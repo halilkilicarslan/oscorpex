@@ -1,10 +1,23 @@
 import "dotenv/config";
-import { VoltAgent, VoltOpsClient, Agent, Memory, VoltAgentObservability } from "@voltagent/core";
+import {
+  VoltAgent,
+  VoltOpsClient,
+  Agent,
+  Memory,
+  VoltAgentObservability,
+} from "@voltagent/core";
 import { LibSQLMemoryAdapter, LibSQLObservabilityAdapter } from "@voltagent/libsql";
 import { createPinoLogger } from "@voltagent/logger";
 import { honoServer } from "@voltagent/server-hono";
+import { studioRoutes } from "./studio/index.js";
 import { expenseApprovalWorkflow } from "./workflows";
-import { weatherTool } from "./tools";
+import {
+  weatherTool,
+  calculatorTool,
+  dateTimeTool,
+  webSearchTool,
+} from "./tools";
+import { createCodeAssistant, createTranslator, createSummarizer } from "./agents";
 
 // Create a logger instance
 const logger = createPinoLogger({
@@ -27,22 +40,61 @@ const observability = new VoltAgentObservability({
   }),
 });
 
-const agent = new Agent({
-  name: "my-voltagent-app",
-  instructions: "A helpful assistant that can check weather and help with various tasks",
+// All available tools
+const allTools = [weatherTool, calculatorTool, dateTimeTool, webSearchTool];
+
+// Main assistant agent — general purpose with all tools
+const assistant = new Agent({
+  name: "assistant",
+  instructions: `You are a helpful AI assistant. You can:
+- Check real-time weather for any city worldwide
+- Perform calculations and math operations
+- Get current date/time in any timezone
+- Search the web for information
+
+Always be concise and accurate. If you're unsure about something, say so.
+When using tools, explain what you're doing and present results clearly.`,
   model: "openai/gpt-4o-mini",
-  tools: [weatherTool],
+  tools: allTools,
   memory,
 });
 
+// Research specialist agent — focused on web search and analysis
+const researcher = new Agent({
+  name: "researcher",
+  instructions: `You are a research specialist. Your role is to:
+- Search for information on given topics
+- Summarize findings concisely
+- Provide sources when available
+- Compare different perspectives
+
+Focus on accuracy and cite your sources. Present findings in a structured format.`,
+  model: "openai/gpt-4o-mini",
+  tools: [webSearchTool, dateTimeTool],
+  memory,
+});
+
+const codeAssistant = createCodeAssistant();
+const translator = createTranslator();
+const summarizer = createSummarizer();
+
 new VoltAgent({
   agents: {
-    agent,
+    assistant,
+    researcher,
+    "code-assistant": codeAssistant,
+    translator,
+    summarizer,
   },
   workflows: {
     expenseApprovalWorkflow,
   },
-  server: honoServer(),
+  server: honoServer({
+    port: 3141,
+    configureApp: (app) => {
+      app.route('/api/studio', studioRoutes);
+    },
+  }),
   logger,
   observability,
   voltOpsClient: new VoltOpsClient({
