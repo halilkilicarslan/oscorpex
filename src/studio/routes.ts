@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { streamText, stepCountIs } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { getAIModel, isAnyProviderConfigured } from './ai-provider-factory.js';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import {
@@ -19,6 +19,7 @@ import {
   listProjectTasks,
   getTask,
   updateTask,
+  appendTaskLogs,
   listAgentConfigs,
   listPresetAgents,
   createAgentConfig,
@@ -29,11 +30,20 @@ import {
   insertChatMessage,
   listChatMessages,
   seedPresetAgents,
+  createProvider,
+  getProvider,
+  listProviders,
+  updateProvider,
+  deleteProvider,
+  setDefaultProvider,
+  getRawProviderApiKey,
+  getDefaultProvider,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { PM_SYSTEM_PROMPT, pmToolkit } from './pm-agent.js';
 import { taskEngine } from './task-engine.js';
 import { containerManager } from './container-manager.js';
+import { executionEngine } from './execution-engine.js';
 import { gitManager } from './git-manager.js';
 
 // Ensure preset agents exist
@@ -96,8 +106,12 @@ studio.delete('/projects/:id', (c) => {
 // ---- PM Chat (SSE streaming) ----------------------------------------------
 
 studio.post('/projects/:id/chat', async (c) => {
-  if (!process.env.OPENAI_API_KEY) {
-    return c.json({ error: 'OPENAI_API_KEY is not configured. Set it in your .env file.' }, 503);
+  // Veritabanında varsayılan provider yoksa ve OPENAI_API_KEY de ayarlanmamışsa hata döndür
+  if (!isAnyProviderConfigured()) {
+    return c.json(
+      { error: 'No AI provider configured. Add a provider in Settings or set OPENAI_API_KEY in your .env file.' },
+      503,
+    );
   }
 
   const projectId = c.req.param('id');
@@ -135,7 +149,8 @@ Description: ${project.description || 'No description yet'}`;
 
     try {
       const result = streamText({
-        model: openai('gpt-4o-mini'),
+        // Veritabanındaki varsayılan provider'ı kullan; yoksa gpt-4o-mini'ye geri dön
+        model: getAIModel(),
         system: systemPrompt,
         messages,
         tools: pmToolkit,
@@ -198,30 +213,13 @@ studio.post('/projects/:id/plan/approve', (c) => {
     payload: { planId: plan.id },
   });
 
-  let execution: { started: boolean; readyTasks: { id: string; title: string }[] } = {
-    started: false,
-    readyTasks: [],
-  };
+  // Start actual execution in the background — executionEngine calls
+  // taskEngine.beginExecution internally and dispatches all tasks.
+  executionEngine.startProjectExecution(projectId).catch((err) => {
+    console.error('[execution-engine] startProjectExecution failed:', err);
+  });
 
-  try {
-    const readyTasks = taskEngine.beginExecution(projectId);
-    execution = {
-      started: true,
-      readyTasks: readyTasks.map((t) => ({ id: t.id, title: t.title })),
-    };
-
-    eventBus.emit({
-      projectId,
-      type: 'execution:started',
-      payload: { planId: plan.id, readyTaskCount: readyTasks.length },
-    });
-  } catch (_execError) {
-    // Execution failed to start — plan remains approved but project stays in approved state
-    updateProject(projectId, { status: 'approved' });
-    return c.json({ success: true, planId: plan.id, execution });
-  }
-
-  return c.json({ success: true, planId: plan.id, execution });
+  return c.json({ success: true, planId: plan.id, execution: { started: true } });
 });
 
 studio.post('/projects/:id/plan/reject', async (c) => {
@@ -237,15 +235,26 @@ studio.post('/projects/:id/plan/reject', async (c) => {
 
 // ---- Execution ------------------------------------------------------------
 
+// Manual trigger to start or resume execution for a project.
 studio.post('/projects/:id/execute', (c) => {
   const projectId = c.req.param('id');
-  try {
-    const readyTasks = taskEngine.beginExecution(projectId);
-    return c.json({ success: true, readyTasks: readyTasks.map((t) => ({ id: t.id, title: t.title })) });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Execution failed';
-    return c.json({ error: msg }, 400);
-  }
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  // Fire and forget — progress is observable via SSE events and /progress
+  executionEngine.startProjectExecution(projectId).catch((err) => {
+    console.error('[execution-engine] manual execute failed:', err);
+  });
+
+  return c.json({ success: true, message: 'Execution started' });
+});
+
+// Execution status snapshot: running containers + task progress.
+studio.get('/projects/:id/execution/status', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  return c.json(executionEngine.getExecutionStatus(projectId));
 });
 
 studio.get('/projects/:id/progress', (c) => {
@@ -255,7 +264,23 @@ studio.get('/projects/:id/progress', (c) => {
 // ---- Tasks ----------------------------------------------------------------
 
 studio.get('/projects/:id/tasks', (c) => {
-  return c.json(listProjectTasks(c.req.param('id')));
+  const tasks = listProjectTasks(c.req.param('id'));
+
+  // Attach a lightweight output summary so task cards can show badges
+  // without requiring a separate fetch of the full output payload.
+  const tasksWithSummary = tasks.map((task) => ({
+    ...task,
+    outputSummary: task.output
+      ? {
+          filesCreatedCount: task.output.filesCreated.length,
+          filesModifiedCount: task.output.filesModified.length,
+          logLineCount: task.output.logs.length,
+          hasTestResults: task.output.testResults !== undefined,
+        }
+      : null,
+  }));
+
+  return c.json(tasksWithSummary);
 });
 
 studio.get('/projects/:id/tasks/:taskId', (c) => {
@@ -279,6 +304,118 @@ studio.post('/projects/:id/tasks/:taskId/retry', (c) => {
     const msg = error instanceof Error ? error.message : 'Retry failed';
     return c.json({ error: msg }, 400);
   }
+});
+
+// GET /projects/:id/tasks/:taskId/logs
+// Returns stored logs from task.output.logs as JSON.
+// For still-running tasks also appends the agent's live terminal buffer.
+studio.get('/projects/:id/tasks/:taskId/logs', (c) => {
+  const task = getTask(c.req.param('taskId'));
+  if (!task) return c.json({ error: 'Task not found' }, 404);
+
+  const storedLogs: string[] = task.output?.logs ?? [];
+
+  const isRunning = task.status !== 'done' && task.status !== 'failed';
+  let liveLogs: string[] = [];
+
+  if (isRunning && task.assignedAgent) {
+    const runtime = containerManager.getRuntime(c.req.param('id'), task.assignedAgent);
+    if (runtime) {
+      // Include terminal buffer lines that are not already persisted
+      liveLogs = runtime.terminalBuffer.slice(storedLogs.length);
+    }
+  }
+
+  return c.json({
+    taskId: task.id,
+    status: task.status,
+    logs: storedLogs,
+    liveLogs,
+    total: storedLogs.length + liveLogs.length,
+  });
+});
+
+// GET /projects/:id/tasks/:taskId/output
+// Returns the full TaskOutput for a task (files, test results, logs).
+studio.get('/projects/:id/tasks/:taskId/output', (c) => {
+  const task = getTask(c.req.param('taskId'));
+  if (!task) return c.json({ error: 'Task not found' }, 404);
+
+  if (!task.output) {
+    return c.json({
+      taskId: task.id,
+      status: task.status,
+      output: null,
+    });
+  }
+
+  return c.json({
+    taskId: task.id,
+    status: task.status,
+    output: task.output,
+  });
+});
+
+// GET /projects/:id/tasks/:taskId/stream
+// SSE endpoint — streams task logs in real-time.
+// Sends stored logs immediately, then subscribes to live agent:output events
+// until the task reaches a terminal state.
+studio.get('/projects/:id/tasks/:taskId/stream', async (c) => {
+  const projectId = c.req.param('id');
+  const taskId = c.req.param('taskId');
+
+  const task = getTask(taskId);
+  if (!task) return c.json({ error: 'Task not found' }, 404);
+
+  return streamSSE(c, async (stream) => {
+    // For terminal tasks: replay stored logs and close immediately.
+    if (task.status === 'done' || task.status === 'failed') {
+      for (const line of task.output?.logs ?? []) {
+        await stream.writeSSE({ event: 'log', data: JSON.stringify({ text: line }) });
+      }
+      await stream.writeSSE({ event: 'done', data: JSON.stringify({ status: task.status }) });
+      return;
+    }
+
+    // For running/queued tasks: first flush any logs already persisted…
+    for (const line of task.output?.logs ?? []) {
+      await stream.writeSSE({ event: 'log', data: JSON.stringify({ text: line }) });
+    }
+
+    // …then subscribe to live project events and forward matching output.
+    let closed = false;
+
+    const unsubscribe = eventBus.onProject(projectId, async (event) => {
+      if (closed) return;
+
+      try {
+        if (event.type === 'agent:output' && event.agentId === task.assignedAgent) {
+          const text = typeof event.payload.output === 'string' ? event.payload.output : '';
+          await stream.writeSSE({ event: 'log', data: JSON.stringify({ text }) });
+          // Persist the incoming log line(s) to the task record.
+          if (text) appendTaskLogs(taskId, [text]);
+        }
+
+        if (
+          (event.type === 'task:completed' || event.type === 'task:failed') &&
+          event.taskId === taskId
+        ) {
+          await stream.writeSSE({ event: 'done', data: JSON.stringify({ status: event.type === 'task:completed' ? 'done' : 'failed' }) });
+          closed = true;
+          unsubscribe();
+        }
+      } catch {
+        // Client disconnected — stop forwarding.
+        closed = true;
+        unsubscribe();
+      }
+    });
+
+    stream.onAbort(() => {
+      closed = true;
+      unsubscribe();
+    });
+  });
 });
 
 // ---- Agent Configs --------------------------------------------------------
@@ -530,7 +667,118 @@ studio.get('/projects/:id/events/recent', (c) => {
 // ---- Config status --------------------------------------------------------
 
 studio.get('/config/status', (c) => {
-  return c.json({ openaiConfigured: !!process.env.OPENAI_API_KEY });
+  // Veritabanındaki varsayılan provider bilgisini de döndür
+  const defaultProvider = getDefaultProvider();
+
+  return c.json({
+    openaiConfigured: !!process.env.OPENAI_API_KEY,
+    providerConfigured: isAnyProviderConfigured(),
+    providerName: defaultProvider?.name,
+  });
+});
+
+// ---- AI Providers ---------------------------------------------------------
+
+studio.get('/providers', (c) => {
+  return c.json(listProviders());
+});
+
+studio.post('/providers', async (c) => {
+  const body = (await c.req.json()) as {
+    name: string;
+    type?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+    isActive?: boolean;
+  };
+
+  if (!body.name?.trim()) {
+    return c.json({ error: 'name is required' }, 400);
+  }
+
+  const provider = createProvider({
+    name: body.name.trim(),
+    type: (body.type ?? 'openai') as any,
+    apiKey: body.apiKey ?? '',
+    baseUrl: body.baseUrl ?? '',
+    model: body.model ?? '',
+    isActive: body.isActive !== false,
+  });
+
+  return c.json(provider, 201);
+});
+
+studio.get('/providers/:id', (c) => {
+  const provider = getProvider(c.req.param('id'));
+  if (!provider) return c.json({ error: 'Provider not found' }, 404);
+  return c.json(provider);
+});
+
+studio.put('/providers/:id', async (c) => {
+  const body = (await c.req.json()) as {
+    name?: string;
+    type?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+    isActive?: boolean;
+  };
+
+  const provider = updateProvider(c.req.param('id'), {
+    name: body.name,
+    type: body.type as any,
+    apiKey: body.apiKey,
+    baseUrl: body.baseUrl,
+    model: body.model,
+    isActive: body.isActive,
+  });
+
+  if (!provider) return c.json({ error: 'Provider not found' }, 404);
+  return c.json(provider);
+});
+
+studio.delete('/providers/:id', (c) => {
+  const result = deleteProvider(c.req.param('id'));
+  if (!result.success) {
+    return c.json({ error: result.error }, result.error === 'Provider not found' ? 404 : 400);
+  }
+  return c.json({ success: true });
+});
+
+studio.post('/providers/:id/default', (c) => {
+  const provider = setDefaultProvider(c.req.param('id'));
+  if (!provider) return c.json({ error: 'Provider not found' }, 404);
+  return c.json(provider);
+});
+
+studio.post('/providers/:id/test', async (c) => {
+  const provider = getProvider(c.req.param('id'));
+  if (!provider) return c.json({ error: 'Provider not found' }, 404);
+
+  if (provider.type !== 'openai') {
+    return c.json({ valid: true, message: 'Validation not available for this provider type' });
+  }
+
+  try {
+    const apiKey = getRawProviderApiKey(provider.id);
+    const res = await fetch('https://api.openai.com/v1/models', {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (res.ok) {
+      return c.json({ valid: true, message: 'Connection successful' });
+    }
+
+    const errorBody = await res.json().catch(() => ({}));
+    return c.json({
+      valid: false,
+      message: (errorBody as any)?.error?.message ?? `HTTP ${res.status}`,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Connection failed';
+    return c.json({ valid: false, message: msg });
+  }
 });
 
 export { studio as studioRoutes };

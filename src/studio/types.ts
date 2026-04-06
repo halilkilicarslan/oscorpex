@@ -188,6 +188,23 @@ export interface ContainerConfig {
   cpuLimit: number;
 }
 
+// ---- AI Providers ----------------------------------------------------------
+
+export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom';
+
+export interface AIProvider {
+  id: string;
+  name: string;
+  type: AIProviderType;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ---- Git types -------------------------------------------------------------
 
 export interface GitLogEntry {

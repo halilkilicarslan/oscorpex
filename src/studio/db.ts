@@ -22,6 +22,8 @@ import type {
   EventType,
   ChatMessage,
   ChatRole,
+  AIProvider,
+  AIProviderType,
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -128,6 +130,19 @@ function migrate(db: Database.Database): void {
       role        TEXT NOT NULL,
       content     TEXT NOT NULL,
       created_at  TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ai_providers (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      type       TEXT NOT NULL DEFAULT 'openai',
+      api_key    TEXT NOT NULL DEFAULT '',
+      base_url   TEXT NOT NULL DEFAULT '',
+      model      TEXT NOT NULL DEFAULT '',
+      is_default INTEGER NOT NULL DEFAULT 0,
+      is_active  INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_plans_project   ON project_plans(project_id);
@@ -370,6 +385,22 @@ function rowToTask(row: any): Task {
   };
 }
 
+/**
+ * Append log lines to a task's output.logs without replacing other output fields.
+ * Safe to call from streaming contexts — reads current state then writes atomically.
+ */
+export function appendTaskLogs(taskId: string, logs: string[]): void {
+  if (logs.length === 0) return;
+  const task = getTask(taskId);
+  if (!task) return;
+
+  const currentOutput: TaskOutput = task.output ?? { filesCreated: [], filesModified: [], logs: [] };
+  currentOutput.logs.push(...logs);
+
+  const db = getDb();
+  db.prepare('UPDATE tasks SET output = ? WHERE id = ?').run(JSON.stringify(currentOutput), taskId);
+}
+
 // ---------------------------------------------------------------------------
 // Agent Configs CRUD
 // ---------------------------------------------------------------------------
@@ -499,6 +530,138 @@ export function listChatMessages(projectId: string): ChatMessage[] {
     content: row.content,
     createdAt: row.created_at,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// AI Providers CRUD
+// ---------------------------------------------------------------------------
+
+function maskApiKey(key: string): string {
+  if (!key || key.length <= 8) return key ? '***' : '';
+  return key.slice(0, 4) + '*'.repeat(key.length - 8) + key.slice(-4);
+}
+
+function rowToProvider(row: any, masked = false): AIProvider {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type as AIProviderType,
+    apiKey: masked ? maskApiKey(row.api_key) : row.api_key,
+    baseUrl: row.base_url,
+    model: row.model,
+    isDefault: row.is_default === 1,
+    isActive: row.is_active === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function createProvider(
+  data: Pick<AIProvider, 'name' | 'type' | 'apiKey' | 'baseUrl' | 'model' | 'isActive'>,
+): AIProvider {
+  const db = getDb();
+  const id = randomUUID();
+  const ts = now();
+
+  // Auto-set as default if it is the very first provider
+  const existingCount = (db.prepare('SELECT COUNT(*) as c FROM ai_providers').get() as any).c;
+  const isDefault = existingCount === 0 ? 1 : 0;
+
+  db.prepare(`
+    INSERT INTO ai_providers (id, name, type, api_key, base_url, model, is_default, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    data.name,
+    data.type,
+    data.apiKey,
+    data.baseUrl,
+    data.model,
+    isDefault,
+    data.isActive ? 1 : 0,
+    ts,
+    ts,
+  );
+
+  return getProvider(id)!;
+}
+
+export function getProvider(id: string): AIProvider | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM ai_providers WHERE id = ?').get(id) as any;
+  return row ? rowToProvider(row, true) : undefined;
+}
+
+export function listProviders(): AIProvider[] {
+  const db = getDb();
+  return (db.prepare('SELECT * FROM ai_providers ORDER BY created_at ASC').all() as any[]).map((r) =>
+    rowToProvider(r, true),
+  );
+}
+
+export function updateProvider(
+  id: string,
+  data: Partial<Pick<AIProvider, 'name' | 'type' | 'apiKey' | 'baseUrl' | 'model' | 'isActive'>>,
+): AIProvider | undefined {
+  const db = getDb();
+  const fields: string[] = [];
+  const values: any[] = [];
+
+  if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
+  if (data.type !== undefined) { fields.push('type = ?'); values.push(data.type); }
+  if (data.apiKey !== undefined) { fields.push('api_key = ?'); values.push(data.apiKey); }
+  if (data.baseUrl !== undefined) { fields.push('base_url = ?'); values.push(data.baseUrl); }
+  if (data.model !== undefined) { fields.push('model = ?'); values.push(data.model); }
+  if (data.isActive !== undefined) { fields.push('is_active = ?'); values.push(data.isActive ? 1 : 0); }
+
+  if (fields.length === 0) return getProvider(id);
+
+  fields.push('updated_at = ?');
+  values.push(now());
+  values.push(id);
+
+  db.prepare(`UPDATE ai_providers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  return getProvider(id);
+}
+
+export function deleteProvider(id: string): { success: boolean; error?: string } {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM ai_providers WHERE id = ?').get(id) as any;
+  if (!row) return { success: false, error: 'Provider not found' };
+  if (row.is_default === 1) {
+    return { success: false, error: 'Cannot delete the default provider. Set another provider as default first.' };
+  }
+  db.prepare('DELETE FROM ai_providers WHERE id = ?').run(id);
+  return { success: true };
+}
+
+export function setDefaultProvider(id: string): AIProvider | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM ai_providers WHERE id = ?').get(id) as any;
+  if (!row) return undefined;
+
+  // Use a transaction to swap default atomically
+  const swap = db.transaction(() => {
+    db.prepare('UPDATE ai_providers SET is_default = 0, updated_at = ?').run(now());
+    db.prepare('UPDATE ai_providers SET is_default = 1, updated_at = ? WHERE id = ?').run(now(), id);
+  });
+  swap();
+
+  return getProvider(id);
+}
+
+export function getDefaultProvider(): AIProvider | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM ai_providers WHERE is_default = 1 LIMIT 1').get() as any;
+  // Return with unmasked key — for backend usage
+  return row ? rowToProvider(row, false) : undefined;
+}
+
+/** Returns the raw (unmasked) API key for a provider — for internal backend use only. */
+export function getRawProviderApiKey(id: string): string {
+  const db = getDb();
+  const row = db.prepare('SELECT api_key FROM ai_providers WHERE id = ?').get(id) as any;
+  return row?.api_key ?? '';
 }
 
 // ---------------------------------------------------------------------------
