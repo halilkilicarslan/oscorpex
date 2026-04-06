@@ -153,3 +153,5 @@ dist
 
 # cursor
 .cursor
+.playwright-mcp/
+*.png

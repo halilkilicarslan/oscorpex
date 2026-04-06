@@ -33,7 +33,7 @@ lerna-debug.log*
 .git
 .gitignore
 
-# Environment files (copy them separately)
+# Environment files
 .env.local
 .env.development
 .env.test
@@ -48,5 +48,5 @@ docs
 .gitlab-ci.yml
 .travis.yml
 
-# Console (has its own Dockerfile)
-console
+# Parent directory files
+..

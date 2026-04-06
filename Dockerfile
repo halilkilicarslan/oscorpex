@@ -46,8 +46,8 @@ RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile --production; \
 # Copy built application from builder stage
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 
-# Copy .env file if it exists (dotenv will read it automatically)
-COPY --chown=nodejs:nodejs .env* ./
+# NOTE: Do not bake .env into the image. Pass environment variables at
+# runtime via `docker run --env-file .env` or your orchestrator's secrets.
 
 # Prepare writable runtime directory for VoltAgent (avoids EACCES on .voltagent)
 RUN mkdir -p /app/.voltagent && chown -R nodejs:nodejs /app
@@ -55,8 +55,8 @@ RUN mkdir -p /app/.voltagent && chown -R nodejs:nodejs /app
 # Switch to non-root user
 USER nodejs
 
-# Expose port (VoltAgent default)
-EXPOSE 3141
+# Expose port (VoltAgent default: 4242)
+EXPOSE 4242
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
