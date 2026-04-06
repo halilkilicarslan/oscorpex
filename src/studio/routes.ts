@@ -30,6 +30,15 @@ import {
   insertChatMessage,
   listChatMessages,
   seedPresetAgents,
+  seedTeamTemplates,
+  listTeamTemplates,
+  getTeamTemplate,
+  createProjectAgent,
+  getProjectAgent,
+  listProjectAgents,
+  updateProjectAgent,
+  deleteProjectAgent,
+  copyAgentsToProject,
   createProvider,
   getProvider,
   listProviders,
@@ -46,8 +55,9 @@ import { containerManager } from './container-manager.js';
 import { executionEngine } from './execution-engine.js';
 import { gitManager } from './git-manager.js';
 
-// Ensure preset agents exist
+// Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();
+seedTeamTemplates();
 
 const studio = new Hono();
 
@@ -62,6 +72,8 @@ studio.post('/projects', async (c) => {
     name: string;
     description?: string;
     techStack?: string[];
+    // İsteğe bağlı takım şablonu — belirtilmezse Full Stack Team varsayılan olarak seçilir
+    teamTemplateId?: string;
   };
   const project = createProject({
     name: body.name,
@@ -69,6 +81,23 @@ studio.post('/projects', async (c) => {
     techStack: body.techStack ?? [],
     repoPath: '',
   });
+
+  // Proje oluşturulduktan sonra takım şablonundan agentları kopyala
+  const templateId = body.teamTemplateId;
+  if (templateId) {
+    // Kullanıcının belirttiği şablon
+    const template = getTeamTemplate(templateId);
+    if (template) {
+      copyAgentsToProject(project.id, template.roles);
+    }
+  } else {
+    // Varsayılan: Full Stack Team
+    const templates = listTeamTemplates();
+    const fullStack = templates.find((t) => t.name === 'Full Stack Team');
+    if (fullStack) {
+      copyAgentsToProject(project.id, fullStack.roles);
+    }
+  }
 
   // Initialize git repo and docs structure — optional, failure does not block project creation
   try {
@@ -127,7 +156,13 @@ studio.post('/projects/:id/chat', async (c) => {
   // Build conversation history for context
   const history = listChatMessages(projectId);
 
-  // Build system prompt with project context
+  // Projeye özel takım bilgisini al (project_agents tablosundan)
+  const agents = listProjectAgents(projectId);
+  const teamInfo = agents
+    .map((a) => `- ${a.avatar} **${a.name}** (${a.role}) — ${a.personality}. Skills: ${a.skills.join(', ')}`)
+    .join('\n');
+
+  // Build system prompt with project context + team info
   const systemPrompt = `${PM_SYSTEM_PROMPT}
 
 [Current Project Context]
@@ -135,7 +170,10 @@ Project ID: ${projectId}
 Project Name: ${project.name}
 Status: ${project.status}
 Tech Stack: ${project.techStack.join(', ') || 'Not decided yet'}
-Description: ${project.description || 'No description yet'}`;
+Description: ${project.description || 'No description yet'}
+
+[Your Team — ${agents.length} agents]
+${teamInfo}`;
 
   // Prepare messages for AI SDK
   const messages = history.map((m) => ({
@@ -451,6 +489,131 @@ studio.delete('/agents/:id', (c) => {
   const ok = deleteAgentConfig(c.req.param('id'));
   if (!ok) return c.json({ error: 'Agent not found or is a preset' }, 404);
   return c.json({ success: true });
+});
+
+// ---- Team Templates -------------------------------------------------------
+
+// Tüm takım şablonlarını listele
+studio.get('/team-templates', (c) => {
+  return c.json(listTeamTemplates());
+});
+
+// ---- Project Team (project_agents) ----------------------------------------
+
+// Projenin takım üyelerini listele
+studio.get('/projects/:id/team', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  return c.json(listProjectAgents(projectId));
+});
+
+// Projeye yeni takım üyesi ekle (manuel veya preset'ten kopyalama)
+studio.post('/projects/:id/team', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const body = (await c.req.json()) as {
+    sourceAgentId?: string;
+    name?: string;
+    role?: string;
+    avatar?: string;
+    personality?: string;
+    model?: string;
+    cliTool?: string;
+    skills?: string[];
+    systemPrompt?: string;
+  };
+
+  // sourceAgentId verilmişse preset'ten kopyala
+  if (body.sourceAgentId) {
+    const preset = getAgentConfig(body.sourceAgentId);
+    if (!preset) return c.json({ error: 'Source agent not found' }, 404);
+    const agent = createProjectAgent({
+      projectId,
+      sourceAgentId: preset.id,
+      name: body.name ?? preset.name,
+      role: body.role ?? preset.role,
+      avatar: body.avatar ?? preset.avatar,
+      personality: body.personality ?? preset.personality,
+      model: body.model ?? preset.model,
+      cliTool: body.cliTool ?? preset.cliTool,
+      skills: body.skills ?? preset.skills,
+      systemPrompt: body.systemPrompt ?? preset.systemPrompt,
+    });
+    return c.json(agent, 201);
+  }
+
+  // Manuel oluşturma — zorunlu alanlar kontrol edilir
+  if (!body.name || !body.role) {
+    return c.json({ error: 'name and role are required' }, 400);
+  }
+
+  const agent = createProjectAgent({
+    projectId,
+    sourceAgentId: body.sourceAgentId,
+    name: body.name,
+    role: body.role,
+    avatar: body.avatar ?? '',
+    personality: body.personality ?? '',
+    model: body.model ?? 'claude-sonnet-4-6',
+    cliTool: body.cliTool ?? 'claude-code',
+    skills: body.skills ?? [],
+    systemPrompt: body.systemPrompt ?? '',
+  });
+  return c.json(agent, 201);
+});
+
+// Tekil proje agentını getir
+studio.get('/projects/:id/team/:agentId', (c) => {
+  const agent = getProjectAgent(c.req.param('agentId'));
+  if (!agent || agent.projectId !== c.req.param('id')) {
+    return c.json({ error: 'Agent not found' }, 404);
+  }
+  return c.json(agent);
+});
+
+// Proje agentını güncelle
+studio.put('/projects/:id/team/:agentId', async (c) => {
+  const agentId = c.req.param('agentId');
+  const existing = getProjectAgent(agentId);
+  if (!existing || existing.projectId !== c.req.param('id')) {
+    return c.json({ error: 'Agent not found' }, 404);
+  }
+
+  const body = await c.req.json();
+  const updated = updateProjectAgent(agentId, body);
+  if (!updated) return c.json({ error: 'Agent not found' }, 404);
+  return c.json(updated);
+});
+
+// Proje agentını takımdan çıkar
+studio.delete('/projects/:id/team/:agentId', (c) => {
+  const agentId = c.req.param('agentId');
+  const existing = getProjectAgent(agentId);
+  if (!existing || existing.projectId !== c.req.param('id')) {
+    return c.json({ error: 'Agent not found' }, 404);
+  }
+  const ok = deleteProjectAgent(agentId);
+  if (!ok) return c.json({ error: 'Agent not found' }, 404);
+  return c.json({ success: true });
+});
+
+// Şablondan agentları projeye toplu kopyala
+studio.post('/projects/:id/team/from-template', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const body = (await c.req.json()) as { templateId: string };
+  if (!body.templateId) return c.json({ error: 'templateId is required' }, 400);
+
+  const template = getTeamTemplate(body.templateId);
+  if (!template) return c.json({ error: 'Template not found' }, 404);
+
+  const agents = copyAgentsToProject(projectId, template.roles);
+  return c.json(agents, 201);
 });
 
 // ---- Container / Runtime --------------------------------------------------

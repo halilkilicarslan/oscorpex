@@ -17,7 +17,9 @@ import {
   fetchProjects,
   createProject,
   deleteProject,
+  fetchTeamTemplates,
   type Project,
+  type TeamTemplate,
 } from '../../lib/studio-api';
 
 // ---------------------------------------------------------------------------
@@ -132,6 +134,12 @@ function CreateProjectModal({ onClose, onCreate }: {
   const [techInput, setTechInput] = useState('');
   const [techStack, setTechStack] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [templates, setTemplates] = useState<TeamTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+
+  useEffect(() => {
+    fetchTeamTemplates().then(setTemplates).catch(() => {});
+  }, []);
 
   const addTech = () => {
     const tech = techInput.trim();
@@ -149,7 +157,12 @@ function CreateProjectModal({ onClose, onCreate }: {
     if (!name.trim()) return;
     setLoading(true);
     try {
-      const project = await createProject({ name: name.trim(), description: description.trim(), techStack });
+      const project = await createProject({
+        name: name.trim(),
+        description: description.trim(),
+        techStack,
+        teamTemplateId: selectedTemplate || undefined,
+      });
       onCreate(project);
     } catch (err) {
       console.error('Failed to create project:', err);
@@ -160,15 +173,15 @@ function CreateProjectModal({ onClose, onCreate }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#111111] border border-[#262626] rounded-2xl w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-5">
+      <div className="bg-[#111111] border border-[#262626] rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 pt-6 pb-5 border-b border-[#1f1f1f] shrink-0">
           <h2 className="text-[16px] font-semibold text-[#fafafa]">New Project</h2>
           <button onClick={onClose} className="p-1 rounded hover:bg-[#1f1f1f] text-[#525252] hover:text-[#a3a3a3]">
             <X size={18} />
           </button>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="overflow-y-auto flex-1 px-6 py-5 flex flex-col gap-4">
           {/* Name */}
           <div>
             <label className="text-[12px] text-[#737373] font-medium block mb-1.5">Project Name</label>
@@ -229,10 +242,44 @@ function CreateProjectModal({ onClose, onCreate }: {
               </div>
             )}
           </div>
+
+          {/* Team Template */}
+          {templates.length > 0 && (
+            <div>
+              <label className="text-[12px] text-[#737373] font-medium block mb-1.5">Team Template</label>
+              <div className="flex flex-col gap-2">
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setSelectedTemplate(t.id === selectedTemplate ? '' : t.id)}
+                    className={`text-left p-3 rounded-lg border transition-colors ${
+                      selectedTemplate === t.id
+                        ? 'border-[#22c55e] bg-[#22c55e]/5'
+                        : 'border-[#262626] bg-[#0a0a0a] hover:border-[#333]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] font-medium text-[#fafafa]">{t.name}</span>
+                      <span className="text-[11px] text-[#525252]">{t.roles.length} agents</span>
+                    </div>
+                    <p className="text-[11px] text-[#737373] mt-0.5">{t.description}</p>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {t.roles.map((role) => (
+                        <span key={role} className="text-[10px] px-1.5 py-0.5 rounded bg-[#1f1f1f] text-[#a3a3a3] border border-[#262626]">
+                          {role}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-2 mt-6">
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#1f1f1f] shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg text-[13px] text-[#a3a3a3] hover:text-[#fafafa] border border-[#262626] hover:border-[#333] transition-colors"

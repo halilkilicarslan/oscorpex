@@ -70,6 +70,31 @@ export interface AgentConfig {
   isPreset: boolean;
 }
 
+// ---- Team Templates & Project Agents ------------------------------------
+
+export interface TeamTemplate {
+  id: string;
+  name: string;
+  description: string;
+  roles: string[];
+  createdAt: string;
+}
+
+export interface ProjectAgent {
+  id: string;
+  projectId: string;
+  sourceAgentId?: string;
+  name: string;
+  role: string;
+  avatar: string;
+  personality: string;
+  model: string;
+  cliTool: string;
+  skills: string[];
+  systemPrompt: string;
+  createdAt: string;
+}
+
 export interface ChatMessage {
   id: string;
   projectId: string;
@@ -103,7 +128,7 @@ export async function fetchProject(id: string): Promise<Project> {
   return json(await fetch(`${BASE}/projects/${id}`));
 }
 
-export async function createProject(data: { name: string; description?: string; techStack?: string[] }): Promise<Project> {
+export async function createProject(data: { name: string; description?: string; techStack?: string[]; teamTemplateId?: string }): Promise<Project> {
   return json(await fetch(`${BASE}/projects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -193,6 +218,57 @@ export async function updateAgent(id: string, data: Partial<AgentConfig>): Promi
 
 export async function deleteAgent(id: string): Promise<void> {
   await fetch(`${BASE}/agents/${id}`, { method: 'DELETE' });
+}
+
+// ---- Team Templates -------------------------------------------------------
+
+export async function fetchTeamTemplates(): Promise<TeamTemplate[]> {
+  return json(await fetch(`${BASE}/team-templates`));
+}
+
+// ---- Project Team (project-scoped agents) ---------------------------------
+
+export async function fetchProjectAgents(projectId: string): Promise<ProjectAgent[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/team`));
+}
+
+export async function fetchProjectAgent(projectId: string, agentId: string): Promise<ProjectAgent> {
+  return json(await fetch(`${BASE}/projects/${projectId}/team/${agentId}`));
+}
+
+export async function addProjectAgent(
+  projectId: string,
+  data: Omit<ProjectAgent, 'id' | 'projectId' | 'createdAt'>,
+): Promise<ProjectAgent> {
+  return json(await fetch(`${BASE}/projects/${projectId}/team`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }));
+}
+
+export async function updateProjectAgent(
+  projectId: string,
+  agentId: string,
+  data: Partial<ProjectAgent>,
+): Promise<ProjectAgent> {
+  return json(await fetch(`${BASE}/projects/${projectId}/team/${agentId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }));
+}
+
+export async function deleteProjectAgent(projectId: string, agentId: string): Promise<void> {
+  await fetch(`${BASE}/projects/${projectId}/team/${agentId}`, { method: 'DELETE' });
+}
+
+export async function copyTeamFromTemplate(projectId: string, templateId: string): Promise<ProjectAgent[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/team/from-template`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ templateId }),
+  }));
 }
 
 // ---- Chat -----------------------------------------------------------------

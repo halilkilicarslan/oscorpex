@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { createAgent, updateAgent, type AgentConfig } from '../../lib/studio-api';
+import { addProjectAgent, updateProjectAgent, type ProjectAgent } from '../../lib/studio-api';
 
 const ROLE_OPTIONS = [
   { value: 'pm', label: 'PM' },
@@ -22,9 +22,10 @@ const CLI_TOOL_OPTIONS = [
 
 interface AgentFormModalProps {
   mode: 'create' | 'edit';
-  agent?: AgentConfig;
+  agent?: ProjectAgent;
+  projectId: string;
   onClose: () => void;
-  onSave: (agent: AgentConfig) => void;
+  onSave: (agent: ProjectAgent) => void;
 }
 
 const inputClass =
@@ -33,7 +34,7 @@ const selectClass =
   'w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none appearance-none';
 const labelClass = 'text-[12px] text-[#737373] font-medium block mb-1.5';
 
-export default function AgentFormModal({ mode, agent, onClose, onSave }: AgentFormModalProps) {
+export default function AgentFormModal({ mode, agent, projectId, onClose, onSave }: AgentFormModalProps) {
   const [name, setName] = useState(agent?.name ?? '');
   const [avatar, setAvatar] = useState(agent?.avatar ?? '');
   const [role, setRole] = useState(agent?.role ?? 'custom');
@@ -76,11 +77,11 @@ export default function AgentFormModal({ mode, agent, onClose, onSave }: AgentFo
         systemPrompt: systemPrompt.trim(),
       };
 
-      let saved: AgentConfig;
+      let saved: ProjectAgent;
       if (mode === 'edit' && agent) {
-        saved = await updateAgent(agent.id, payload);
+        saved = await updateProjectAgent(projectId, agent.id, payload);
       } else {
-        saved = await createAgent(payload);
+        saved = await addProjectAgent(projectId, payload);
       }
       onSave(saved);
     } catch (err) {

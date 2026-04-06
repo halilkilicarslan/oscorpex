@@ -205,6 +205,34 @@ export interface AIProvider {
   updatedAt: string;
 }
 
+// ---- Project Agent (proje bazlı takım üyesi) --------------------------------
+
+export interface ProjectAgent {
+  id: string;
+  projectId: string;
+  sourceAgentId?: string;
+  name: string;
+  role: AgentRole | string;
+  avatar: string;
+  personality: string;
+  model: string;
+  cliTool: CLITool;
+  skills: string[];
+  systemPrompt: string;
+  createdAt: string;
+}
+
+// ---- Team Template (hazır takım şablonu) ------------------------------------
+
+export interface TeamTemplate {
+  id: string;
+  name: string;
+  description: string;
+  // agent_ids sütununda roller (ör: ["pm","frontend","qa"]) saklanır
+  roles: string[];
+  createdAt: string;
+}
+
 // ---- Git types -------------------------------------------------------------
 
 export interface GitLogEntry {

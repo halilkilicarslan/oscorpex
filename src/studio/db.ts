@@ -24,6 +24,8 @@ import type {
   ChatRole,
   AIProvider,
   AIProviderType,
+  ProjectAgent,
+  TeamTemplate,
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -150,6 +152,33 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tasks_phase     ON tasks(phase_id);
     CREATE INDEX IF NOT EXISTS idx_events_project  ON events(project_id);
     CREATE INDEX IF NOT EXISTS idx_chat_project    ON chat_messages(project_id);
+
+    -- Hazır takım şablonları (team templates)
+    CREATE TABLE IF NOT EXISTS team_templates (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      agent_ids   TEXT NOT NULL DEFAULT '[]',
+      created_at  TEXT NOT NULL
+    );
+
+    -- Projeye özel agent kopyaları (project-scoped team members)
+    CREATE TABLE IF NOT EXISTS project_agents (
+      id              TEXT PRIMARY KEY,
+      project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      source_agent_id TEXT,
+      name            TEXT NOT NULL,
+      role            TEXT NOT NULL,
+      avatar          TEXT NOT NULL DEFAULT '',
+      personality     TEXT NOT NULL DEFAULT '',
+      model           TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
+      cli_tool        TEXT NOT NULL DEFAULT 'claude-code',
+      skills          TEXT NOT NULL DEFAULT '[]',
+      system_prompt   TEXT NOT NULL DEFAULT '',
+      created_at      TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_project_agents_project ON project_agents(project_id);
   `);
 }
 
@@ -780,9 +809,231 @@ Your role:
 5. Ensure documentation is adequate`,
       isPreset: true,
     },
+    // Solo Coder şablonu için tam-yığın geliştirici
+    {
+      name: 'Pixel',
+      role: 'coder',
+      avatar: '💻',
+      personality: 'Versatile, fast, pragmatic',
+      model: 'claude-sonnet-4-6',
+      cliTool: 'claude-code',
+      skills: ['full-stack', 'typescript', 'react', 'node.js', 'database', 'testing'],
+      systemPrompt: `You are Pixel, a senior Full-Stack Developer.
+Your role:
+1. Implement features end-to-end (frontend + backend)
+2. Write clean, well-tested code
+3. Handle database queries and API endpoints
+4. Ensure code quality and best practices
+5. Work independently on all parts of the stack`,
+      isPreset: true,
+    },
   ];
 
   for (const preset of presets) {
     createAgentConfig(preset);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Seed team templates (hazır takım şablonlarını veritabanına ekle)
+// ---------------------------------------------------------------------------
+
+export function seedTeamTemplates(): void {
+  const db = getDb();
+  const count = (db.prepare('SELECT COUNT(*) as c FROM team_templates').get() as any).c;
+  // Zaten veri varsa tekrar ekleme
+  if (count > 0) return;
+
+  const templates = [
+    {
+      name: 'Full Stack Team',
+      description: 'Complete team with PM, architect, frontend, backend, QA, and code reviewer',
+      roles: ['pm', 'architect', 'frontend', 'backend', 'qa', 'reviewer'],
+    },
+    {
+      name: 'Frontend Team',
+      description: 'Focused team for frontend projects with PM, frontend dev, and QA',
+      roles: ['pm', 'frontend', 'qa'],
+    },
+    {
+      name: 'Backend Team',
+      description: 'Focused team for backend/API projects with PM, architect, backend dev, and QA',
+      roles: ['pm', 'architect', 'backend', 'qa'],
+    },
+    {
+      name: 'Solo Coder',
+      description: 'Minimal team with PM and a single full-stack coder agent',
+      roles: ['pm', 'coder'],
+    },
+  ];
+
+  for (const t of templates) {
+    db.prepare(
+      'INSERT INTO team_templates (id, name, description, agent_ids, created_at) VALUES (?, ?, ?, ?, ?)',
+    ).run(
+      randomUUID(),
+      t.name,
+      t.description,
+      // agent_ids sütunu aslında rolleri saklar — preset agent eşlemesi role üzerinden yapılır
+      JSON.stringify(t.roles),
+      now(),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Team Templates — okuma fonksiyonları
+// ---------------------------------------------------------------------------
+
+function rowToTeamTemplate(row: any): TeamTemplate {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    // agent_ids sütununda roller saklanır
+    roles: JSON.parse(row.agent_ids),
+    createdAt: row.created_at,
+  };
+}
+
+export function listTeamTemplates(): TeamTemplate[] {
+  const db = getDb();
+  return (db.prepare('SELECT * FROM team_templates ORDER BY name').all() as any[]).map(rowToTeamTemplate);
+}
+
+export function getTeamTemplate(id: string): TeamTemplate | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM team_templates WHERE id = ?').get(id) as any;
+  return row ? rowToTeamTemplate(row) : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Project Agents CRUD
+// ---------------------------------------------------------------------------
+
+function rowToProjectAgent(row: any): ProjectAgent {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    sourceAgentId: row.source_agent_id ?? undefined,
+    name: row.name,
+    role: row.role as AgentRole | string,
+    avatar: row.avatar,
+    personality: row.personality,
+    model: row.model,
+    cliTool: row.cli_tool as CLITool,
+    skills: JSON.parse(row.skills),
+    systemPrompt: row.system_prompt,
+    createdAt: row.created_at,
+  };
+}
+
+export function createProjectAgent(data: {
+  projectId: string;
+  sourceAgentId?: string;
+  name: string;
+  role: string;
+  avatar: string;
+  personality: string;
+  model: string;
+  cliTool: string;
+  skills: string[];
+  systemPrompt: string;
+}): ProjectAgent {
+  const db = getDb();
+  const id = randomUUID();
+  const ts = now();
+  db.prepare(
+    `INSERT INTO project_agents
+      (id, project_id, source_agent_id, name, role, avatar, personality, model, cli_tool, skills, system_prompt, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    data.projectId,
+    data.sourceAgentId ?? null,
+    data.name,
+    data.role,
+    data.avatar,
+    data.personality,
+    data.model,
+    data.cliTool,
+    JSON.stringify(data.skills),
+    data.systemPrompt,
+    ts,
+  );
+  return getProjectAgent(id)!;
+}
+
+export function getProjectAgent(id: string): ProjectAgent | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM project_agents WHERE id = ?').get(id) as any;
+  return row ? rowToProjectAgent(row) : undefined;
+}
+
+export function listProjectAgents(projectId: string): ProjectAgent[] {
+  const db = getDb();
+  return (
+    db.prepare('SELECT * FROM project_agents WHERE project_id = ? ORDER BY created_at').all(projectId) as any[]
+  ).map(rowToProjectAgent);
+}
+
+export function updateProjectAgent(
+  id: string,
+  data: Partial<Omit<ProjectAgent, 'id' | 'projectId' | 'createdAt'>>,
+): ProjectAgent | undefined {
+  const db = getDb();
+  const fields: string[] = [];
+  const values: any[] = [];
+
+  if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
+  if (data.role !== undefined) { fields.push('role = ?'); values.push(data.role); }
+  if (data.avatar !== undefined) { fields.push('avatar = ?'); values.push(data.avatar); }
+  if (data.personality !== undefined) { fields.push('personality = ?'); values.push(data.personality); }
+  if (data.model !== undefined) { fields.push('model = ?'); values.push(data.model); }
+  if (data.cliTool !== undefined) { fields.push('cli_tool = ?'); values.push(data.cliTool); }
+  if (data.skills !== undefined) { fields.push('skills = ?'); values.push(JSON.stringify(data.skills)); }
+  if (data.systemPrompt !== undefined) { fields.push('system_prompt = ?'); values.push(data.systemPrompt); }
+  if (data.sourceAgentId !== undefined) { fields.push('source_agent_id = ?'); values.push(data.sourceAgentId); }
+
+  if (fields.length === 0) return getProjectAgent(id);
+
+  values.push(id);
+  db.prepare(`UPDATE project_agents SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  return getProjectAgent(id);
+}
+
+export function deleteProjectAgent(id: string): boolean {
+  const db = getDb();
+  const result = db.prepare('DELETE FROM project_agents WHERE id = ?').run(id);
+  return result.changes > 0;
+}
+
+/**
+ * Belirtilen rollere sahip preset agentları projeye kopyalar.
+ * Template'de tanımlı roller ile preset agentlar rol üzerinden eşleştirilir.
+ */
+export function copyAgentsToProject(projectId: string, roles: string[]): ProjectAgent[] {
+  const presets = listPresetAgents();
+  const created: ProjectAgent[] = [];
+
+  for (const role of roles) {
+    const preset = presets.find((p) => p.role === role);
+    if (preset) {
+      const agent = createProjectAgent({
+        projectId,
+        sourceAgentId: preset.id,
+        name: preset.name,
+        role: preset.role,
+        avatar: preset.avatar,
+        personality: preset.personality,
+        model: preset.model,
+        cliTool: preset.cliTool,
+        skills: preset.skills,
+        systemPrompt: preset.systemPrompt,
+      });
+      created.push(agent);
+    }
+  }
+
+  return created;
 }

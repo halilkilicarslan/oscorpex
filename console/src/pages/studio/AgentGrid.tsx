@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, Users, Plus } from 'lucide-react';
 import {
-  fetchAgentConfigs,
-  deleteAgent,
-  type AgentConfig,
+  fetchProjectAgents,
+  deleteProjectAgent,
+  type ProjectAgent,
 } from '../../lib/studio-api';
 import AgentCard from './AgentCard';
 import AgentDetailModal from './AgentDetailModal';
@@ -12,17 +12,17 @@ import AgentFormModal from './AgentFormModal';
 type RuntimeStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
 
 export default function AgentGrid({ projectId }: { projectId: string }) {
-  const [agents, setAgents] = useState<AgentConfig[]>([]);
+  const [agents, setAgents] = useState<ProjectAgent[]>([]);
   const [statuses, setStatuses] = useState<Record<string, RuntimeStatus>>({});
   const [loading, setLoading] = useState(true);
 
   // Modal state
-  const [detailAgent, setDetailAgent] = useState<AgentConfig | null>(null);
+  const [detailAgent, setDetailAgent] = useState<ProjectAgent | null>(null);
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
-  const [editTarget, setEditTarget] = useState<AgentConfig | undefined>(undefined);
+  const [editTarget, setEditTarget] = useState<ProjectAgent | undefined>(undefined);
 
   const loadAgents = useCallback(() => {
-    fetchAgentConfigs()
+    fetchProjectAgents(projectId)
       .then((data) => {
         setAgents(data);
         setStatuses((prev) => {
@@ -35,7 +35,7 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [projectId]);
 
   useEffect(() => { loadAgents(); }, [loadAgents]);
 
@@ -102,23 +102,23 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
     }
   }, [projectId]);
 
-  const handleDelete = useCallback(async (agent: AgentConfig) => {
+  const handleDelete = useCallback(async (agent: ProjectAgent) => {
     if (!confirm(`Delete agent "${agent.name}"? This action cannot be undone.`)) return;
     try {
-      await deleteAgent(agent.id);
+      await deleteProjectAgent(projectId, agent.id);
       setAgents((prev) => prev.filter((a) => a.id !== agent.id));
     } catch (err) {
       console.error('Failed to delete agent:', err);
     }
-  }, []);
+  }, [projectId]);
 
-  const handleOpenEdit = useCallback((agent: AgentConfig) => {
+  const handleOpenEdit = useCallback((agent: ProjectAgent) => {
     setDetailAgent(null);
     setEditTarget(agent);
     setFormMode('edit');
   }, []);
 
-  const handleFormSave = useCallback((saved: AgentConfig) => {
+  const handleFormSave = useCallback((saved: ProjectAgent) => {
     setAgents((prev) => {
       const idx = prev.findIndex((a) => a.id === saved.id);
       if (idx !== -1) {
@@ -185,8 +185,8 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
               onStart={() => handleStart(agent.id)}
               onStop={() => handleStop(agent.id)}
               onClick={() => setDetailAgent(agent)}
-              onEdit={!agent.isPreset ? () => handleOpenEdit(agent) : undefined}
-              onDelete={!agent.isPreset ? () => handleDelete(agent) : undefined}
+              onEdit={() => handleOpenEdit(agent)}
+              onDelete={() => handleDelete(agent)}
             />
           ))}
         </div>
@@ -206,6 +206,7 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
         <AgentFormModal
           mode={formMode}
           agent={editTarget}
+          projectId={projectId}
           onClose={() => { setFormMode(null); setEditTarget(undefined); }}
           onSave={handleFormSave}
         />
