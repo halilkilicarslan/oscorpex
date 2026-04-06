@@ -6,6 +6,7 @@ import {
   approvePlan,
   rejectPlan,
   streamPMChat,
+  fetchConfigStatus,
   type ChatMessage,
   type ProjectPlan,
 } from '../../lib/studio-api';
@@ -78,19 +79,22 @@ export default function PMChat({ projectId }: { projectId: string }) {
   const [streamText, setStreamText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [openaiConfigured, setOpenaiConfigured] = useState<boolean | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
 
-  // Load history & plan
+  // Load history, plan, and config status
   useEffect(() => {
     const load = async () => {
       try {
-        const [history, latestPlan] = await Promise.allSettled([
+        const [history, latestPlan, configStatus] = await Promise.allSettled([
           fetchChatHistory(projectId),
           fetchPlan(projectId),
+          fetchConfigStatus(),
         ]);
         if (history.status === 'fulfilled') setMessages(history.value);
         if (latestPlan.status === 'fulfilled') setPlan(latestPlan.value);
+        if (configStatus.status === 'fulfilled') setOpenaiConfigured(configStatus.value.openaiConfigured);
       } finally {
         setLoading(false);
       }
@@ -232,6 +236,11 @@ export default function PMChat({ projectId }: { projectId: string }) {
 
       {/* Input */}
       <div className="px-6 py-4 border-t border-[#262626]">
+        {openaiConfigured === false && (
+          <div className="mb-3 bg-[#f59e0b]/10 border border-[#f59e0b]/20 text-[#f59e0b] rounded-lg px-4 py-2 text-[12px]">
+            OpenAI API key is not configured. Add OPENAI_API_KEY to your .env file to enable PM Chat.
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <input
             type="text"
@@ -244,12 +253,12 @@ export default function PMChat({ projectId }: { projectId: string }) {
               }
             }}
             placeholder="Describe what you want to build..."
-            disabled={streaming}
+            disabled={streaming || openaiConfigured === false}
             className="flex-1 px-4 py-2.5 bg-[#0a0a0a] border border-[#262626] rounded-xl text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none disabled:opacity-50"
           />
           <button
             onClick={sendMessage}
-            disabled={!input.trim() || streaming}
+            disabled={!input.trim() || streaming || openaiConfigured === false}
             className="p-2.5 rounded-xl bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             {streaming ? (

@@ -234,3 +234,9 @@ export function streamPMChat(
 export async function fetchDockerStatus(): Promise<{ docker: boolean; coderImage: boolean }> {
   return json(await fetch(`${BASE}/docker/status`));
 }
+
+// ---- Config status --------------------------------------------------------
+
+export async function fetchConfigStatus(): Promise<{ openaiConfigured: boolean }> {
+  return json(await fetch(`${BASE}/config/status`));
+}

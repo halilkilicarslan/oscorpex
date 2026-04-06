@@ -7,20 +7,23 @@ import {
   Kanban,
   FolderTree,
   Loader2,
+  Activity,
 } from 'lucide-react';
 import { fetchProject, type Project } from '../../lib/studio-api';
 import PMChat from './PMChat';
 import AgentGrid from './AgentGrid';
 import KanbanBoard from './KanbanBoard';
 import FileExplorer from './FileExplorer';
+import EventFeed from './EventFeed';
 
-type Tab = 'chat' | 'team' | 'board' | 'files';
+type Tab = 'chat' | 'team' | 'board' | 'files' | 'events';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat', label: 'PM Chat', icon: <MessageSquare size={16} /> },
   { id: 'team', label: 'Team', icon: <Users size={16} /> },
   { id: 'board', label: 'Board', icon: <Kanban size={16} /> },
   { id: 'files', label: 'Files', icon: <FolderTree size={16} /> },
+  { id: 'events', label: 'Events', icon: <Activity size={16} /> },
 ];
 
 export default function ProjectPage() {
@@ -96,6 +99,7 @@ export default function ProjectPage() {
         {activeTab === 'team' && <AgentGrid projectId={projectId!} />}
         {activeTab === 'board' && <KanbanBoard projectId={projectId!} />}
         {activeTab === 'files' && <FileExplorer projectId={projectId!} />}
+        {activeTab === 'events' && <EventFeed projectId={projectId!} />}
       </div>
     </div>
   );
