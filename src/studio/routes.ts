@@ -62,6 +62,7 @@ import {
   writeAgentFile,
   deleteAgentFiles,
 } from './agent-files.js';
+import type { ProjectAgent } from './types.js';
 
 // Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();
@@ -1035,6 +1036,89 @@ studio.post('/providers/:id/test', async (c) => {
     const msg = err instanceof Error ? err.message : 'Connection failed';
     return c.json({ valid: false, message: msg });
   }
+});
+
+// ---- Org Structure helpers ------------------------------------------------
+
+interface OrgNode {
+  id: string;
+  name: string;
+  role: string;
+  avatar: string;
+  color: string;
+  pipelineOrder: number;
+  children: OrgNode[];
+}
+
+function buildOrgTree(agents: ProjectAgent[]): OrgNode[] {
+  const nodeMap = new Map<string, OrgNode>();
+
+  for (const a of agents) {
+    nodeMap.set(a.id, {
+      id: a.id,
+      name: a.name,
+      role: a.role,
+      avatar: a.avatar,
+      color: a.color,
+      pipelineOrder: a.pipelineOrder,
+      children: [],
+    });
+  }
+
+  const roots: OrgNode[] = [];
+
+  for (const a of agents) {
+    const node = nodeMap.get(a.id)!;
+    if (a.reportsTo && nodeMap.has(a.reportsTo)) {
+      nodeMap.get(a.reportsTo)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots;
+}
+
+// ---- Org Structure endpoints ----------------------------------------------
+
+// Get org structure for a project (tree format + pipeline order)
+studio.get('/projects/:id/team/org', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const agents = listProjectAgents(projectId);
+
+  const tree = buildOrgTree(agents);
+
+  const pipeline = agents
+    .filter((a) => a.pipelineOrder > 0)
+    .sort((a, b) => a.pipelineOrder - b.pipelineOrder)
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      role: a.role,
+      avatar: a.avatar,
+      color: a.color,
+      pipelineOrder: a.pipelineOrder,
+    }));
+
+  return c.json({ tree, pipeline });
+});
+
+// Update agent hierarchy (set reports_to and optional pipeline_order)
+studio.put('/projects/:id/team/:agentId/hierarchy', async (c) => {
+  const agentId = c.req.param('agentId');
+  const existing = getProjectAgent(agentId);
+  if (!existing || existing.projectId !== c.req.param('id')) {
+    return c.json({ error: 'Agent not found' }, 404);
+  }
+  const body = (await c.req.json()) as { reportsTo: string | null; pipelineOrder?: number };
+  const updated = updateProjectAgent(agentId, {
+    reportsTo: body.reportsTo ?? undefined,
+    pipelineOrder: body.pipelineOrder,
+  });
+  return c.json(updated);
 });
 
 export { studio as studioRoutes };

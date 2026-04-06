@@ -58,7 +58,8 @@ export default function AgentCard({
 
   return (
     <div
-      className={`border border-[#262626] rounded-xl bg-[#111111] overflow-hidden ${onClick ? 'hover:border-[#333] transition-colors' : ''}`}
+      className={`bg-[#111111] border border-[#262626] border-l-4 rounded-xl overflow-hidden ${onClick ? 'hover:border-[#333] transition-colors' : ''}`}
+      style={{ borderLeftColor: agent.color ?? '#22c55e' }}
     >
       <div
         className={`flex items-center gap-3 px-4 py-3 ${onClick ? 'cursor-pointer' : ''}`}
