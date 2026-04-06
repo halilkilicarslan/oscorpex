@@ -171,6 +171,30 @@ export async function fetchPresetAgents(): Promise<AgentConfig[]> {
   return json(await fetch(`${BASE}/agents/presets`));
 }
 
+export async function fetchAgent(id: string): Promise<AgentConfig> {
+  return json(await fetch(`${BASE}/agents/${id}`));
+}
+
+export async function createAgent(data: Omit<AgentConfig, 'id' | 'isPreset'>): Promise<AgentConfig> {
+  return json(await fetch(`${BASE}/agents`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }));
+}
+
+export async function updateAgent(id: string, data: Partial<AgentConfig>): Promise<AgentConfig> {
+  return json(await fetch(`${BASE}/agents/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }));
+}
+
+export async function deleteAgent(id: string): Promise<void> {
+  await fetch(`${BASE}/agents/${id}`, { method: 'DELETE' });
+}
+
 // ---- Chat -----------------------------------------------------------------
 
 export async function fetchChatHistory(projectId: string): Promise<ChatMessage[]> {
@@ -239,4 +263,59 @@ export async function fetchDockerStatus(): Promise<{ docker: boolean; coderImage
 
 export async function fetchConfigStatus(): Promise<{ openaiConfigured: boolean }> {
   return json(await fetch(`${BASE}/config/status`));
+}
+
+// ---- AI Providers ---------------------------------------------------------
+
+export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom';
+
+export interface AIProvider {
+  id: string;
+  name: string;
+  type: AIProviderType;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchProviders(): Promise<AIProvider[]> {
+  return json(await fetch(`${BASE}/providers`));
+}
+
+export async function createProvider(
+  data: Omit<AIProvider, 'id' | 'createdAt' | 'updatedAt' | 'isDefault'>,
+): Promise<AIProvider> {
+  return json(
+    await fetch(`${BASE}/providers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  );
+}
+
+export async function updateProvider(id: string, data: Partial<AIProvider>): Promise<AIProvider> {
+  return json(
+    await fetch(`${BASE}/providers/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  );
+}
+
+export async function deleteProvider(id: string): Promise<void> {
+  await json(await fetch(`${BASE}/providers/${id}`, { method: 'DELETE' }));
+}
+
+export async function setDefaultProvider(id: string): Promise<void> {
+  await json(await fetch(`${BASE}/providers/${id}/default`, { method: 'POST' }));
+}
+
+export async function testProvider(id: string): Promise<{ valid: boolean; message: string }> {
+  return json(await fetch(`${BASE}/providers/${id}/test`, { method: 'POST' }));
 }

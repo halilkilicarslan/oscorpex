@@ -9,6 +9,7 @@ const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'));
 const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
 const StudioHomePage = lazy(() => import('./pages/studio/StudioHomePage'));
 const ProjectPage = lazy(() => import('./pages/studio/ProjectPage'));
+const ProvidersPage = lazy(() => import('./pages/studio/ProvidersPage'));
 
 function LoadingSpinner() {
   return (
@@ -43,6 +44,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/triggers" element={<PlaceholderPage title="Triggers" description="Event triggers and automation" />} />
             <Route path="/studio" element={<StudioHomePage />} />
             <Route path="/studio/:projectId" element={<ProjectPage />} />
+            <Route path="/studio/providers" element={<ProvidersPage />} />
           </Route>
         </Routes>
       </Suspense>

@@ -17,6 +17,7 @@ import {
   ChevronRight,
   ExternalLink,
   Code2,
+  Settings,
 } from 'lucide-react';
 
 interface NavItem {
@@ -69,6 +70,7 @@ const sections: NavSection[] = [
     title: 'AI DEV STUDIO',
     items: [
       { to: '/studio', label: 'Studio Home', icon: <Code2 size={18} />, badge: 'New' },
+      { to: '/studio/providers', label: 'Providers', icon: <Settings size={18} /> },
     ],
   },
 ];
