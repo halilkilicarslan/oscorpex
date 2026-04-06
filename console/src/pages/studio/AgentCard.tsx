@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Play, Square, Loader2, Terminal, ChevronUp, Pencil, Trash2 } from 'lucide-react';
-import type { AgentConfig } from '../../lib/studio-api';
+import type { ProjectAgent } from '../../lib/studio-api';
 import AgentTerminal from './AgentTerminal';
 
 type RuntimeStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
@@ -23,7 +23,7 @@ export default function AgentCard({
   onEdit,
   onDelete,
 }: {
-  agent: AgentConfig;
+  agent: ProjectAgent;
   projectId: string;
   status: RuntimeStatus;
   onStart: () => Promise<void>;
@@ -74,15 +74,15 @@ export default function AgentCard({
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-semibold text-[#fafafa] truncate">{agent.name}</span>
             <div className={`w-2 h-2 rounded-full shrink-0 ${s.color}`} title={s.label} />
-            {/* Preset / Custom badge */}
+            {/* Template / Custom badge */}
             <span
               className={`text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0 ${
-                agent.isPreset
+                agent.sourceAgentId
                   ? 'bg-[#a3a3a3]/10 text-[#525252] border border-[#333]'
                   : 'bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20'
               }`}
             >
-              {agent.isPreset ? 'Preset' : 'Custom'}
+              {agent.sourceAgentId ? 'Template' : 'Custom'}
             </span>
           </div>
           <span className="text-[11px] text-[#525252] block truncate capitalize">{agent.role}</span>
@@ -93,8 +93,8 @@ export default function AgentCard({
           className="flex items-center gap-1.5"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Edit — only for custom agents */}
-          {!agent.isPreset && onEdit && (
+          {/* Edit */}
+          {onEdit && (
             <button
               onClick={onEdit}
               className="p-1.5 rounded-lg text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors"
@@ -104,8 +104,8 @@ export default function AgentCard({
             </button>
           )}
 
-          {/* Delete — only for custom agents */}
-          {!agent.isPreset && onDelete && (
+          {/* Delete */}
+          {onDelete && (
             <button
               onClick={onDelete}
               className="p-1.5 rounded-lg text-[#525252] hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-colors"
