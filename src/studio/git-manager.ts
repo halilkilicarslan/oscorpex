@@ -195,6 +195,17 @@ class GitManager {
     return readFile(fullPath, 'utf-8');
   }
 
+  async writeFileContent(projectPath: string, filePath: string, content: string): Promise<void> {
+    const fullPath = join(projectPath, filePath);
+    if (!fullPath.startsWith(projectPath)) {
+      throw new Error('Invalid file path');
+    }
+    const { writeFile, mkdir } = await import('node:fs/promises');
+    const { dirname } = await import('node:path');
+    await mkdir(dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, content, 'utf-8');
+  }
+
   async getFileStats(projectPath: string, filePath: string): Promise<{ size: number; modified: string }> {
     const fullPath = join(projectPath, filePath);
     if (!fullPath.startsWith(projectPath)) throw new Error('Invalid file path');

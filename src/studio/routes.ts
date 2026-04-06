@@ -415,6 +415,29 @@ studio.get('/projects/:id/files/*', async (c) => {
   }
 });
 
+studio.put('/projects/:id/files/*', async (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+
+  const prefix = `/api/studio/projects/${c.req.param('id')}/files/`;
+  const filePath = c.req.path.startsWith(prefix)
+    ? c.req.path.slice(prefix.length)
+    : c.req.path.replace(/^.*\/files\//, '');
+  if (!filePath) return c.json({ error: 'File path required' }, 400);
+
+  const body = (await c.req.json()) as { content: string };
+  if (typeof body.content !== 'string') return c.json({ error: 'Content required' }, 400);
+
+  try {
+    await gitManager.writeFileContent(project.repoPath, filePath, body.content);
+    return c.json({ path: filePath, saved: true });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Failed to save file';
+    return c.json({ error: msg }, 500);
+  }
+});
+
 studio.get('/projects/:id/git/log', async (c) => {
   const project = getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
