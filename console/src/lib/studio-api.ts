@@ -329,6 +329,38 @@ export function streamPMChat(
   return () => controller.abort();
 }
 
+// ---- Agent Files ----------------------------------------------------------
+
+export async function fetchAgentFiles(
+  projectId: string,
+  agentId: string,
+): Promise<{ agentId: string; agentName: string; files: string[] }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/team/${agentId}/files`));
+}
+
+export async function fetchAgentFile(
+  projectId: string,
+  agentId: string,
+  fileName: string,
+): Promise<{ fileName: string; content: string }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/team/${agentId}/files/${fileName}`));
+}
+
+export async function writeAgentFile(
+  projectId: string,
+  agentId: string,
+  fileName: string,
+  content: string,
+): Promise<void> {
+  await json(
+    await fetch(`${BASE}/projects/${projectId}/team/${agentId}/files/${fileName}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    }),
+  );
+}
+
 // ---- Docker ---------------------------------------------------------------
 
 export async function fetchDockerStatus(): Promise<{ docker: boolean; coderImage: boolean }> {

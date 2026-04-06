@@ -1,6 +1,15 @@
-import { useState } from 'react';
-import { X, Loader2 } from 'lucide-react';
-import { addProjectAgent, updateProjectAgent, type ProjectAgent } from '../../lib/studio-api';
+import { useState, useEffect } from 'react';
+import { X, Loader2, FileText } from 'lucide-react';
+import {
+  addProjectAgent,
+  updateProjectAgent,
+  fetchProviders,
+  fetchAgentFile,
+  writeAgentFile,
+  type AIProvider,
+  type ProjectAgent,
+} from '../../lib/studio-api';
+import { getModelsFromProviders } from '../../lib/model-options';
 
 const ROLE_OPTIONS = [
   { value: 'pm', label: 'PM' },
@@ -47,6 +56,100 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Provider-driven model select
+  const [providers, setProviders] = useState<AIProvider[]>([]);
+  const [modelGroups, setModelGroups] = useState<{ label: string; models: string[] }[]>([]);
+
+  // .md file mode toggles
+  const [promptMode, setPromptMode] = useState<'inline' | 'file'>('inline');
+  const [skillsMode, setSkillsMode] = useState<'inline' | 'file'>('inline');
+
+  // Skills .md file content (separate state so inline tags are preserved)
+  const [skillsMdContent, setSkillsMdContent] = useState('');
+
+  useEffect(() => {
+    fetchProviders()
+      .then((p) => {
+        setProviders(p);
+        setModelGroups(getModelsFromProviders(p));
+      })
+      .catch(() => {
+        // Providers endpoint may not be ready; fall back to text input
+      });
+  }, []);
+
+  // Suppress unused variable warning — providers is used implicitly via getModelsFromProviders
+  void providers;
+
+  // ---- .md file handlers ---------------------------------------------------
+
+  const loadPromptFile = async () => {
+    if (!agent) return;
+    try {
+      const { content } = await fetchAgentFile(projectId, agent.id, 'system-prompt.md');
+      // Skip the first heading line and blank line, keep the rest
+      const lines = content.split('\n');
+      const bodyStart = lines.findIndex((l, i) => i > 0 && l.trim() === '') + 1;
+      setSystemPrompt(lines.slice(bodyStart).join('\n').trim());
+    } catch {
+      // File may not exist yet — leave current content as-is
+    }
+  };
+
+  const savePromptFile = async () => {
+    if (!agent) return;
+    try {
+      await writeAgentFile(
+        projectId,
+        agent.id,
+        'system-prompt.md',
+        `# ${name} — System Prompt\n\n${systemPrompt}\n`,
+      );
+    } catch {
+      // Best-effort; backend may not be ready yet
+    }
+  };
+
+  const loadSkillsFile = async () => {
+    if (!agent) return;
+    try {
+      const { content } = await fetchAgentFile(projectId, agent.id, 'skills.md');
+      setSkillsMdContent(content);
+    } catch {
+      // File may not exist yet — seed with current inline skills as markdown
+      const seed = skills.length > 0 ? skills.map((s) => `- ${s}`).join('\n') : '';
+      setSkillsMdContent(seed ? `# ${name} — Skills\n\n${seed}\n` : '');
+    }
+  };
+
+  const saveSkillsFile = async () => {
+    if (!agent) return;
+    try {
+      await writeAgentFile(projectId, agent.id, 'skills.md', skillsMdContent);
+    } catch {
+      // Best-effort; backend may not be ready yet
+    }
+  };
+
+  // Pre-load file content when switching to file mode
+  const handleTogglePromptMode = () => {
+    const next = promptMode === 'inline' ? 'file' : 'inline';
+    setPromptMode(next);
+    if (next === 'file' && agent) {
+      loadPromptFile();
+    }
+  };
+
+  const handleToggleSkillsMode = () => {
+    const next = skillsMode === 'inline' ? 'file' : 'inline';
+    setSkillsMode(next);
+    if (next === 'file' && agent) {
+      loadSkillsFile();
+    }
+  };
+
+  // ---- Skills (inline) -----------------------------------------------------
+
   const addSkill = () => {
     const skill = skillInput.trim();
     if (skill && !skills.includes(skill)) {
@@ -58,6 +161,8 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
   const removeSkill = (skill: string) => {
     setSkills(skills.filter((s) => s !== skill));
   };
+
+  // ---- Submit --------------------------------------------------------------
 
   const isValid = name.trim().length > 0 && role.length > 0;
 
@@ -90,6 +195,8 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
       setLoading(false);
     }
   };
+
+  // ---- Render --------------------------------------------------------------
 
   return (
     <div
@@ -181,13 +288,30 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
           {/* Model */}
           <div>
             <label className={labelClass}>Model</label>
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="gpt-4o-mini, claude-sonnet-4-20250514..."
-              className={inputClass + ' font-mono'}
-            />
+            {modelGroups.length > 0 ? (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className={selectClass}
+              >
+                <option value="">Select model...</option>
+                {modelGroups.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.models.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="gpt-4o-mini, claude-sonnet-4-20250514..."
+                className={inputClass + ' font-mono'}
+              />
+            )}
           </div>
 
           {/* Personality */}
@@ -204,57 +328,139 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
 
           {/* Skills */}
           <div>
-            <label className={labelClass}>Skills</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={skillInput}
-                onChange={(e) => setSkillInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); addSkill(); }
-                }}
-                placeholder="TypeScript, React, Testing..."
-                className="flex-1 px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
-              />
-              <button
-                onClick={addSkill}
-                type="button"
-                className="px-3 py-2 rounded-lg bg-[#1f1f1f] text-[#a3a3a3] hover:text-[#fafafa] text-[12px] font-medium transition-colors"
-              >
-                Add
-              </button>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className={labelClass + ' mb-0'}>Skills</label>
+              {mode === 'edit' && agent && (
+                <button
+                  type="button"
+                  onClick={handleToggleSkillsMode}
+                  className="flex items-center gap-1 text-[11px] text-[#525252] hover:text-[#a3a3a3] transition-colors"
+                >
+                  <FileText size={11} />
+                  {skillsMode === 'inline' ? 'View .md file' : 'Edit inline'}
+                </button>
+              )}
             </div>
-            {skills.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {skills.map((skill) => (
-                  <span
-                    key={skill}
-                    className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20"
+            {skillsMode === 'file' ? (
+              <div className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-[#525252] font-mono">skills.md</span>
+                  <button
+                    type="button"
+                    onClick={loadSkillsFile}
+                    className="text-[11px] text-[#22c55e] hover:underline"
                   >
-                    {skill}
-                    <button
-                      onClick={() => removeSkill(skill)}
-                      type="button"
-                      className="hover:text-white"
-                    >
-                      <X size={10} />
-                    </button>
-                  </span>
-                ))}
+                    Reload from file
+                  </button>
+                </div>
+                <textarea
+                  value={skillsMdContent}
+                  onChange={(e) => setSkillsMdContent(e.target.value)}
+                  rows={6}
+                  className={inputClass + ' resize-none font-mono text-[12px] leading-relaxed'}
+                />
+                <button
+                  type="button"
+                  onClick={saveSkillsFile}
+                  className="mt-2 text-[11px] px-2 py-1 rounded bg-[#1f1f1f] text-[#a3a3a3] hover:text-[#fafafa] transition-colors"
+                >
+                  Save to .md file
+                </button>
               </div>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={skillInput}
+                    onChange={(e) => setSkillInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); addSkill(); }
+                    }}
+                    placeholder="TypeScript, React, Testing..."
+                    className="flex-1 px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
+                  />
+                  <button
+                    onClick={addSkill}
+                    type="button"
+                    className="px-3 py-2 rounded-lg bg-[#1f1f1f] text-[#a3a3a3] hover:text-[#fafafa] text-[12px] font-medium transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+                {skills.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {skills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20"
+                      >
+                        {skill}
+                        <button
+                          onClick={() => removeSkill(skill)}
+                          type="button"
+                          className="hover:text-white"
+                        >
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           {/* System Prompt */}
           <div>
-            <label className={labelClass}>System Prompt</label>
-            <textarea
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              placeholder="You are a senior frontend engineer..."
-              rows={6}
-              className={inputClass + ' resize-none font-mono text-[12px] leading-relaxed'}
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className={labelClass + ' mb-0'}>System Prompt</label>
+              {mode === 'edit' && agent && (
+                <button
+                  type="button"
+                  onClick={handleTogglePromptMode}
+                  className="flex items-center gap-1 text-[11px] text-[#525252] hover:text-[#a3a3a3] transition-colors"
+                >
+                  <FileText size={11} />
+                  {promptMode === 'inline' ? 'View .md file' : 'Edit inline'}
+                </button>
+              )}
+            </div>
+            {promptMode === 'file' ? (
+              <div className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-[#525252] font-mono">system-prompt.md</span>
+                  <button
+                    type="button"
+                    onClick={loadPromptFile}
+                    className="text-[11px] text-[#22c55e] hover:underline"
+                  >
+                    Reload from file
+                  </button>
+                </div>
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  rows={8}
+                  className={inputClass + ' resize-none font-mono text-[12px] leading-relaxed'}
+                />
+                <button
+                  type="button"
+                  onClick={savePromptFile}
+                  className="mt-2 text-[11px] px-2 py-1 rounded bg-[#1f1f1f] text-[#a3a3a3] hover:text-[#fafafa] transition-colors"
+                >
+                  Save to .md file
+                </button>
+              </div>
+            ) : (
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                placeholder="You are a senior frontend engineer..."
+                rows={6}
+                className={inputClass + ' resize-none font-mono text-[12px] leading-relaxed'}
+              />
+            )}
           </div>
 
           {/* Error */}

@@ -25,6 +25,7 @@ import {
   type AIProvider,
   type AIProviderType,
 } from '../../lib/studio-api';
+import { MODEL_OPTIONS } from '../../lib/model-options';
 
 // ---------------------------------------------------------------------------
 // Provider type metadata
@@ -43,67 +44,35 @@ const PROVIDER_META: Record<AIProviderType, ProviderMeta> = {
     label: 'OpenAI',
     defaultBaseUrl: '',
     defaultModel: 'gpt-4o-mini',
-    models: [
-      'gpt-4o',
-      'gpt-4o-mini',
-      'gpt-4.1',
-      'gpt-4.1-mini',
-      'gpt-4.1-nano',
-      'o4-mini',
-      'o3',
-      'o3-mini',
-    ],
+    models: MODEL_OPTIONS.openai,
     color: 'text-[#10a37f]',
   },
   anthropic: {
     label: 'Anthropic',
     defaultBaseUrl: '',
     defaultModel: 'claude-sonnet-4-20250514',
-    models: [
-      'claude-opus-4-20250514',
-      'claude-sonnet-4-20250514',
-      'claude-haiku-4-20250514',
-      'claude-3-5-sonnet-20241022',
-      'claude-3-5-haiku-20241022',
-    ],
+    models: MODEL_OPTIONS.anthropic,
     color: 'text-[#d97706]',
   },
   google: {
     label: 'Google',
     defaultBaseUrl: '',
     defaultModel: 'gemini-2.0-flash',
-    models: [
-      'gemini-2.5-pro',
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-2.0-flash-lite',
-      'gemini-1.5-pro',
-      'gemini-1.5-flash',
-    ],
+    models: MODEL_OPTIONS.google,
     color: 'text-[#4285f4]',
   },
   ollama: {
     label: 'Ollama',
     defaultBaseUrl: 'http://localhost:11434',
     defaultModel: 'llama3',
-    models: [
-      'llama3',
-      'llama3.1',
-      'llama3.2',
-      'mistral',
-      'mixtral',
-      'codellama',
-      'deepseek-coder',
-      'phi3',
-      'qwen2.5-coder',
-    ],
+    models: MODEL_OPTIONS.ollama,
     color: 'text-[#a855f7]',
   },
   custom: {
     label: 'Custom',
     defaultBaseUrl: '',
     defaultModel: '',
-    models: [],
+    models: MODEL_OPTIONS.custom,
     color: 'text-[#a3a3a3]',
   },
 };

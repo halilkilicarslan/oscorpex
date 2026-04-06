@@ -11,3 +11,4 @@ export { containerManager } from './container-manager.js';
 export { executionEngine } from './execution-engine.js';
 export { gitManager } from './git-manager.js';
 export { studioRoutes } from './routes.js';
+export * from './agent-files.js';

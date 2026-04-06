@@ -54,6 +54,14 @@ import { taskEngine } from './task-engine.js';
 import { containerManager } from './container-manager.js';
 import { executionEngine } from './execution-engine.js';
 import { gitManager } from './git-manager.js';
+import {
+  createAgentFiles,
+  updateAgentFiles,
+  readAgentFile,
+  listAgentFiles,
+  writeAgentFile,
+  deleteAgentFiles,
+} from './agent-files.js';
 
 // Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();
@@ -88,14 +96,32 @@ studio.post('/projects', async (c) => {
     // Kullanıcının belirttiği şablon
     const template = getTeamTemplate(templateId);
     if (template) {
-      copyAgentsToProject(project.id, template.roles);
+      const copiedAgents = copyAgentsToProject(project.id, template.roles);
+      for (const agent of copiedAgents) {
+        createAgentFiles(project.id, agent.name, {
+          skills: agent.skills,
+          systemPrompt: agent.systemPrompt,
+          personality: agent.personality,
+          role: agent.role,
+          model: agent.model,
+        }).catch((err) => console.error('Failed to create agent files:', err));
+      }
     }
   } else {
     // Varsayılan: Full Stack Team
     const templates = listTeamTemplates();
     const fullStack = templates.find((t) => t.name === 'Full Stack Team');
     if (fullStack) {
-      copyAgentsToProject(project.id, fullStack.roles);
+      const copiedAgents = copyAgentsToProject(project.id, fullStack.roles);
+      for (const agent of copiedAgents) {
+        createAgentFiles(project.id, agent.name, {
+          skills: agent.skills,
+          systemPrompt: agent.systemPrompt,
+          personality: agent.personality,
+          role: agent.role,
+          model: agent.model,
+        }).catch((err) => console.error('Failed to create agent files:', err));
+      }
     }
   }
 
@@ -542,6 +568,14 @@ studio.post('/projects/:id/team', async (c) => {
       skills: body.skills ?? preset.skills,
       systemPrompt: body.systemPrompt ?? preset.systemPrompt,
     });
+    // Create agent .md files (non-blocking)
+    createAgentFiles(projectId, agent.name, {
+      skills: agent.skills,
+      systemPrompt: agent.systemPrompt,
+      personality: agent.personality,
+      role: agent.role,
+      model: agent.model,
+    }).catch((err) => console.error('Failed to create agent files:', err));
     return c.json(agent, 201);
   }
 
@@ -562,6 +596,14 @@ studio.post('/projects/:id/team', async (c) => {
     skills: body.skills ?? [],
     systemPrompt: body.systemPrompt ?? '',
   });
+  // Create agent .md files (non-blocking)
+  createAgentFiles(projectId, agent.name, {
+    skills: agent.skills,
+    systemPrompt: agent.systemPrompt,
+    personality: agent.personality,
+    role: agent.role,
+    model: agent.model,
+  }).catch((err) => console.error('Failed to create agent files:', err));
   return c.json(agent, 201);
 });
 
@@ -585,6 +627,13 @@ studio.put('/projects/:id/team/:agentId', async (c) => {
   const body = await c.req.json();
   const updated = updateProjectAgent(agentId, body);
   if (!updated) return c.json({ error: 'Agent not found' }, 404);
+  updateAgentFiles(c.req.param('id'), updated.name, {
+    skills: updated.skills,
+    systemPrompt: updated.systemPrompt,
+    personality: updated.personality,
+    role: updated.role,
+    model: updated.model,
+  }).catch((err) => console.error('Failed to update agent files:', err));
   return c.json(updated);
 });
 
@@ -597,6 +646,7 @@ studio.delete('/projects/:id/team/:agentId', (c) => {
   }
   const ok = deleteProjectAgent(agentId);
   if (!ok) return c.json({ error: 'Agent not found' }, 404);
+  deleteAgentFiles(c.req.param('id'), existing.name).catch(() => {});
   return c.json({ success: true });
 });
 
@@ -613,7 +663,50 @@ studio.post('/projects/:id/team/from-template', async (c) => {
   if (!template) return c.json({ error: 'Template not found' }, 404);
 
   const agents = copyAgentsToProject(projectId, template.roles);
+  for (const agent of agents) {
+    createAgentFiles(projectId, agent.name, {
+      skills: agent.skills,
+      systemPrompt: agent.systemPrompt,
+      personality: agent.personality,
+      role: agent.role,
+      model: agent.model,
+    }).catch((err) => console.error('Failed to create agent files:', err));
+  }
   return c.json(agents, 201);
+});
+
+// ---- Agent .md Files ------------------------------------------------------
+
+// List .md files for a project agent
+studio.get('/projects/:id/team/:agentId/files', async (c) => {
+  const agent = getProjectAgent(c.req.param('agentId'));
+  if (!agent || agent.projectId !== c.req.param('id')) {
+    return c.json({ error: 'Agent not found' }, 404);
+  }
+  const files = await listAgentFiles(c.req.param('id'), agent.name);
+  return c.json({ agentId: agent.id, agentName: agent.name, files });
+});
+
+// Read a specific .md file
+studio.get('/projects/:id/team/:agentId/files/:fileName', async (c) => {
+  const agent = getProjectAgent(c.req.param('agentId'));
+  if (!agent || agent.projectId !== c.req.param('id')) {
+    return c.json({ error: 'Agent not found' }, 404);
+  }
+  const content = await readAgentFile(c.req.param('id'), agent.name, c.req.param('fileName'));
+  if (content === null) return c.json({ error: 'File not found' }, 404);
+  return c.json({ fileName: c.req.param('fileName'), content });
+});
+
+// Write/update a .md file
+studio.put('/projects/:id/team/:agentId/files/:fileName', async (c) => {
+  const agent = getProjectAgent(c.req.param('agentId'));
+  if (!agent || agent.projectId !== c.req.param('id')) {
+    return c.json({ error: 'Agent not found' }, 404);
+  }
+  const body = (await c.req.json()) as { content: string };
+  await writeAgentFile(c.req.param('id'), agent.name, c.req.param('fileName'), body.content);
+  return c.json({ success: true });
 });
 
 // ---- Container / Runtime --------------------------------------------------
