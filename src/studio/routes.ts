@@ -399,8 +399,11 @@ studio.get('/projects/:id/files/*', async (c) => {
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
-  // Extract file path from wildcard
-  const filePath = c.req.path.replace(`/projects/${c.req.param('id')}/files/`, '');
+  // Extract file path from wildcard — req.path includes the mount prefix (/api/studio)
+  const prefix = `/api/studio/projects/${c.req.param('id')}/files/`;
+  const filePath = c.req.path.startsWith(prefix)
+    ? c.req.path.slice(prefix.length)
+    : c.req.path.replace(/^.*\/files\//, '');
   if (!filePath) return c.json({ error: 'File path required' }, 400);
 
   try {
