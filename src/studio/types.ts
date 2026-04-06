@@ -143,6 +143,7 @@ export type EventType =
   | 'phase:completed'
   | 'plan:created'
   | 'plan:approved'
+  | 'execution:started'
   | 'escalation:user'
   | 'git:commit'
   | 'git:pr-created';

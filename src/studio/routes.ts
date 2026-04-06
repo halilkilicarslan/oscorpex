@@ -6,6 +6,8 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { streamText, stepCountIs } from 'ai';
 import { openai } from '@ai-sdk/openai';
+import { mkdir } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import {
   createProject,
   getProject,
@@ -57,7 +59,19 @@ studio.post('/projects', async (c) => {
     techStack: body.techStack ?? [],
     repoPath: '',
   });
-  return c.json(project, 201);
+
+  // Initialize git repo and docs structure — optional, failure does not block project creation
+  try {
+    const repoPath = join(resolve('.voltagent/repos'), project.id);
+    await mkdir(repoPath, { recursive: true });
+    await gitManager.initRepo(repoPath);
+    await gitManager.initDocs(repoPath);
+    updateProject(project.id, { repoPath });
+    return c.json({ ...project, repoPath }, 201);
+  } catch {
+    // Repo init failed — return the project without a repoPath
+    return c.json(project, 201);
+  }
 });
 
 studio.get('/projects/:id', (c) => {
@@ -82,6 +96,10 @@ studio.delete('/projects/:id', (c) => {
 // ---- PM Chat (SSE streaming) ----------------------------------------------
 
 studio.post('/projects/:id/chat', async (c) => {
+  if (!process.env.OPENAI_API_KEY) {
+    return c.json({ error: 'OPENAI_API_KEY is not configured. Set it in your .env file.' }, 503);
+  }
+
   const projectId = c.req.param('id');
   const project = getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
@@ -167,20 +185,43 @@ studio.get('/projects/:id/plan', (c) => {
 });
 
 studio.post('/projects/:id/plan/approve', (c) => {
-  const plan = getLatestPlan(c.req.param('id'));
+  const projectId = c.req.param('id');
+  const plan = getLatestPlan(projectId);
   if (!plan) return c.json({ error: 'No plan found' }, 404);
   if (plan.status !== 'draft') return c.json({ error: 'Plan is not in draft status' }, 400);
 
   updatePlanStatus(plan.id, 'approved');
-  updateProject(c.req.param('id'), { status: 'approved' });
 
   eventBus.emit({
-    projectId: c.req.param('id'),
+    projectId,
     type: 'plan:approved',
     payload: { planId: plan.id },
   });
 
-  return c.json({ success: true, planId: plan.id });
+  let execution: { started: boolean; readyTasks: { id: string; title: string }[] } = {
+    started: false,
+    readyTasks: [],
+  };
+
+  try {
+    const readyTasks = taskEngine.beginExecution(projectId);
+    execution = {
+      started: true,
+      readyTasks: readyTasks.map((t) => ({ id: t.id, title: t.title })),
+    };
+
+    eventBus.emit({
+      projectId,
+      type: 'execution:started',
+      payload: { planId: plan.id, readyTaskCount: readyTasks.length },
+    });
+  } catch (_execError) {
+    // Execution failed to start — plan remains approved but project stays in approved state
+    updateProject(projectId, { status: 'approved' });
+    return c.json({ success: true, planId: plan.id, execution });
+  }
+
+  return c.json({ success: true, planId: plan.id, execution });
 });
 
 studio.post('/projects/:id/plan/reject', async (c) => {
@@ -458,6 +499,12 @@ studio.get('/projects/:id/events', (c) => {
 studio.get('/projects/:id/events/recent', (c) => {
   const limit = Number(c.req.query('limit') ?? 50);
   return c.json(listEvents(c.req.param('id'), limit));
+});
+
+// ---- Config status --------------------------------------------------------
+
+studio.get('/config/status', (c) => {
+  return c.json({ openaiConfigured: !!process.env.OPENAI_API_KEY });
 });
 
 export { studio as studioRoutes };
