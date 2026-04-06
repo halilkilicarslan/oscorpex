@@ -175,11 +175,28 @@ function migrate(db: Database.Database): void {
       cli_tool        TEXT NOT NULL DEFAULT 'claude-code',
       skills          TEXT NOT NULL DEFAULT '[]',
       system_prompt   TEXT NOT NULL DEFAULT '',
-      created_at      TEXT NOT NULL
+      created_at      TEXT NOT NULL,
+      reports_to      TEXT,
+      color           TEXT NOT NULL DEFAULT '#22c55e',
+      pipeline_order  INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE INDEX IF NOT EXISTS idx_project_agents_project ON project_agents(project_id);
   `);
+
+  // Additive migrations for existing databases — safe to run on every startup
+  const existingCols = (db.prepare("PRAGMA table_info(project_agents)").all() as Array<{ name: string }>).map(
+    (c) => c.name,
+  );
+  if (!existingCols.includes('reports_to')) {
+    db.exec("ALTER TABLE project_agents ADD COLUMN reports_to TEXT");
+  }
+  if (!existingCols.includes('color')) {
+    db.exec("ALTER TABLE project_agents ADD COLUMN color TEXT NOT NULL DEFAULT '#22c55e'");
+  }
+  if (!existingCols.includes('pipeline_order')) {
+    db.exec("ALTER TABLE project_agents ADD COLUMN pipeline_order INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -925,6 +942,9 @@ function rowToProjectAgent(row: any): ProjectAgent {
     skills: JSON.parse(row.skills),
     systemPrompt: row.system_prompt,
     createdAt: row.created_at,
+    reportsTo: row.reports_to || undefined,
+    color: row.color || '#22c55e',
+    pipelineOrder: row.pipeline_order ?? 0,
   };
 }
 
@@ -939,14 +959,17 @@ export function createProjectAgent(data: {
   cliTool: string;
   skills: string[];
   systemPrompt: string;
+  reportsTo?: string;
+  color?: string;
+  pipelineOrder?: number;
 }): ProjectAgent {
   const db = getDb();
   const id = randomUUID();
   const ts = now();
   db.prepare(
     `INSERT INTO project_agents
-      (id, project_id, source_agent_id, name, role, avatar, personality, model, cli_tool, skills, system_prompt, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, project_id, source_agent_id, name, role, avatar, personality, model, cli_tool, skills, system_prompt, created_at, reports_to, color, pipeline_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     data.projectId,
@@ -960,6 +983,9 @@ export function createProjectAgent(data: {
     JSON.stringify(data.skills),
     data.systemPrompt,
     ts,
+    data.reportsTo ?? null,
+    data.color ?? '#22c55e',
+    data.pipelineOrder ?? 0,
   );
   return getProjectAgent(id)!;
 }
@@ -994,6 +1020,9 @@ export function updateProjectAgent(
   if (data.skills !== undefined) { fields.push('skills = ?'); values.push(JSON.stringify(data.skills)); }
   if (data.systemPrompt !== undefined) { fields.push('system_prompt = ?'); values.push(data.systemPrompt); }
   if (data.sourceAgentId !== undefined) { fields.push('source_agent_id = ?'); values.push(data.sourceAgentId); }
+  if (data.reportsTo !== undefined) { fields.push('reports_to = ?'); values.push(data.reportsTo || null); }
+  if (data.color !== undefined) { fields.push('color = ?'); values.push(data.color); }
+  if (data.pipelineOrder !== undefined) { fields.push('pipeline_order = ?'); values.push(data.pipelineOrder); }
 
   if (fields.length === 0) return getProjectAgent(id);
 
@@ -1011,10 +1040,33 @@ export function deleteProjectAgent(id: string): boolean {
 /**
  * Belirtilen rollere sahip preset agentları projeye kopyalar.
  * Template'de tanımlı roller ile preset agentlar rol üzerinden eşleştirilir.
+ * Ayrıca PM liderliğinde varsayılan hiyerarşi ve pipeline sırası kurulur.
  */
 export function copyAgentsToProject(projectId: string, roles: string[]): ProjectAgent[] {
   const presets = listPresetAgents();
   const created: ProjectAgent[] = [];
+
+  const colorMap: Record<string, string> = {
+    pm: '#f59e0b',
+    architect: '#3b82f6',
+    frontend: '#ec4899',
+    backend: '#22c55e',
+    qa: '#a855f7',
+    reviewer: '#ef4444',
+    devops: '#06b6d4',
+    coder: '#06b6d4',
+  };
+
+  const pipelineMap: Record<string, number> = {
+    pm: 0,
+    architect: 1,
+    frontend: 2,
+    backend: 2,
+    qa: 3,
+    reviewer: 4,
+    devops: 1,
+    coder: 2,
+  };
 
   for (const role of roles) {
     const preset = presets.find((p) => p.role === role);
@@ -1030,8 +1082,21 @@ export function copyAgentsToProject(projectId: string, roles: string[]): Project
         cliTool: preset.cliTool,
         skills: preset.skills,
         systemPrompt: preset.systemPrompt,
+        color: colorMap[preset.role] || '#22c55e',
+        pipelineOrder: pipelineMap[preset.role] ?? 2,
       });
       created.push(agent);
+    }
+  }
+
+  // Set up hierarchy: PM is the lead, all other agents report to PM
+  const pm = created.find((a) => a.role === 'pm');
+  if (pm) {
+    for (const agent of created) {
+      if (agent.id !== pm.id) {
+        updateProjectAgent(agent.id, { reportsTo: pm.id });
+        agent.reportsTo = pm.id;
+      }
     }
   }
 

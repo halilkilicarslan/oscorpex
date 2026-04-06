@@ -93,6 +93,28 @@ export interface ProjectAgent {
   skills: string[];
   systemPrompt: string;
   createdAt: string;
+  reportsTo?: string;
+  color: string;
+  pipelineOrder: number;
+}
+
+export interface OrgNode {
+  id: string;
+  name: string;
+  role: string;
+  avatar: string;
+  color: string;
+  pipelineOrder: number;
+  children: OrgNode[];
+}
+
+export interface PipelineAgent {
+  id: string;
+  name: string;
+  role: string;
+  avatar: string;
+  color: string;
+  pipelineOrder: number;
 }
 
 export interface ChatMessage {
@@ -261,6 +283,22 @@ export async function updateProjectAgent(
 
 export async function deleteProjectAgent(projectId: string, agentId: string): Promise<void> {
   await fetch(`${BASE}/projects/${projectId}/team/${agentId}`, { method: 'DELETE' });
+}
+
+export async function fetchOrgStructure(projectId: string): Promise<{ tree: OrgNode[]; pipeline: PipelineAgent[] }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/team/org`));
+}
+
+export async function updateAgentHierarchy(
+  projectId: string,
+  agentId: string,
+  data: { reportsTo: string | null; pipelineOrder?: number },
+): Promise<ProjectAgent> {
+  return json(await fetch(`${BASE}/projects/${projectId}/team/${agentId}/hierarchy`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }));
 }
 
 export async function copyTeamFromTemplate(projectId: string, templateId: string): Promise<ProjectAgent[]> {

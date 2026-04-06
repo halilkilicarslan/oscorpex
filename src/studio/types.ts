@@ -220,6 +220,9 @@ export interface ProjectAgent {
   skills: string[];
   systemPrompt: string;
   createdAt: string;
+  reportsTo?: string;      // ID of parent agent (null = top-level)
+  color: string;           // hex color for org chart visualization
+  pipelineOrder: number;   // execution order in workflow (0 = unordered)
 }
 
 // ---- Team Template (hazır takım şablonu) ------------------------------------
