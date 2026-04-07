@@ -13,6 +13,7 @@ import {
   BarChart3,
   Play,
   Square,
+  Settings,
 } from 'lucide-react';
 import {
   fetchProject,
@@ -32,12 +33,13 @@ import FileExplorer from './FileExplorer';
 import EventFeed from './EventFeed';
 import MessageCenter from './MessageCenter';
 import AgentDashboard from './AgentDashboard';
+import ProjectSettings from './ProjectSettings';
 
 // Board sekmesi içindeki görünüm modu — kanban veya pipeline
 type BoardView = 'kanban' | 'pipeline';
 
-// Sekme türü tanımı — dashboard sekmesi eklendi
-type Tab = 'chat' | 'team' | 'board' | 'files' | 'events' | 'messages' | 'dashboard';
+// Sekme türü tanımı — settings sekmesi eklendi
+type Tab = 'chat' | 'team' | 'board' | 'files' | 'events' | 'messages' | 'dashboard' | 'settings';
 
 // Sabit sekme listesi (messages badge'i dinamik olarak eklenir)
 const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -48,6 +50,7 @@ const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'events', label: 'Events', icon: <Activity size={16} /> },
   { id: 'messages', label: 'Messages', icon: <Inbox size={16} /> },
   { id: 'dashboard', label: 'Dashboard', icon: <BarChart3 size={16} /> },
+  { id: 'settings', label: 'Ayarlar', icon: <Settings size={16} /> },
 ];
 
 export default function ProjectPage() {
@@ -268,6 +271,7 @@ export default function ProjectPage() {
         {activeTab === 'messages' && <MessageCenter projectId={projectId!} />}
         {/* Ajan dashboard sekmesi */}
         {activeTab === 'dashboard' && <AgentDashboard projectId={projectId!} />}
+        {activeTab === 'settings' && <ProjectSettings projectId={projectId!} />}
       </div>
     </div>
   );

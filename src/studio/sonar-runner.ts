@@ -5,31 +5,34 @@
  * - runSonarScan(repoPath) — runs sonar-scanner CLI
  * - fetchQualityGate(projectKey) — fetches quality gate status from SonarQube API
  *
- * Configuration via env vars:
- *   SONAR_HOST_URL  — SonarQube server URL (default: http://localhost:9000)
- *   SONAR_TOKEN     — Authentication token
- *   SONAR_ENABLED   — Set to "true" to enable (default: disabled)
+ * Configuration priority: project settings (DB) > env vars > defaults
  */
 
 import { existsSync } from 'node:fs';
 import { writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
+import { getProjectSetting } from './db.js';
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-function getSonarConfig() {
+function getSonarConfig(projectId?: string) {
+  // Project-level settings take priority over env vars
+  const dbEnabled = projectId ? getProjectSetting(projectId, 'sonarqube', 'enabled') : undefined;
+  const dbHost = projectId ? getProjectSetting(projectId, 'sonarqube', 'hostUrl') : undefined;
+  const dbToken = projectId ? getProjectSetting(projectId, 'sonarqube', 'token') : undefined;
+
   return {
-    enabled: process.env.SONAR_ENABLED === 'true',
-    hostUrl: process.env.SONAR_HOST_URL || 'http://localhost:9000',
-    token: process.env.SONAR_TOKEN || '',
+    enabled: dbEnabled !== undefined ? dbEnabled === 'true' : process.env.SONAR_ENABLED === 'true',
+    hostUrl: dbHost || process.env.SONAR_HOST_URL || 'http://localhost:9000',
+    token: dbToken || process.env.SONAR_TOKEN || '',
   };
 }
 
-export function isSonarEnabled(): boolean {
-  return getSonarConfig().enabled;
+export function isSonarEnabled(projectId?: string): boolean {
+  return getSonarConfig(projectId).enabled;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,8 +97,9 @@ function exec(cmd: string, args: string[], cwd: string, env?: Record<string, str
 export async function runSonarScan(
   repoPath: string,
   log?: (msg: string) => void,
+  projectId?: string,
 ): Promise<ScanResult> {
-  const config = getSonarConfig();
+  const config = getSonarConfig(projectId);
 
   if (!config.enabled) {
     return { success: true, output: 'SonarQube disabled (SONAR_ENABLED != true)' };
@@ -148,8 +152,8 @@ export interface QualityGateCondition {
  * Fetch quality gate status from SonarQube API.
  * Returns NONE if SonarQube is disabled or unreachable.
  */
-export async function fetchQualityGate(projectKey: string): Promise<QualityGateResult> {
-  const config = getSonarConfig();
+export async function fetchQualityGate(projectKey: string, projectId?: string): Promise<QualityGateResult> {
+  const config = getSonarConfig(projectId);
 
   if (!config.enabled) {
     return { status: 'NONE', conditions: [] };

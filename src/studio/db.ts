@@ -304,6 +304,18 @@ function migrate(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_sonar_scans_project ON sonar_scans(project_id);
+
+    CREATE TABLE IF NOT EXISTS project_settings (
+      id              TEXT PRIMARY KEY,
+      project_id      TEXT NOT NULL,
+      category        TEXT NOT NULL,
+      key             TEXT NOT NULL,
+      value           TEXT NOT NULL DEFAULT '',
+      updated_at      TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_project_settings_unique ON project_settings(project_id, category, key);
   `);
 }
 
@@ -1734,4 +1746,85 @@ export function listTokenUsage(projectId: string): TokenUsage[] {
     costUsd: r.cost_usd,
     createdAt: r.created_at,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Project Settings — key-value store per project, per category
+// ---------------------------------------------------------------------------
+
+export interface ProjectSetting {
+  id: string;
+  projectId: string;
+  category: string;
+  key: string;
+  value: string;
+  updatedAt: string;
+}
+
+/** Get all settings for a project, optionally filtered by category. */
+export function getProjectSettings(projectId: string, category?: string): ProjectSetting[] {
+  const db = getDb();
+  const sql = category
+    ? 'SELECT * FROM project_settings WHERE project_id = ? AND category = ? ORDER BY category, key'
+    : 'SELECT * FROM project_settings WHERE project_id = ? ORDER BY category, key';
+  const params = category ? [projectId, category] : [projectId];
+  const rows = db.prepare(sql).all(...params) as any[];
+  return rows.map((r: any) => ({
+    id: r.id,
+    projectId: r.project_id,
+    category: r.category,
+    key: r.key,
+    value: r.value,
+    updatedAt: r.updated_at,
+  }));
+}
+
+/** Get a single setting value. Returns undefined if not set. */
+export function getProjectSetting(projectId: string, category: string, key: string): string | undefined {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT value FROM project_settings WHERE project_id = ? AND category = ? AND key = ?',
+  ).get(projectId, category, key) as any;
+  return row?.value;
+}
+
+/** Upsert a single setting. */
+export function setProjectSetting(projectId: string, category: string, key: string, value: string): void {
+  const db = getDb();
+  const ts = now();
+  const id = `${projectId}:${category}:${key}`;
+  db.prepare(`
+    INSERT INTO project_settings (id, project_id, category, key, value, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT (project_id, category, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(id, projectId, category, key, value, ts);
+}
+
+/** Bulk upsert settings for a category. */
+export function setProjectSettings(projectId: string, category: string, entries: Record<string, string>): void {
+  const db = getDb();
+  const ts = now();
+  const stmt = db.prepare(`
+    INSERT INTO project_settings (id, project_id, category, key, value, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT (project_id, category, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `);
+  const tx = db.transaction(() => {
+    for (const [k, v] of Object.entries(entries)) {
+      const id = `${projectId}:${category}:${k}`;
+      stmt.run(id, projectId, category, k, v, ts);
+    }
+  });
+  tx();
+}
+
+/** Get all settings as a nested object { category: { key: value } }. */
+export function getProjectSettingsMap(projectId: string): Record<string, Record<string, string>> {
+  const settings = getProjectSettings(projectId);
+  const map: Record<string, Record<string, string>> = {};
+  for (const s of settings) {
+    if (!map[s.category]) map[s.category] = {};
+    map[s.category][s.key] = s.value;
+  }
+  return map;
 }
