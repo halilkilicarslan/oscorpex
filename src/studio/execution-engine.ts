@@ -21,6 +21,7 @@ import {
   recordTokenUsage,
   listProjectTasks,
   getTask,
+  listProjectAgents,
 } from './db.js';
 import { createAgentTools } from './agent-tools.js';
 import { agentRuntime } from './agent-runtime.js';
@@ -322,6 +323,16 @@ class ExecutionEngine {
       }
 
       taskEngine.completeTask(task.id, output);
+
+      // --- Review loop: auto-review coding tasks ---
+      const CODER_ROLES = new Set(['frontend', 'backend', 'coder']);
+      if (CODER_ROLES.has(agent.role) && output.filesCreated.length + output.filesModified.length > 0) {
+        try {
+          await this.runReviewLoop(projectId, project, task, agent, output);
+        } catch (reviewErr) {
+          console.warn('[execution-engine] Review loop failed (non-blocking):', reviewErr);
+        }
+      }
     } catch (err) {
       const isTimeout = err instanceof TaskTimeoutError;
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -742,6 +753,112 @@ class ExecutionEngine {
   // Dispatch newly ready tasks
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // Review Loop: reviewer agent auto-reviews coding task output
+  // -------------------------------------------------------------------------
+
+  private async runReviewLoop(
+    projectId: string,
+    project: Project,
+    task: Task,
+    coderAgent: AgentConfig,
+    output: TaskOutput,
+  ): Promise<void> {
+    // Find reviewer agent in project team (project-scoped)
+    const agents = listProjectAgents(projectId);
+    const reviewer = agents.find((a) => a.role === 'reviewer');
+    if (!reviewer) return; // No reviewer in team — skip
+
+    const allFiles = [...output.filesCreated, ...output.filesModified];
+    if (allFiles.length === 0) return;
+
+    const termLog = (msg: string) => {
+      agentRuntime.ensureVirtualProcess(projectId, reviewer.id, reviewer.name);
+      agentRuntime.appendVirtualOutput(projectId, reviewer.id, msg);
+      eventBus.emit({
+        projectId,
+        type: 'agent:output',
+        agentId: reviewer.id,
+        taskId: task.id,
+        payload: { output: msg },
+      });
+    };
+
+    termLog(`[review] ${coderAgent.name} tarafindan yazilan "${task.title}" inceleniyor...`);
+
+    const reviewPrompt = [
+      `# Code Review: ${task.title}`,
+      '',
+      `## Context`,
+      `- Original task by: ${coderAgent.name} (${coderAgent.role})`,
+      `- Project: ${project.name}`,
+      '',
+      `## Files to Review`,
+      ...allFiles.map((f) => `- \`${f}\``),
+      '',
+      `## Instructions`,
+      'Review the code written by the other agent. For each file:',
+      '1. Use readFile to read the file contents',
+      '2. Check for bugs, security issues, code style problems, and missing edge cases',
+      '3. If you find issues, use writeFile to fix them directly',
+      '4. If the code is good, just note it as approved',
+      '',
+      '## Output Format',
+      'Provide a brief review summary. Start with either:',
+      '- "APPROVED" if the code is good',
+      '- "FIXED" if you made corrections',
+      '',
+      'Then list what you found and any changes you made.',
+    ].join('\n');
+
+    const { model, modelName, providerType } = getAIModelInfo();
+    const tracker = { filesCreated: [] as string[], filesModified: [] as string[], logs: [] as string[] };
+    const tools = createAgentTools(
+      { projectId, agentId: reviewer.id, taskId: task.id, repoPath: project.repoPath },
+      tracker,
+    );
+
+    try {
+      const { text, usage } = await generateText({
+        model,
+        stopWhen: stepCountIs(15),
+        system: reviewer.systemPrompt || this.defaultSystemPrompt(reviewer),
+        prompt: reviewPrompt,
+        tools,
+        maxRetries: 4,
+      });
+
+      termLog(text.slice(0, 1500));
+
+      // Record token usage for the review
+      if (usage) {
+        const inputTokens = usage.inputTokens ?? 0;
+        const outputTokens = usage.outputTokens ?? 0;
+        const costUsd = calculateCost(modelName, inputTokens, outputTokens);
+        recordTokenUsage({
+          projectId,
+          taskId: task.id,
+          agentId: reviewer.id,
+          model: modelName,
+          provider: providerType,
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          costUsd,
+        });
+        termLog(`[review-cost] ${modelName}: ${inputTokens + outputTokens} tokens ($${costUsd.toFixed(4)})`);
+      }
+
+      const status = text.toUpperCase().includes('APPROVED') ? 'APPROVED' : 'FIXED';
+      termLog(`[review] Sonuc: ${status}`);
+      agentRuntime.markVirtualStopped(projectId, reviewer.id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      termLog(`[review] Hata: ${msg.slice(0, 200)}`);
+      agentRuntime.markVirtualStopped(projectId, reviewer.id);
+    }
+  }
+
   /**
    * After a task in `phaseId` has been settled, check for tasks whose
    * dependencies are now satisfied and dispatch them in parallel.
@@ -829,18 +946,31 @@ class ExecutionEngine {
   private resolveAgent(projectId: string, assignment: string): AgentConfig | undefined {
     if (!assignment) return undefined;
 
-    // Try direct ID lookup first
+    // 1. Try project-scoped agents first (by ID, role, or name)
+    const projectAgents = listProjectAgents(projectId);
+    const pById = projectAgents.find((a) => a.id === assignment);
+    if (pById) return pById as unknown as AgentConfig;
+
+    const pByRole = projectAgents.find(
+      (a) => a.role.toLowerCase() === assignment.toLowerCase(),
+    );
+    if (pByRole) return pByRole as unknown as AgentConfig;
+
+    const pByName = projectAgents.find(
+      (a) => a.name.toLowerCase() === assignment.toLowerCase(),
+    );
+    if (pByName) return pByName as unknown as AgentConfig;
+
+    // 2. Fallback to global agent configs
     const byId = getAgentConfig(assignment);
     if (byId) return byId;
 
-    // Try matching by role across all agents
     const all = listAgentConfigs();
     const byRole = all.find(
       (a) => a.role.toLowerCase() === assignment.toLowerCase(),
     );
     if (byRole) return byRole;
 
-    // Try matching by name (case-insensitive)
     const byName = all.find(
       (a) => a.name.toLowerCase() === assignment.toLowerCase(),
     );
@@ -851,7 +981,7 @@ class ExecutionEngine {
   // Default system prompt fallback
   // -------------------------------------------------------------------------
 
-  private defaultSystemPrompt(agent: AgentConfig): string {
+  private defaultSystemPrompt(agent: { name: string; role: string; skills: string[] }): string {
     return `You are ${agent.name}, a ${agent.role} agent in an AI Dev Studio.
 Your skills include: ${agent.skills.join(', ') || 'general software development'}.
 Complete the task described in the user message. Be precise and produce working code.`;

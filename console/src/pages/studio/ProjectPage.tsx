@@ -34,12 +34,13 @@ import EventFeed from './EventFeed';
 import MessageCenter from './MessageCenter';
 import AgentDashboard from './AgentDashboard';
 import ProjectSettings from './ProjectSettings';
+import DiffViewer from './DiffViewer';
 
 // Board sekmesi içindeki görünüm modu — kanban veya pipeline
 type BoardView = 'kanban' | 'pipeline';
 
 // Sekme türü tanımı — settings sekmesi eklendi
-type Tab = 'chat' | 'team' | 'board' | 'files' | 'events' | 'messages' | 'dashboard' | 'settings';
+type Tab = 'chat' | 'team' | 'board' | 'files' | 'events' | 'messages' | 'dashboard' | 'diff' | 'settings';
 
 // Sabit sekme listesi (messages badge'i dinamik olarak eklenir)
 const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -50,6 +51,7 @@ const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'events', label: 'Events', icon: <Activity size={16} /> },
   { id: 'messages', label: 'Messages', icon: <Inbox size={16} /> },
   { id: 'dashboard', label: 'Dashboard', icon: <BarChart3 size={16} /> },
+  { id: 'diff', label: 'Diff', icon: <GitBranch size={16} /> },
   { id: 'settings', label: 'Ayarlar', icon: <Settings size={16} /> },
 ];
 
@@ -271,6 +273,7 @@ export default function ProjectPage() {
         {activeTab === 'messages' && <MessageCenter projectId={projectId!} />}
         {/* Ajan dashboard sekmesi */}
         {activeTab === 'dashboard' && <AgentDashboard projectId={projectId!} />}
+        {activeTab === 'diff' && <DiffViewer projectId={projectId!} />}
         {activeTab === 'settings' && <ProjectSettings projectId={projectId!} />}
       </div>
     </div>

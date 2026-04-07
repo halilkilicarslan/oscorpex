@@ -159,6 +159,14 @@ export async function createProject(data: { name: string; description?: string; 
   }));
 }
 
+export async function importProject(data: { name: string; repoPath: string; description?: string; techStack?: string[]; teamTemplateId?: string }): Promise<Project> {
+  return json(await fetch(`${BASE}/projects/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }));
+}
+
 export async function updateProject(id: string, data: Partial<Project>): Promise<Project> {
   return json(await fetch(`${BASE}/projects/${id}`, {
     method: 'PATCH',
@@ -1157,4 +1165,33 @@ export async function triggerSonarScan(projectId: string): Promise<SonarScanResu
 
 export async function fetchLatestSonarScan(projectId: string): Promise<SonarLatestScan> {
   return json(await fetch(`${BASE}/projects/${projectId}/sonar/latest`));
+}
+
+// ---- Git ------------------------------------------------------------------
+
+export interface GitStatus {
+  modified: string[];
+  untracked: string[];
+  staged: string[];
+  deleted: string[];
+}
+
+export interface GitLogEntry {
+  hash: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
+export async function fetchGitStatus(projectId: string): Promise<GitStatus> {
+  return json(await fetch(`${BASE}/projects/${projectId}/git/status`));
+}
+
+export async function fetchGitDiff(projectId: string, ref?: string): Promise<{ diff: string }> {
+  const q = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+  return json(await fetch(`${BASE}/projects/${projectId}/git/diff${q}`));
+}
+
+export async function fetchGitLog(projectId: string): Promise<GitLogEntry[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/git/log`));
 }

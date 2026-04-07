@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { streamText, stepCountIs } from 'ai';
 import { getAIModel, isAnyProviderConfigured } from './ai-provider-factory.js';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { initLintConfig } from './lint-runner.js';
 import { checkDocsFreshness } from './docs-generator.js';
@@ -175,6 +175,94 @@ studio.post('/projects', async (c) => {
     // Repo init failed — return the project without a repoPath
     return c.json(project, 201);
   }
+});
+
+// POST /projects/import — import an existing local repository as a project
+studio.post('/projects/import', async (c) => {
+  const body = (await c.req.json()) as {
+    name: string;
+    repoPath: string;
+    description?: string;
+    techStack?: string[];
+    teamTemplateId?: string;
+  };
+
+  if (!body.repoPath) return c.json({ error: 'repoPath is required' }, 400);
+
+  // Validate the path exists
+  try {
+    await access(body.repoPath);
+  } catch {
+    return c.json({ error: 'Path does not exist: ' + body.repoPath }, 400);
+  }
+
+  // Auto-detect tech stack and description from package.json if not provided
+  let description = body.description ?? '';
+  let techStack = body.techStack ?? [];
+  try {
+    const pkgRaw = await readFile(join(body.repoPath, 'package.json'), 'utf-8');
+    const pkg = JSON.parse(pkgRaw);
+    if (!description && pkg.description) description = pkg.description;
+    if (techStack.length === 0) {
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+      const known = ['react', 'vue', 'angular', 'next', 'express', 'hono', 'fastify', 'nestjs', 'typescript', 'tailwindcss', 'prisma', 'drizzle'];
+      techStack = known.filter((k) => deps[k] || deps['@' + k + '/core']);
+    }
+  } catch {
+    // No package.json or parse error — fine
+  }
+
+  const project = createProject({
+    name: body.name,
+    description,
+    techStack,
+    repoPath: body.repoPath,
+  });
+
+  // Copy team template agents (same logic as POST /projects)
+  const templateId = body.teamTemplateId;
+  if (templateId) {
+    const template = getTeamTemplate(templateId);
+    if (template) {
+      const copiedAgents = copyAgentsToProject(project.id, template.roles);
+      for (const agent of copiedAgents) {
+        createAgentFiles(project.id, agent.name, {
+          skills: agent.skills,
+          systemPrompt: agent.systemPrompt,
+          personality: agent.personality,
+          role: agent.role,
+          model: agent.model,
+        }).catch((err) => console.error('Failed to create agent files:', err));
+      }
+    }
+  } else {
+    const templates = listTeamTemplates();
+    const fullStack = templates.find((t) => t.name === 'Full Stack Team');
+    if (fullStack) {
+      const copiedAgents = copyAgentsToProject(project.id, fullStack.roles);
+      for (const agent of copiedAgents) {
+        createAgentFiles(project.id, agent.name, {
+          skills: agent.skills,
+          systemPrompt: agent.systemPrompt,
+          personality: agent.personality,
+          role: agent.role,
+          model: agent.model,
+        }).catch((err) => console.error('Failed to create agent files:', err));
+      }
+    }
+  }
+
+  // Initialize lint config + sonar if enabled (for imported repos too)
+  try {
+    await initLintConfig(body.repoPath);
+    if (isSonarEnabled()) {
+      await initSonarConfig(body.repoPath, `studio-${project.id}`, project.name);
+    }
+  } catch {
+    // Non-blocking
+  }
+
+  return c.json(project, 201);
 });
 
 studio.get('/projects/:id', (c) => {
