@@ -25,6 +25,7 @@ import { agentRuntime } from './agent-runtime.js';
 import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
 import { runIntegrationTest, runApp } from './task-runners.js';
 import { runLintFix } from './lint-runner.js';
+import { updateDocsAfterTask } from './docs-generator.js';
 
 // ---------------------------------------------------------------------------
 // Timeout configuration
@@ -306,6 +307,16 @@ class ExecutionEngine {
           // Lint failure should never block task completion
           console.warn('[execution-engine] Lint/format failed (non-blocking):', lintErr);
         }
+      }
+
+      // --- Auto-documentation: update docs based on agent role ---
+      try {
+        await updateDocsAfterTask(project, { ...task, output }, agent, (msg) => {
+          agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
+          agentRuntime.appendVirtualOutput(projectId, agent.id, msg);
+        });
+      } catch (docErr) {
+        console.warn('[execution-engine] Docs update failed (non-blocking):', docErr);
       }
 
       taskEngine.completeTask(task.id, output);

@@ -9,6 +9,7 @@ import { getAIModel, isAnyProviderConfigured } from './ai-provider-factory.js';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { initLintConfig } from './lint-runner.js';
+import { checkDocsFreshness } from './docs-generator.js';
 import {
   createProject,
   getProject,
@@ -1758,6 +1759,19 @@ studio.get('/projects/:id/costs/history', (c) => {
   const project = getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
   return c.json(listTokenUsage(projectId));
+});
+
+// ---------------------------------------------------------------------------
+// Docs Freshness Check
+// ---------------------------------------------------------------------------
+
+studio.get('/projects/:id/docs/freshness', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+  const results = await checkDocsFreshness(project.repoPath);
+  return c.json(results);
 });
 
 // ---------------------------------------------------------------------------

@@ -1080,3 +1080,14 @@ export async function stopApp(projectId: string): Promise<{ ok: boolean }> {
 export async function fetchAppStatus(projectId: string): Promise<AppStatus> {
   return json(await fetch(`${BASE}/projects/${projectId}/app/status`));
 }
+
+// ---- Docs Freshness -------------------------------------------------------
+
+export interface DocFreshnessItem {
+  file: string;
+  status: 'filled' | 'tbd' | 'missing';
+}
+
+export async function fetchDocsFreshness(projectId: string): Promise<DocFreshnessItem[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/docs/freshness`));
+}

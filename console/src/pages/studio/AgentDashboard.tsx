@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Activity,
   DollarSign,
+  FileText,
 } from 'lucide-react';
 import {
   fetchProjectAnalytics,
@@ -20,11 +21,13 @@ import {
   fetchActivityTimeline,
   fetchProjectCosts,
   fetchCostBreakdown,
+  fetchDocsFreshness,
   type ProjectAnalytics,
   type AgentAnalytics,
   type ActivityTimeline,
   type ProjectCostSummary,
   type CostBreakdownEntry,
+  type DocFreshnessItem,
 } from '../../lib/studio-api';
 
 // ---------------------------------------------------------------------------
@@ -289,6 +292,7 @@ export default function AgentDashboard({ projectId }: Props) {
   const [timeline, setTimeline] = useState<ActivityTimeline[]>([]);
   const [costs, setCosts] = useState<ProjectCostSummary | null>(null);
   const [costBreakdown, setCostBreakdown] = useState<CostBreakdownEntry[]>([]);
+  const [docsFreshness, setDocsFreshness] = useState<DocFreshnessItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -298,18 +302,20 @@ export default function AgentDashboard({ projectId }: Props) {
     else setRefreshing(true);
     setError(null);
     try {
-      const [ov, ag, tl, cs, cb] = await Promise.all([
+      const [ov, ag, tl, cs, cb, df] = await Promise.all([
         fetchProjectAnalytics(projectId),
         fetchAgentAnalytics(projectId),
         fetchActivityTimeline(projectId, 7),
         fetchProjectCosts(projectId),
         fetchCostBreakdown(projectId),
+        fetchDocsFreshness(projectId).catch(() => [] as DocFreshnessItem[]),
       ]);
       setOverview(ov);
       setAgents(ag);
       setTimeline(tl);
       setCosts(cs);
       setCostBreakdown(cb);
+      setDocsFreshness(df);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Veri yuklenemedi');
     } finally {
@@ -529,6 +535,44 @@ export default function AgentDashboard({ projectId }: Props) {
               </span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Docs freshness */}
+      {docsFreshness.length > 0 && (
+        <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
+            <FileText size={14} className="text-[#60a5fa]" />
+            <h3 className="text-[12px] font-semibold text-[#fafafa]">Dokumantasyon Durumu</h3>
+            <span className="ml-auto text-[10px] text-[#525252]">
+              {docsFreshness.filter((d) => d.status === 'filled').length}/{docsFreshness.length} dolu
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3">
+            {docsFreshness.map((doc) => (
+              <div
+                key={doc.file}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+                  doc.status === 'filled'
+                    ? 'border-[#166534] bg-[#052e16]/40'
+                    : doc.status === 'tbd'
+                      ? 'border-[#854d0e] bg-[#422006]/40'
+                      : 'border-[#7f1d1d] bg-[#450a0a]/40'
+                }`}
+              >
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    doc.status === 'filled'
+                      ? 'bg-[#22c55e]'
+                      : doc.status === 'tbd'
+                        ? 'bg-[#eab308]'
+                        : 'bg-[#ef4444]'
+                  }`}
+                />
+                <span className="text-[11px] text-[#a3a3a3] truncate">{doc.file}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
