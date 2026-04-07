@@ -24,6 +24,7 @@ import { createAgentTools } from './agent-tools.js';
 import { agentRuntime } from './agent-runtime.js';
 import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
 import { runIntegrationTest, runApp } from './task-runners.js';
+import { runLintFix } from './lint-runner.js';
 
 // ---------------------------------------------------------------------------
 // Timeout configuration
@@ -282,6 +283,30 @@ class ExecutionEngine {
 
       // Suppress unused variable warning — usedDocker reserved for future telemetry
       void usedDocker;
+
+      // --- ESLint/Prettier enforcement: auto-fix generated files ---
+      const allFiles = [...(output.filesCreated ?? []), ...(output.filesModified ?? [])];
+      if (allFiles.length > 0 && project.repoPath) {
+        try {
+          const termLog = (msg: string) => {
+            agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
+            agentRuntime.appendVirtualOutput(projectId, agent.id, msg);
+          };
+          const lintResult = await runLintFix(project.repoPath, allFiles, termLog);
+          if (lintResult.eslint.errors.length > 0 || lintResult.prettier.errors.length > 0) {
+            eventBus.emit({
+              projectId,
+              type: 'agent:output',
+              agentId: agent.id,
+              taskId: task.id,
+              payload: { output: `[lint] Uyarılar: eslint(${lintResult.eslint.errors.length}), prettier(${lintResult.prettier.errors.length})` },
+            });
+          }
+        } catch (lintErr) {
+          // Lint failure should never block task completion
+          console.warn('[execution-engine] Lint/format failed (non-blocking):', lintErr);
+        }
+      }
 
       taskEngine.completeTask(task.id, output);
     } catch (err) {

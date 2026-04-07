@@ -8,6 +8,7 @@ import { streamText, stepCountIs } from 'ai';
 import { getAIModel, isAnyProviderConfigured } from './ai-provider-factory.js';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { initLintConfig } from './lint-runner.js';
 import {
   createProject,
   getProject,
@@ -153,6 +154,7 @@ studio.post('/projects', async (c) => {
     await mkdir(repoPath, { recursive: true });
     await gitManager.initRepo(repoPath);
     await gitManager.initDocs(repoPath);
+    await initLintConfig(repoPath);
     updateProject(project.id, { repoPath });
     return c.json({ ...project, repoPath }, 201);
   } catch {
