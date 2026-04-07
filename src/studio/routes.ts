@@ -66,6 +66,7 @@ import {
   listTokenUsage,
   getProjectSettingsMap,
   setProjectSettings,
+  recordTokenUsage,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { PM_SYSTEM_PROMPT, pmToolkit } from './pm-agent.js';
@@ -1977,6 +1978,84 @@ studio.get('/projects/:id/app/status', (c) => {
 
   const info = getRunningApp(projectId);
   return c.json(info ?? { running: false, backendUrl: null, frontendUrl: null });
+});
+
+// ---- Worker endpoints (called by agent containers) -------------------------
+
+import { generateText as workerGenerateText, stepCountIs as workerStepCountIs } from 'ai';
+import { getAIModel as workerGetAIModel, getAIModelInfo as workerGetAIModelInfo, calculateCost as workerCalculateCost } from './ai-provider-factory.js';
+import { containerPool } from './container-pool.js';
+
+// POST /worker/generate — AI text generation for containerized agents
+studio.post('/worker/generate', async (c) => {
+  const body = (await c.req.json()) as {
+    projectId: string;
+    agentId: string;
+    taskId: string;
+    prompt: string;
+    systemPrompt?: string;
+    isFollowUp?: boolean;
+  };
+
+  try {
+    const { model, modelName, providerType } = workerGetAIModelInfo();
+    const { text, usage } = await workerGenerateText({
+      model,
+      system: body.systemPrompt || 'You are a software development agent. Complete the task precisely.',
+      prompt: body.prompt,
+      maxRetries: 3,
+    });
+
+    // Record token usage
+    if (usage) {
+      const inputTokens = usage.inputTokens ?? 0;
+      const outputTokens = usage.outputTokens ?? 0;
+      const costUsd = workerCalculateCost(modelName, inputTokens, outputTokens);
+      recordTokenUsage({
+        projectId: body.projectId,
+        taskId: body.taskId,
+        agentId: body.agentId,
+        model: modelName,
+        provider: providerType,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        costUsd,
+      });
+    }
+
+    return c.json({ text });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'AI generation failed';
+    return c.json({ error: msg }, 500);
+  }
+});
+
+// POST /worker/status — agent container status reports
+studio.post('/worker/status', async (c) => {
+  const body = (await c.req.json()) as {
+    projectId: string;
+    agentId: string;
+    taskId?: string;
+    status: string;
+  };
+
+  eventBus.emit({
+    projectId: body.projectId,
+    type: 'agent:output',
+    agentId: body.agentId,
+    taskId: body.taskId,
+    payload: { output: `[container] Status: ${body.status}` },
+  });
+
+  return c.json({ ok: true });
+});
+
+// ---- Container Pool status ------------------------------------------------
+
+studio.get('/pool/status', async (c) => {
+  const status = containerPool.getStatus();
+  return c.json(status);
 });
 
 export { studio as studioRoutes };

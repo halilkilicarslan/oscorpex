@@ -15,6 +15,7 @@ import {
   DollarSign,
   FileText,
   Shield,
+  Container,
 } from 'lucide-react';
 import {
   fetchProjectAnalytics,
@@ -26,6 +27,7 @@ import {
   fetchSonarStatus,
   fetchLatestSonarScan,
   triggerSonarScan,
+  fetchPoolStatus,
   type ProjectAnalytics,
   type AgentAnalytics,
   type ActivityTimeline,
@@ -33,6 +35,7 @@ import {
   type CostBreakdownEntry,
   type DocFreshnessItem,
   type SonarLatestScan,
+  type PoolStatus,
 } from '../../lib/studio-api';
 
 // ---------------------------------------------------------------------------
@@ -301,6 +304,7 @@ export default function AgentDashboard({ projectId }: Props) {
   const [sonarEnabled, setSonarEnabled] = useState(false);
   const [sonarScan, setSonarScan] = useState<SonarLatestScan | null>(null);
   const [sonarScanning, setSonarScanning] = useState(false);
+  const [poolStatus, setPoolStatus] = useState<PoolStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -310,7 +314,7 @@ export default function AgentDashboard({ projectId }: Props) {
     else setRefreshing(true);
     setError(null);
     try {
-      const [ov, ag, tl, cs, cb, df, ss, sl] = await Promise.all([
+      const [ov, ag, tl, cs, cb, df, ss, sl, ps] = await Promise.all([
         fetchProjectAnalytics(projectId),
         fetchAgentAnalytics(projectId),
         fetchActivityTimeline(projectId, 7),
@@ -319,6 +323,7 @@ export default function AgentDashboard({ projectId }: Props) {
         fetchDocsFreshness(projectId).catch(() => [] as DocFreshnessItem[]),
         fetchSonarStatus(projectId).catch(() => ({ enabled: false })),
         fetchLatestSonarScan(projectId).catch(() => null as SonarLatestScan | null),
+        fetchPoolStatus().catch(() => null as PoolStatus | null),
       ]);
       setOverview(ov);
       setAgents(ag);
@@ -328,6 +333,7 @@ export default function AgentDashboard({ projectId }: Props) {
       setDocsFreshness(df);
       setSonarEnabled(ss.enabled);
       setSonarScan(sl);
+      setPoolStatus(ps);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Veri yuklenemedi');
     } finally {
@@ -656,6 +662,51 @@ export default function AgentDashboard({ projectId }: Props) {
                 : 'Henuz tarama yapilmadi'}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Container Pool durumu */}
+      {poolStatus?.initialized && (
+        <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
+            <Container size={14} className="text-[#06b6d4]" />
+            <h3 className="text-[12px] font-semibold text-[#fafafa]">Container Pool</h3>
+            <span className="ml-auto text-[10px] text-[#525252]">{poolStatus.total} container</span>
+          </div>
+          <div className="p-3">
+            <div className="flex gap-3 mb-3">
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                <span className="text-[#a3a3a3]">Ready: {poolStatus.ready}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <span className="w-2 h-2 rounded-full bg-[#f59e0b]" />
+                <span className="text-[#a3a3a3]">Busy: {poolStatus.busy}</span>
+              </div>
+              {poolStatus.unhealthy > 0 && (
+                <div className="flex items-center gap-1.5 text-[11px]">
+                  <span className="w-2 h-2 rounded-full bg-[#ef4444]" />
+                  <span className="text-[#a3a3a3]">Unhealthy: {poolStatus.unhealthy}</span>
+                </div>
+              )}
+            </div>
+            {poolStatus.containers.length > 0 && (
+              <div className="space-y-1">
+                {poolStatus.containers.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between text-[11px] py-0.5">
+                    <span className="text-[#737373] font-mono">{c.name}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      c.status === 'ready' ? 'bg-[#052e16] text-[#22c55e]' :
+                      c.status === 'busy' ? 'bg-[#422006] text-[#f59e0b]' :
+                      'bg-[#450a0a] text-[#ef4444]'
+                    }`}>
+                      {c.status}{c.assignedTo ? ` (task)` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

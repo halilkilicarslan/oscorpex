@@ -1195,3 +1195,25 @@ export async function fetchGitDiff(projectId: string, ref?: string): Promise<{ d
 export async function fetchGitLog(projectId: string): Promise<GitLogEntry[]> {
   return json(await fetch(`${BASE}/projects/${projectId}/git/log`));
 }
+
+// ---- Container Pool -------------------------------------------------------
+
+export interface PoolStatus {
+  initialized: boolean;
+  total: number;
+  ready: number;
+  busy: number;
+  unhealthy: number;
+  containers: {
+    id: string;
+    name: string;
+    port: number;
+    status: string;
+    assignedTo?: { projectId: string; agentId: string; taskId: string };
+    createdAt: string;
+  }[];
+}
+
+export async function fetchPoolStatus(): Promise<PoolStatus> {
+  return json(await fetch(`${BASE}/pool/status`));
+}

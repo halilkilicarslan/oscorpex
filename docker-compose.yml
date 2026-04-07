@@ -1,37 +1,56 @@
 version: '3.9'
 
+# ---------------------------------------------------------------------------
+# AI Dev Studio — Docker Compose
+# ---------------------------------------------------------------------------
+# Usage:
+#   docker-compose up -d                    # Start backend + console
+#   docker-compose --profile agents up -d   # Start with agent pool
+#   docker-compose down                     # Stop all services
+# ---------------------------------------------------------------------------
+
 services:
+  # ---- Backend (Hono API Server) ------------------------------------------
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: voltagent-backend
     ports:
-      - "4242:4242"
+      - "3141:3141"
     environment:
       - NODE_ENV=production
+      - STUDIO_DB_PATH=/app/.voltagent/studio.db
     env_file:
       - .env
     volumes:
-      - ./data:/app/.voltagent
+      - studio-data:/app/.voltagent
+      - repos:/app/.voltagent/repos
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker-in-Docker for pool management
+    networks:
+      - studio-frontend
+      - studio-agents
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4242/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3141/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
+  # ---- Console (Vite Frontend) --------------------------------------------
   console:
     build:
       context: ./console
       dockerfile: Dockerfile
     container_name: voltagent-console
     ports:
-      - "3000:80"
+      - "5173:80"
     depends_on:
       backend:
         condition: service_healthy
+    networks:
+      - studio-frontend
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
@@ -40,6 +59,126 @@ services:
       retries: 3
       start_period: 10s
 
+  # ---- Agent Pool (pre-warmed isolated containers) ------------------------
+  # Activate with: docker-compose --profile agents up -d
+  agent-1:
+    build:
+      context: ./docker/coder-agent
+      dockerfile: Dockerfile
+    container_name: studio-pool-9900
+    profiles: ["agents"]
+    ports:
+      - "9900:9900"
+    environment:
+      - WORKER_PORT=9900
+      - HOST_API=http://backend:3141
+      - WORKSPACE=/workspace
+    volumes:
+      - repos:/workspace
+    networks:
+      - studio-agents
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2'
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9900/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  agent-2:
+    build:
+      context: ./docker/coder-agent
+      dockerfile: Dockerfile
+    container_name: studio-pool-9901
+    profiles: ["agents"]
+    ports:
+      - "9901:9900"
+    environment:
+      - WORKER_PORT=9900
+      - HOST_API=http://backend:3141
+      - WORKSPACE=/workspace
+    volumes:
+      - repos:/workspace
+    networks:
+      - studio-agents
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2'
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9900/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # ---- SonarQube (optional) -----------------------------------------------
+  sonarqube:
+    image: sonarqube:community
+    container_name: studio-sonarqube
+    profiles: ["sonar"]
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+    volumes:
+      - sonar-data:/opt/sonarqube/data
+      - sonar-logs:/opt/sonarqube/logs
+      - sonar-extensions:/opt/sonarqube/extensions
+    networks:
+      - studio-agents
+    restart: unless-stopped
+
+# ---------------------------------------------------------------------------
+# Networks
+# ---------------------------------------------------------------------------
+networks:
+  # Frontend network — backend <-> console only
+  studio-frontend:
+    driver: bridge
+
+  # Agent network — backend <-> agent containers + sonarqube
+  # Agents cannot reach the internet or frontend
+  studio-agents:
+    driver: bridge
+    internal: false  # Needs host.docker.internal for API keys
+
+# ---------------------------------------------------------------------------
+# Volumes
+# ---------------------------------------------------------------------------
 volumes:
-  data:
+  studio-data:
+    driver: local
+  repos:
+    driver: local
+  sonar-data:
+    driver: local
+  sonar-logs:
+    driver: local
+  sonar-extensions:
     driver: local
