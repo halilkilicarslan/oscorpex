@@ -471,6 +471,65 @@ function _syncRunToDb(record: AgentProcessRecord): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Sanal süreç kaydı — execution-engine tarafından kullanılır
+// ---------------------------------------------------------------------------
+
+/**
+ * Execution engine'in AI SDK ile çalıştırdığı görevler için sanal bir süreç
+ * kaydı oluşturur. Eğer zaten varsa mevcut kaydı döndürür.
+ * Bu sayede terminal SSE stream'i bu agent için çalışır.
+ */
+function ensureVirtualProcess(
+  projectId: string,
+  agentId: string,
+  agentName: string,
+): AgentProcessRecord {
+  const key = processKey(projectId, agentId);
+  const existing = processes.get(key);
+  if (existing) {
+    // Halihazırda kayıt varsa durumunu running yap
+    existing.status = 'running';
+    return existing;
+  }
+
+  const record: AgentProcessRecord = {
+    id: randomUUID(),
+    projectId,
+    agentId,
+    agentName,
+    cliTool: 'ai-sdk',
+    process: null,
+    status: 'running',
+    output: [],
+    startedAt: new Date().toISOString(),
+  };
+  processes.set(key, record);
+  return record;
+}
+
+/**
+ * Sanal süreç kaydına çıktı satırı ekler.
+ * Execution engine'deki agent:output event'leri için kullanılır.
+ */
+function appendVirtualOutput(projectId: string, agentId: string, line: string): void {
+  const key = processKey(projectId, agentId);
+  const record = processes.get(key);
+  if (!record) return;
+  appendLine(record, line);
+}
+
+/**
+ * Sanal süreç kaydını tamamlandı olarak işaretler.
+ */
+function markVirtualStopped(projectId: string, agentId: string): void {
+  const key = processKey(projectId, agentId);
+  const record = processes.get(key);
+  if (!record) return;
+  record.status = 'stopped';
+  record.stoppedAt = new Date().toISOString();
+}
+
 /**
  * Çalıştırılabilir bir örnek olarak dışa aktarılan nesne.
  * routes.ts'de containerManager ile aynı erişim kalıbını korumak için.
@@ -483,4 +542,7 @@ export const agentRuntime = {
   getAgentOutput,
   streamAgentOutput,
   cleanupProject,
+  ensureVirtualProcess,
+  appendVirtualOutput,
+  markVirtualStopped,
 } as const;
