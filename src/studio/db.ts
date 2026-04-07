@@ -239,6 +239,14 @@ function migrate(db: Database.Database): void {
     db.exec("ALTER TABLE project_agents ADD COLUMN pipeline_order INTEGER NOT NULL DEFAULT 0");
   }
 
+  // tasks tablosuna error kolonu ekle
+  const taskCols = (db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>).map(
+    (c) => c.name,
+  );
+  if (!taskCols.includes('error')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN error TEXT");
+  }
+
   // Agent çalışma geçmişi tablosu — yerel CLI süreç kayıtları
   db.exec(`
     CREATE TABLE IF NOT EXISTS agent_runs (
@@ -458,7 +466,7 @@ export function listProjectTasks(projectId: string): Task[] {
   return rows.map(rowToTask);
 }
 
-export function updateTask(id: string, data: Partial<Pick<Task, 'status' | 'assignedAgent' | 'output' | 'retryCount' | 'startedAt' | 'completedAt'>>): Task | undefined {
+export function updateTask(id: string, data: Partial<Pick<Task, 'status' | 'assignedAgent' | 'output' | 'retryCount' | 'error' | 'startedAt' | 'completedAt'>>): Task | undefined {
   const db = getDb();
   const fields: string[] = [];
   const values: any[] = [];
@@ -469,6 +477,7 @@ export function updateTask(id: string, data: Partial<Pick<Task, 'status' | 'assi
   if (data.retryCount !== undefined) { fields.push('retry_count = ?'); values.push(data.retryCount); }
   if (data.startedAt !== undefined) { fields.push('started_at = ?'); values.push(data.startedAt); }
   if (data.completedAt !== undefined) { fields.push('completed_at = ?'); values.push(data.completedAt); }
+  if (data.error !== undefined) { fields.push('error = ?'); values.push(data.error); }
 
   if (fields.length === 0) return getTask(id);
 
@@ -490,6 +499,7 @@ function rowToTask(row: any): Task {
     branch: row.branch,
     output: row.output ? JSON.parse(row.output) : undefined,
     retryCount: row.retry_count,
+    error: row.error ?? undefined,
     startedAt: row.started_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
   };

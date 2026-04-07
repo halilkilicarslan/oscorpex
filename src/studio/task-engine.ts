@@ -129,7 +129,7 @@ class TaskEngine {
       throw new Error(`Task ${taskId} is not running (status: ${task.status})`);
     }
 
-    const updated = updateTask(taskId, { status: 'failed' })!;
+    const updated = updateTask(taskId, { status: 'failed', error })!;
     const projectId = this.getProjectIdForTask(task);
 
     eventBus.emit({
