@@ -13,7 +13,9 @@ import {
   Eye,
   GitBranch,
   SkipForward,
+  Terminal,
 } from 'lucide-react';
+import AgentTerminal from './AgentTerminal';
 import {
   startPipeline,
   getPipelineStatus,
@@ -307,13 +309,18 @@ function TaskRow({
 // Aşama detay paneli — seçili aşamadaki ajan ve görevleri gösterir
 function StageDetailPanel({
   stage,
+  projectId,
   retryingTaskId,
   onRetryTask,
 }: {
   stage: PipelineStage;
+  projectId: string;
   retryingTaskId: string | null;
   onRetryTask: (taskId: string) => void;
 }) {
+  // Terminali açık olan ajanın ID'si (aynı anda sadece bir terminal)
+  const [terminalAgentId, setTerminalAgentId] = useState<string | null>(null);
+
   return (
     <div className="border border-[#262626] rounded-xl bg-[#111111] p-4">
       {/* Panel başlığı */}
@@ -357,6 +364,19 @@ function StageDetailPanel({
                     </span>
                     <span className="text-[10px] text-[#525252] ml-1.5">{agent.role}</span>
                   </div>
+                  {/* Terminal aç/kapat butonu */}
+                  <button
+                    onClick={() => setTerminalAgentId(terminalAgentId === agent.id ? null : agent.id)}
+                    className={`flex items-center gap-1 ml-auto px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
+                      terminalAgentId === agent.id
+                        ? 'bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30'
+                        : 'text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] border border-transparent'
+                    }`}
+                    title={terminalAgentId === agent.id ? 'Terminali kapat' : 'Terminal aç'}
+                  >
+                    <Terminal size={11} />
+                    Terminal
+                  </button>
                 </div>
 
                 {/* Ajana ait görevler */}
@@ -368,6 +388,18 @@ function StageDetailPanel({
                   </div>
                 ) : (
                   <p className="ml-10 text-[10px] text-[#525252] italic">Atanmış görev yok</p>
+                )}
+
+                {/* Gömülü terminal */}
+                {terminalAgentId === agent.id && (
+                  <div className="ml-10 h-[260px] rounded-lg overflow-hidden border border-[#262626]">
+                    <AgentTerminal
+                      projectId={projectId}
+                      agentId={agent.id}
+                      agentName={agent.name}
+                      agentAvatar={agent.avatar}
+                    />
+                  </div>
                 )}
               </div>
             );
@@ -709,7 +741,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
 
         {/* ---- Seçili aşama detay paneli ----------------------------------- */}
         {selectedStage && (
-          <StageDetailPanel stage={selectedStage} retryingTaskId={retryingTaskId} onRetryTask={handleRetryTask} />
+          <StageDetailPanel stage={selectedStage} projectId={projectId} retryingTaskId={retryingTaskId} onRetryTask={handleRetryTask} />
         )}
 
         {/* ---- Tamamlanma mesajı ------------------------------------------- */}
