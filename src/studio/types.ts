@@ -62,6 +62,8 @@ export type TaskStatus =
 
 export type TaskComplexity = 'S' | 'M' | 'L';
 
+export type TaskType = 'ai' | 'integration-test' | 'run-app';
+
 export interface TaskOutput {
   filesCreated: string[];
   filesModified: string[];
@@ -79,6 +81,7 @@ export interface Task {
   complexity: TaskComplexity;
   dependsOn: string[]; // Task IDs
   branch: string;
+  taskType?: TaskType;
   output?: TaskOutput;
   retryCount: number;
   error?: string;

@@ -11,12 +11,18 @@ import {
   GitBranch,
   Inbox,
   BarChart3,
+  Play,
+  Square,
 } from 'lucide-react';
 import {
   fetchProject,
   fetchProjectAgents,
   fetchUnreadCount,
+  startApp,
+  stopApp,
+  fetchAppStatus,
   type Project,
+  type AppStatus,
 } from '../../lib/studio-api';
 import PMChat from './PMChat';
 import AgentGrid from './AgentGrid';
@@ -56,6 +62,9 @@ export default function ProjectPage() {
   const [totalUnread, setTotalUnread] = useState(0);
   // Polling referansı — bellek sızıntısını önlemek için
   const unreadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // App runner state
+  const [appStatus, setAppStatus] = useState<AppStatus>({ running: false, backendUrl: null, frontendUrl: null });
+  const [appLoading, setAppLoading] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -94,6 +103,31 @@ export default function ProjectPage() {
     };
   }, [project, refreshUnreadTotal]);
 
+  // App status polling
+  useEffect(() => {
+    if (!projectId) return;
+    fetchAppStatus(projectId).then(setAppStatus).catch(() => {});
+    const interval = setInterval(() => {
+      fetchAppStatus(projectId).then(setAppStatus).catch(() => {});
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [projectId]);
+
+  const handleToggleApp = async () => {
+    if (!projectId) return;
+    setAppLoading(true);
+    try {
+      if (appStatus.running) {
+        await stopApp(projectId);
+      } else {
+        await startApp(projectId);
+      }
+      const status = await fetchAppStatus(projectId);
+      setAppStatus(status);
+    } catch { /* ignore */ }
+    setAppLoading(false);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -124,8 +158,41 @@ export default function ProjectPage() {
                 <span className="text-[11px] text-[#525252]">{project.techStack.join(', ')}</span>
               </>
             )}
+            {appStatus.running && (
+              <>
+                <span className="text-[#262626]">|</span>
+                {appStatus.backendUrl && (
+                  <a href={appStatus.backendUrl} target="_blank" rel="noreferrer" className="text-[11px] text-[#22c55e] hover:underline">
+                    Backend
+                  </a>
+                )}
+                {appStatus.frontendUrl && (
+                  <a href={appStatus.frontendUrl} target="_blank" rel="noreferrer" className="text-[11px] text-[#22c55e] hover:underline">
+                    Frontend
+                  </a>
+                )}
+              </>
+            )}
           </div>
         </div>
+        <button
+          onClick={handleToggleApp}
+          disabled={appLoading}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
+            appStatus.running
+              ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
+              : 'bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20'
+          } disabled:opacity-50`}
+        >
+          {appLoading ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : appStatus.running ? (
+            <Square size={14} />
+          ) : (
+            <Play size={14} />
+          )}
+          {appStatus.running ? 'Stop App' : 'Run App'}
+        </button>
       </div>
 
       {/* Sekme çubuğu */}

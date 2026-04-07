@@ -1730,4 +1730,43 @@ studio.get('/projects/:id/analytics/timeline', (c) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// App Runner — start / stop / status
+// ---------------------------------------------------------------------------
+
+import { runApp, stopApp, getRunningApp } from './task-runners.js';
+
+studio.post('/projects/:id/app/start', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  try {
+    const output = await runApp(projectId, project.repoPath, (msg) => {
+      eventBus.emit({ projectId, type: 'agent:output', payload: { output: msg } });
+    });
+    return c.json({ ok: true, output });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'App başlatılamadı' }, 500);
+  }
+});
+
+studio.post('/projects/:id/app/stop', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  await stopApp(projectId);
+  return c.json({ ok: true });
+});
+
+studio.get('/projects/:id/app/status', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const info = getRunningApp(projectId);
+  return c.json(info ?? { running: false, backendUrl: null, frontendUrl: null });
+});
+
 export { studio as studioRoutes };

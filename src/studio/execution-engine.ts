@@ -22,6 +22,7 @@ import {
 import { createAgentTools } from './agent-tools.js';
 import { agentRuntime } from './agent-runtime.js';
 import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
+import { runIntegrationTest, runApp } from './task-runners.js';
 
 // ---------------------------------------------------------------------------
 // Timeout configuration
@@ -207,6 +208,12 @@ class ExecutionEngine {
   async executeTask(projectId: string, task: Task): Promise<void> {
     const project = getProject(projectId);
     if (!project) throw new Error(`Project ${projectId} not found`);
+
+    // --- Non-AI task types: integration-test & run-app ---
+    if (task.taskType === 'integration-test' || task.taskType === 'run-app') {
+      await this.executeSpecialTask(projectId, project, task);
+      return;
+    }
 
     // Resolve agent config — prefer the task's assignedAgent value, which may
     // be an agent ID or a role name. Try both.
@@ -525,6 +532,61 @@ class ExecutionEngine {
     ];
 
     return lines.join('\n');
+  }
+
+  // -------------------------------------------------------------------------
+  // Special (non-AI) task execution: integration-test, run-app
+  // -------------------------------------------------------------------------
+
+  private async executeSpecialTask(projectId: string, project: Project, task: Task): Promise<void> {
+    taskEngine.assignTask(task.id, task.taskType ?? 'system');
+    taskEngine.startTask(task.id);
+
+    const termLog = (msg: string) => {
+      eventBus.emit({
+        projectId,
+        type: 'agent:output',
+        taskId: task.id,
+        payload: { output: msg },
+      });
+    };
+
+    try {
+      let output: TaskOutput;
+
+      if (task.taskType === 'integration-test') {
+        termLog('[execution-engine] Running integration tests...');
+        output = await runIntegrationTest(project.repoPath, termLog);
+      } else {
+        // run-app
+        termLog('[execution-engine] Starting application...');
+        output = await runApp(projectId, project.repoPath, termLog);
+      }
+
+      taskEngine.completeTask(task.id, output);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[execution-engine] Special task failed: "${task.title}" — ${errorMsg}`);
+      eventBus.emit({
+        projectId,
+        type: 'agent:error',
+        taskId: task.id,
+        payload: { error: errorMsg },
+      });
+      taskEngine.failTask(task.id, errorMsg);
+    }
+
+    // Dispatch next tasks
+    await this.dispatchReadyTasks(projectId, task.phaseId);
+    const plan = getLatestPlan(projectId);
+    if (plan) {
+      const phases = listPhases(plan.id);
+      for (const phase of phases) {
+        if (phase.status === 'running' && phase.id !== task.phaseId) {
+          await this.dispatchReadyTasks(projectId, phase.id);
+        }
+      }
+    }
   }
 
   // -------------------------------------------------------------------------
