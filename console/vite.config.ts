@@ -11,7 +11,18 @@ export default defineConfig({
       '/workflows': 'http://localhost:3141',
       '/tools': 'http://localhost:3141',
       '/doc': 'http://localhost:3141',
-      '/api/studio': 'http://localhost:3141',
+      '/api/studio': {
+        target: 'http://localhost:3141',
+        changeOrigin: true,
+        // SSE akışlarının bufferlenmesini önle
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+              proxyRes.headers['x-accel-buffering'] = 'no';
+            }
+          });
+        },
+      },
     },
   },
 })

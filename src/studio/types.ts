@@ -111,6 +111,8 @@ export interface AgentConfig {
   skills: string[];
   systemPrompt: string;
   isPreset: boolean;
+  /** Task execution timeout in milliseconds. If not set, the engine default (5 min) is used. */
+  taskTimeout?: number;
 }
 
 // ---- Agent Runtime State ---------------------------------------------------
@@ -135,6 +137,7 @@ export type EventType =
   | 'task:started'
   | 'task:completed'
   | 'task:failed'
+  | 'task:timeout'
   | 'task:retry'
   | 'agent:started'
   | 'agent:stopped'
@@ -278,6 +281,8 @@ export interface PipelineStage {
   agents: ProjectAgent[];
   tasks: Task[];
   status: PipelineStageStatus;
+  /** Eşleşen plan phase ID'si; stage → phase mapping için kullanılır */
+  phaseId?: string;
 }
 
 // Bir projenin anlık pipeline durumu (hem bellekte hem DB'de saklanır)

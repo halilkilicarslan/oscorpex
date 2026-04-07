@@ -3,20 +3,26 @@
 // Agent'ları pipeline_order sırasına göre aşamalı olarak çalıştırır.
 // Her aşamadaki tüm görevler tamamlanmadan bir sonraki aşamaya geçilmez.
 // Paralel çalışma: Aynı aşamadaki agent'lar eş zamanlı yürütülür.
+//
+// Stage → Phase Mapping:
+//   Pipeline stage'leri agent.pipelineOrder değerine göre oluşturulur.
+//   Her stage, aynı sıra numarasına sahip plan phase'iyle eşleştirilir.
+//   Böylece phase order = stage order; task'lar phase bazlı bulunur.
 // ---------------------------------------------------------------------------
 
 import {
   getProject,
   listProjectAgents,
-  listProjectTasks,
   getTask,
   createPipelineRun,
   getPipelineRun,
   updatePipelineRun,
+  getLatestPlan,
+  listPhases,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { taskEngine } from './task-engine.js';
-import type { PipelineStage, PipelineState, PipelineStatus, ProjectAgent, Task } from './types.js';
+import type { PipelineStage, PipelineState, PipelineStatus, ProjectAgent, Task, Phase } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Bellek içi durum haritası (projectId → PipelineState)
@@ -68,17 +74,29 @@ class PipelineEngine {
   // -------------------------------------------------------------------------
 
   /**
-   * Projedeki agent'ları ve görevleri okuyarak pipeline aşamalarını oluşturur.
-   * Agent'lar pipelineOrder'a göre gruplanır; pipeline_order=0 olan agent'lar
-   * kendi aşamalarında yürütülür (sırasız kademesi olarak değerlendirilir).
+   * Projedeki agent'ları ve plan phase'lerini okuyarak pipeline aşamalarını oluşturur.
+   *
+   * Stage → Phase Mapping stratejisi:
+   *   1. Agent'lar pipelineOrder değerine göre gruplanır (stage oluşturur).
+   *   2. Plan phase'leri sıra numarasına göre sıralanır.
+   *   3. Her stage, aynı index'teki phase ile eşleştirilir
+   *      (stage[0] → phase[0], stage[1] → phase[1], ...).
+   *   4. Eşleşen phase'in task'ları stage'e atanır.
+   *   5. Eşleşen phase yoksa (daha fazla stage var), task listesi boş kalır
+   *      ve stage anında tamamlanmış sayılır.
+   *
+   * Bu yaklaşım circular dependency yaratmaz: sadece db.ts fonksiyonları kullanılır.
    */
   buildPipeline(projectId: string): PipelineState {
     const project = getProject(projectId);
     if (!project) throw new Error(`Proje bulunamadı: ${projectId}`);
 
-    // Tüm proje agent'larını ve görevlerini getir
+    // Tüm proje agent'larını getir
     const agents = listProjectAgents(projectId);
-    const tasks = listProjectTasks(projectId);
+
+    // Plan phase'lerini getir (task assignment için)
+    const plan = getLatestPlan(projectId);
+    const phases: Phase[] = plan ? listPhases(plan.id) : [];
 
     // Agent'ları pipelineOrder değerine göre grupla
     // pipelineOrder=0 olanlar "sırasız" kabul edilir ve stage 0 olarak atanır
@@ -91,25 +109,48 @@ class PipelineEngine {
 
     // Sıralı aşamaları oluştur
     const sortedOrders = Array.from(orderGroups.keys()).sort((a, b) => a - b);
-    const stages: PipelineStage[] = sortedOrders.map((order) => {
+
+    // Phase'leri order'a göre sırala (phase.order küçükten büyüğe)
+    const sortedPhases = [...phases].sort((a, b) => a.order - b.order);
+
+    const stages: PipelineStage[] = sortedOrders.map((order, stageIndex) => {
       const stageAgents = orderGroups.get(order)!;
 
-      // Bu aşamadaki agent'lara atanmış görevleri bul
-      const agentIds = new Set(stageAgents.map((a) => a.id));
-      const agentRoles = new Set(stageAgents.map((a) => a.role.toLowerCase()));
+      // Stage index ile aynı index'teki phase'i eşleştir
+      // Bu sayede phase 0 → stage 0, phase 1 → stage 1 olur
+      const matchedPhase: Phase | undefined = sortedPhases[stageIndex];
 
-      const stageTasks = tasks.filter((t) => {
-        const assigned = t.assignedAgent?.toLowerCase() ?? '';
-        // Görev, agent ID'si veya rol adıyla atanmış olabilir
-        return agentIds.has(assigned) || agentRoles.has(assigned);
-      });
+      // Stage task listesi: eşleşen phase'in task'ları
+      // Fallback: agent ID/role bazlı matching (phase yoksa)
+      let stageTasks: Task[] = [];
+
+      if (matchedPhase) {
+        // Phase bazlı mapping: en güvenilir yöntem
+        stageTasks = matchedPhase.tasks ?? [];
+      } else {
+        // Phase eşleşmesi yoksa agent ID/role bazlı fallback
+        const agentIds = new Set(stageAgents.map((a) => a.id));
+        const agentNames = new Set(stageAgents.map((a) => a.name.toLowerCase()));
+        const agentRoles = new Set(stageAgents.map((a) => a.role.toLowerCase()));
+
+        // Tüm phase'lerin task'larını tara
+        for (const phase of phases) {
+          for (const task of phase.tasks ?? []) {
+            const assigned = task.assignedAgent?.toLowerCase() ?? '';
+            if (agentIds.has(task.assignedAgent) || agentRoles.has(assigned) || agentNames.has(assigned)) {
+              stageTasks.push(task);
+            }
+          }
+        }
+      }
 
       return {
         order,
         agents: stageAgents,
         tasks: stageTasks,
         status: 'pending' as const,
-      };
+        phaseId: matchedPhase?.id,
+      } satisfies PipelineStage;
     });
 
     const state: PipelineState = {
@@ -174,7 +215,9 @@ class PipelineEngine {
 
   /**
    * Belirtilen aşamayı "running" durumuna getirir ve event yayar.
-   * Aşamada görev yoksa otomatik olarak tamamlanmış sayılır.
+   * Aşamada görev yoksa:
+   *   - Execution engine üzerinden aktif task'ları kontrol et
+   *   - Hâlâ yoksa otomatik olarak tamamlanmış say
    */
   private startStage(projectId: string, stageIndex: number): void {
     const state = _states.get(projectId);
@@ -206,6 +249,7 @@ class PipelineEngine {
     if (stage.tasks.length === 0) {
       this.completeStage(projectId, stageIndex);
     }
+    // Görev varsa: taskEngine callback'i üzerinden advanceStage tetiklenecek
   }
 
   /**
@@ -291,6 +335,13 @@ class PipelineEngine {
    * Mevcut aşamanın tüm görevlerinin tamamlanıp tamamlanmadığını kontrol eder.
    * Tamamlandıysa bir sonraki aşamaya geçer.
    * Bu metot, taskEngine'in onTaskCompleted callback'inden tetiklenir.
+   *
+   * Senkronizasyon mantığı:
+   *   1. Stage'deki task listesi boşsa, plan phase task'larını taze olarak sorgula
+   *   2. Task'ların güncel durumunu DB'den oku (getTask)
+   *   3. Hepsi done ise → completeStage
+   *   4. Herhangi biri failed ise → markFailed
+   *   5. Hâlâ running/queued olanlar varsa → bekle
    */
   advanceStage(projectId: string): PipelineState {
     // Durumu DB'den veya bellekten getir
@@ -310,22 +361,23 @@ class PipelineEngine {
     const currentStage = state.stages[currentIndex];
     if (!currentStage) return state;
 
-    // Mevcut aşamanın tüm görevleri done mu?
-    const allDone = currentStage.tasks.every((t) => {
-      // Görev durumunu task-engine üzerinden taze olarak oku
-      const fresh = this.getTaskStatus(t.id);
-      return fresh === 'done';
-    });
+    // Stage'deki görev listesini taze verilerle güncelle
+    // (buildPipeline sırasında snapshot alınmıştı; şimdi DB'den güncel halleri çek)
+    const freshTaskIds = this.resolveStageTaskIds(projectId, currentIndex, state);
 
-    // Herhangi bir görev failed mi?
-    const anyFailed = currentStage.tasks.some((t) => {
-      const fresh = this.getTaskStatus(t.id);
-      return fresh === 'failed';
-    });
+    if (freshTaskIds.length === 0) {
+      // Bu stage'de hiç task yok — anında tamamla
+      this.completeStage(projectId, currentIndex);
+      return _states.get(projectId)!;
+    }
+
+    // Her task'ın güncel durumunu DB'den sorgula
+    const statuses = freshTaskIds.map((id) => this.getTaskStatus(id));
+
+    const anyFailed = statuses.some((s) => s === 'failed');
+    const allDone = statuses.every((s) => s === 'done');
 
     if (anyFailed) {
-      // Bir sonraki aşamaya geçmeden önce failed olarak işaretle
-      // (Görev bazında hata varsa pipeline durur; tasarım kararı)
       this.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
     } else if (allDone) {
       // Bellekteki görev listesini güncel statüslerle senkronize et
@@ -334,8 +386,39 @@ class PipelineEngine {
       }
       this.completeStage(projectId, currentIndex);
     }
+    // Aksi hâlde (running/queued): bir sonraki task tamamlandığında tekrar tetiklenecek
 
     return _states.get(projectId)!;
+  }
+
+  /**
+   * Verilen stage index için görev ID listesini döner.
+   * Önce stage'in kendi tasks listesini kullanır.
+   * Eğer boşsa plan phase'inden taze olarak yükler.
+   *
+   * Bu metot circular import yaratmaz çünkü yalnızca db.js kullanır.
+   */
+  private resolveStageTaskIds(projectId: string, stageIndex: number, state: PipelineState): string[] {
+    const stage = state.stages[stageIndex];
+    if (!stage) return [];
+
+    // Stage'in kendi task listesi varsa kullan
+    if (stage.tasks.length > 0) {
+      return stage.tasks.map((t) => t.id);
+    }
+
+    // Task listesi boşsa plan phase'inden taze yükle
+    const plan = getLatestPlan(projectId);
+    if (!plan) return [];
+
+    const phases = listPhases(plan.id).sort((a, b) => a.order - b.order);
+    const matchedPhase = phases[stageIndex];
+    if (!matchedPhase) return [];
+
+    // Stage'in task listesini güncelle (sonraki advanceStage çağrılarında kullanmak için)
+    stage.tasks = matchedPhase.tasks ?? [];
+
+    return stage.tasks.map((t) => t.id);
   }
 
   /**
@@ -367,6 +450,47 @@ class PipelineEngine {
     }
 
     return null;
+  }
+
+  /**
+   * Pipeline durumunu task execution durumlarıyla zenginleştirerek döner.
+   * Execution engine çalışıyor ama pipeline kayıt yoksa sentetik bir durum üretir.
+   *
+   * Kullanım: GET /projects/:id/pipeline/status endpoint'i tarafından çağrılır.
+   */
+  getEnrichedPipelineStatus(projectId: string): {
+    pipelineState: PipelineState | null;
+    taskProgress: ReturnType<typeof taskEngine.getProgress>;
+    derivedStatus: PipelineStatus;
+    warning?: string;
+  } {
+    const pipelineState = this.getPipelineState(projectId);
+    const taskProgress = taskEngine.getProgress(projectId);
+
+    const overall = taskProgress.overall;
+
+    // Task durumlarına göre pipeline durumunu türet
+    // Bu sayede pipeline kaydı "idle" olsa bile task'lar çalışıyorsa "running" gösterilir
+    let derivedStatus: PipelineStatus = pipelineState?.status ?? 'idle';
+
+    if (derivedStatus === 'idle' || derivedStatus === 'failed') {
+      // Pipeline kaydı henüz oluşmamış veya hatalı durumda;
+      // task durumlarına bakarak daha doğru bir bilgi sun
+      if (overall.running > 0) {
+        derivedStatus = 'running';
+      } else if (overall.done > 0 && overall.running === 0 && overall.queued === 0 && overall.failed === 0) {
+        derivedStatus = 'completed';
+      } else if (overall.failed > 0 && overall.running === 0 && overall.queued === 0) {
+        derivedStatus = 'failed';
+      }
+    }
+
+    let warning: string | undefined;
+    if (pipelineState?.status === 'failed' && overall.running > 0) {
+      warning = 'Pipeline kaydı "failed" gösterse de task\'lar hâlâ çalışıyor. Durum task verilerinden türetildi.';
+    }
+
+    return { pipelineState, taskProgress, derivedStatus, warning };
   }
 
   // -------------------------------------------------------------------------
@@ -423,20 +547,45 @@ class PipelineEngine {
   /**
    * TaskEngine'e callback kaydeder.
    * Herhangi bir görev tamamlandığında, ilgili projenin pipeline'ını kontrol eder.
+   *
+   * Kayıt mantığı:
+   *   1. Pipeline DB kaydı var ve "running" ise → advanceStage çağır
+   *   2. Pipeline kaydı yoksa ama task'lar çalışıyorsa →
+   *      Pipeline'ı otomatik başlat (plan onaylıysa)
+   *   3. Hata durumunda pipeline durdurulmamalı → sadece logla
+   *
    * Bu metot uygulama başlangıcında bir kez çağrılmalıdır.
    */
   registerTaskHook(): void {
     taskEngine.onTaskCompleted((taskId, projectId) => {
-      // Pipeline kaydı yoksa görmezden gel (execution-engine bağımsız çalışabilir)
       const run = getPipelineRun(projectId);
-      if (!run || run.status !== 'running') return;
 
-      try {
-        this.advanceStage(projectId);
-      } catch (err) {
-        // Pipeline ilerleme hatası uygulamayı durdurmamalı
-        console.error(`[pipeline-engine] advanceStage hatası (proje=${projectId}):`, err);
+      if (run && run.status === 'running') {
+        // Pipeline aktif: normal akış
+        try {
+          this.advanceStage(projectId);
+        } catch (err) {
+          console.error(`[pipeline-engine] advanceStage hatası (proje=${projectId}):`, err);
+        }
+        return;
       }
+
+      if (!run || run.status === 'idle' || run.status === 'failed') {
+        // Pipeline kaydı yok veya başlatılmamış;
+        // task'lar çalışıyorsa pipeline'ı otomatik başlat
+        try {
+          const agents = listProjectAgents(projectId);
+          if (agents.length > 0) {
+            console.log(`[pipeline-engine] Task tamamlandı ama pipeline başlatılmamış; otomatik başlatılıyor (proje=${projectId})`);
+            this.startPipeline(projectId);
+            // startPipeline sonrası advanceStage çağırarak mevcut durumu değerlendir
+            this.advanceStage(projectId);
+          }
+        } catch (err) {
+          console.error(`[pipeline-engine] otomatik pipeline başlatma hatası (proje=${projectId}):`, err);
+        }
+      }
+      // run.status === 'paused' | 'completed' → hiçbir şey yapma
     });
   }
 }

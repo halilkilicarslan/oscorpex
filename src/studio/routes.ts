@@ -302,37 +302,45 @@ studio.post('/projects/:id/plan/approve', (c) => {
   });
 
   // Pipeline auto-start: agent pipeline_order'a göre aşamalı yürütme
+  // Execution engine zaten görevleri başlattı; pipeline engine aşama koordinasyonunu üstlenir.
+  // İkisi birbirinden bağımsız değil: pipeline engine, taskEngine.onTaskCompleted
+  // callback'i üzerinden execution engine'in ilerlemesini takip eder.
   let pipelineStarted = false;
   let pipelineWarning: string | undefined;
 
   try {
     const agents = listProjectAgents(projectId);
     if (agents.length === 0) {
-      pipelineWarning = 'Projeye atanmış agent bulunamadı; pipeline başlatılamadı.';
+      // Agent yoksa pipeline başlatılamaz ama execution devam edebilir
+      pipelineWarning = 'Projeye atanmış agent bulunamadı; pipeline stage koordinasyonu devre dışı.';
+      console.warn(`[pipeline-engine] ${pipelineWarning} (proje=${projectId})`);
     } else {
       pipelineEngine.startPipeline(projectId);
       pipelineStarted = true;
-      eventBus.emit({
-        projectId,
-        type: 'pipeline:stage_started' as any,
-        payload: { autoStarted: true, planId: plan.id },
-      });
       console.log(`[pipeline-engine] Plan onayı ile pipeline otomatik başlatıldı (proje=${projectId})`);
     }
   } catch (err) {
+    // Pipeline başlatma hatası execution engine'i durdurmamalı
+    // Hata mesajını kaydet ama "Hata" olarak gösterme — execution devam ediyor
     pipelineWarning = err instanceof Error ? err.message : String(err);
-    console.error('[pipeline-engine] auto-start hatası:', err);
+    console.error('[pipeline-engine] auto-start hatası (execution devam ediyor):', err);
   }
 
   return c.json({
     success: true,
     planId: plan.id,
     execution: { started: true },
-    pipeline: { started: pipelineStarted, warning: pipelineWarning },
+    pipeline: {
+      started: pipelineStarted,
+      // warning yalnızca gerçek bir sorun varsa dolu; aksi hâlde undefined
+      warning: pipelineWarning,
+    },
   });
 });
 
 // Pipeline auto-start durumunu sorgula
+// Task durumlarıyla zenginleştirilmiş yanıt döner; "Hata" göstermek yerine
+// task'lar çalışıyorsa "running" statüsü türetilir.
 studio.get('/projects/:id/pipeline/auto-start-status', (c) => {
   const projectId = c.req.param('id');
   const project = getProject(projectId);
@@ -340,12 +348,16 @@ studio.get('/projects/:id/pipeline/auto-start-status', (c) => {
 
   const plan = getLatestPlan(projectId);
   const planApproved = plan?.status === 'approved';
-  const pipelineState = pipelineEngine.getPipelineState(projectId);
+
+  // Zenginleştirilmiş durum: pipeline + task progress + derived status
+  const enriched = pipelineEngine.getEnrichedPipelineStatus(projectId);
+  const pipelineState = enriched.pipelineState;
 
   return c.json({
     projectId,
     planApproved,
     autoStartEnabled: true,
+    // Gerçek pipeline kaydı (null olabilir)
     pipeline: pipelineState
       ? {
           status: pipelineState.status,
@@ -354,6 +366,13 @@ studio.get('/projects/:id/pipeline/auto-start-status', (c) => {
           startedAt: pipelineState.startedAt,
         }
       : null,
+    // Task durumlarından türetilen gerçek durum
+    // Board bu alanı kullanmalı; pipeline.status yerine effectiveStatus tercih edilir
+    effectiveStatus: enriched.derivedStatus,
+    // Anlık task ilerleme özeti
+    taskProgress: enriched.taskProgress.overall,
+    // Varsa uyarı mesajı
+    warning: enriched.warning,
   });
 });
 
@@ -1588,18 +1607,31 @@ studio.post('/projects/:id/pipeline/start', (c) => {
   }
 });
 
-// GET /projects/:id/pipeline/status — mevcut pipeline durumunu döner
+// GET /projects/:id/pipeline/status — mevcut pipeline durumunu task durumlarıyla birlikte döner
 studio.get('/projects/:id/pipeline/status', (c) => {
   const projectId = c.req.param('id');
   const project = getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
-  const state = pipelineEngine.getPipelineState(projectId);
-  if (!state) {
+  // Zenginleştirilmiş durum: pipeline state + task progress + derived status
+  const enriched = pipelineEngine.getEnrichedPipelineStatus(projectId);
+
+  // Pipeline kaydı hiç yoksa ve task'lar da çalışmıyorsa 404 dön
+  if (!enriched.pipelineState && enriched.taskProgress.overall.total === 0) {
     return c.json({ error: 'Bu proje için pipeline kaydı bulunamadı' }, 404);
   }
 
-  return c.json(state);
+  return c.json({
+    // Ham pipeline state (null olabilir — kayıt henüz oluşmamışsa)
+    pipeline: enriched.pipelineState,
+    // Task engine'den gelen anlık ilerleme
+    taskProgress: enriched.taskProgress,
+    // Task durumlarına göre türetilen gerçek durum
+    // (pipeline kaydı "failed" olsa bile task'lar çalışıyorsa "running" gösterilir)
+    status: enriched.derivedStatus,
+    // Uyarı mesajı (pipeline/task durumları uyuşmuyorsa)
+    warning: enriched.warning,
+  });
 });
 
 // POST /projects/:id/pipeline/pause — pipeline'ı duraklatır

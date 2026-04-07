@@ -20,6 +20,53 @@ import { createAgentTools } from './agent-tools.js';
 import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
 
 // ---------------------------------------------------------------------------
+// Timeout configuration
+// ---------------------------------------------------------------------------
+
+/** Default task timeout: 5 minutes (in milliseconds) */
+const DEFAULT_TASK_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * Wraps a promise with a timeout using AbortController.
+ * If the promise does not resolve within `timeoutMs`, the AbortController is
+ * aborted and a TaskTimeoutError is thrown.
+ *
+ * @param operation - Factory that receives an AbortSignal and returns the promise to race.
+ * @param timeoutMs - Maximum allowed duration in milliseconds.
+ * @returns The resolved value of the operation promise.
+ */
+function withTimeout<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  const controller = new AbortController();
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    const timer = setTimeout(() => {
+      controller.abort();
+      reject(new TaskTimeoutError(timeoutMs));
+    }, timeoutMs);
+
+    // If the operation resolves/rejects first, clear the timer to avoid leaks
+    controller.signal.addEventListener('abort', () => clearTimeout(timer));
+  });
+
+  return Promise.race([operation(controller.signal), timeoutPromise]);
+}
+
+/** Thrown when a task exceeds its configured timeout */
+class TaskTimeoutError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    const minutes = (timeoutMs / 60_000).toFixed(1);
+    super(`Task timed out after ${minutes} minute(s) (${timeoutMs}ms). The task was aborted.`);
+    this.name = 'TaskTimeoutError';
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Execution Engine
 // ---------------------------------------------------------------------------
 
@@ -134,6 +181,9 @@ class ExecutionEngine {
 
     const prompt = this.buildTaskPrompt(task, project);
 
+    // Resolve the effective timeout: agent-level config takes priority over the default
+    const timeoutMs = agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS;
+
     try {
       let output: TaskOutput;
 
@@ -143,9 +193,15 @@ class ExecutionEngine {
 
       if (dockerAvailable && agent.cliTool === 'claude-code') {
         try {
-          output = await this.executeInContainer(projectId, agent, project, task, prompt);
+          output = await withTimeout(
+            (signal) => this.executeInContainer(projectId, agent, project, task, prompt, signal),
+            timeoutMs,
+          );
           usedDocker = true;
         } catch (dockerErr) {
+          // If it is a timeout error, propagate it directly — do not fall back to local
+          if (dockerErr instanceof TaskTimeoutError) throw dockerErr;
+
           const dockerMsg = dockerErr instanceof Error ? dockerErr.message : String(dockerErr);
           eventBus.emit({
             projectId,
@@ -154,15 +210,40 @@ class ExecutionEngine {
             taskId: task.id,
             payload: { output: `[docker fallback] Container failed: ${dockerMsg.slice(0, 200)}. Falling back to local execution.` },
           });
-          output = await this.executeLocally(projectId, agent, task, prompt);
+          output = await withTimeout(
+            (signal) => this.executeLocally(projectId, agent, task, prompt, signal),
+            timeoutMs,
+          );
         }
       } else {
-        output = await this.executeLocally(projectId, agent, task, prompt);
+        output = await withTimeout(
+          (signal) => this.executeLocally(projectId, agent, task, prompt, signal),
+          timeoutMs,
+        );
       }
+
+      // Suppress unused variable warning — usedDocker reserved for future telemetry
+      void usedDocker;
 
       taskEngine.completeTask(task.id, output);
     } catch (err) {
+      const isTimeout = err instanceof TaskTimeoutError;
       const errorMsg = err instanceof Error ? err.message : String(err);
+
+      if (isTimeout) {
+        // Emit a dedicated timeout event before the generic error event
+        eventBus.emit({
+          projectId,
+          type: 'task:timeout',
+          agentId: agent.id,
+          taskId: task.id,
+          payload: {
+            timeoutMs,
+            taskTitle: task.title,
+            message: errorMsg,
+          },
+        });
+      }
 
       eventBus.emit({
         projectId,
@@ -191,17 +272,36 @@ class ExecutionEngine {
     project: Project,
     task: Task,
     prompt: string,
+    signal: AbortSignal,
   ): Promise<TaskOutput> {
+    // Abort early if the timeout already fired before we even started
+    if (signal.aborted) {
+      throw new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS);
+    }
+
     // Ensure a container is alive for this agent; create one if needed
     const existing = containerManager.getRuntime(projectId, agent.id);
     if (!existing?.containerId) {
       await containerManager.createContainer(agent, project);
     }
 
-    const { exitCode, output } = await containerManager.runClaudeCode(
-      projectId,
-      agent.id,
-      prompt,
+    const claudeCodePromise = containerManager.runClaudeCode(projectId, agent.id, prompt);
+
+    // Race the container execution against the abort signal
+    const { exitCode, output } = await new Promise<{ exitCode: number; output: string }>(
+      (resolve, reject) => {
+        const onAbort = () => reject(new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS));
+        signal.addEventListener('abort', onAbort, { once: true });
+        claudeCodePromise
+          .then((result) => {
+            signal.removeEventListener('abort', onAbort);
+            resolve(result);
+          })
+          .catch((err) => {
+            signal.removeEventListener('abort', onAbort);
+            reject(err);
+          });
+      },
     );
 
     const taskOutput = this.parseTaskOutput(output);
@@ -223,7 +323,13 @@ class ExecutionEngine {
     agent: AgentConfig,
     task: Task,
     prompt: string,
+    signal: AbortSignal,
   ): Promise<TaskOutput> {
+    // Abort early if the timeout already fired before we even started
+    if (signal.aborted) {
+      throw new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS);
+    }
+
     const project = getProject(projectId);
     const repoPath = project?.repoPath;
 
@@ -247,12 +353,37 @@ class ExecutionEngine {
 
     const model = getAIModel();
 
-    const { text } = await generateText({
+    // Pass the AbortSignal to generateText so the AI SDK can honour cancellation
+    const generatePromise = generateText({
       model,
       stopWhen: stepCountIs(20),
       system: agent.systemPrompt || this.defaultSystemPrompt(agent),
       prompt,
       tools,
+      abortSignal: signal,
+    });
+
+    // Additionally race against the signal in case the SDK does not propagate it
+    const { text } = await new Promise<Awaited<typeof generatePromise>>((resolve, reject) => {
+      const onAbort = () => reject(new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS));
+      signal.addEventListener('abort', onAbort, { once: true });
+      generatePromise
+        .then((result) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(result);
+        })
+        .catch((err) => {
+          signal.removeEventListener('abort', onAbort);
+          // If the SDK itself throws an abort error, translate it to TaskTimeoutError
+          if (
+            err instanceof Error &&
+            (err.name === 'AbortError' || err.message.toLowerCase().includes('abort'))
+          ) {
+            reject(new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS));
+          } else {
+            reject(err);
+          }
+        });
     });
 
     eventBus.emit({
