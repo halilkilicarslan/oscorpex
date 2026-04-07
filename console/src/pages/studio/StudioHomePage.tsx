@@ -12,10 +12,12 @@ import {
   Clock,
   Code2,
   X,
+  FolderInput,
 } from 'lucide-react';
 import {
   fetchProjects,
   createProject,
+  importProject,
   deleteProject,
   fetchTeamTemplates,
   type Project,
@@ -300,6 +302,133 @@ function CreateProjectModal({ onClose, onCreate }: {
 }
 
 // ---------------------------------------------------------------------------
+// Import project modal
+// ---------------------------------------------------------------------------
+
+function ImportProjectModal({ onClose, onImport }: {
+  onClose: () => void;
+  onImport: (project: Project) => void;
+}) {
+  const [name, setName] = useState('');
+  const [repoPath, setRepoPath] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [templates, setTemplates] = useState<TeamTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+
+  useEffect(() => {
+    fetchTeamTemplates().then(setTemplates).catch(() => {});
+  }, []);
+
+  const handleSubmit = async () => {
+    if (!name.trim() || !repoPath.trim()) return;
+    setLoading(true);
+    setError('');
+    try {
+      const project = await importProject({
+        name: name.trim(),
+        repoPath: repoPath.trim(),
+        teamTemplateId: selectedTemplate || undefined,
+      });
+      onImport(project);
+    } catch (err: any) {
+      setError(err?.message || 'Import failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-[#111111] border border-[#262626] rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 pt-6 pb-5 border-b border-[#1f1f1f] shrink-0">
+          <h2 className="text-[16px] font-semibold text-[#fafafa]">Import Project</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-[#1f1f1f] text-[#525252] hover:text-[#a3a3a3]">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          {error && (
+            <div className="text-[12px] text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-[12px] text-[#a3a3a3] mb-1.5">Project Name</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My App"
+              className="w-full px-3 py-2 rounded-lg bg-[#0a0a0a] border border-[#262626] text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[12px] text-[#a3a3a3] mb-1.5">Repository Path</label>
+            <input
+              value={repoPath}
+              onChange={(e) => setRepoPath(e.target.value)}
+              placeholder="/Users/you/projects/my-app"
+              className="w-full px-3 py-2 rounded-lg bg-[#0a0a0a] border border-[#262626] text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none font-mono"
+            />
+            <p className="text-[11px] text-[#525252] mt-1">Absolute path to existing local repository</p>
+          </div>
+
+          {/* Team template picker */}
+          {templates.length > 0 && (
+            <div>
+              <label className="block text-[12px] text-[#a3a3a3] mb-1.5">Team Template</label>
+              <div className="space-y-2">
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setSelectedTemplate(selectedTemplate === t.id ? '' : t.id)}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg border transition-colors ${
+                      selectedTemplate === t.id
+                        ? 'border-[#22c55e] bg-[#22c55e]/5'
+                        : 'border-[#262626] hover:border-[#333]'
+                    }`}
+                  >
+                    <p className="text-[12px] font-medium text-[#fafafa]">{t.name}</p>
+                    <p className="text-[11px] text-[#737373] mt-0.5">{t.description}</p>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {t.roles.map((role) => (
+                        <span key={role} className="text-[10px] px-1.5 py-0.5 rounded bg-[#1f1f1f] text-[#a3a3a3] border border-[#262626]">
+                          {role}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#1f1f1f] shrink-0">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-[13px] text-[#a3a3a3] hover:text-[#fafafa] border border-[#262626] hover:border-[#333] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!name.trim() || !repoPath.trim() || loading}
+            className="px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading ? 'Importing...' : 'Import Project'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -307,6 +436,7 @@ export default function StudioHomePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const navigate = useNavigate();
 
   const load = async () => {
@@ -338,13 +468,22 @@ export default function StudioHomePage() {
             Create projects, plan with PM Agent, and let AI agents build your software
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] transition-colors"
-        >
-          <Plus size={16} />
-          New Project
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium border border-[#262626] text-[#a3a3a3] hover:text-[#fafafa] hover:border-[#333] transition-colors"
+          >
+            <FolderInput size={16} />
+            Import
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] transition-colors"
+          >
+            <Plus size={16} />
+            New Project
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -389,6 +528,18 @@ export default function StudioHomePage() {
           onCreate={(project) => {
             setProjects((prev) => [project, ...prev]);
             setShowCreate(false);
+            navigate(`/studio/${project.id}`);
+          }}
+        />
+      )}
+
+      {/* Import modal */}
+      {showImport && (
+        <ImportProjectModal
+          onClose={() => setShowImport(false)}
+          onImport={(project) => {
+            setProjects((prev) => [project, ...prev]);
+            setShowImport(false);
             navigate(`/studio/${project.id}`);
           }}
         />
