@@ -333,13 +333,17 @@ function StageDetailPanel({
       ) : (
         <div className="flex flex-col gap-3">
           {stage.agents.map((agent) => {
-            // Ajana ait görevleri filtrele
-            const agentTasks = stage.tasks.filter(
-              (t) =>
-                t.assignedAgent === agent.id ||
-                t.assignedAgent === agent.name ||
-                t.assignedAgent === agent.role,
-            );
+            // Ajana ait görevleri filtrele (id, sourceAgentId, name, role ile eşleştir)
+            const agentTasks = stage.tasks.filter((t) => {
+              const assigned = t.assignedAgent ?? '';
+              const assignedLower = assigned.toLowerCase();
+              return (
+                assigned === agent.id ||
+                assigned === agent.sourceAgentId ||
+                assignedLower === agent.name.toLowerCase() ||
+                assignedLower === agent.role.toLowerCase()
+              );
+            });
             const agentColor = getAgentColor(agent);
 
             return (
@@ -374,12 +378,16 @@ function StageDetailPanel({
             const matchedIds = new Set(
               stage.agents.flatMap((agent) =>
                 stage.tasks
-                  .filter(
-                    (t) =>
-                      t.assignedAgent === agent.id ||
-                      t.assignedAgent === agent.name ||
-                      t.assignedAgent === agent.role,
-                  )
+                  .filter((t) => {
+                    const assigned = t.assignedAgent ?? '';
+                    const assignedLower = assigned.toLowerCase();
+                    return (
+                      assigned === agent.id ||
+                      assigned === agent.sourceAgentId ||
+                      assignedLower === agent.name.toLowerCase() ||
+                      assignedLower === agent.role.toLowerCase()
+                    );
+                  })
                   .map((t) => t.id),
               ),
             );

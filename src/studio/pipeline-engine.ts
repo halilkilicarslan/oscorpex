@@ -113,31 +113,66 @@ class PipelineEngine {
     // Phase'leri order'a göre sırala (phase.order küçükten büyüğe)
     const sortedPhases = [...phases].sort((a, b) => a.order - b.order);
 
-    const stages: PipelineStage[] = sortedOrders.map((order, stageIndex) => {
+    // Her stage için agent kimlik setlerini oluştur (id, sourceAgentId, role, name)
+    // Plan'daki assignedAgent değeri sourceAgentId, role veya name olabilir
+    function buildAgentMatchSet(stageAgents: ProjectAgent[]): {
+      ids: Set<string>;
+      roles: Set<string>;
+    } {
+      const ids = new Set<string>();
+      const roles = new Set<string>();
+      for (const a of stageAgents) {
+        ids.add(a.id);
+        if (a.sourceAgentId) ids.add(a.sourceAgentId);
+        roles.add(a.role.toLowerCase());
+        roles.add(a.name.toLowerCase());
+      }
+      return { ids, roles };
+    }
+
+    // Phase-Stage eşleştirmesi: phase'deki task assignedAgent değerlerini
+    // stage agent'larının id/sourceAgentId/role/name ile karşılaştır
+    function matchPhaseToStage(phase: Phase, stageAgents: ProjectAgent[]): boolean {
+      const { ids, roles } = buildAgentMatchSet(stageAgents);
+      const phaseTasks = phase.tasks ?? [];
+      if (phaseTasks.length === 0) return false;
+      // Phase'deki en az bir task'ın bu stage'deki bir agent'a eşleşmesi yeterli
+      return phaseTasks.some((t) => {
+        const assigned = t.assignedAgent ?? '';
+        return ids.has(assigned) || roles.has(assigned.toLowerCase());
+      });
+    }
+
+    const usedPhaseIds = new Set<string>();
+
+    const stages: PipelineStage[] = sortedOrders.map((order) => {
       const stageAgents = orderGroups.get(order)!;
 
-      // Stage index ile aynı index'teki phase'i eşleştir
-      // Bu sayede phase 0 → stage 0, phase 1 → stage 1 olur
-      const matchedPhase: Phase | undefined = sortedPhases[stageIndex];
+      // Bu stage'e eşleşen TÜM phase'leri bul (agent bazlı matching)
+      // Aynı stage'de birden fazla agent olabilir ve her birinin farklı phase'i olabilir
+      const matchedPhases: Phase[] = [];
+      for (const phase of sortedPhases) {
+        if (usedPhaseIds.has(phase.id)) continue;
+        if (matchPhaseToStage(phase, stageAgents)) {
+          matchedPhases.push(phase);
+          usedPhaseIds.add(phase.id);
+        }
+      }
 
-      // Stage task listesi: eşleşen phase'in task'ları
-      // Fallback: agent ID/role bazlı matching (phase yoksa)
+      // Stage task listesi: eşleşen phase'lerin task'ları
       let stageTasks: Task[] = [];
 
-      if (matchedPhase) {
-        // Phase bazlı mapping: en güvenilir yöntem
-        stageTasks = matchedPhase.tasks ?? [];
+      if (matchedPhases.length > 0) {
+        for (const phase of matchedPhases) {
+          stageTasks.push(...(phase.tasks ?? []));
+        }
       } else {
-        // Phase eşleşmesi yoksa agent ID/role bazlı fallback
-        const agentIds = new Set(stageAgents.map((a) => a.id));
-        const agentNames = new Set(stageAgents.map((a) => a.name.toLowerCase()));
-        const agentRoles = new Set(stageAgents.map((a) => a.role.toLowerCase()));
-
-        // Tüm phase'lerin task'larını tara
+        // Phase eşleşmesi yoksa tüm phase'lerden agent bazlı fallback
+        const { ids, roles } = buildAgentMatchSet(stageAgents);
         for (const phase of phases) {
           for (const task of phase.tasks ?? []) {
-            const assigned = task.assignedAgent?.toLowerCase() ?? '';
-            if (agentIds.has(task.assignedAgent) || agentRoles.has(assigned) || agentNames.has(assigned)) {
+            const assigned = task.assignedAgent ?? '';
+            if (ids.has(assigned) || roles.has(assigned.toLowerCase())) {
               stageTasks.push(task);
             }
           }
@@ -149,7 +184,7 @@ class PipelineEngine {
         agents: stageAgents,
         tasks: stageTasks,
         status: 'pending' as const,
-        phaseId: matchedPhase?.id,
+        phaseId: matchedPhases[0]?.id,
       } satisfies PipelineStage;
     });
 
