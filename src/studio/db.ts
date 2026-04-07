@@ -1435,6 +1435,7 @@ export function getProjectAnalytics(projectId: string) {
     WHERE pp.project_id = ?
   `).get(projectId) as any;
 
+  // Match tasks to project agents by: project_agent ID, source_agent_id, or role
   const agentTaskRows = db.prepare(`
     SELECT
       pa.id AS agent_id, pa.name AS agent_name,
@@ -1443,7 +1444,8 @@ export function getProjectAnalytics(projectId: string) {
     FROM tasks t
     JOIN phases ph  ON ph.id  = t.phase_id
     JOIN project_plans pp ON pp.id = ph.plan_id
-    JOIN project_agents pa ON pa.project_id = pp.project_id AND pa.role = t.assigned_agent
+    JOIN project_agents pa ON pa.project_id = pp.project_id
+      AND (pa.id = t.assigned_agent OR pa.source_agent_id = t.assigned_agent OR pa.role = t.assigned_agent)
     WHERE pp.project_id = ?
     GROUP BY pa.id, pa.name
   `).all(projectId) as any[];
@@ -1465,7 +1467,12 @@ export function getProjectAnalytics(projectId: string) {
     FROM pipeline_runs WHERE project_id = ?
   `).get(projectId) as any;
 
-  const tasksPerAgent = (agentTaskRows || []).map((r: any) => ({
+  // Deduplicate by agent name (multiple project_agents may match same tasks)
+  const agentMap = new Map<string, any>();
+  for (const r of agentTaskRows || []) {
+    if (!agentMap.has(r.agent_name)) agentMap.set(r.agent_name, r);
+  }
+  const tasksPerAgent = [...agentMap.values()].map((r: any) => ({
     agentId: r.agent_id, agentName: r.agent_name,
     total: r.total ?? 0, completed: r.completed ?? 0,
     completionRate: r.total > 0 ? Math.round((r.completed / r.total) * 100) : 0,
@@ -1488,17 +1495,29 @@ export function getProjectAnalytics(projectId: string) {
 
 export function getAgentAnalytics(projectId: string) {
   const db = getDb();
-  const agents = db.prepare('SELECT id, name, role, color FROM project_agents WHERE project_id = ?').all(projectId) as any[];
+  const allAgents = db.prepare('SELECT id, name, role, color, source_agent_id FROM project_agents WHERE project_id = ?').all(projectId) as any[];
+  // Deduplicate agents by source_agent_id (keep first occurrence)
+  const seen = new Set<string>();
+  const agents = allAgents.filter((a: any) => {
+    const key = a.source_agent_id || a.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
   return agents.map((a: any) => {
+    // Match tasks by: project_agent ID, source (agent_config) ID, or role name
+    const matchIds = [a.id, a.source_agent_id, a.role].filter(Boolean);
+    const placeholders = matchIds.map(() => '?').join(',');
+
     const taskStats = db.prepare(`
       SELECT COUNT(*) AS assigned,
         SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) AS completed,
         SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) AS failed
       FROM tasks t JOIN phases ph ON ph.id = t.phase_id
       JOIN project_plans pp ON pp.id = ph.plan_id
-      WHERE pp.project_id = ? AND t.assigned_agent = ?
-    `).get(projectId, a.role) as any;
+      WHERE pp.project_id = ? AND t.assigned_agent IN (${placeholders})
+    `).get(projectId, ...matchIds) as any;
 
     const runStats = db.prepare(`
       SELECT COUNT(*) AS run_count,
