@@ -438,9 +438,11 @@ studio.patch('/projects/:id/tasks/:taskId', async (c) => {
   return c.json(task);
 });
 
-studio.post('/projects/:id/tasks/:taskId/retry', (c) => {
+studio.post('/projects/:id/tasks/:taskId/retry', async (c) => {
   try {
     const updated = taskEngine.retryTask(c.req.param('taskId'));
+    // Re-trigger execution for the retried task
+    executionEngine.executeTask(c.req.param('id'), updated).catch(() => {});
     return c.json({ success: true, task: updated });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Retry failed';

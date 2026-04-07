@@ -93,12 +93,27 @@ class ExecutionEngine {
     const prompt = this.buildTaskPrompt(task, project);
 
     try {
-      const dockerAvailable = await containerManager.isDockerAvailable();
-
       let output: TaskOutput;
 
+      // Try Docker first, fallback to local if unavailable or fails
+      let usedDocker = false;
+      const dockerAvailable = await containerManager.isDockerAvailable();
+
       if (dockerAvailable && agent.cliTool === 'claude-code') {
-        output = await this.executeInContainer(projectId, agent, project, task, prompt);
+        try {
+          output = await this.executeInContainer(projectId, agent, project, task, prompt);
+          usedDocker = true;
+        } catch (dockerErr) {
+          const dockerMsg = dockerErr instanceof Error ? dockerErr.message : String(dockerErr);
+          eventBus.emit({
+            projectId,
+            type: 'agent:output',
+            agentId: agent.id,
+            taskId: task.id,
+            payload: { output: `[docker fallback] Container failed: ${dockerMsg.slice(0, 200)}. Falling back to local execution.` },
+          });
+          output = await this.executeLocally(projectId, agent, task, prompt);
+        }
       } else {
         output = await this.executeLocally(projectId, agent, task, prompt);
       }
