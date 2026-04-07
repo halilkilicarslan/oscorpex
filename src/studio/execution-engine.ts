@@ -19,6 +19,8 @@ import {
   updatePhaseStatus,
   listProjects,
   recordTokenUsage,
+  listProjectTasks,
+  getTask,
 } from './db.js';
 import { createAgentTools } from './agent-tools.js';
 import { agentRuntime } from './agent-runtime.js';
@@ -349,6 +351,24 @@ class ExecutionEngine {
       });
 
       taskEngine.failTask(task.id, errorMsg);
+
+      // --- Self-healing: auto-retry with error context ---
+      const MAX_AUTO_RETRIES = 2;
+      const failedTask = getTask(task.id);
+      if (!isTimeout && failedTask && failedTask.retryCount < MAX_AUTO_RETRIES) {
+        console.log(`[execution-engine] Self-healing: auto-retry #${failedTask.retryCount + 1} for "${task.title}"`);
+        eventBus.emit({
+          projectId,
+          type: 'agent:output',
+          agentId: agent.id,
+          taskId: task.id,
+          payload: { output: `[self-heal] Otomatik yeniden deneme #${failedTask.retryCount + 1}: ${errorMsg.slice(0, 200)}` },
+        });
+        const retried = taskEngine.retryTask(task.id);
+        // Re-execute with error context injected into the task
+        await this.executeTask(projectId, { ...retried, error: errorMsg });
+        return; // skip dispatchReadyTasks — executeTask will handle it
+      }
     } finally {
       containerManager.setCurrentTask(projectId, agent.id, undefined);
     }
@@ -553,6 +573,22 @@ class ExecutionEngine {
     const techStack =
       project.techStack.length > 0 ? project.techStack.join(', ') : 'Not specified';
 
+    // --- Code Context: gather files from completed tasks in this project ---
+    const completedTasks = listProjectTasks(project.id).filter(
+      (t) => t.status === 'done' && t.output && t.id !== task.id,
+    );
+
+    const contextFiles = new Map<string, { agent: string; task: string }>();
+    for (const ct of completedTasks) {
+      const allFiles = [
+        ...(ct.output?.filesCreated ?? []),
+        ...(ct.output?.filesModified ?? []),
+      ];
+      for (const f of allFiles) {
+        contextFiles.set(f, { agent: ct.assignedAgent, task: ct.title });
+      }
+    }
+
     const lines: string[] = [
       `# Task: ${task.title}`,
       '',
@@ -561,10 +597,61 @@ class ExecutionEngine {
       `- Tech Stack: ${techStack}`,
       `- Description: ${project.description || 'No description provided'}`,
       '',
+    ];
+
+    // Add code context section if there are completed tasks
+    if (contextFiles.size > 0) {
+      lines.push(
+        `## Code Context (files created/modified by other agents)`,
+        '',
+        'The following files already exist in the project. Read them with readFile before making changes to ensure consistency:',
+        '',
+      );
+      const sorted = [...contextFiles.entries()].sort(([a], [b]) => a.localeCompare(b));
+      for (const [filePath, info] of sorted.slice(0, 50)) {
+        lines.push(`- \`${filePath}\` (by ${info.agent}: ${info.task})`);
+      }
+      if (contextFiles.size > 50) {
+        lines.push(`- ... and ${contextFiles.size - 50} more files`);
+      }
+      lines.push('');
+    }
+
+    // Add completed task summaries for cross-agent awareness
+    if (completedTasks.length > 0) {
+      lines.push(
+        `## Completed Tasks (${completedTasks.length})`,
+        '',
+      );
+      for (const ct of completedTasks.slice(-10)) {
+        const fileCount = (ct.output?.filesCreated?.length ?? 0) + (ct.output?.filesModified?.length ?? 0);
+        lines.push(`- **${ct.title}** (${ct.assignedAgent}) — ${fileCount} files`);
+      }
+      lines.push('');
+    }
+
+    // Self-healing: inject previous error so agent can fix it
+    if (task.error) {
+      lines.push(
+        `## Previous Attempt Failed`,
+        '',
+        'This task was attempted before but failed with the following error. Please fix the issue and try again:',
+        '',
+        '```',
+        task.error.slice(0, 1000),
+        '```',
+        '',
+        'Common fixes: check import paths, install missing dependencies, fix syntax errors, ensure files exist before reading.',
+        '',
+      );
+    }
+
+    lines.push(
       `## Task Details`,
       `- ID: ${task.id}`,
       `- Complexity: ${task.complexity}`,
       `- Branch: ${task.branch || 'main'}`,
+      `- Retry: ${task.retryCount > 0 ? `#${task.retryCount}` : 'first attempt'}`,
       '',
       `## Instructions`,
       task.description,
@@ -584,9 +671,14 @@ class ExecutionEngine {
       '4. Run any relevant commands (install deps, run tests, etc.)',
       '5. Commit your changes with a descriptive message',
       '',
+      `## Important`,
+      '- Read existing files before modifying them to maintain consistency',
+      '- Follow the same patterns and conventions used in existing code',
+      '- Do not overwrite files created by other agents unless necessary for your task',
+      '',
       `## Output`,
       'After completing all tool calls, provide a brief summary of what you did.',
-    ];
+    );
 
     return lines.join('\n');
   }
