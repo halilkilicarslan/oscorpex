@@ -239,8 +239,81 @@ function StageCard({
   );
 }
 
+// Tek bir görev satırı — ağaç dalı sembolü, durum, retry butonu ile
+function TaskRow({
+  task,
+  isLast,
+  retryingTaskId,
+  onRetryTask,
+}: {
+  task: Task;
+  isLast: boolean;
+  retryingTaskId: string | null;
+  onRetryTask: (taskId: string) => void;
+}) {
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-start gap-2 text-[11px] text-[#a3a3a3]">
+        <span className="text-[#333] shrink-0 mt-0.5 font-mono">
+          {isLast ? '└──' : '├──'}
+        </span>
+        <div className="flex items-start gap-1.5 flex-1 min-w-0">
+          <div className="mt-0.5 shrink-0">{TASK_STATUS_ICONS[task.status]}</div>
+          <span className="truncate flex-1">{task.title}</span>
+          {task.status === 'failed' && (
+            <button
+              onClick={() => onRetryTask(task.id)}
+              disabled={retryingTaskId === task.id}
+              className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors shrink-0 disabled:opacity-50"
+              title="Görevi yeniden dene"
+            >
+              <RotateCcw size={9} className={retryingTaskId === task.id ? 'animate-spin' : ''} />
+              Retry
+            </button>
+          )}
+          <span
+            className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${
+              COMPLEXITY_COLORS[task.complexity] ?? ''
+            }`}
+          >
+            {task.complexity}
+          </span>
+          <span
+            className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 font-medium ${
+              task.status === 'done'
+                ? 'bg-[#22c55e]/10 text-[#22c55e]'
+                : task.status === 'running'
+                ? 'bg-[#f59e0b]/10 text-[#f59e0b]'
+                : task.status === 'failed'
+                ? 'bg-[#ef4444]/10 text-[#ef4444]'
+                : task.status === 'review'
+                ? 'bg-[#a855f7]/10 text-[#a855f7]'
+                : 'bg-[#262626] text-[#525252]'
+            }`}
+          >
+            {task.status}
+          </span>
+        </div>
+      </div>
+      {task.status === 'failed' && task.error && (
+        <div className="ml-14 mt-1 text-[10px] text-[#ef4444] bg-[#ef4444]/5 border border-[#ef4444]/20 rounded px-2 py-1 max-w-md truncate" title={task.error}>
+          {task.error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Aşama detay paneli — seçili aşamadaki ajan ve görevleri gösterir
-function StageDetailPanel({ stage }: { stage: PipelineStage }) {
+function StageDetailPanel({
+  stage,
+  retryingTaskId,
+  onRetryTask,
+}: {
+  stage: PipelineStage;
+  retryingTaskId: string | null;
+  onRetryTask: (taskId: string) => void;
+}) {
   return (
     <div className="border border-[#262626] rounded-xl bg-[#111111] p-4">
       {/* Panel başlığı */}
@@ -286,110 +359,43 @@ function StageDetailPanel({ stage }: { stage: PipelineStage }) {
                 {agentTasks.length > 0 ? (
                   <div className="ml-10 flex flex-col gap-1.5">
                     {agentTasks.map((task, idx) => (
-                      <div key={task.id} className="flex flex-col">
-                        <div className="flex items-start gap-2 text-[11px] text-[#a3a3a3]">
-                          {/* Ağaç dalı sembolü */}
-                          <span className="text-[#333] shrink-0 mt-0.5 font-mono">
-                            {idx === agentTasks.length - 1 ? '└──' : '├──'}
-                          </span>
-                          <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                            <div className="mt-0.5 shrink-0">{TASK_STATUS_ICONS[task.status]}</div>
-                            <span className="truncate flex-1">{task.title}</span>
-                            {/* Failed ise retry butonu */}
-                            {task.status === 'failed' && (
-                              <button
-                                onClick={() => handleRetryTask(task.id)}
-                                disabled={retryingTaskId === task.id}
-                                className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors shrink-0 disabled:opacity-50"
-                                title="Görevi yeniden dene"
-                              >
-                                <RotateCcw size={9} className={retryingTaskId === task.id ? 'animate-spin' : ''} />
-                                Retry
-                              </button>
-                            )}
-                            {/* Karmaşıklık rozeti */}
-                            <span
-                              className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${
-                                COMPLEXITY_COLORS[task.complexity] ?? ''
-                              }`}
-                            >
-                              {task.complexity}
-                            </span>
-                            {/* Durum rozeti */}
-                            <span
-                              className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 font-medium ${
-                                task.status === 'done'
-                                  ? 'bg-[#22c55e]/10 text-[#22c55e]'
-                                  : task.status === 'running'
-                                  ? 'bg-[#f59e0b]/10 text-[#f59e0b]'
-                                  : task.status === 'failed'
-                                  ? 'bg-[#ef4444]/10 text-[#ef4444]'
-                                  : task.status === 'review'
-                                  ? 'bg-[#a855f7]/10 text-[#a855f7]'
-                                  : 'bg-[#262626] text-[#525252]'
-                              }`}
-                            >
-                              {task.status}
-                            </span>
-                          </div>
-                        </div>
-                        {/* Failed task hata mesajı */}
-                        {task.status === 'failed' && task.error && (
-                          <div className="ml-14 mt-1 text-[10px] text-[#ef4444] bg-[#ef4444]/5 border border-[#ef4444]/20 rounded px-2 py-1 max-w-md truncate" title={task.error}>
-                            {task.error}
-                          </div>
-                        )}
-                      </div>
+                      <TaskRow key={task.id} task={task} isLast={idx === agentTasks.length - 1} retryingTaskId={retryingTaskId} onRetryTask={onRetryTask} />
                     ))}
                   </div>
                 ) : (
-                  // Ajana ait görev yoksa tüm aşama görevlerini göster (serbest atama)
-                  stage.tasks.length > 0 && stage.agents.length === 1 ? (
-                    <div className="ml-10 flex flex-col gap-1.5">
-                      {stage.tasks.map((task, idx) => (
-                        <div key={task.id} className="flex flex-col">
-                          <div className="flex items-start gap-2 text-[11px] text-[#a3a3a3]">
-                            <span className="text-[#333] shrink-0 mt-0.5 font-mono">
-                              {idx === stage.tasks.length - 1 ? '└──' : '├──'}
-                            </span>
-                            <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                              <div className="mt-0.5 shrink-0">{TASK_STATUS_ICONS[task.status]}</div>
-                              <span className="truncate flex-1">{task.title}</span>
-                              {task.status === 'failed' && (
-                                <button
-                                  onClick={() => handleRetryTask(task.id)}
-                                  disabled={retryingTaskId === task.id}
-                                  className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors shrink-0 disabled:opacity-50"
-                                  title="Görevi yeniden dene"
-                                >
-                                  <RotateCcw size={9} className={retryingTaskId === task.id ? 'animate-spin' : ''} />
-                                  Retry
-                                </button>
-                              )}
-                              <span
-                                className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${
-                                  COMPLEXITY_COLORS[task.complexity] ?? ''
-                                }`}
-                              >
-                                {task.complexity}
-                              </span>
-                            </div>
-                          </div>
-                          {task.status === 'failed' && task.error && (
-                            <div className="ml-14 mt-1 text-[10px] text-[#ef4444] bg-[#ef4444]/5 border border-[#ef4444]/20 rounded px-2 py-1 max-w-md truncate" title={task.error}>
-                              {task.error}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="ml-10 text-[10px] text-[#525252] italic">Atanmış görev yok</p>
-                  )
+                  <p className="ml-10 text-[10px] text-[#525252] italic">Atanmış görev yok</p>
                 )}
               </div>
             );
           })}
+
+          {/* Hiçbir ajana eşleşmeyen görevleri göster */}
+          {(() => {
+            const matchedIds = new Set(
+              stage.agents.flatMap((agent) =>
+                stage.tasks
+                  .filter(
+                    (t) =>
+                      t.assignedAgent === agent.id ||
+                      t.assignedAgent === agent.name ||
+                      t.assignedAgent === agent.role,
+                  )
+                  .map((t) => t.id),
+              ),
+            );
+            const unmatched = stage.tasks.filter((t) => !matchedIds.has(t.id));
+            if (unmatched.length === 0) return null;
+            return (
+              <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-[#1f1f1f]">
+                <span className="text-[10px] text-[#525252] font-medium">Diğer Görevler</span>
+                <div className="ml-2 flex flex-col gap-1.5">
+                  {unmatched.map((task, idx) => (
+                    <TaskRow key={task.id} task={task} isLast={idx === unmatched.length - 1} retryingTaskId={retryingTaskId} onRetryTask={onRetryTask} />
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -695,7 +701,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
 
         {/* ---- Seçili aşama detay paneli ----------------------------------- */}
         {selectedStage && (
-          <StageDetailPanel stage={selectedStage} />
+          <StageDetailPanel stage={selectedStage} retryingTaskId={retryingTaskId} onRetryTask={handleRetryTask} />
         )}
 
         {/* ---- Tamamlanma mesajı ------------------------------------------- */}
