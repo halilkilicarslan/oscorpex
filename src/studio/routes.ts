@@ -426,6 +426,13 @@ studio.get('/projects/:id/tasks/:taskId', (c) => {
 
 studio.patch('/projects/:id/tasks/:taskId', async (c) => {
   const body = await c.req.json();
+  // Status değişimlerinde timestamp'leri otomatik set et
+  if (body.status === 'running' && !body.startedAt) {
+    body.startedAt = new Date().toISOString();
+  }
+  if (body.status === 'done' && !body.completedAt) {
+    body.completedAt = new Date().toISOString();
+  }
   const task = updateTask(c.req.param('taskId'), body);
   if (!task) return c.json({ error: 'Task not found' }, 404);
   return c.json(task);
