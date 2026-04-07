@@ -13,6 +13,7 @@ import {
   getProject,
   listProjectTasks,
   getDb,
+  getProjectAgentsWithSkills,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import type { TaskComplexity } from './types.js';
@@ -43,12 +44,40 @@ You help users plan and manage software projects end-to-end. You work with a tea
 - Include testing tasks for critical features
 - Include a "Documentation" task in the first phase
 
-## Your Team
-You have a team of AI developer agents. Their names, roles, and capabilities are provided in the [Your Team] section of the context. When the user asks about the team:
+## Your Team & Agent Skills
+You have a team of AI developer agents. Each agent has specific skills and specializations:
+
+| Role       | Core Skills & Specializations |
+|------------|-------------------------------|
+| pm         | project management, planning, coordination, team leadership |
+| designer   | UI/UX design, wireframes, prototypes, design systems, user research |
+| architect  | system design, API design, database schema, infrastructure planning |
+| frontend   | React, TypeScript, CSS, UI components, responsive design, accessibility |
+| backend    | API development, database queries, server logic, authentication, REST |
+| coder      | general coding, implementation, algorithms, full-stack tasks |
+| qa         | testing, test automation, e2e tests, quality assurance, bug reporting |
+| reviewer   | code review, best practices, security review, standards enforcement |
+| devops     | CI/CD, deployment, Docker, Kubernetes, infrastructure, monitoring |
+
+When assigning tasks:
+- Use **smartAssignTask** to get skill-match recommendations before assigning to a specific role
+- Match task requirements to agent skills for best results
+- Prefer specialists for domain-specific work (e.g., "build a React form" → frontend, not coder)
+- Use coder only when no specialist role fits or for small utility tasks
+
+## Your Team Context
+Their names, roles, and capabilities are provided in the [Your Team] section of the context. When the user asks about the team:
 - Introduce each team member by name, role, and specialties
 - Explain what each agent does and what kind of tasks they handle
 - You (Kerem) are the PM — you plan and coordinate, the others implement
 - When creating plans, assign tasks using the exact role names from the team (e.g., "frontend", "backend", "architect", "qa", "reviewer")
+
+## Smart Assignment
+When the user asks "who should handle X?" or you need to assign a task:
+1. Use the **smartAssignTask** tool with the task description
+2. Present the recommendation with confidence score and reasoning
+3. Explain which skills matched and why that agent is the best fit
+4. The recommendation is advisory — the user can override your choice
 
 ## Communication Style
 - Be friendly and professional
@@ -56,6 +85,7 @@ You have a team of AI developer agents. Their names, roles, and capabilities are
 - Summarize decisions before creating the plan
 - Use Turkish if the user communicates in Turkish
 - Be concise but thorough
+- When showing skill match results, format them clearly: agent name, confidence %, key matching skills
 
 ## Important
 - Always use the createProjectPlan tool to create plans — don't just describe them in text
@@ -242,6 +272,169 @@ export const pmToolkit = {
         payload: { question, options },
       });
       return { message: question, options: options ?? [], note: 'Question sent to user.' };
+    },
+  }),
+
+  smartAssignTask: tool({
+    description: `Analyze a task description and recommend the best agent(s) based on skill matching.
+Returns ranked candidates with confidence scores and reasoning so you can explain the assignment decision to the user.
+Use this whenever the user asks "who should do X?" or before assigning tasks in a plan.`,
+    inputSchema: z.object({
+      projectId: z.string().describe('The project ID to look up team members'),
+      taskTitle: z.string().describe('Short title of the task'),
+      taskDescription: z.string().describe('Detailed description of what needs to be done'),
+      requiredSkills: z
+        .array(z.string())
+        .optional()
+        .describe('Specific skills or technologies needed (e.g. ["react", "typescript", "testing"])'),
+    }),
+    execute: async ({ projectId, taskTitle, taskDescription, requiredSkills }) => {
+      // Proje agentlarını beceri listesiyle birlikte al; yoksa varsayılan rol becerilerini kullan
+      let candidates = getProjectAgentsWithSkills(projectId);
+
+      // Proje agentı yoksa varsayılan rol→beceri haritasını kullan
+      const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
+        pm:        ['project management', 'planning', 'coordination', 'team leadership'],
+        designer:  ['ui design', 'ux design', 'wireframes', 'prototypes', 'design systems', 'user research', 'figma', 'accessibility'],
+        architect: ['system design', 'api design', 'database schema', 'infrastructure', 'architecture', 'documentation'],
+        frontend:  ['react', 'typescript', 'css', 'ui components', 'responsive design', 'accessibility', 'tailwindcss', 'javascript'],
+        backend:   ['api development', 'database', 'server logic', 'authentication', 'rest api', 'node.js', 'postgresql', 'sql'],
+        coder:     ['general coding', 'implementation', 'algorithms', 'full-stack', 'typescript', 'javascript', 'python'],
+        qa:        ['testing', 'test automation', 'e2e tests', 'quality assurance', 'bug reporting', 'unit tests', 'integration tests'],
+        reviewer:  ['code review', 'best practices', 'security review', 'standards', 'performance', 'refactoring'],
+        devops:    ['ci/cd', 'deployment', 'docker', 'kubernetes', 'infrastructure', 'monitoring', 'aws', 'automation'],
+      };
+
+      if (candidates.length === 0) {
+        // Proje henüz agent atanmamış — genel rol önerileri yap
+        candidates = Object.entries(DEFAULT_ROLE_SKILLS).map(([role, skills]) => ({
+          id: role,
+          name: role.charAt(0).toUpperCase() + role.slice(1),
+          role,
+          skills,
+        }));
+      }
+
+      // PM rolünü atamadan çıkar (PM koordinatör, uygulayıcı değil)
+      const assignableCandidates = candidates.filter((c) => c.role !== 'pm');
+
+      // Görev metni ve gereken becerilerden anahtar kelimeler çıkar
+      const taskText = `${taskTitle} ${taskDescription}`.toLowerCase();
+      const explicitSkills = (requiredSkills ?? []).map((s) => s.toLowerCase());
+
+      // Her aday için puanlama: beceri eşleşmesi + rol uyumu
+      const scored = assignableCandidates.map((agent) => {
+        const agentSkills = agent.skills.map((s: string) => s.toLowerCase());
+
+        // Kümülatif eşleşme skoru
+        let score = 0;
+        const matchedSkills: string[] = [];
+        const matchedReasons: string[] = [];
+
+        // 1. Açıkça belirtilen gereken becerilerle eşleşme (yüksek ağırlık)
+        for (const skill of explicitSkills) {
+          for (const agentSkill of agentSkills) {
+            if (agentSkill.includes(skill) || skill.includes(agentSkill)) {
+              score += 25;
+              if (!matchedSkills.includes(agentSkill)) {
+                matchedSkills.push(agentSkill);
+                matchedReasons.push(`Explicit skill match: "${skill}" ↔ "${agentSkill}"`);
+              }
+              break;
+            }
+          }
+        }
+
+        // 2. Görev metni ile beceri eşleşmesi (orta ağırlık)
+        for (const agentSkill of agentSkills) {
+          if (taskText.includes(agentSkill)) {
+            score += 15;
+            if (!matchedSkills.includes(agentSkill)) {
+              matchedSkills.push(agentSkill);
+              matchedReasons.push(`Task mentions "${agentSkill}"`);
+            }
+          }
+        }
+
+        // 3. Rol anahtar kelimesi görev metninde geçiyor mu (düşük ağırlık)
+        if (taskText.includes(agent.role)) {
+          score += 10;
+          matchedReasons.push(`Task references role "${agent.role}"`);
+        }
+
+        // 4. Yaygın görev kategorisi → rol uyumu kural tabanlı bonus
+        const ROLE_KEYWORD_BONUS: Record<string, string[]> = {
+          frontend:  ['ui', 'component', 'page', 'view', 'form', 'modal', 'button', 'layout', 'css', 'style', 'react', 'frontend', 'client'],
+          backend:   ['api', 'endpoint', 'route', 'controller', 'service', 'model', 'database', 'migration', 'auth', 'server', 'backend'],
+          architect: ['design', 'schema', 'architecture', 'structure', 'diagram', 'contract', 'spec', 'interface'],
+          qa:        ['test', 'testing', 'spec', 'coverage', 'qa', 'quality', 'e2e', 'unit', 'integration', 'bug'],
+          reviewer:  ['review', 'audit', 'check', 'lint', 'refactor', 'standard', 'best practice'],
+          devops:    ['deploy', 'pipeline', 'ci', 'cd', 'docker', 'container', 'infra', 'monitor', 'build'],
+          designer:  ['design', 'wireframe', 'mockup', 'ux', 'prototype', 'figma', 'style guide', 'color', 'font'],
+          coder:     ['algorithm', 'utility', 'helper', 'script', 'general', 'implement'],
+        };
+
+        const bonusKeywords = ROLE_KEYWORD_BONUS[agent.role] ?? [];
+        for (const kw of bonusKeywords) {
+          if (taskText.includes(kw)) {
+            score += 8;
+            matchedReasons.push(`Keyword "${kw}" suggests ${agent.role} role`);
+            break; // Rol başına en fazla bir keyword bonusu
+          }
+        }
+
+        // Güven skoru 0-100 aralığına normalize et
+        const maxPossibleScore = (explicitSkills.length * 25) + (agentSkills.length * 15) + 10 + 8;
+        const confidence = Math.min(100, Math.round((score / Math.max(maxPossibleScore, 30)) * 100));
+
+        return {
+          agentId: agent.id,
+          agentName: agent.name,
+          role: agent.role,
+          confidence,
+          matchedSkills,
+          reasoning: matchedReasons.slice(0, 4), // En önemli 4 nedeni göster
+          score,
+        };
+      });
+
+      // Puana göre sırala, en iyi 3 adayı döndür
+      const topCandidates = scored
+        .filter((c) => c.score > 0 || assignableCandidates.length <= 3)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+
+      // Skor sıfır olan ve alternatif yoksa en azından bir öneri sun
+      if (topCandidates.length === 0 && assignableCandidates.length > 0) {
+        const fallback = scored.sort((a, b) => b.score - a.score)[0];
+        topCandidates.push(fallback);
+      }
+
+      const best = topCandidates[0];
+
+      return {
+        taskTitle,
+        recommendation: best
+          ? {
+              agentId: best.agentId,
+              agentName: best.agentName,
+              role: best.role,
+              confidence: best.confidence,
+              matchedSkills: best.matchedSkills,
+              reasoning: best.reasoning,
+            }
+          : null,
+        alternatives: topCandidates.slice(1).map((c) => ({
+          agentId: c.agentId,
+          agentName: c.agentName,
+          role: c.role,
+          confidence: c.confidence,
+          matchedSkills: c.matchedSkills,
+        })),
+        note: best
+          ? `Best match: ${best.agentName} (${best.role}) with ${best.confidence}% confidence.`
+          : 'No strong skill match found. Consider assigning to a coder or architect.',
+      };
     },
   }),
 };

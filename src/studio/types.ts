@@ -372,3 +372,10 @@ export interface MergeResult {
   success: boolean;
   conflicts?: string[];
 }
+
+export interface GitStatus {
+  modified: string[];
+  untracked: string[];
+  staged: string[];
+  deleted: string[];
+}

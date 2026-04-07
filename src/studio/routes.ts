@@ -48,6 +48,9 @@ import {
   getRawProviderApiKey,
   getDefaultProvider,
   listAgentRuns,
+  getProjectAnalytics,
+  getAgentAnalytics,
+  getActivityTimeline,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { PM_SYSTEM_PROMPT, pmToolkit } from './pm-agent.js';
@@ -293,13 +296,65 @@ studio.post('/projects/:id/plan/approve', (c) => {
     payload: { planId: plan.id },
   });
 
-  // Start actual execution in the background — executionEngine calls
-  // taskEngine.beginExecution internally and dispatches all tasks.
+  // Execution engine: görev bazlı yürütme
   executionEngine.startProjectExecution(projectId).catch((err) => {
     console.error('[execution-engine] startProjectExecution failed:', err);
   });
 
-  return c.json({ success: true, planId: plan.id, execution: { started: true } });
+  // Pipeline auto-start: agent pipeline_order'a göre aşamalı yürütme
+  let pipelineStarted = false;
+  let pipelineWarning: string | undefined;
+
+  try {
+    const agents = listProjectAgents(projectId);
+    if (agents.length === 0) {
+      pipelineWarning = 'Projeye atanmış agent bulunamadı; pipeline başlatılamadı.';
+    } else {
+      pipelineEngine.startPipeline(projectId);
+      pipelineStarted = true;
+      eventBus.emit({
+        projectId,
+        type: 'pipeline:stage_started' as any,
+        payload: { autoStarted: true, planId: plan.id },
+      });
+      console.log(`[pipeline-engine] Plan onayı ile pipeline otomatik başlatıldı (proje=${projectId})`);
+    }
+  } catch (err) {
+    pipelineWarning = err instanceof Error ? err.message : String(err);
+    console.error('[pipeline-engine] auto-start hatası:', err);
+  }
+
+  return c.json({
+    success: true,
+    planId: plan.id,
+    execution: { started: true },
+    pipeline: { started: pipelineStarted, warning: pipelineWarning },
+  });
+});
+
+// Pipeline auto-start durumunu sorgula
+studio.get('/projects/:id/pipeline/auto-start-status', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const plan = getLatestPlan(projectId);
+  const planApproved = plan?.status === 'approved';
+  const pipelineState = pipelineEngine.getPipelineState(projectId);
+
+  return c.json({
+    projectId,
+    planApproved,
+    autoStartEnabled: true,
+    pipeline: pipelineState
+      ? {
+          status: pipelineState.status,
+          currentStage: pipelineState.currentStage,
+          totalStages: pipelineState.stages.length,
+          startedAt: pipelineState.startedAt,
+        }
+      : null,
+  });
 });
 
 studio.post('/projects/:id/plan/reject', async (c) => {
@@ -1207,6 +1262,85 @@ studio.get('/projects/:id/git/branches', async (c) => {
   }
 });
 
+// ---- File Create / Delete / Git Status & Commit ----------------------------
+
+studio.post('/projects/:id/files', async (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+
+  const body = (await c.req.json()) as { path?: string; content?: string };
+  if (!body.path || typeof body.path !== 'string') return c.json({ error: 'File path is required' }, 400);
+  if (body.path.includes('..')) return c.json({ error: 'Invalid file path: directory traversal not allowed' }, 400);
+
+  try {
+    await gitManager.createFile(project.repoPath, body.path, body.content ?? '');
+    return c.json({ path: body.path, created: true }, 201);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Failed to create file';
+    return c.json({ error: msg }, msg.includes('already exists') ? 409 : 500);
+  }
+});
+
+studio.delete('/projects/:id/files', async (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+
+  const body = (await c.req.json()) as { path?: string };
+  if (!body.path || typeof body.path !== 'string') return c.json({ error: 'File path is required' }, 400);
+  if (body.path.includes('..')) return c.json({ error: 'Invalid file path: directory traversal not allowed' }, 400);
+
+  try {
+    await gitManager.deleteFile(project.repoPath, body.path);
+    return c.json({ path: body.path, deleted: true });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Failed to delete file';
+    return c.json({ error: msg }, msg.includes('ENOENT') ? 404 : 500);
+  }
+});
+
+studio.get('/projects/:id/git/status', async (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+
+  try {
+    const gitStatus = await gitManager.getStatus(project.repoPath);
+    return c.json(gitStatus);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Failed to get git status';
+    return c.json({ error: msg }, 500);
+  }
+});
+
+studio.post('/projects/:id/git/commit', async (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+
+  const body = (await c.req.json()) as { message?: string; files?: string[] };
+  if (!body.message || typeof body.message !== 'string' || body.message.trim() === '') {
+    return c.json({ error: 'Commit message is required' }, 400);
+  }
+  if (Array.isArray(body.files)) {
+    for (const f of body.files) {
+      if (typeof f !== 'string' || f.includes('..')) return c.json({ error: `Invalid file path: ${f}` }, 400);
+    }
+  }
+
+  try {
+    const commitHash = await gitManager.commitChanges(
+      project.repoPath, body.message.trim(),
+      body.files && body.files.length > 0 ? body.files : undefined,
+    );
+    return c.json({ commit: commitHash, message: body.message.trim() });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Failed to commit changes';
+    return c.json({ error: msg }, msg.includes('Nothing to commit') ? 422 : 500);
+  }
+});
+
 // ---- Event Stream (SSE) ---------------------------------------------------
 
 studio.get('/projects/:id/events', (c) => {
@@ -1501,6 +1635,42 @@ studio.post('/projects/:id/pipeline/advance', (c) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Pipeline ilerletilemedi';
     return c.json({ error: msg }, 400);
+  }
+});
+
+// ---- Analytics Routes -------------------------------------------------------
+
+studio.get('/projects/:id/analytics/overview', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  try {
+    return c.json(getProjectAnalytics(projectId));
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Analytics hesaplanamadı' }, 500);
+  }
+});
+
+studio.get('/projects/:id/analytics/agents', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  try {
+    return c.json(getAgentAnalytics(projectId));
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Ajan metrikleri hesaplanamadı' }, 500);
+  }
+});
+
+studio.get('/projects/:id/analytics/timeline', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  const days = Math.min(Math.max(parseInt(c.req.query('days') ?? '7', 10) || 7, 1), 30);
+  try {
+    return c.json(getActivityTimeline(projectId, days));
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Zaman çizelgesi hesaplanamadı' }, 500);
   }
 });
 

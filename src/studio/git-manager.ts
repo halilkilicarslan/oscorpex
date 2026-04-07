@@ -5,8 +5,8 @@
 
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { join, relative } from 'node:path';
-import type { GitLogEntry, FileTreeNode, MergeResult } from './types.js';
+import { join, relative, normalize } from 'node:path';
+import type { GitLogEntry, FileTreeNode, MergeResult, GitStatus } from './types.js';
 
 class GitManager {
   private getGit(repoPath: string): SimpleGit {
@@ -204,6 +204,105 @@ class GitManager {
     const { dirname } = await import('node:path');
     await mkdir(dirname(fullPath), { recursive: true });
     await writeFile(fullPath, content, 'utf-8');
+  }
+
+  // -------------------------------------------------------------------------
+  // File create / delete
+  // -------------------------------------------------------------------------
+
+  /** Yeni dosya oluşturur. Dosya zaten mevcutsa hata fırlatır. */
+  async createFile(projectPath: string, filePath: string, content = ''): Promise<void> {
+    // Güvenlik: path traversal engelleme
+    const normalized = normalize(filePath);
+    if (normalized.includes('..')) {
+      throw new Error('Invalid file path: directory traversal not allowed');
+    }
+
+    const fullPath = join(projectPath, normalized);
+    if (!fullPath.startsWith(projectPath)) {
+      throw new Error('Invalid file path');
+    }
+
+    // Dosya zaten var mı kontrol et
+    try {
+      await stat(fullPath);
+      throw new Error(`File already exists: ${filePath}`);
+    } catch (err: any) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+
+    const { writeFile, mkdir } = await import('node:fs/promises');
+    const { dirname } = await import('node:path');
+    await mkdir(dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, content, 'utf-8');
+  }
+
+  /** Belirtilen dosyayı siler. */
+  async deleteFile(projectPath: string, filePath: string): Promise<void> {
+    const normalized = normalize(filePath);
+    if (normalized.includes('..')) {
+      throw new Error('Invalid file path: directory traversal not allowed');
+    }
+
+    const fullPath = join(projectPath, normalized);
+    if (!fullPath.startsWith(projectPath)) {
+      throw new Error('Invalid file path');
+    }
+
+    const { unlink } = await import('node:fs/promises');
+    await unlink(fullPath);
+  }
+
+  // -------------------------------------------------------------------------
+  // Git status & commit
+  // -------------------------------------------------------------------------
+
+  /** Çalışma dizininin git durumunu döndürür. */
+  async getStatus(projectPath: string): Promise<import('./types.js').GitStatus> {
+    const git = this.getGit(projectPath);
+    try {
+      const status = await git.status();
+      return {
+        modified: status.modified,
+        untracked: status.not_added,
+        staged: status.staged,
+        deleted: status.deleted,
+      };
+    } catch {
+      return { modified: [], untracked: [], staged: [], deleted: [] };
+    }
+  }
+
+  /**
+   * Değişiklikleri commit eder.
+   * - `files` belirtilirse yalnızca o dosyalar stage edilir.
+   * - `files` belirtilmezse tüm değişiklikler (git add .) eklenir.
+   * - Stage edilecek değişiklik yoksa hata fırlatır.
+   */
+  async commitChanges(projectPath: string, message: string, files?: string[]): Promise<string> {
+    const git = this.getGit(projectPath);
+
+    if (files && files.length > 0) {
+      // Path traversal kontrolü
+      for (const f of files) {
+        const normalized = normalize(f);
+        if (normalized.includes('..')) {
+          throw new Error(`Invalid file path: ${f}`);
+        }
+      }
+      await git.add(files);
+    } else {
+      await git.add('.');
+    }
+
+    // Stage edilmiş değişiklik var mı kontrol et
+    const status = await git.status();
+    if (status.staged.length === 0) {
+      throw new Error('Nothing to commit: no staged changes');
+    }
+
+    const result = await git.commit(message);
+    return result.commit;
   }
 
   async getFileStats(projectPath: string, filePath: string): Promise<{ size: number; modified: string }> {

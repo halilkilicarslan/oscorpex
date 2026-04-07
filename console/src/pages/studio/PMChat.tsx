@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Loader2, Bot, User, AlertCircle } from 'lucide-react';
+import { Send, Loader2, Bot, User, AlertCircle, Zap, TriangleAlert } from 'lucide-react';
 import {
   fetchChatHistory,
   fetchPlan,
@@ -11,6 +11,55 @@ import {
   type ProjectPlan,
 } from '../../lib/studio-api';
 import PlanPreview from './PlanPreview';
+
+// ---------------------------------------------------------------------------
+// Pipeline auto-start bildirimi
+// ---------------------------------------------------------------------------
+
+type PipelineToastState =
+  | { type: 'success'; message: string }
+  | { type: 'warning'; message: string }
+  | null;
+
+function PipelineToast({
+  toast,
+  onClose,
+}: {
+  toast: NonNullable<PipelineToastState>;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 6000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const isSuccess = toast.type === 'success';
+
+  return (
+    <div
+      className={`flex items-start gap-2.5 px-4 py-3 rounded-xl border text-[12px] leading-relaxed ${
+        isSuccess
+          ? 'bg-[#22c55e]/10 border-[#22c55e]/20 text-[#22c55e]'
+          : 'bg-[#f59e0b]/10 border-[#f59e0b]/20 text-[#f59e0b]'
+      }`}
+    >
+      {isSuccess ? (
+        <Zap size={14} className="shrink-0 mt-0.5" />
+      ) : (
+        <TriangleAlert size={14} className="shrink-0 mt-0.5" />
+      )}
+      <span className="flex-1">{toast.message}</span>
+      <button
+        type="button"
+        onClick={onClose}
+        className="shrink-0 opacity-60 hover:opacity-100 transition-opacity ml-1"
+        aria-label="Kapat"
+      >
+        &times;
+      </button>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Message bubble
@@ -80,6 +129,7 @@ export default function PMChat({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [openaiConfigured, setOpenaiConfigured] = useState<boolean | null>(null);
+  const [pipelineToast, setPipelineToast] = useState<PipelineToastState>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
 
@@ -168,9 +218,22 @@ export default function PMChat({ projectId }: { projectId: string }) {
 
   const handleApprove = async () => {
     try {
-      await approvePlan(projectId);
+      const result = await approvePlan(projectId);
       const updated = await fetchPlan(projectId);
       setPlan(updated);
+
+      // Pipeline auto-start bildirimini goster
+      if (result.pipeline.started) {
+        setPipelineToast({
+          type: 'success',
+          message: 'Plan onaylandı. Pipeline otomatik olarak baslatildi — Board sekmesinden ilerlemeyi takip edebilirsiniz.',
+        });
+      } else if (result.pipeline.warning) {
+        setPipelineToast({
+          type: 'warning',
+          message: `Plan onaylandı ancak pipeline başlatılamadı: ${result.pipeline.warning}`,
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to approve plan');
     }
@@ -221,6 +284,14 @@ export default function PMChat({ projectId }: { projectId: string }) {
           <div className="mt-2">
             <PlanPreview plan={plan} onApprove={handleApprove} onReject={handleReject} />
           </div>
+        )}
+
+        {/* Pipeline auto-start bildirimi */}
+        {pipelineToast && (
+          <PipelineToast
+            toast={pipelineToast}
+            onClose={() => setPipelineToast(null)}
+          />
         )}
 
         {/* Error */}

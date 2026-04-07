@@ -1147,6 +1147,41 @@ export function deleteProjectAgent(id: string): boolean {
 }
 
 /**
+ * Belirli bir beceriye sahip proje agentlarını döner (büyük/küçük harf duyarsız).
+ */
+export function getProjectAgentsBySkill(projectId: string, skill: string): ProjectAgent[] {
+  const db = getDb();
+  const agents = (
+    db.prepare('SELECT * FROM project_agents WHERE project_id = ? ORDER BY created_at').all(projectId) as any[]
+  ).map(rowToProjectAgent);
+  const lowerSkill = skill.toLowerCase();
+  return agents.filter((a) =>
+    a.skills.some((s: string) => s.toLowerCase().includes(lowerSkill)),
+  );
+}
+
+/**
+ * Bir projedeki tüm agentları beceri listesiyle birlikte döner.
+ * PM ajanının akıllı görev atama kararları için kullanılır.
+ */
+export function getProjectAgentsWithSkills(projectId: string): Array<{
+  id: string;
+  name: string;
+  role: string;
+  skills: string[];
+}> {
+  const db = getDb();
+  return (
+    db.prepare('SELECT id, name, role, skills FROM project_agents WHERE project_id = ? ORDER BY pipeline_order, created_at').all(projectId) as any[]
+  ).map((row) => ({
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    skills: JSON.parse(row.skills ?? '[]'),
+  }));
+}
+
+/**
  * Belirtilen rollere sahip preset agentları projeye kopyalar.
  * Template'de tanımlı roller ile preset agentlar rol üzerinden eşleştirilir.
  * Ayrıca PM liderliğinde varsayılan hiyerarşi ve pipeline sırası kurulur.
@@ -1379,4 +1414,145 @@ export function listAgentRuns(projectId: string, agentId: string, limit = 50): A
     LIMIT ?
   `).all(projectId, agentId, limit) as any[];
   return rows.map(rowToAgentRun);
+}
+
+// ---------------------------------------------------------------------------
+// Analytics Queries
+// ---------------------------------------------------------------------------
+
+export function getProjectAnalytics(projectId: string) {
+  const db = getDb();
+
+  const taskStats = db.prepare(`
+    SELECT
+      COUNT(*)                                           AS total,
+      SUM(CASE WHEN t.status = 'done'    THEN 1 ELSE 0 END) AS completed,
+      SUM(CASE WHEN t.status IN ('running','assigned','review') THEN 1 ELSE 0 END) AS in_progress,
+      SUM(CASE WHEN t.status = 'failed'  THEN 1 ELSE 0 END) AS blocked
+    FROM tasks t
+    JOIN phases ph ON ph.id = t.phase_id
+    JOIN project_plans pp ON pp.id = ph.plan_id
+    WHERE pp.project_id = ?
+  `).get(projectId) as any;
+
+  const agentTaskRows = db.prepare(`
+    SELECT
+      pa.id AS agent_id, pa.name AS agent_name,
+      COUNT(t.id) AS total,
+      SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) AS completed
+    FROM tasks t
+    JOIN phases ph  ON ph.id  = t.phase_id
+    JOIN project_plans pp ON pp.id = ph.plan_id
+    JOIN project_agents pa ON pa.project_id = pp.project_id AND pa.role = t.assigned_agent
+    WHERE pp.project_id = ?
+    GROUP BY pa.id, pa.name
+  `).all(projectId) as any[];
+
+  const avgRow = db.prepare(`
+    SELECT AVG(
+      (julianday(t.completed_at) - julianday(t.started_at)) * 86400000
+    ) AS avg_ms
+    FROM tasks t
+    JOIN phases ph ON ph.id = t.phase_id
+    JOIN project_plans pp ON pp.id = ph.plan_id
+    WHERE pp.project_id = ?
+      AND t.started_at IS NOT NULL AND t.completed_at IS NOT NULL AND t.status = 'done'
+  `).get(projectId) as any;
+
+  const pipelineRow = db.prepare(`
+    SELECT COUNT(*) AS run_count,
+      SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS successes
+    FROM pipeline_runs WHERE project_id = ?
+  `).get(projectId) as any;
+
+  const tasksPerAgent = (agentTaskRows || []).map((r: any) => ({
+    agentId: r.agent_id, agentName: r.agent_name,
+    total: r.total ?? 0, completed: r.completed ?? 0,
+    completionRate: r.total > 0 ? Math.round((r.completed / r.total) * 100) : 0,
+  }));
+
+  const runCount = pipelineRow?.run_count ?? 0;
+  const successes = pipelineRow?.successes ?? 0;
+
+  return {
+    totalTasks: taskStats?.total ?? 0,
+    completedTasks: taskStats?.completed ?? 0,
+    inProgressTasks: taskStats?.in_progress ?? 0,
+    blockedTasks: taskStats?.blocked ?? 0,
+    tasksPerAgent,
+    avgCompletionTimeMs: avgRow?.avg_ms ?? null,
+    pipelineRunCount: runCount,
+    pipelineSuccessRate: runCount > 0 ? Math.round((successes / runCount) * 100) : 0,
+  };
+}
+
+export function getAgentAnalytics(projectId: string) {
+  const db = getDb();
+  const agents = db.prepare('SELECT id, name, role, color FROM project_agents WHERE project_id = ?').all(projectId) as any[];
+
+  return agents.map((a: any) => {
+    const taskStats = db.prepare(`
+      SELECT COUNT(*) AS assigned,
+        SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) AS completed,
+        SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) AS failed
+      FROM tasks t JOIN phases ph ON ph.id = t.phase_id
+      JOIN project_plans pp ON pp.id = ph.plan_id
+      WHERE pp.project_id = ? AND t.assigned_agent = ?
+    `).get(projectId, a.role) as any;
+
+    const runStats = db.prepare(`
+      SELECT COUNT(*) AS run_count,
+        SUM(CASE WHEN started_at IS NOT NULL AND stopped_at IS NOT NULL
+          THEN (julianday(stopped_at) - julianday(started_at)) * 86400000 ELSE 0 END) AS total_runtime_ms
+      FROM agent_runs WHERE project_id = ? AND agent_id = ?
+    `).get(projectId, a.id) as any;
+
+    const msgSent = (db.prepare('SELECT COUNT(*) AS cnt FROM agent_messages WHERE project_id = ? AND from_agent_id = ?').get(projectId, a.id) as any)?.cnt ?? 0;
+    const msgReceived = (db.prepare('SELECT COUNT(*) AS cnt FROM agent_messages WHERE project_id = ? AND to_agent_id = ?').get(projectId, a.id) as any)?.cnt ?? 0;
+    const lastRun = db.prepare('SELECT status FROM agent_runs WHERE project_id = ? AND agent_id = ? ORDER BY created_at DESC LIMIT 1').get(projectId, a.id) as any;
+
+    return {
+      agentId: a.id, agentName: a.name, role: a.role, color: a.color,
+      tasksAssigned: taskStats?.assigned ?? 0, tasksCompleted: taskStats?.completed ?? 0,
+      tasksFailed: taskStats?.failed ?? 0, runCount: runStats?.run_count ?? 0,
+      totalRuntimeMs: Math.round(runStats?.total_runtime_ms ?? 0),
+      messagesSent: msgSent, messagesReceived: msgReceived,
+      isRunning: lastRun?.status === 'running' || lastRun?.status === 'starting',
+    };
+  });
+}
+
+export function getActivityTimeline(projectId: string, days = 7) {
+  const db = getDb();
+  const dates: string[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+
+  const taskRows = db.prepare(`
+    SELECT substr(t.completed_at, 1, 10) AS day, COUNT(*) AS cnt
+    FROM tasks t JOIN phases ph ON ph.id = t.phase_id JOIN project_plans pp ON pp.id = ph.plan_id
+    WHERE pp.project_id = ? AND t.status = 'done' AND t.completed_at >= ?
+    GROUP BY day
+  `).all(projectId, dates[0]) as any[];
+
+  const runsStartedRows = db.prepare(`
+    SELECT substr(started_at, 1, 10) AS day, COUNT(*) AS cnt
+    FROM agent_runs WHERE project_id = ? AND started_at >= ? GROUP BY day
+  `).all(projectId, dates[0]) as any[];
+
+  const runsCompletedRows = db.prepare(`
+    SELECT substr(stopped_at, 1, 10) AS day, COUNT(*) AS cnt
+    FROM agent_runs WHERE project_id = ? AND status IN ('stopped','error') AND stopped_at >= ? GROUP BY day
+  `).all(projectId, dates[0]) as any[];
+
+  const taskMap = Object.fromEntries((taskRows || []).map((r: any) => [r.day, r.cnt]));
+  const rsMap = Object.fromEntries((runsStartedRows || []).map((r: any) => [r.day, r.cnt]));
+  const rcMap = Object.fromEntries((runsCompletedRows || []).map((r: any) => [r.day, r.cnt]));
+
+  return dates.map((date) => ({
+    date, tasksCompleted: taskMap[date] ?? 0,
+    runsStarted: rsMap[date] ?? 0, runsCompleted: rcMap[date] ?? 0,
+  }));
 }

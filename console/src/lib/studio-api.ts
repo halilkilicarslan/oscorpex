@@ -178,8 +178,31 @@ export async function fetchPlan(projectId: string): Promise<ProjectPlan | null> 
   return json(res);
 }
 
-export async function approvePlan(projectId: string): Promise<void> {
-  await json(await fetch(`${BASE}/projects/${projectId}/plan/approve`, { method: 'POST' }));
+export interface ApproveResult {
+  success: boolean;
+  planId: string;
+  execution: { started: boolean };
+  pipeline: { started: boolean; warning?: string };
+}
+
+export async function approvePlan(projectId: string): Promise<ApproveResult> {
+  return json(await fetch(`${BASE}/projects/${projectId}/plan/approve`, { method: 'POST' }));
+}
+
+export interface AutoStartStatus {
+  projectId: string;
+  planApproved: boolean;
+  autoStartEnabled: boolean;
+  pipeline: {
+    status: string;
+    currentStage: number;
+    totalStages: number;
+    startedAt?: string;
+  } | null;
+}
+
+export async function fetchAutoStartStatus(projectId: string): Promise<AutoStartStatus> {
+  return json(await fetch(`${BASE}/projects/${projectId}/pipeline/auto-start-status`));
 }
 
 export async function rejectPlan(projectId: string, feedback?: string): Promise<void> {
@@ -811,4 +834,85 @@ export async function broadcastMessage(
       body: JSON.stringify(data),
     }),
   );
+}
+
+// ---- File Operations (Enhanced) --------------------------------------------
+
+export interface GitStatusResult {
+  modified: string[];
+  untracked: string[];
+  staged: string[];
+  deleted: string[];
+}
+
+export async function createFile(projectId: string, filePath: string, content = ''): Promise<{ path: string; created: boolean }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/files`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: filePath, content }),
+  }));
+}
+
+export async function deleteFile(projectId: string, filePath: string): Promise<{ path: string; deleted: boolean }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/files`, {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: filePath }),
+  }));
+}
+
+export async function getGitStatus(projectId: string): Promise<GitStatusResult> {
+  return json(await fetch(`${BASE}/projects/${projectId}/git/status`));
+}
+
+export async function commitChanges(projectId: string, message: string, files?: string[]): Promise<{ commit: string; message: string }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/git/commit`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, files }),
+  }));
+}
+
+// ---- Analytics -------------------------------------------------------------
+
+export interface ProjectAnalytics {
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  blockedTasks: number;
+  tasksPerAgent: { agentId: string; agentName: string; total: number; completed: number; completionRate: number }[];
+  avgCompletionTimeMs: number | null;
+  pipelineRunCount: number;
+  pipelineSuccessRate: number;
+}
+
+export interface AgentAnalytics {
+  agentId: string;
+  agentName: string;
+  role: string;
+  color: string;
+  tasksAssigned: number;
+  tasksCompleted: number;
+  tasksFailed: number;
+  runCount: number;
+  totalRuntimeMs: number;
+  messagesSent: number;
+  messagesReceived: number;
+  isRunning: boolean;
+}
+
+export interface ActivityTimeline {
+  date: string;
+  tasksCompleted: number;
+  runsStarted: number;
+  runsCompleted: number;
+}
+
+export async function fetchProjectAnalytics(projectId: string): Promise<ProjectAnalytics> {
+  return json(await fetch(`${BASE}/projects/${projectId}/analytics/overview`));
+}
+
+export async function fetchAgentAnalytics(projectId: string): Promise<AgentAnalytics[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/analytics/agents`));
+}
+
+export async function fetchActivityTimeline(projectId: string, days = 7): Promise<ActivityTimeline[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/analytics/timeline?days=${days}`));
 }
