@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Loader2, Kanban } from 'lucide-react';
-import { fetchTasks, retryTask, type Task } from '../../lib/studio-api';
+import { Loader2, Kanban, Zap } from 'lucide-react';
+import {
+  fetchTasks,
+  retryTask,
+  fetchAutoStartStatus,
+  type Task,
+  type AutoStartStatus,
+} from '../../lib/studio-api';
 import TaskCard from './TaskCard';
 
 const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
@@ -12,9 +18,49 @@ const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
   { key: 'failed', label: 'Failed', color: 'border-[#ef4444]' },
 ];
 
+// Pipeline durum renk ve etiket eslemesi
+const PIPELINE_STATUS_COLORS: Record<string, string> = {
+  idle: 'text-[#525252]',
+  running: 'text-[#22c55e]',
+  paused: 'text-[#f59e0b]',
+  completed: 'text-[#3b82f6]',
+  failed: 'text-[#ef4444]',
+};
+
+const PIPELINE_STATUS_LABELS: Record<string, string> = {
+  idle: 'Beklemede',
+  running: 'Calisiyor',
+  paused: 'Duraklatildi',
+  completed: 'Tamamlandi',
+  failed: 'Hata',
+};
+
+// Pipeline auto-start durum cubugu
+function PipelineAutoStartBadge({ status }: { status: AutoStartStatus }) {
+  if (!status.planApproved || !status.pipeline) return null;
+
+  const pipelineStatus = status.pipeline.status;
+  const colorClass = PIPELINE_STATUS_COLORS[pipelineStatus] ?? 'text-[#525252]';
+  const label = PIPELINE_STATUS_LABELS[pipelineStatus] ?? pipelineStatus;
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 mb-4 rounded-lg bg-[#22c55e]/5 border border-[#22c55e]/15 text-[11px]">
+      <Zap size={12} className="text-[#22c55e] shrink-0" />
+      <span className="text-[#a3a3a3]">Pipeline auto-start:</span>
+      <span className={`font-medium ${colorClass}`}>{label}</span>
+      {status.pipeline.totalStages > 0 && (
+        <span className="text-[#525252] ml-auto">
+          Asama {status.pipeline.currentStage + 1} / {status.pipeline.totalStages}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function KanbanBoard({ projectId }: { projectId: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [autoStartStatus, setAutoStartStatus] = useState<AutoStartStatus | null>(null);
 
   const load = () => {
     fetchTasks(projectId)
@@ -23,9 +69,21 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
       .finally(() => setLoading(false));
   };
 
+  const loadAutoStartStatus = () => {
+    fetchAutoStartStatus(projectId)
+      .then(setAutoStartStatus)
+      .catch(() => {});
+  };
+
   useEffect(() => {
     load();
-    const interval = setInterval(load, 5000);
+    loadAutoStartStatus();
+
+    const interval = setInterval(() => {
+      load();
+      loadAutoStartStatus();
+    }, 5000);
+
     return () => clearInterval(interval);
   }, [projectId]);
 
@@ -72,8 +130,11 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
   );
 
   return (
-    <div className="p-6 h-full overflow-x-auto">
-      <div className="flex gap-4 min-w-min h-full">
+    <div className="p-6 h-full overflow-x-auto flex flex-col">
+      {/* Pipeline auto-start durum cubugu */}
+      {autoStartStatus && <PipelineAutoStartBadge status={autoStartStatus} />}
+
+      <div className="flex gap-4 min-w-min flex-1">
         {activeColumns.map((col) => {
           const colTasks = grouped.get(col.key) ?? [];
           return (
