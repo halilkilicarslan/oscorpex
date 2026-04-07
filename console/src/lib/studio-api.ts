@@ -447,12 +447,15 @@ export interface PipelineState {
 
 // Pipeline'ı başlat
 export async function startPipeline(projectId: string): Promise<PipelineState> {
-  return json(await fetch(`${BASE}/projects/${projectId}/pipeline/start`, { method: 'POST' }));
+  const data = await json(await fetch(`${BASE}/projects/${projectId}/pipeline/start`, { method: 'POST' }));
+  return data.pipeline ?? data;
 }
 
 // Pipeline durumunu getir
 export async function getPipelineStatus(projectId: string): Promise<PipelineState> {
-  return json(await fetch(`${BASE}/projects/${projectId}/pipeline/status`));
+  const data = await json(await fetch(`${BASE}/projects/${projectId}/pipeline/status`));
+  // API { pipeline, taskProgress, status } formatında dönüyor — içindeki pipeline objesini çıkar
+  return data.pipeline ?? data;
 }
 
 // Pipeline'ı duraklat
@@ -467,7 +470,8 @@ export async function resumePipeline(projectId: string): Promise<void> {
 
 // Pipeline'ı manuel olarak ilerlet (test amaçlı)
 export async function advancePipeline(projectId: string): Promise<PipelineState> {
-  return json(await fetch(`${BASE}/projects/${projectId}/pipeline/advance`, { method: 'POST' }));
+  const data = await json(await fetch(`${BASE}/projects/${projectId}/pipeline/advance`, { method: 'POST' }));
+  return data.pipeline ?? data;
 }
 
 // ---- Agent Runtime (süreç yönetimi) --------------------------------------
