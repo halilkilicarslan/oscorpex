@@ -4,7 +4,7 @@
 // containers (or falls back to local AI SDK execution when Docker unavailable).
 // ---------------------------------------------------------------------------
 
-import { generateText } from 'ai';
+import { generateText, stepCountIs } from 'ai';
 import { taskEngine } from './task-engine.js';
 import { containerManager } from './container-manager.js';
 import { eventBus } from './event-bus.js';
@@ -14,6 +14,7 @@ import {
   listAgentConfigs,
   getAgentConfig,
 } from './db.js';
+import { createAgentTools } from './agent-tools.js';
 import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -166,20 +167,35 @@ class ExecutionEngine {
     task: Task,
     prompt: string,
   ): Promise<TaskOutput> {
+    const project = getProject(projectId);
+    const repoPath = project?.repoPath;
+
+    if (!repoPath) {
+      throw new Error(`Project ${projectId} has no repoPath configured`);
+    }
+
     eventBus.emit({
       projectId,
       type: 'agent:output',
       agentId: agent.id,
       taskId: task.id,
-      payload: { output: '[local execution] Docker not available — using AI SDK directly' },
+      payload: { output: '[local execution] Using AI SDK with file tools' },
     });
+
+    const tracker = { filesCreated: [] as string[], filesModified: [] as string[], logs: [] as string[] };
+    const tools = createAgentTools(
+      { projectId, agentId: agent.id, taskId: task.id, repoPath },
+      tracker,
+    );
 
     const model = getAIModel();
 
     const { text } = await generateText({
       model,
+      stopWhen: stepCountIs(20),
       system: agent.systemPrompt || this.defaultSystemPrompt(agent),
       prompt,
+      tools,
     });
 
     eventBus.emit({
@@ -190,7 +206,18 @@ class ExecutionEngine {
       payload: { output: text.slice(0, 2000) },
     });
 
-    return this.parseTaskOutput(text);
+    // Merge tool-tracked files with any mentioned in the AI's final text
+    const parsed = this.parseTaskOutput(text);
+    const filesCreated = [...new Set([...tracker.filesCreated, ...parsed.filesCreated])];
+    const filesModified = [...new Set([...tracker.filesModified, ...parsed.filesModified])];
+    const logs = [...tracker.logs, ...parsed.logs].slice(-100);
+
+    return {
+      filesCreated,
+      filesModified,
+      testResults: parsed.testResults,
+      logs,
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -222,20 +249,23 @@ class ExecutionEngine {
       `## Instructions`,
       task.description,
       '',
-      `## Git Branch`,
-      `Work on branch \`${task.branch || 'main'}\`. If the branch does not exist, create it from main/master.`,
-      `Run: git checkout -b ${task.branch || 'main'} 2>/dev/null || git checkout ${task.branch || 'main'}`,
+      `## Available Tools`,
+      'You have the following tools to complete this task:',
+      '- **listFiles**: List files in a directory',
+      '- **readFile**: Read file contents',
+      '- **writeFile**: Create or update files',
+      '- **runCommand**: Run shell commands (npm/pnpm install, tests, builds, etc.)',
+      '- **commitChanges**: Git commit your changes',
       '',
-      `## Deliverables`,
-      '- Create or modify the necessary files to complete this task',
-      '- Run any relevant tests to verify your implementation',
-      '- Report which files you created or modified',
+      `## Workflow`,
+      '1. First, use listFiles to understand the current project structure',
+      '2. Read any relevant existing files to understand the codebase',
+      '3. Create or modify the necessary files using writeFile',
+      '4. Run any relevant commands (install deps, run tests, etc.)',
+      '5. Commit your changes with a descriptive message',
       '',
-      `## Output Format`,
-      'After completing the task, output a summary that includes:',
-      '- FILES CREATED: list each file path on a separate line prefixed with "  + "',
-      '- FILES MODIFIED: list each file path on a separate line prefixed with "  ~ "',
-      '- TEST RESULTS: if tests were run, output "TESTS: passed=N failed=N total=N"',
+      `## Output`,
+      'After completing all tool calls, provide a brief summary of what you did.',
     ];
 
     return lines.join('\n');

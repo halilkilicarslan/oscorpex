@@ -17,6 +17,7 @@ import {
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import type { TaskComplexity } from './types.js';
+import { gitManager } from './git-manager.js';
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -126,7 +127,7 @@ type PhaseInput = z.infer<typeof phaseSchema>;
 // Helper: build plan from phases
 // ---------------------------------------------------------------------------
 
-function buildPlan(projectId: string, phases: PhaseInput[]) {
+async function buildPlan(projectId: string, phases: PhaseInput[]) {
   const project = getProject(projectId);
   if (!project) throw new Error(`Project ${projectId} not found`);
 
@@ -176,6 +177,25 @@ function buildPlan(projectId: string, phases: PhaseInput[]) {
     }
   }
 
+  // Export plan as markdown to docs/PLAN.md
+  if (project.repoPath) {
+    try {
+      const lines: string[] = [`# Project Plan — ${project.name}`, '', `**Version:** ${plan.version}`, ''];
+      for (const { input } of createdPhases) {
+        lines.push(`## Phase ${input.order}: ${input.name}`, '');
+        for (const t of input.tasks) {
+          const deps = t.dependsOnTaskTitles.length > 0 ? ` (depends on: ${t.dependsOnTaskTitles.join(', ')})` : '';
+          lines.push(`- **[${t.complexity}] ${t.title}** — ${t.assignedRole}${deps}`);
+          if (t.description) lines.push(`  ${t.description}`);
+        }
+        lines.push('');
+      }
+      await gitManager.writeFileContent(project.repoPath, 'docs/PLAN.md', lines.join('\n'));
+    } catch {
+      // Non-critical: don't fail plan creation if docs export fails
+    }
+  }
+
   eventBus.emit({
     projectId,
     type: 'plan:created',
@@ -202,7 +222,7 @@ export const pmToolkit = {
       phases: z.array(phaseSchema).describe('Ordered list of project phases'),
     }),
     execute: async ({ projectId, phases }) => {
-      const result = buildPlan(projectId, phases);
+      const result = await buildPlan(projectId, phases);
       return { ...result, message: 'Plan created successfully. Waiting for user approval.' };
     },
   }),
