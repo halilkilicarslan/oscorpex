@@ -93,7 +93,7 @@ export default function PMChat({ projectId }: { projectId: string }) {
           fetchConfigStatus(),
         ]);
         if (history.status === 'fulfilled') setMessages(history.value);
-        if (latestPlan.status === 'fulfilled') setPlan(latestPlan.value);
+        if (latestPlan.status === 'fulfilled' && latestPlan.value) setPlan(latestPlan.value);
         if (configStatus.status === 'fulfilled') setOpenaiConfigured(configStatus.value.openaiConfigured);
       } finally {
         setLoading(false);
@@ -155,7 +155,7 @@ export default function PMChat({ projectId }: { projectId: string }) {
 
         // Refresh plan in case PM agent created/updated one
         fetchPlan(projectId)
-          .then(setPlan)
+          .then((p) => { if (p) setPlan(p); })
           .catch(() => {});
       },
       (err) => {

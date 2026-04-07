@@ -47,12 +47,15 @@ import {
   setDefaultProvider,
   getRawProviderApiKey,
   getDefaultProvider,
+  listAgentRuns,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { PM_SYSTEM_PROMPT, pmToolkit } from './pm-agent.js';
 import { taskEngine } from './task-engine.js';
 import { containerManager } from './container-manager.js';
+import { agentRuntime } from './agent-runtime.js';
 import { executionEngine } from './execution-engine.js';
+import { pipelineEngine } from './pipeline-engine.js';
 import { gitManager } from './git-manager.js';
 import {
   createAgentFiles,
@@ -63,6 +66,18 @@ import {
   deleteAgentFiles,
 } from './agent-files.js';
 import type { ProjectAgent } from './types.js';
+import {
+  sendMessage,
+  getMessage,
+  getInbox,
+  getThread,
+  markAsRead,
+  archiveMessage,
+  getUnreadCount,
+  listProjectMessages,
+  broadcastToTeam,
+  notifyNextInPipeline,
+} from './agent-messaging.js';
 
 // Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();
@@ -608,6 +623,32 @@ studio.post('/projects/:id/team', async (c) => {
   return c.json(agent, 201);
 });
 
+// Get org structure for a project (tree format + pipeline order)
+// NOTE: Must be defined BEFORE /team/:agentId to prevent "org" matching as agentId
+studio.get('/projects/:id/team/org', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const agents = listProjectAgents(projectId);
+
+  const tree = buildOrgTree(agents);
+
+  const pipeline = agents
+    .filter((a) => a.pipelineOrder > 0)
+    .sort((a, b) => a.pipelineOrder - b.pipelineOrder)
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      role: a.role,
+      avatar: a.avatar,
+      color: a.color,
+      pipelineOrder: a.pipelineOrder,
+    }));
+
+  return c.json({ tree, pipeline });
+});
+
 // Tekil proje agentını getir
 studio.get('/projects/:id/team/:agentId', (c) => {
   const agent = getProjectAgent(c.req.param('agentId'));
@@ -710,45 +751,334 @@ studio.put('/projects/:id/team/:agentId/files/:fileName', async (c) => {
   return c.json({ success: true });
 });
 
+// ---- Agent Messaging -------------------------------------------------------
+// NOT: /projects/:id/messages/broadcast ve /pipeline-notify gibi sabit segmentler
+// dinamik :messageId ve :agentId rotalarından ÖNCE tanımlanmalıdır.
+
+// Projeye yeni mesaj gönder
+studio.post('/projects/:id/messages', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const body = (await c.req.json()) as {
+    fromAgentId: string;
+    toAgentId: string;
+    type: string;
+    subject: string;
+    content: string;
+    metadata?: Record<string, any>;
+    parentMessageId?: string;
+  };
+
+  // Zorunlu alan kontrolü
+  if (!body.fromAgentId || !body.toAgentId || !body.type || !body.subject || !body.content) {
+    return c.json({ error: 'fromAgentId, toAgentId, type, subject and content are required' }, 400);
+  }
+
+  const msg = sendMessage(
+    projectId,
+    body.fromAgentId,
+    body.toAgentId,
+    body.type as any,
+    body.subject,
+    body.content,
+    body.metadata,
+    body.parentMessageId,
+  );
+
+  return c.json(msg, 201);
+});
+
+// Projedeki tüm mesajları listele — isteğe bağlı ?agentId= ve ?status= filtreleri
+studio.get('/projects/:id/messages', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const agentId = c.req.query('agentId');
+  const status = c.req.query('status') as any;
+
+  return c.json(listProjectMessages(projectId, agentId, status));
+});
+
+// Takıma toplu yayın mesajı gönder
+studio.post('/projects/:id/messages/broadcast', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const body = (await c.req.json()) as {
+    fromAgentId: string;
+    subject: string;
+    content: string;
+    metadata?: Record<string, any>;
+  };
+
+  if (!body.fromAgentId || !body.subject || !body.content) {
+    return c.json({ error: 'fromAgentId, subject and content are required' }, 400);
+  }
+
+  const sent = broadcastToTeam(projectId, body.fromAgentId, body.subject, body.content, body.metadata);
+  return c.json({ sent: sent.length, messages: sent }, 201);
+});
+
+// Pipeline'daki bir sonraki aşamayı bilgilendir
+studio.post('/projects/:id/messages/pipeline-notify', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const body = (await c.req.json()) as {
+    fromAgentId: string;
+    taskId: string;
+    message: string;
+  };
+
+  if (!body.fromAgentId || !body.taskId || !body.message) {
+    return c.json({ error: 'fromAgentId, taskId and message are required' }, 400);
+  }
+
+  const sent = notifyNextInPipeline(projectId, body.fromAgentId, body.taskId, body.message);
+
+  if (sent.length === 0) {
+    return c.json({ error: 'No next pipeline stage found or agent not found' }, 404);
+  }
+
+  return c.json({ sent: sent.length, messages: sent }, 201);
+});
+
+// Belirli bir mesajın thread zincirini getir
+studio.get('/projects/:id/messages/:messageId/thread', (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const thread = getThread(c.req.param('messageId'));
+  if (thread.length === 0) return c.json({ error: 'Message not found' }, 404);
+
+  return c.json(thread);
+});
+
+// Mesajı okundu olarak işaretle
+studio.put('/projects/:id/messages/:messageId/read', (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const msg = markAsRead(c.req.param('messageId'));
+  if (!msg) return c.json({ error: 'Message not found' }, 404);
+
+  return c.json(msg);
+});
+
+// Mesajı arşivle
+studio.put('/projects/:id/messages/:messageId/archive', (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const msg = archiveMessage(c.req.param('messageId'));
+  if (!msg) return c.json({ error: 'Message not found' }, 404);
+
+  return c.json(msg);
+});
+
+// Ajanın gelen kutusunu getir
+studio.get('/projects/:id/agents/:agentId/inbox', (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const status = c.req.query('status') as any;
+  const messages = getInbox(c.req.param('id'), c.req.param('agentId'), status);
+
+  return c.json(messages);
+});
+
+// Ajanın okunmamış mesaj sayısını getir
+studio.get('/projects/:id/agents/:agentId/inbox/count', (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const count = getUnreadCount(c.req.param('id'), c.req.param('agentId'));
+  return c.json({ agentId: c.req.param('agentId'), unreadCount: count });
+});
+
 // ---- Container / Runtime --------------------------------------------------
+// Önce yerel agent-runtime denenir; Docker mevcut değilse fallback olarak kullanılır.
 
-studio.get('/projects/:id/agents/:agentId/status', (c) => {
-  const runtime = containerManager.getRuntime(c.req.param('id'), c.req.param('agentId'));
-  if (!runtime) return c.json({ error: 'No runtime found' }, 404);
-  return c.json(runtime);
-});
-
-studio.get('/projects/:id/runtimes', (c) => {
-  return c.json(containerManager.getAllRuntimes(c.req.param('id')));
-});
-
+/**
+ * Agent başlatma — önce yerel süreç, hata/Docker yoksa Docker fallback.
+ * project_agents tablosundaki agentId ile çalışır.
+ */
 studio.post('/projects/:id/agents/:agentId/start', async (c) => {
   const projectId = c.req.param('id');
   const agentId = c.req.param('agentId');
 
   const project = getProject(projectId);
-  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project) return c.json({ error: 'Proje bulunamadı' }, 404);
 
-  const agent = getAgentConfig(agentId);
-  if (!agent) return c.json({ error: 'Agent not found' }, 404);
+  // Önce project_agents tablosunda ara (yerel süreç için birincil kaynak)
+  const projectAgent = getProjectAgent(agentId);
+  if (!projectAgent || projectAgent.projectId !== projectId) {
+    return c.json({ error: 'Agent bulunamadı' }, 404);
+  }
 
+  const body = await c.req.json().catch(() => ({})) as { taskPrompt?: string };
+
+  // cliTool == 'none' ise yerel süreç başlatma
+  if (projectAgent.cliTool && projectAgent.cliTool !== 'none') {
+    try {
+      const record = agentRuntime.startAgent(
+        projectId,
+        {
+          id: projectAgent.id,
+          name: projectAgent.name,
+          cliTool: projectAgent.cliTool,
+          systemPrompt: projectAgent.systemPrompt,
+        },
+        body.taskPrompt,
+      );
+      return c.json({
+        success: true,
+        mode: 'local',
+        agentId: record.agentId,
+        pid: record.pid,
+        status: record.status,
+        cliTool: record.cliTool,
+      });
+    } catch (localErr) {
+      // Yerel başlatma başarısız — Docker'a düş
+      console.warn('[routes] Yerel süreç başlatılamadı, Docker deneniyor:', localErr);
+    }
+  }
+
+  // Docker fallback — agent_configs'ten al
+  const agentConfig = getAgentConfig(agentId);
+  if (agentConfig) {
+    try {
+      const containerId = await containerManager.createContainer(agentConfig, project);
+      return c.json({ success: true, mode: 'docker', containerId: containerId.slice(0, 12) });
+    } catch (dockerErr) {
+      const msg = dockerErr instanceof Error ? dockerErr.message : 'Container başlatılamadı';
+      return c.json({ error: msg }, 500);
+    }
+  }
+
+  return c.json({ error: 'Agent başlatılamadı: CLI aracı yapılandırılmamış ve Docker da mevcut değil' }, 500);
+});
+
+/** Agent durdurma — yerel süreç önce, sonra Docker */
+studio.post('/projects/:id/agents/:agentId/stop', async (c) => {
+  const projectId = c.req.param('id');
+  const agentId = c.req.param('agentId');
+
+  // Yerel süreç varsa onu durdur
+  const record = agentRuntime.getAgentProcess(projectId, agentId);
+  if (record && record.process) {
+    agentRuntime.stopAgent(projectId, agentId);
+    return c.json({ success: true, mode: 'local' });
+  }
+
+  // Docker fallback
   try {
-    const containerId = await containerManager.createContainer(agent, project);
-    return c.json({ success: true, containerId: containerId.slice(0, 12) });
+    await containerManager.stopContainer(projectId, agentId);
+    return c.json({ success: true, mode: 'docker' });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Failed to start container';
+    const msg = error instanceof Error ? error.message : 'Durdurulamadı';
     return c.json({ error: msg }, 500);
   }
 });
 
-studio.post('/projects/:id/agents/:agentId/stop', async (c) => {
-  try {
-    await containerManager.stopContainer(c.req.param('id'), c.req.param('agentId'));
-    return c.json({ success: true });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Failed to stop container';
-    return c.json({ error: msg }, 500);
+/**
+ * Agent durum bilgisi — yerel süreç veya Docker runtime'ını döndürür.
+ */
+studio.get('/projects/:id/agents/:agentId/status', (c) => {
+  const projectId = c.req.param('id');
+  const agentId = c.req.param('agentId');
+
+  // Önce yerel süreç kaydına bak
+  const localRecord = agentRuntime.getAgentProcess(projectId, agentId);
+  if (localRecord) {
+    // ChildProcess nesnesi JSON'a serileştirilemez — çıkar
+    const { process: _proc, ...safeRecord } = localRecord;
+    return c.json({ mode: 'local', ...safeRecord });
   }
+
+  // Docker runtime'ına bak
+  const dockerRuntime = containerManager.getRuntime(projectId, agentId);
+  if (dockerRuntime) {
+    return c.json({ mode: 'docker', ...dockerRuntime });
+  }
+
+  return c.json({ error: 'Çalışan süreç bulunamadı' }, 404);
+});
+
+/**
+ * Agent çıktı tamponu — son N satırı döndürür.
+ * Sorgu parametresi: ?since=<satır_indeksi>
+ */
+studio.get('/projects/:id/agents/:agentId/output', (c) => {
+  const projectId = c.req.param('id');
+  const agentId = c.req.param('agentId');
+  const sinceParam = c.req.query('since');
+  const since = sinceParam !== undefined ? parseInt(sinceParam, 10) : undefined;
+
+  const lines = agentRuntime.getAgentOutput(projectId, agentId, since);
+  return c.json({ projectId, agentId, lines, total: lines.length });
+});
+
+/**
+ * Agent çıktı SSE akışı — yeni satırlar geldiğinde server-sent event olarak iletir.
+ */
+studio.get('/projects/:id/agents/:agentId/stream', (c) => {
+  const projectId = c.req.param('id');
+  const agentId = c.req.param('agentId');
+
+  const readable = agentRuntime.streamAgentOutput(projectId, agentId);
+  if (!readable) {
+    return c.json({ error: 'Aktif agent süreci bulunamadı' }, 404);
+  }
+
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+});
+
+/**
+ * Proje kapsamındaki tüm çalışan agent'ları listeler.
+ * Hem yerel süreçleri hem Docker runtime'larını içerir.
+ */
+studio.get('/projects/:id/runtimes', (c) => {
+  const projectId = c.req.param('id');
+
+  // Yerel süreçler
+  const localProcesses = agentRuntime.listProjectProcesses(projectId).map((r) => {
+    const { process: _proc, ...safe } = r;
+    return { mode: 'local', ...safe };
+  });
+
+  // Docker runtime'ları
+  const dockerRuntimes = containerManager.getAllRuntimes(projectId).map((r) => ({
+    mode: 'docker',
+    ...r,
+  }));
+
+  return c.json([...localProcesses, ...dockerRuntimes]);
+});
+
+/**
+ * Agent çalışma geçmişi — agent_runs tablosundan.
+ * Sorgu parametresi: ?limit=<sayı> (varsayılan 50)
+ */
+studio.get('/projects/:id/agents/:agentId/runs', (c) => {
+  const projectId = c.req.param('id');
+  const agentId = c.req.param('agentId');
+  const limit = Number(c.req.query('limit') ?? 50);
+  const runs = listAgentRuns(projectId, agentId, limit);
+  return c.json(runs);
 });
 
 studio.post('/projects/:id/agents/:agentId/exec', async (c) => {
@@ -1080,31 +1410,7 @@ function buildOrgTree(agents: ProjectAgent[]): OrgNode[] {
 }
 
 // ---- Org Structure endpoints ----------------------------------------------
-
-// Get org structure for a project (tree format + pipeline order)
-studio.get('/projects/:id/team/org', (c) => {
-  const projectId = c.req.param('id');
-  const project = getProject(projectId);
-  if (!project) return c.json({ error: 'Project not found' }, 404);
-
-  const agents = listProjectAgents(projectId);
-
-  const tree = buildOrgTree(agents);
-
-  const pipeline = agents
-    .filter((a) => a.pipelineOrder > 0)
-    .sort((a, b) => a.pipelineOrder - b.pipelineOrder)
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      role: a.role,
-      avatar: a.avatar,
-      color: a.color,
-      pipelineOrder: a.pipelineOrder,
-    }));
-
-  return c.json({ tree, pipeline });
-});
+// NOTE: The GET /team/org route is defined above (before /team/:agentId) to prevent route conflict.
 
 // Update agent hierarchy (set reports_to and optional pipeline_order)
 studio.put('/projects/:id/team/:agentId/hierarchy', async (c) => {
@@ -1119,6 +1425,83 @@ studio.put('/projects/:id/team/:agentId/hierarchy', async (c) => {
     pipelineOrder: body.pipelineOrder,
   });
   return c.json(updated);
+});
+
+// ---- Pipeline Engine Routes -----------------------------------------------
+// Pipeline'ı başlatma, durum sorgulama, durdurma ve devam ettirme endpoint'leri
+
+// POST /projects/:id/pipeline/start — pipeline'ı başlatır
+studio.post('/projects/:id/pipeline/start', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  try {
+    const state = pipelineEngine.startPipeline(projectId);
+    return c.json({ success: true, pipeline: state }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Pipeline başlatılamadı';
+    return c.json({ error: msg }, 500);
+  }
+});
+
+// GET /projects/:id/pipeline/status — mevcut pipeline durumunu döner
+studio.get('/projects/:id/pipeline/status', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const state = pipelineEngine.getPipelineState(projectId);
+  if (!state) {
+    return c.json({ error: 'Bu proje için pipeline kaydı bulunamadı' }, 404);
+  }
+
+  return c.json(state);
+});
+
+// POST /projects/:id/pipeline/pause — pipeline'ı duraklatır
+studio.post('/projects/:id/pipeline/pause', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  try {
+    pipelineEngine.pausePipeline(projectId);
+    return c.json({ success: true, message: 'Pipeline duraklatıldı' });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Pipeline duraklatılamadı';
+    return c.json({ error: msg }, 400);
+  }
+});
+
+// POST /projects/:id/pipeline/resume — duraklatılmış pipeline'ı devam ettirir
+studio.post('/projects/:id/pipeline/resume', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  try {
+    pipelineEngine.resumePipeline(projectId);
+    return c.json({ success: true, message: 'Pipeline devam ettirildi' });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Pipeline devam ettirilemedi';
+    return c.json({ error: msg }, 400);
+  }
+});
+
+// POST /projects/:id/pipeline/advance — manuel olarak bir sonraki aşamaya geçer (test amaçlı)
+studio.post('/projects/:id/pipeline/advance', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  try {
+    const state = pipelineEngine.advanceStage(projectId);
+    return c.json({ success: true, pipeline: state });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Pipeline ilerletilemedi';
+    return c.json({ error: msg }, 400);
+  }
 });
 
 export { studio as studioRoutes };

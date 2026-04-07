@@ -16,7 +16,31 @@ import {
 import { eventBus } from './event-bus.js';
 import type { Task, Phase, TaskOutput } from './types.js';
 
+// Görev tamamlandığında çağrılacak callback tipi
+// Pipeline engine bu callback'i kullanarak aşama ilerlemesini kontrol eder
+type TaskCompletionCallback = (taskId: string, projectId: string) => void;
+
 class TaskEngine {
+  // Görev tamamlandığında bildirim gönderilecek callback listesi
+  private completionCallbacks: Set<TaskCompletionCallback> = new Set();
+
+  // -------------------------------------------------------------------------
+  // Callback kayıt mekanizması (pipeline engine için hook noktası)
+  // -------------------------------------------------------------------------
+
+  /** Görev tamamlandığında çağrılacak bir callback kaydeder; temizleme fonksiyonu döner */
+  onTaskCompleted(callback: TaskCompletionCallback): () => void {
+    this.completionCallbacks.add(callback);
+    return () => { this.completionCallbacks.delete(callback); };
+  }
+
+  /** Kayıtlı tüm tamamlama callback'lerini tetikler */
+  private notifyCompleted(taskId: string, projectId: string): void {
+    for (const cb of this.completionCallbacks) {
+      try { cb(taskId, projectId); } catch { /* callback hatası pipeline'ı durdurmamalı */ }
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Task lifecycle
   // -------------------------------------------------------------------------
@@ -92,6 +116,9 @@ class TaskEngine {
 
     // Auto-advance phase
     this.checkAndAdvancePhase(task.phaseId, projectId);
+
+    // Pipeline engine'e görev tamamlandığını bildir
+    this.notifyCompleted(taskId, projectId);
 
     return updated;
   }

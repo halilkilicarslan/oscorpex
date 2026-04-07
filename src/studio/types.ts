@@ -89,13 +89,14 @@ export interface Task {
 
 export type AgentRole =
   | 'pm'
+  | 'designer'
   | 'architect'
   | 'frontend'
   | 'backend'
+  | 'coder'
   | 'qa'
   | 'reviewer'
-  | 'devops'
-  | 'coder';
+  | 'devops';
 
 export type CLITool = 'claude-code' | 'codex' | 'aider' | 'none';
 
@@ -233,6 +234,121 @@ export interface TeamTemplate {
   description: string;
   // agent_ids sütununda roller (ör: ["pm","frontend","qa"]) saklanır
   roles: string[];
+  createdAt: string;
+}
+
+// ---- Agent Messages (ajan-arası iletişim) ----------------------------------
+
+export type MessageType =
+  | 'task_assignment'
+  | 'task_complete'
+  | 'review_request'
+  | 'bug_report'
+  | 'feedback'
+  | 'notification';
+
+export type MessageStatus = 'unread' | 'read' | 'archived';
+
+export interface AgentMessage {
+  id: string;
+  projectId: string;
+  fromAgentId: string;
+  toAgentId: string;
+  type: MessageType;
+  subject: string;
+  content: string;
+  metadata: Record<string, any>;
+  status: MessageStatus;
+  parentMessageId?: string;
+  createdAt: string;
+  readAt?: string;
+}
+
+// ---- Pipeline Engine -------------------------------------------------------
+
+// Bir pipeline aşamasının (stage) durumu
+export type PipelineStageStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+// Genel pipeline durumu
+export type PipelineStatus = 'idle' | 'running' | 'paused' | 'completed' | 'failed';
+
+// Pipeline aşaması: aynı pipeline_order değerine sahip agent'lar ve görevler bir arada
+export interface PipelineStage {
+  order: number;
+  agents: ProjectAgent[];
+  tasks: Task[];
+  status: PipelineStageStatus;
+}
+
+// Bir projenin anlık pipeline durumu (hem bellekte hem DB'de saklanır)
+export interface PipelineState {
+  projectId: string;
+  stages: PipelineStage[];
+  currentStage: number;
+  status: PipelineStatus;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+// Veritabanındaki pipeline_runs tablosuna karşılık gelen arayüz
+export interface PipelineRun {
+  id: string;
+  projectId: string;
+  currentStage: number;
+  status: PipelineStatus;
+  stagesJson: string;       // PipelineStage[] JSON olarak serileştirilmiş hali
+  startedAt?: string;
+  completedAt?: string;
+  createdAt: string;
+}
+
+// ---- Agent Process (yerel CLI süreç kaydı) ----------------------------------
+
+/** Yerel agent sürecinin anlık durum değerleri */
+export type AgentProcessStatus =
+  | 'idle'
+  | 'starting'
+  | 'running'
+  | 'stopping'
+  | 'stopped'
+  | 'error';
+
+/** Bellek içi süreç kaydı — ChildProcess referansını da taşır */
+export interface AgentProcessRecord {
+  /** Benzersiz çalışma kimliği (agent_runs tablosunda da kullanılır) */
+  id: string;
+  projectId: string;
+  agentId: string;
+  agentName: string;
+  cliTool: string;
+  /** Node.js ChildProcess nesnesi — null ise süreç henüz başlamamış veya bitmiş */
+  process: import('node:child_process').ChildProcess | null;
+  status: AgentProcessStatus;
+  /** Son OUTPUT_BUFFER_MAX satırı tutar (ring buffer) */
+  output: string[];
+  startedAt?: string;
+  stoppedAt?: string;
+  /** İşletim sistemi süreç kimliği */
+  pid?: number;
+  /** Süreç çıkış kodu; çalışırken undefined, sinyal ile sonlanırsa null */
+  exitCode?: number | null;
+}
+
+// ---- Agent Run (veritabanı çalışma geçmişi) ---------------------------------
+
+/** agent_runs tablosunun TypeScript yansıması */
+export interface AgentRun {
+  id: string;
+  projectId: string;
+  agentId: string;
+  cliTool: string;
+  status: AgentProcessStatus;
+  taskPrompt?: string;
+  outputSummary?: string;
+  pid?: number;
+  exitCode?: number | null;
+  startedAt?: string;
+  stoppedAt?: string;
   createdAt: string;
 }
 

@@ -172,8 +172,10 @@ export async function deleteProject(id: string): Promise<void> {
 
 // ---- Plans ----------------------------------------------------------------
 
-export async function fetchPlan(projectId: string): Promise<ProjectPlan> {
-  return json(await fetch(`${BASE}/projects/${projectId}/plan`));
+export async function fetchPlan(projectId: string): Promise<ProjectPlan | null> {
+  const res = await fetch(`${BASE}/projects/${projectId}/plan`);
+  if (res.status === 404) return null;
+  return json(res);
 }
 
 export async function approvePlan(projectId: string): Promise<void> {
@@ -399,6 +401,211 @@ export async function writeAgentFile(
   );
 }
 
+// ---- Pipeline -------------------------------------------------------------
+
+// Pipeline aşamasının durumu ve içeriği
+export interface PipelineStage {
+  order: number;
+  agents: ProjectAgent[];
+  tasks: Task[];
+  status: 'pending' | 'running' | 'completed' | 'failed';
+}
+
+// Tüm pipeline'ın durum bilgisi
+export interface PipelineState {
+  projectId: string;
+  stages: PipelineStage[];
+  currentStage: number;
+  status: 'idle' | 'running' | 'paused' | 'completed' | 'failed';
+  startedAt?: string;
+  completedAt?: string;
+}
+
+// Pipeline'ı başlat
+export async function startPipeline(projectId: string): Promise<PipelineState> {
+  return json(await fetch(`${BASE}/projects/${projectId}/pipeline/start`, { method: 'POST' }));
+}
+
+// Pipeline durumunu getir
+export async function getPipelineStatus(projectId: string): Promise<PipelineState> {
+  return json(await fetch(`${BASE}/projects/${projectId}/pipeline/status`));
+}
+
+// Pipeline'ı duraklat
+export async function pausePipeline(projectId: string): Promise<void> {
+  await json(await fetch(`${BASE}/projects/${projectId}/pipeline/pause`, { method: 'POST' }));
+}
+
+// Pipeline'ı devam ettir
+export async function resumePipeline(projectId: string): Promise<void> {
+  await json(await fetch(`${BASE}/projects/${projectId}/pipeline/resume`, { method: 'POST' }));
+}
+
+// Pipeline'ı manuel olarak ilerlet (test amaçlı)
+export async function advancePipeline(projectId: string): Promise<PipelineState> {
+  return json(await fetch(`${BASE}/projects/${projectId}/pipeline/advance`, { method: 'POST' }));
+}
+
+// ---- Agent Runtime (süreç yönetimi) --------------------------------------
+
+// Ajan süreç bilgisi arayüzü
+export interface AgentProcessInfo {
+  id: string;
+  agentId: string;
+  agentName: string;
+  cliTool: string;
+  status: 'idle' | 'starting' | 'running' | 'stopping' | 'stopped' | 'error';
+  pid?: number;
+  startedAt?: string;
+  stoppedAt?: string;
+  exitCode?: number | null;
+  mode?: 'local' | 'docker';
+}
+
+// Ajan çalıştırma geçmişi arayüzü
+export interface AgentRunHistory {
+  id: string;
+  projectId: string;
+  agentId: string;
+  cliTool: string;
+  status: string;
+  taskPrompt?: string;
+  outputSummary?: string;
+  pid?: number;
+  exitCode?: number | null;
+  startedAt?: string;
+  stoppedAt?: string;
+  createdAt: string;
+}
+
+// Ajan sürecini başlat
+export async function startAgentProcess(
+  projectId: string,
+  agentId: string,
+  taskPrompt?: string,
+): Promise<AgentProcessInfo> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/agents/${agentId}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskPrompt }),
+    }),
+  );
+}
+
+// Ajan sürecini durdur
+export async function stopAgentProcess(projectId: string, agentId: string): Promise<void> {
+  await fetch(`${BASE}/projects/${projectId}/agents/${agentId}/stop`, { method: 'POST' });
+}
+
+// Ajan durumunu sorgula
+export async function getAgentStatus(
+  projectId: string,
+  agentId: string,
+): Promise<AgentProcessInfo> {
+  return json(await fetch(`${BASE}/projects/${projectId}/agents/${agentId}/status`));
+}
+
+// Mevcut çıktı tamponunu getir (since parametresi ile offset desteği)
+export async function getAgentOutput(
+  projectId: string,
+  agentId: string,
+  since?: number,
+): Promise<{ agentId: string; lines: string[]; total: number }> {
+  const url =
+    since !== undefined
+      ? `${BASE}/projects/${projectId}/agents/${agentId}/output?since=${since}`
+      : `${BASE}/projects/${projectId}/agents/${agentId}/output`;
+  return json(await fetch(url));
+}
+
+// Tüm ajanların çalışma durumlarını listele
+export async function getAgentRuntimes(projectId: string): Promise<AgentProcessInfo[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/runtimes`));
+}
+
+// Ajan çalıştırma geçmişini getir
+export async function getAgentRunHistory(
+  projectId: string,
+  agentId: string,
+  limit?: number,
+): Promise<AgentRunHistory[]> {
+  const url =
+    limit !== undefined
+      ? `${BASE}/projects/${projectId}/agents/${agentId}/runs?limit=${limit}`
+      : `${BASE}/projects/${projectId}/agents/${agentId}/runs`;
+  return json(await fetch(url));
+}
+
+// SSE akışını fetch + ReadableStream ile bağla.
+// EventSource yerine fetch tercih edilir: daha iyi hata yönetimi ve iptal desteği sağlar.
+// Dönen fonksiyon çağrıldığında bağlantıyı iptal eder (abort).
+export function streamAgentOutput(
+  projectId: string,
+  agentId: string,
+  onLine: (line: string, index: number) => void,
+  onError?: (err: Error) => void,
+): () => void {
+  const controller = new AbortController();
+
+  // SSE akışını asenkron olarak başlat
+  const connect = async () => {
+    try {
+      const res = await fetch(
+        `${BASE}/projects/${projectId}/agents/${agentId}/stream`,
+        { signal: controller.signal },
+      );
+
+      if (!res.ok) {
+        throw new Error(`SSE bağlantısı başarısız: HTTP ${res.status}`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('ReadableStream desteklenmiyor');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      // Veri satırlarını sürekli oku
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Tampondaki tüm tam satırları işle
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          // Yalnızca SSE veri satırlarını işle
+          if (!trimmed.startsWith('data: ')) continue;
+          const jsonStr = trimmed.slice(6);
+          if (!jsonStr || jsonStr === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(jsonStr) as { line: string; index: number };
+            if (typeof parsed.line === 'string' && typeof parsed.index === 'number') {
+              onLine(parsed.line, parsed.index);
+            }
+          } catch {
+            // JSON ayrıştırma hatalarını sessizce atla
+          }
+        }
+      }
+    } catch (err) {
+      // AbortError normal kapatma sinyalidir; hata olarak iletme
+      if (err instanceof Error && err.name === 'AbortError') return;
+      onError?.(err instanceof Error ? err : new Error(String(err)));
+    }
+  };
+
+  connect();
+
+  // Bağlantıyı iptal eden fonksiyonu döndür
+  return () => controller.abort();
+}
+
 // ---- Docker ---------------------------------------------------------------
 
 export async function fetchDockerStatus(): Promise<{ docker: boolean; coderImage: boolean }> {
@@ -464,4 +671,144 @@ export async function setDefaultProvider(id: string): Promise<void> {
 
 export async function testProvider(id: string): Promise<{ valid: boolean; message: string }> {
   return json(await fetch(`${BASE}/providers/${id}/test`, { method: 'POST' }));
+}
+
+// ---- Mesajlaşma Tipleri ---------------------------------------------------
+
+// Ajan mesaj türleri
+export type AgentMessageType =
+  | 'task_assignment'
+  | 'task_complete'
+  | 'review_request'
+  | 'bug_report'
+  | 'feedback'
+  | 'notification';
+
+// Ajan mesajı arayüzü
+export interface AgentMessage {
+  id: string;
+  projectId: string;
+  fromAgentId: string;
+  toAgentId: string;
+  type: AgentMessageType;
+  subject: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  status: 'unread' | 'read' | 'archived';
+  parentMessageId?: string;
+  createdAt: string;
+  readAt?: string;
+}
+
+// Mesaj gönderme veri yapısı
+export interface SendMessageData {
+  fromAgentId: string;
+  toAgentId: string;
+  type: AgentMessageType;
+  subject: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+  parentMessageId?: string;
+}
+
+// Yayın mesajı veri yapısı
+export interface BroadcastMessageData {
+  fromAgentId: string;
+  type: AgentMessageType;
+  subject: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+// ---- Mesajlaşma Fonksiyonları ---------------------------------------------
+
+// Proje mesajlarını listele (opsiyonel: agentId ve status filtresi)
+export async function fetchProjectMessages(
+  projectId: string,
+  agentId?: string,
+  status?: string,
+): Promise<AgentMessage[]> {
+  const params = new URLSearchParams();
+  if (agentId) params.set('agentId', agentId);
+  if (status) params.set('status', status);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return json(await fetch(`${BASE}/projects/${projectId}/messages${query}`));
+}
+
+// Ajan gelen kutusunu getir
+export async function fetchAgentInbox(
+  projectId: string,
+  agentId: string,
+  status?: string,
+): Promise<AgentMessage[]> {
+  const query = status ? `?status=${status}` : '';
+  return json(await fetch(`${BASE}/projects/${projectId}/agents/${agentId}/inbox${query}`));
+}
+
+// Okunmamış mesaj sayısını getir
+export async function fetchUnreadCount(
+  projectId: string,
+  agentId: string,
+): Promise<{ agentId: string; unreadCount: number }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/agents/${agentId}/inbox/count`));
+}
+
+// Yeni mesaj gönder
+export async function sendAgentMessage(
+  projectId: string,
+  data: SendMessageData,
+): Promise<AgentMessage> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  );
+}
+
+// Mesajı okundu olarak işaretle
+export async function markMessageRead(
+  projectId: string,
+  messageId: string,
+): Promise<AgentMessage> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/messages/${messageId}/read`, {
+      method: 'PUT',
+    }),
+  );
+}
+
+// Mesajı arşivle
+export async function archiveAgentMessage(
+  projectId: string,
+  messageId: string,
+): Promise<AgentMessage> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/messages/${messageId}/archive`, {
+      method: 'PUT',
+    }),
+  );
+}
+
+// Mesaj zincirini (thread) getir
+export async function fetchMessageThread(
+  projectId: string,
+  messageId: string,
+): Promise<AgentMessage[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/messages/${messageId}/thread`));
+}
+
+// Tüm ekibe yayın mesajı gönder
+export async function broadcastMessage(
+  projectId: string,
+  data: BroadcastMessageData,
+): Promise<{ sent: number; messages: AgentMessage[] }> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/messages/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  );
 }

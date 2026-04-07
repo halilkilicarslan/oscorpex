@@ -26,6 +26,10 @@ import type {
   AIProviderType,
   ProjectAgent,
   TeamTemplate,
+  PipelineRun,
+  PipelineStatus,
+  AgentRun,
+  AgentProcessStatus,
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -182,6 +186,43 @@ function migrate(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_project_agents_project ON project_agents(project_id);
+
+    -- Ajanlar arası mesajlaşma tablosu (agent-to-agent communication)
+    CREATE TABLE IF NOT EXISTS agent_messages (
+      id                TEXT PRIMARY KEY,
+      project_id        TEXT NOT NULL,
+      from_agent_id     TEXT NOT NULL,
+      to_agent_id       TEXT NOT NULL,
+      type              TEXT NOT NULL,
+      subject           TEXT NOT NULL,
+      content           TEXT NOT NULL,
+      metadata          TEXT NOT NULL DEFAULT '{}',
+      status            TEXT NOT NULL DEFAULT 'unread',
+      parent_message_id TEXT,
+      created_at        TEXT NOT NULL,
+      read_at           TEXT,
+      FOREIGN KEY (project_id) REFERENCES projects(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_project  ON agent_messages(project_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_to_agent ON agent_messages(to_agent_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_from_agent ON agent_messages(from_agent_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_parent   ON agent_messages(parent_message_id);
+
+    -- Pipeline çalıştırma kayıtları (pipeline execution runs)
+    CREATE TABLE IF NOT EXISTS pipeline_runs (
+      id            TEXT PRIMARY KEY,
+      project_id    TEXT NOT NULL UNIQUE,
+      current_stage INTEGER NOT NULL DEFAULT 0,
+      status        TEXT NOT NULL DEFAULT 'idle',
+      stages_json   TEXT NOT NULL DEFAULT '[]',
+      started_at    TEXT,
+      completed_at  TEXT,
+      created_at    TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pipeline_runs_project ON pipeline_runs(project_id);
   `);
 
   // Additive migrations for existing databases — safe to run on every startup
@@ -197,6 +238,29 @@ function migrate(db: Database.Database): void {
   if (!existingCols.includes('pipeline_order')) {
     db.exec("ALTER TABLE project_agents ADD COLUMN pipeline_order INTEGER NOT NULL DEFAULT 0");
   }
+
+  // Agent çalışma geçmişi tablosu — yerel CLI süreç kayıtları
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      id              TEXT PRIMARY KEY,
+      project_id      TEXT NOT NULL,
+      agent_id        TEXT NOT NULL,
+      cli_tool        TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'idle',
+      task_prompt     TEXT,
+      output_summary  TEXT,
+      pid             INTEGER,
+      exit_code       INTEGER,
+      started_at      TEXT,
+      stopped_at      TEXT,
+      created_at      TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id),
+      FOREIGN KEY (agent_id)   REFERENCES project_agents(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_project ON agent_runs(project_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_agent   ON agent_runs(agent_id);
+  `);
 }
 
 // ---------------------------------------------------------------------------
@@ -716,8 +780,10 @@ export function getRawProviderApiKey(id: string): string {
 
 export function seedPresetAgents(): void {
   const db = getDb();
-  const count = (db.prepare('SELECT COUNT(*) as c FROM agent_configs WHERE is_preset = 1').get() as any).c;
-  if (count > 0) return;
+  // Mevcut preset rollerini al — sadece eksik olanları ekle (additive)
+  const existingRoles = new Set(
+    (db.prepare('SELECT role FROM agent_configs WHERE is_preset = 1').all() as { role: string }[]).map((r) => r.role),
+  );
 
   const presets: Omit<AgentConfig, 'id'>[] = [
     {
@@ -844,10 +910,48 @@ Your role:
 5. Work independently on all parts of the stack`,
       isPreset: true,
     },
+    {
+      name: 'Iris',
+      role: 'designer',
+      avatar: '🎯',
+      personality: 'Creative, empathetic, user-centric, detail-obsessed',
+      model: 'claude-sonnet-4-6',
+      cliTool: 'claude-code',
+      skills: ['ui-design', 'ux-research', 'wireframing', 'design-systems', 'figma', 'accessibility'],
+      systemPrompt: `You are Iris, a senior UI/UX Designer.
+Your role:
+1. Create wireframes and UI mockups based on requirements
+2. Design user flows and interaction patterns
+3. Build and maintain design system components
+4. Ensure accessibility (WCAG) and responsive design
+5. Conduct UX reviews and provide feedback on implementations
+6. Write CSS/Tailwind component specifications for developers`,
+      isPreset: true,
+    },
+    {
+      name: 'Vanguard',
+      role: 'devops',
+      avatar: '🚀',
+      personality: 'Methodical, reliability-focused, automation-driven',
+      model: 'claude-sonnet-4-6',
+      cliTool: 'claude-code',
+      skills: ['docker', 'ci-cd', 'kubernetes', 'aws', 'monitoring', 'infrastructure-as-code'],
+      systemPrompt: `You are Vanguard, a senior DevOps Engineer.
+Your role:
+1. Set up CI/CD pipelines for automated build, test, and deploy
+2. Create and manage Docker containers and orchestration
+3. Configure infrastructure as code (Terraform, CloudFormation)
+4. Set up monitoring, logging, and alerting systems
+5. Manage environment configurations (dev, staging, production)
+6. Ensure security best practices in infrastructure`,
+      isPreset: true,
+    },
   ];
 
   for (const preset of presets) {
-    createAgentConfig(preset);
+    if (!existingRoles.has(preset.role)) {
+      createAgentConfig(preset);
+    }
   }
 }
 
@@ -857,25 +961,30 @@ Your role:
 
 export function seedTeamTemplates(): void {
   const db = getDb();
-  const count = (db.prepare('SELECT COUNT(*) as c FROM team_templates').get() as any).c;
-  // Zaten veri varsa tekrar ekleme
-  if (count > 0) return;
+
+  // Mevcut şablonları sil ve güncellenmiş halleri ile yeniden oluştur
+  db.prepare('DELETE FROM team_templates').run();
 
   const templates = [
     {
       name: 'Full Stack Team',
-      description: 'Complete team with PM, architect, frontend, backend, QA, and code reviewer',
-      roles: ['pm', 'architect', 'frontend', 'backend', 'qa', 'reviewer'],
+      description: 'Complete professional team: PM, Designer, Architect, Frontend, Backend, QA, Reviewer, DevOps',
+      roles: ['pm', 'designer', 'architect', 'frontend', 'backend', 'qa', 'reviewer', 'devops'],
+    },
+    {
+      name: 'Startup Team',
+      description: 'Lean team for fast-moving startups: PM, Architect, Full-Stack Coder, QA',
+      roles: ['pm', 'architect', 'coder', 'qa'],
     },
     {
       name: 'Frontend Team',
-      description: 'Focused team for frontend projects with PM, frontend dev, and QA',
-      roles: ['pm', 'frontend', 'qa'],
+      description: 'Focused team for UI-heavy projects: PM, Designer, Frontend, QA, Reviewer',
+      roles: ['pm', 'designer', 'frontend', 'qa', 'reviewer'],
     },
     {
       name: 'Backend Team',
-      description: 'Focused team for backend/API projects with PM, architect, backend dev, and QA',
-      roles: ['pm', 'architect', 'backend', 'qa'],
+      description: 'Focused team for API/infra projects: PM, Architect, Backend, QA, DevOps',
+      roles: ['pm', 'architect', 'backend', 'qa', 'devops'],
     },
     {
       name: 'Solo Coder',
@@ -1048,24 +1157,26 @@ export function copyAgentsToProject(projectId: string, roles: string[]): Project
 
   const colorMap: Record<string, string> = {
     pm: '#f59e0b',
+    designer: '#f472b6',
     architect: '#3b82f6',
     frontend: '#ec4899',
     backend: '#22c55e',
+    coder: '#06b6d4',
     qa: '#a855f7',
     reviewer: '#ef4444',
-    devops: '#06b6d4',
-    coder: '#06b6d4',
+    devops: '#0ea5e9',
   };
 
   const pipelineMap: Record<string, number> = {
     pm: 0,
-    architect: 1,
-    frontend: 2,
-    backend: 2,
-    qa: 3,
-    reviewer: 4,
-    devops: 1,
-    coder: 2,
+    designer: 1,
+    architect: 2,
+    frontend: 3,
+    backend: 3,
+    coder: 3,
+    qa: 4,
+    reviewer: 5,
+    devops: 6,
   };
 
   for (const role of roles) {
@@ -1089,11 +1200,23 @@ export function copyAgentsToProject(projectId: string, roles: string[]): Project
     }
   }
 
-  // Set up hierarchy: PM is the lead, all other agents report to PM
+  // Set up professional hierarchy:
+  // - PM is the top-level lead
+  // - Designer, Architect, QA, Reviewer, DevOps report to PM
+  // - Frontend, Backend, Coder report to Architect (technical chain)
   const pm = created.find((a) => a.role === 'pm');
+  const architect = created.find((a) => a.role === 'architect');
+  const devRoles = new Set(['frontend', 'backend', 'coder']);
+
   if (pm) {
     for (const agent of created) {
-      if (agent.id !== pm.id) {
+      if (agent.id === pm.id) continue;
+
+      // Devs report to Architect if present, otherwise to PM
+      if (devRoles.has(agent.role) && architect) {
+        updateProjectAgent(agent.id, { reportsTo: architect.id });
+        agent.reportsTo = architect.id;
+      } else {
         updateProjectAgent(agent.id, { reportsTo: pm.id });
         agent.reportsTo = pm.id;
       }
@@ -1101,4 +1224,159 @@ export function copyAgentsToProject(projectId: string, roles: string[]): Project
   }
 
   return created;
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline Runs CRUD
+// Pipeline çalıştırma kayıtları — PipelineState'i kalıcı olarak saklar
+// ---------------------------------------------------------------------------
+
+/** Bir PipelineRun satırını TypeScript nesnesine çevirir */
+function rowToPipelineRun(row: any): PipelineRun {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    currentStage: row.current_stage,
+    status: row.status as PipelineStatus,
+    stagesJson: row.stages_json,
+    startedAt: row.started_at ?? undefined,
+    completedAt: row.completed_at ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+/** Projeye yeni bir pipeline run kaydı oluşturur (ya da mevcut olanı günceller — UPSERT) */
+export function createPipelineRun(data: Pick<PipelineRun, 'projectId' | 'status' | 'stagesJson'>): PipelineRun {
+  const db = getDb();
+  const id = randomUUID();
+  const ts = now();
+
+  // Projeye ait tek bir pipeline_run kaydı olur; varsa güncelle
+  db.prepare(`
+    INSERT INTO pipeline_runs (id, project_id, current_stage, status, stages_json, started_at, completed_at, created_at)
+    VALUES (?, ?, 0, ?, ?, NULL, NULL, ?)
+    ON CONFLICT(project_id) DO UPDATE SET
+      current_stage = 0,
+      status = excluded.status,
+      stages_json = excluded.stages_json,
+      started_at = NULL,
+      completed_at = NULL
+  `).run(id, data.projectId, data.status, data.stagesJson, ts);
+
+  return getPipelineRun(data.projectId)!;
+}
+
+/** Projenin mevcut pipeline run kaydını getirir */
+export function getPipelineRun(projectId: string): PipelineRun | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM pipeline_runs WHERE project_id = ?').get(projectId) as any;
+  return row ? rowToPipelineRun(row) : undefined;
+}
+
+/** Pipeline run kaydını günceller */
+export function updatePipelineRun(
+  projectId: string,
+  data: Partial<Pick<PipelineRun, 'currentStage' | 'status' | 'stagesJson' | 'startedAt' | 'completedAt'>>,
+): PipelineRun | undefined {
+  const db = getDb();
+  const fields: string[] = [];
+  const values: any[] = [];
+
+  if (data.currentStage !== undefined) { fields.push('current_stage = ?'); values.push(data.currentStage); }
+  if (data.status !== undefined) { fields.push('status = ?'); values.push(data.status); }
+  if (data.stagesJson !== undefined) { fields.push('stages_json = ?'); values.push(data.stagesJson); }
+  if (data.startedAt !== undefined) { fields.push('started_at = ?'); values.push(data.startedAt); }
+  if (data.completedAt !== undefined) { fields.push('completed_at = ?'); values.push(data.completedAt); }
+
+  if (fields.length === 0) return getPipelineRun(projectId);
+
+  values.push(projectId);
+  db.prepare(`UPDATE pipeline_runs SET ${fields.join(', ')} WHERE project_id = ?`).run(...values);
+  return getPipelineRun(projectId);
+}
+
+// ---------------------------------------------------------------------------
+// Agent Runs CRUD — yerel CLI süreç çalışma geçmişi
+// ---------------------------------------------------------------------------
+
+function rowToAgentRun(row: any): AgentRun {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    agentId: row.agent_id,
+    cliTool: row.cli_tool,
+    status: row.status as AgentProcessStatus,
+    taskPrompt: row.task_prompt ?? undefined,
+    outputSummary: row.output_summary ?? undefined,
+    pid: row.pid ?? undefined,
+    exitCode: row.exit_code ?? undefined,
+    startedAt: row.started_at ?? undefined,
+    stoppedAt: row.stopped_at ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+/** Yeni bir agent çalışma kaydı oluşturur */
+export function createAgentRun(
+  data: Pick<AgentRun, 'id' | 'projectId' | 'agentId' | 'cliTool' | 'status'> &
+    Partial<Pick<AgentRun, 'taskPrompt' | 'pid' | 'startedAt'>>,
+): AgentRun {
+  const db = getDb();
+  const ts = now();
+  db.prepare(`
+    INSERT INTO agent_runs
+      (id, project_id, agent_id, cli_tool, status, task_prompt, pid, started_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    data.id,
+    data.projectId,
+    data.agentId,
+    data.cliTool,
+    data.status,
+    data.taskPrompt ?? null,
+    data.pid ?? null,
+    data.startedAt ?? null,
+    ts,
+  );
+  return getAgentRun(data.id)!;
+}
+
+/** Tek bir agent çalışma kaydını getirir */
+export function getAgentRun(id: string): AgentRun | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM agent_runs WHERE id = ?').get(id) as any;
+  return row ? rowToAgentRun(row) : undefined;
+}
+
+/** Agent çalışma kaydını günceller */
+export function updateAgentRun(
+  id: string,
+  data: Partial<Pick<AgentRun, 'status' | 'outputSummary' | 'exitCode' | 'stoppedAt'>>,
+): AgentRun | undefined {
+  const db = getDb();
+  const fields: string[] = [];
+  const values: any[] = [];
+
+  if (data.status !== undefined) { fields.push('status = ?'); values.push(data.status); }
+  if (data.outputSummary !== undefined) { fields.push('output_summary = ?'); values.push(data.outputSummary); }
+  if (data.exitCode !== undefined) { fields.push('exit_code = ?'); values.push(data.exitCode); }
+  if (data.stoppedAt !== undefined) { fields.push('stopped_at = ?'); values.push(data.stoppedAt); }
+
+  if (fields.length === 0) return getAgentRun(id);
+
+  values.push(id);
+  db.prepare(`UPDATE agent_runs SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  return getAgentRun(id);
+}
+
+/** Belirli bir agent'ın tüm çalışma geçmişini listeler (en yeniden eskiye) */
+export function listAgentRuns(projectId: string, agentId: string, limit = 50): AgentRun[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT * FROM agent_runs
+    WHERE project_id = ? AND agent_id = ?
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(projectId, agentId, limit) as any[];
+  return rows.map(rowToAgentRun);
 }
