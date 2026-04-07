@@ -7,6 +7,7 @@
 import { generateText, stepCountIs } from 'ai';
 import { taskEngine } from './task-engine.js';
 import { containerManager } from './container-manager.js';
+import { containerPool, type TaskResult as PoolTaskResult } from './container-pool.js';
 import { eventBus } from './event-bus.js';
 import { getAIModelInfo, calculateCost } from './ai-provider-factory.js';
 import {
@@ -248,45 +249,92 @@ class ExecutionEngine {
     const timeoutMs = agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS;
 
     try {
-      let output: TaskOutput;
+      let output: TaskOutput | undefined;
+      let executionMode: 'pool' | 'docker' | 'local' = 'local';
 
-      // Try Docker first, fallback to local if unavailable or fails
-      let usedDocker = false;
-      const dockerAvailable = await containerManager.isDockerAvailable();
+      // Execution priority: 1) Container Pool  2) Docker Container  3) Local AI SDK
+      const poolReady = containerPool.isReady();
 
-      if (dockerAvailable && agent.cliTool === 'claude-code') {
+      if (poolReady && project.repoPath) {
+        // --- Level 1: Container Pool (isolated, pre-warmed) ---
         try {
-          output = await withTimeout(
-            (signal) => this.executeInContainer(projectId, agent, project, task, prompt, signal),
-            timeoutMs,
+          const poolResult = await containerPool.executeTask(
+            projectId,
+            agent.id,
+            agent.name,
+            agent.role,
+            project.repoPath,
+            {
+              taskId: task.id,
+              prompt,
+              systemPrompt: agent.systemPrompt || this.defaultSystemPrompt(agent),
+              timeout: timeoutMs,
+            },
           );
-          usedDocker = true;
-        } catch (dockerErr) {
-          // If it is a timeout error, propagate it directly — do not fall back to local
-          if (dockerErr instanceof TaskTimeoutError) throw dockerErr;
-
-          const dockerMsg = dockerErr instanceof Error ? dockerErr.message : String(dockerErr);
+          output = {
+            filesCreated: poolResult.filesCreated,
+            filesModified: poolResult.filesModified,
+            logs: [...poolResult.logs, `[pool-output] ${poolResult.output.slice(0, 500)}`],
+          };
+          executionMode = 'pool';
+        } catch (poolErr) {
+          const poolMsg = poolErr instanceof Error ? poolErr.message : String(poolErr);
           eventBus.emit({
             projectId,
             type: 'agent:output',
             agentId: agent.id,
             taskId: task.id,
-            payload: { output: `[docker fallback] Container failed: ${dockerMsg.slice(0, 200)}. Falling back to local execution.` },
+            payload: { output: `[pool fallback] Pool failed: ${poolMsg.slice(0, 200)}. Trying Docker/local...` },
           });
+          // Fall through to Docker/local
+          output = undefined as any;
+        }
+      }
+
+      if (!output) {
+        const dockerAvailable = await containerManager.isDockerAvailable();
+
+        if (dockerAvailable && agent.cliTool === 'claude-code') {
+          // --- Level 2: Docker Container (claude-code CLI) ---
+          try {
+            output = await withTimeout(
+              (signal) => this.executeInContainer(projectId, agent, project, task, prompt, signal),
+              timeoutMs,
+            );
+            executionMode = 'docker';
+          } catch (dockerErr) {
+            if (dockerErr instanceof TaskTimeoutError) throw dockerErr;
+
+            const dockerMsg = dockerErr instanceof Error ? dockerErr.message : String(dockerErr);
+            eventBus.emit({
+              projectId,
+              type: 'agent:output',
+              agentId: agent.id,
+              taskId: task.id,
+              payload: { output: `[docker fallback] Container failed: ${dockerMsg.slice(0, 200)}. Falling back to local execution.` },
+            });
+            output = await withTimeout(
+              (signal) => this.executeLocally(projectId, agent, task, prompt, signal),
+              timeoutMs,
+            );
+          }
+        } else {
+          // --- Level 3: Local AI SDK ---
           output = await withTimeout(
             (signal) => this.executeLocally(projectId, agent, task, prompt, signal),
             timeoutMs,
           );
         }
-      } else {
-        output = await withTimeout(
-          (signal) => this.executeLocally(projectId, agent, task, prompt, signal),
-          timeoutMs,
-        );
       }
 
-      // Suppress unused variable warning — usedDocker reserved for future telemetry
-      void usedDocker;
+      // Log execution mode for telemetry
+      eventBus.emit({
+        projectId,
+        type: 'agent:output',
+        agentId: agent.id,
+        taskId: task.id,
+        payload: { output: `[execution] Mode: ${executionMode}` },
+      });
 
       // --- ESLint/Prettier enforcement: auto-fix generated files ---
       const allFiles = [...(output.filesCreated ?? []), ...(output.filesModified ?? [])];
