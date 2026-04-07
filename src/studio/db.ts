@@ -246,6 +246,9 @@ function migrate(db: Database.Database): void {
   if (!taskCols.includes('error')) {
     db.exec("ALTER TABLE tasks ADD COLUMN error TEXT");
   }
+  if (!taskCols.includes('task_type')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN task_type TEXT NOT NULL DEFAULT 'ai'");
+  }
 
   // Agent çalışma geçmişi tablosu — yerel CLI süreç kayıtları
   db.exec(`
@@ -421,13 +424,14 @@ export function updatePhaseStatus(id: string, status: PhaseStatus): void {
 // Tasks CRUD
 // ---------------------------------------------------------------------------
 
-export function createTask(data: Pick<Task, 'phaseId' | 'title' | 'description' | 'assignedAgent' | 'complexity' | 'dependsOn' | 'branch'>): Task {
+export function createTask(data: Pick<Task, 'phaseId' | 'title' | 'description' | 'assignedAgent' | 'complexity' | 'dependsOn' | 'branch'> & { taskType?: Task['taskType'] }): Task {
   const db = getDb();
   const id = randomUUID();
+  const taskType = data.taskType ?? 'ai';
   db.prepare(`
-    INSERT INTO tasks (id, phase_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count)
-    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, 0)
-  `).run(id, data.phaseId, data.title, data.description, data.assignedAgent, data.complexity, JSON.stringify(data.dependsOn), data.branch);
+    INSERT INTO tasks (id, phase_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type)
+    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, 0, ?)
+  `).run(id, data.phaseId, data.title, data.description, data.assignedAgent, data.complexity, JSON.stringify(data.dependsOn), data.branch, taskType);
 
   return {
     id,
@@ -439,6 +443,7 @@ export function createTask(data: Pick<Task, 'phaseId' | 'title' | 'description' 
     complexity: data.complexity,
     dependsOn: data.dependsOn,
     branch: data.branch,
+    taskType: taskType !== 'ai' ? taskType as Task['taskType'] : undefined,
     retryCount: 0,
   };
 }
@@ -497,6 +502,7 @@ function rowToTask(row: any): Task {
     complexity: row.complexity as TaskComplexity,
     dependsOn: JSON.parse(row.depends_on),
     branch: row.branch,
+    taskType: row.task_type !== 'ai' ? row.task_type : undefined,
     output: row.output ? JSON.parse(row.output) : undefined,
     retryCount: row.retry_count,
     error: row.error ?? undefined,

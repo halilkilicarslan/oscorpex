@@ -45,6 +45,17 @@ You help users plan and manage software projects end-to-end. You work with a tea
 - Include testing tasks for critical features
 - Include a "Documentation" task in the first phase
 
+## Special Task Types
+In addition to normal AI coding tasks (taskType: "ai"), you can use these special task types:
+- **integration-test**: Automated smoke test that starts the backend/frontend, runs HTTP health checks and API tests, then shuts down. Use this as a final verification phase after all coding is done. Assign to role "qa" with branch "test/integration".
+- **run-app**: Starts the application (backend + frontend) and keeps it running so the user can interact with it. Use this as the very last phase. Assign to role "devops" with branch "main".
+
+**Recommended plan structure:**
+1. Foundation phase (setup, config)
+2. Core feature phases (coding tasks)
+3. Integration Test phase (taskType: "integration-test") — depends on all coding phases
+4. Run Application phase (taskType: "run-app") — depends on integration test phase
+
 ## Your Team & Agent Skills
 You have a team of AI developer agents. Each agent has specific skills and specializations:
 
@@ -117,6 +128,7 @@ const phaseSchema = z.object({
         .default([])
         .describe('Titles of tasks this depends on (within same plan)'),
       branch: z.string().describe('Git branch name, e.g. "feat/auth-api"'),
+      taskType: z.enum(['ai', 'integration-test', 'run-app']).default('ai').describe('Task type: "ai" for normal AI coding, "integration-test" for automated smoke tests, "run-app" to start the application'),
     }),
   ),
 });
@@ -154,6 +166,7 @@ async function buildPlan(projectId: string, phases: PhaseInput[]) {
         complexity: t.complexity as TaskComplexity,
         dependsOn: [],
         branch: t.branch,
+        taskType: t.taskType as any,
       });
       titleToId.set(t.title, task.id);
     }

@@ -1027,3 +1027,25 @@ export async function fetchAgentAnalytics(projectId: string): Promise<AgentAnaly
 export async function fetchActivityTimeline(projectId: string, days = 7): Promise<ActivityTimeline[]> {
   return json(await fetch(`${BASE}/projects/${projectId}/analytics/timeline?days=${days}`));
 }
+
+// ---------------------------------------------------------------------------
+// App Runner
+// ---------------------------------------------------------------------------
+
+export interface AppStatus {
+  running: boolean;
+  backendUrl: string | null;
+  frontendUrl: string | null;
+}
+
+export async function startApp(projectId: string): Promise<{ ok: boolean }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/app/start`, { method: 'POST' }));
+}
+
+export async function stopApp(projectId: string): Promise<{ ok: boolean }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/app/stop`, { method: 'POST' }));
+}
+
+export async function fetchAppStatus(projectId: string): Promise<AppStatus> {
+  return json(await fetch(`${BASE}/projects/${projectId}/app/status`));
+}

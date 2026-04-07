@@ -11,6 +11,9 @@ vi.mock('../lib/studio-api', () => ({
   fetchProject: vi.fn(),
   fetchProjectAgents: vi.fn(),
   fetchUnreadCount: vi.fn(),
+  fetchAppStatus: vi.fn().mockResolvedValue({ running: false, backendUrl: null, frontendUrl: null }),
+  startApp: vi.fn().mockResolvedValue({ ok: true }),
+  stopApp: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 // Alt bilesenler — sadece stub render et
