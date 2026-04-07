@@ -17,6 +17,7 @@ import {
   listPhases,
 } from './db.js';
 import { createAgentTools } from './agent-tools.js';
+import { agentRuntime } from './agent-runtime.js';
 import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -337,13 +338,21 @@ class ExecutionEngine {
       throw new Error(`Project ${projectId} has no repoPath configured`);
     }
 
-    eventBus.emit({
-      projectId,
-      type: 'agent:output',
-      agentId: agent.id,
-      taskId: task.id,
-      payload: { output: '[local execution] Using AI SDK with file tools' },
-    });
+    // Terminal için sanal süreç kaydı oluştur — SSE stream bu buffer'dan okur
+    agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
+
+    const termLog = (msg: string) => {
+      agentRuntime.appendVirtualOutput(projectId, agent.id, msg);
+      eventBus.emit({
+        projectId,
+        type: 'agent:output',
+        agentId: agent.id,
+        taskId: task.id,
+        payload: { output: msg },
+      });
+    };
+
+    termLog(`[${agent.name}] Task başlatılıyor: ${task.title}`);
 
     const tracker = { filesCreated: [] as string[], filesModified: [] as string[], logs: [] as string[] };
     const tools = createAgentTools(
@@ -386,13 +395,9 @@ class ExecutionEngine {
         });
     });
 
-    eventBus.emit({
-      projectId,
-      type: 'agent:output',
-      agentId: agent.id,
-      taskId: task.id,
-      payload: { output: text.slice(0, 2000) },
-    });
+    termLog(text.slice(0, 2000));
+    termLog(`[${agent.name}] Task tamamlandı: ${task.title}`);
+    agentRuntime.markVirtualStopped(projectId, agent.id);
 
     // Merge tool-tracked files with any mentioned in the AI's final text
     const parsed = this.parseTaskOutput(text);
