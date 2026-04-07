@@ -12,14 +12,19 @@ import {
   GitBranch,
   TrendingUp,
   Activity,
+  DollarSign,
 } from 'lucide-react';
 import {
   fetchProjectAnalytics,
   fetchAgentAnalytics,
   fetchActivityTimeline,
+  fetchProjectCosts,
+  fetchCostBreakdown,
   type ProjectAnalytics,
   type AgentAnalytics,
   type ActivityTimeline,
+  type ProjectCostSummary,
+  type CostBreakdownEntry,
 } from '../../lib/studio-api';
 
 // ---------------------------------------------------------------------------
@@ -282,6 +287,8 @@ export default function AgentDashboard({ projectId }: Props) {
   const [overview, setOverview] = useState<ProjectAnalytics | null>(null);
   const [agents, setAgents] = useState<AgentAnalytics[]>([]);
   const [timeline, setTimeline] = useState<ActivityTimeline[]>([]);
+  const [costs, setCosts] = useState<ProjectCostSummary | null>(null);
+  const [costBreakdown, setCostBreakdown] = useState<CostBreakdownEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -291,14 +298,18 @@ export default function AgentDashboard({ projectId }: Props) {
     else setRefreshing(true);
     setError(null);
     try {
-      const [ov, ag, tl] = await Promise.all([
+      const [ov, ag, tl, cs, cb] = await Promise.all([
         fetchProjectAnalytics(projectId),
         fetchAgentAnalytics(projectId),
         fetchActivityTimeline(projectId, 7),
+        fetchProjectCosts(projectId),
+        fetchCostBreakdown(projectId),
       ]);
       setOverview(ov);
       setAgents(ag);
       setTimeline(tl);
+      setCosts(cs);
+      setCostBreakdown(cb);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Veri yuklenemedi');
     } finally {
@@ -370,7 +381,7 @@ export default function AgentDashboard({ projectId }: Props) {
       </div>
 
       {/* Ozet kartlar */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard
           label="Toplam Gorev"
           value={overview?.totalTasks ?? 0}
@@ -400,6 +411,13 @@ export default function AgentDashboard({ projectId }: Props) {
             : undefined}
           icon={<GitBranch size={16} />}
           accent="#a855f7"
+        />
+        <StatCard
+          label="Toplam Maliyet"
+          value={costs?.totalCostUsd != null ? `$${costs.totalCostUsd.toFixed(4)}` : '$0'}
+          sub={costs?.totalTokens ? `${(costs.totalTokens / 1000).toFixed(1)}K token` : undefined}
+          icon={<DollarSign size={16} />}
+          accent="#10b981"
         />
       </div>
 
@@ -465,6 +483,52 @@ export default function AgentDashboard({ projectId }: Props) {
             </span>
             <span className="text-[10px] text-[#525252]">Devam eden</span>
           </div>
+        </div>
+      )}
+
+      {/* Maliyet Breakdown Tablosu */}
+      {costBreakdown.length > 0 && (
+        <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
+            <DollarSign size={14} className="text-[#10b981]" />
+            <h3 className="text-[12px] font-semibold text-[#fafafa]">Maliyet Dagilimi</h3>
+            <span className="ml-auto text-[10px] text-[#525252]">
+              Toplam: ${costs?.totalCostUsd?.toFixed(4) ?? '0'}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-2 bg-[#0d0d0d]">
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-32 shrink-0">Ajan</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-32 shrink-0">Model</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Gorev</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Input</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Output</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Toplam</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Maliyet</span>
+          </div>
+          {costBreakdown.map((entry, i) => (
+            <div
+              key={`${entry.agentId}-${entry.model}-${i}`}
+              className="flex items-center gap-3 px-4 py-2.5 border-t border-[#1a1a1a] hover:bg-[#141414] transition-colors"
+            >
+              <span className="text-[11px] text-[#a3a3a3] w-32 truncate shrink-0">
+                {entry.agentName ?? entry.agentId.slice(0, 8)}
+              </span>
+              <span className="text-[11px] text-[#525252] w-32 truncate shrink-0 font-mono">{entry.model}</span>
+              <span className="text-[11px] text-[#a3a3a3] w-14 text-center">{entry.taskCount}</span>
+              <span className="text-[11px] text-[#525252] w-20 text-right font-mono">
+                {(entry.inputTokens / 1000).toFixed(1)}K
+              </span>
+              <span className="text-[11px] text-[#525252] w-20 text-right font-mono">
+                {(entry.outputTokens / 1000).toFixed(1)}K
+              </span>
+              <span className="text-[11px] text-[#a3a3a3] w-20 text-right font-mono">
+                {(entry.totalTokens / 1000).toFixed(1)}K
+              </span>
+              <span className="text-[11px] text-[#10b981] w-20 text-right font-mono font-semibold">
+                ${entry.costUsd.toFixed(4)}
+              </span>
+            </div>
+          ))}
         </div>
       )}
 

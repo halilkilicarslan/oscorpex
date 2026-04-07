@@ -361,6 +361,41 @@ export interface AgentRun {
   createdAt: string;
 }
 
+// ---- Token Usage & Cost Tracking -------------------------------------------
+
+export interface TokenUsage {
+  id: string;
+  projectId: string;
+  taskId: string;
+  agentId: string;
+  model: string;
+  provider: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  createdAt: string;
+}
+
+export interface ProjectCostSummary {
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  taskCount: number;
+}
+
+export interface CostBreakdownEntry {
+  agentId: string;
+  agentName?: string;
+  model: string;
+  taskCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
 // ---- Git types -------------------------------------------------------------
 
 export interface GitLogEntry {

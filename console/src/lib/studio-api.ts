@@ -1029,6 +1029,37 @@ export async function fetchActivityTimeline(projectId: string, days = 7): Promis
 }
 
 // ---------------------------------------------------------------------------
+// Token Usage & Cost Tracking
+// ---------------------------------------------------------------------------
+
+export interface ProjectCostSummary {
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  taskCount: number;
+}
+
+export interface CostBreakdownEntry {
+  agentId: string;
+  agentName?: string;
+  model: string;
+  taskCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
+export async function fetchProjectCosts(projectId: string): Promise<ProjectCostSummary> {
+  return json(await fetch(`${BASE}/projects/${projectId}/costs`));
+}
+
+export async function fetchCostBreakdown(projectId: string): Promise<CostBreakdownEntry[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/costs/breakdown`));
+}
+
+// ---------------------------------------------------------------------------
 // App Runner
 // ---------------------------------------------------------------------------
 
