@@ -1091,3 +1091,48 @@ export interface DocFreshnessItem {
 export async function fetchDocsFreshness(projectId: string): Promise<DocFreshnessItem[]> {
   return json(await fetch(`${BASE}/projects/${projectId}/docs/freshness`));
 }
+
+// ---- SonarQube -------------------------------------------------------------
+
+export interface SonarStatus {
+  enabled: boolean;
+}
+
+export interface SonarScanResult {
+  scanId?: string;
+  qualityGate?: QualityGateResult;
+  error?: string;
+}
+
+export interface QualityGateResult {
+  status: 'OK' | 'WARN' | 'ERROR' | 'NONE';
+  conditions: QualityGateCondition[];
+}
+
+export interface QualityGateCondition {
+  metricKey: string;
+  status: 'OK' | 'WARN' | 'ERROR' | 'NO_VALUE';
+  actualValue?: string;
+  errorThreshold?: string;
+}
+
+export interface SonarLatestScan {
+  id?: string;
+  projectId?: string;
+  qualityGate?: string;
+  conditions?: QualityGateCondition[];
+  createdAt?: string;
+  status?: string;
+}
+
+export async function fetchSonarStatus(projectId: string): Promise<SonarStatus> {
+  return json(await fetch(`${BASE}/projects/${projectId}/sonar/status`));
+}
+
+export async function triggerSonarScan(projectId: string): Promise<SonarScanResult> {
+  return json(await fetch(`${BASE}/projects/${projectId}/sonar/scan`, { method: 'POST' }));
+}
+
+export async function fetchLatestSonarScan(projectId: string): Promise<SonarLatestScan> {
+  return json(await fetch(`${BASE}/projects/${projectId}/sonar/latest`));
+}
