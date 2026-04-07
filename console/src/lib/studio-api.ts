@@ -159,6 +159,28 @@ export async function createProject(data: { name: string; description?: string; 
   }));
 }
 
+// ---- Project Templates ----------------------------------------------------
+
+export interface ProjectTemplateInfo {
+  id: string;
+  name: string;
+  description: string;
+  techStack: string[];
+  teamTemplate: string;
+}
+
+export async function fetchProjectTemplates(): Promise<ProjectTemplateInfo[]> {
+  return json(await fetch(`${BASE}/project-templates`));
+}
+
+export async function createProjectFromTemplate(data: { name: string; templateId: string; description?: string }): Promise<Project & { filesCreated?: string[] }> {
+  return json(await fetch(`${BASE}/projects/from-template`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }));
+}
+
 export async function importProject(data: { name: string; repoPath: string; description?: string; techStack?: string[]; teamTemplateId?: string }): Promise<Project> {
   return json(await fetch(`${BASE}/projects/import`, {
     method: 'POST',

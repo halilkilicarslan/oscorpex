@@ -14,6 +14,9 @@ import {
   Play,
   Square,
   Settings,
+  Bell,
+  BellOff,
+  Terminal,
 } from 'lucide-react';
 import {
   fetchProject,
@@ -35,12 +38,15 @@ import MessageCenter from './MessageCenter';
 import AgentDashboard from './AgentDashboard';
 import ProjectSettings from './ProjectSettings';
 import DiffViewer from './DiffViewer';
+import AgentLogViewer from './AgentLogViewer';
+import { useStudioWebSocket } from '../../hooks/useStudioWebSocket';
+import { useNotifications } from '../../hooks/useNotifications';
 
 // Board sekmesi içindeki görünüm modu — kanban veya pipeline
 type BoardView = 'kanban' | 'pipeline';
 
 // Sekme türü tanımı — settings sekmesi eklendi
-type Tab = 'chat' | 'team' | 'board' | 'files' | 'events' | 'messages' | 'dashboard' | 'diff' | 'settings';
+type Tab = 'chat' | 'team' | 'board' | 'files' | 'events' | 'messages' | 'dashboard' | 'logs' | 'diff' | 'settings';
 
 // Sabit sekme listesi (messages badge'i dinamik olarak eklenir)
 const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -51,6 +57,7 @@ const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'events', label: 'Events', icon: <Activity size={16} /> },
   { id: 'messages', label: 'Messages', icon: <Inbox size={16} /> },
   { id: 'dashboard', label: 'Dashboard', icon: <BarChart3 size={16} /> },
+  { id: 'logs', label: 'Logs', icon: <Terminal size={16} /> },
   { id: 'diff', label: 'Diff', icon: <GitBranch size={16} /> },
   { id: 'settings', label: 'Ayarlar', icon: <Settings size={16} /> },
 ];
@@ -70,6 +77,9 @@ export default function ProjectPage() {
   // App runner state
   const [appStatus, setAppStatus] = useState<AppStatus>({ running: false, backendUrl: null, frontendUrl: null });
   const [appLoading, setAppLoading] = useState(false);
+  // WebSocket + browser notifications
+  const { lastEvent } = useStudioWebSocket(projectId ?? '');
+  const { enabled: notifyEnabled, requestPermission } = useNotifications(lastEvent);
 
   useEffect(() => {
     if (!projectId) return;
@@ -198,6 +208,17 @@ export default function ProjectPage() {
           )}
           {appStatus.running ? 'Stop App' : 'Run App'}
         </button>
+        <button
+          onClick={() => { if (!notifyEnabled) requestPermission(); }}
+          className={`p-1.5 rounded-lg transition-colors ${
+            notifyEnabled
+              ? 'text-[#22c55e] bg-[#22c55e]/10'
+              : 'text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f]'
+          }`}
+          title={notifyEnabled ? 'Bildirimler acik' : 'Bildirimleri ac'}
+        >
+          {notifyEnabled ? <Bell size={16} /> : <BellOff size={16} />}
+        </button>
       </div>
 
       {/* Sekme çubuğu */}
@@ -273,6 +294,7 @@ export default function ProjectPage() {
         {activeTab === 'messages' && <MessageCenter projectId={projectId!} />}
         {/* Ajan dashboard sekmesi */}
         {activeTab === 'dashboard' && <AgentDashboard projectId={projectId!} />}
+        {activeTab === 'logs' && <AgentLogViewer projectId={projectId!} />}
         {activeTab === 'diff' && <DiffViewer projectId={projectId!} />}
         {activeTab === 'settings' && <ProjectSettings projectId={projectId!} />}
       </div>
