@@ -5,6 +5,9 @@ import {
   deleteProjectAgent,
   fetchTeamTemplates,
   copyTeamFromTemplate,
+  getAgentRuntimes,
+  startAgentProcess,
+  stopAgentProcess,
   type ProjectAgent,
   type TeamTemplate,
 } from '../../lib/studio-api';
@@ -99,33 +102,44 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
 
   useEffect(() => { loadAgents(); }, [loadAgents]);
 
-  // Poll runtimes for status
+  // Çalışma zamanı durumlarını 5 saniyede bir sorgula (getAgentRuntimes kullanır)
   useEffect(() => {
     if (agents.length === 0) return;
 
     const poll = async () => {
       try {
-        const res = await fetch(`/api/studio/projects/${projectId}/runtimes`);
-        if (!res.ok) return;
-        const runtimes = await res.json();
+        // Yeni API fonksiyonu — AgentProcessInfo[] döner, mode alanını da içerir
+        const runtimes = await getAgentRuntimes(projectId);
         setStatuses((prev) => {
           const next = { ...prev };
-          // Reset non-transitional statuses to idle
+          // Geçiş durumunda olmayan ajanları idle'a sıfırla
           agents.forEach((a) => {
             if (next[a.id] !== 'starting' && next[a.id] !== 'stopping') {
               next[a.id] = 'idle';
             }
           });
-          // Mark running ones
+          // Çalışan ajanları AgentProcessInfo.status alanına göre güncelle
           for (const rt of runtimes) {
-            if (rt.agentId && rt.status === 'running') {
-              next[rt.agentId] = 'running';
+            if (!rt.agentId) continue;
+            // Yeni şekil: status 'running' | 'stopped' | 'error' | 'starting' | 'stopping' | 'idle' olabilir
+            const mappedStatus: RuntimeStatus =
+              rt.status === 'running'  ? 'running'  :
+              rt.status === 'starting' ? 'starting' :
+              rt.status === 'stopping' ? 'stopping' :
+              rt.status === 'error'    ? 'error'    :
+              'idle';
+            // Geçiş durumundaki ajanları koruma: yalnızca kesinleşmiş durumları yaz
+            if (next[rt.agentId] !== 'starting' && next[rt.agentId] !== 'stopping') {
+              next[rt.agentId] = mappedStatus;
+            } else if (rt.status === 'running' || rt.status === 'error') {
+              // Başlatma/durdurma tamamlandıysa durumu güncelle
+              next[rt.agentId] = mappedStatus;
             }
           }
           return next;
         });
       } catch {
-        // ignore polling errors
+        // Polling hatalarını sessizce atla
       }
     };
 
@@ -134,28 +148,25 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
     return () => clearInterval(interval);
   }, [projectId, agents]);
 
+  // Ajan sürecini başlat — yeni API fonksiyonu kullanılır
   const handleStart = useCallback(async (agentId: string) => {
     setStatuses((prev) => ({ ...prev, [agentId]: 'starting' }));
     try {
-      const res = await fetch(`/api/studio/projects/${projectId}/agents/${agentId}/start`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        setStatuses((prev) => ({ ...prev, [agentId]: 'running' }));
-      } else {
-        setStatuses((prev) => ({ ...prev, [agentId]: 'error' }));
-      }
+      const info = await startAgentProcess(projectId, agentId);
+      // Yanıttaki status alanına göre güncelle
+      const mappedStatus: RuntimeStatus =
+        info.status === 'running' ? 'running' : info.status === 'error' ? 'error' : 'running';
+      setStatuses((prev) => ({ ...prev, [agentId]: mappedStatus }));
     } catch {
       setStatuses((prev) => ({ ...prev, [agentId]: 'error' }));
     }
   }, [projectId]);
 
+  // Ajan sürecini durdur — yeni API fonksiyonu kullanılır
   const handleStop = useCallback(async (agentId: string) => {
     setStatuses((prev) => ({ ...prev, [agentId]: 'stopping' }));
     try {
-      await fetch(`/api/studio/projects/${projectId}/agents/${agentId}/stop`, {
-        method: 'POST',
-      });
+      await stopAgentProcess(projectId, agentId);
       setStatuses((prev) => ({ ...prev, [agentId]: 'idle' }));
     } catch {
       setStatuses((prev) => ({ ...prev, [agentId]: 'error' }));

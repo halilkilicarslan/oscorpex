@@ -12,13 +12,15 @@ import {
 import { getModelsFromProviders } from '../../lib/model-options';
 
 const ROLE_OPTIONS = [
-  { value: 'pm', label: 'PM' },
+  { value: 'pm', label: 'Project Manager' },
+  { value: 'designer', label: 'UI/UX Designer' },
   { value: 'architect', label: 'Architect' },
-  { value: 'frontend', label: 'Frontend' },
-  { value: 'backend', label: 'Backend' },
-  { value: 'qa', label: 'QA' },
-  { value: 'reviewer', label: 'Reviewer' },
-  { value: 'devops', label: 'DevOps' },
+  { value: 'frontend', label: 'Frontend Developer' },
+  { value: 'backend', label: 'Backend Developer' },
+  { value: 'coder', label: 'Full-Stack Coder' },
+  { value: 'qa', label: 'QA Engineer' },
+  { value: 'reviewer', label: 'Code Reviewer' },
+  { value: 'devops', label: 'DevOps Engineer' },
   { value: 'custom', label: 'Custom' },
 ];
 
@@ -330,7 +332,7 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className={labelClass + ' mb-0'}>Skills</label>
-              {mode === 'edit' && agent && (
+              {agent ? (
                 <button
                   type="button"
                   onClick={handleToggleSkillsMode}
@@ -339,6 +341,8 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
                   <FileText size={11} />
                   {skillsMode === 'inline' ? 'View .md file' : 'Edit inline'}
                 </button>
+              ) : (
+                <span className="text-[10px] text-[#404040] italic">.md files available after save</span>
               )}
             </div>
             {skillsMode === 'file' ? (
@@ -415,7 +419,7 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className={labelClass + ' mb-0'}>System Prompt</label>
-              {mode === 'edit' && agent && (
+              {agent ? (
                 <button
                   type="button"
                   onClick={handleTogglePromptMode}
@@ -424,6 +428,8 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
                   <FileText size={11} />
                   {promptMode === 'inline' ? 'View .md file' : 'Edit inline'}
                 </button>
+              ) : (
+                <span className="text-[10px] text-[#404040] italic">.md files available after save</span>
               )}
             </div>
             {promptMode === 'file' ? (
