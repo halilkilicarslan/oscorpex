@@ -1091,6 +1091,12 @@ studio.get('/projects/:id/agents/:agentId/status', (c) => {
     return c.json({ mode: 'docker', ...dockerRuntime });
   }
 
+  // Sanal kayıt yoksa agent bilgisinden idle durumlu kayıt döndür
+  const agent = listProjectAgents(projectId).find((a) => a.id === agentId);
+  if (agent) {
+    return c.json({ mode: 'virtual', status: 'idle', agentId, agentName: agent.name });
+  }
+
   return c.json({ error: 'Çalışan süreç bulunamadı' }, 404);
 });
 
@@ -1115,9 +1121,18 @@ studio.get('/projects/:id/agents/:agentId/stream', (c) => {
   const projectId = c.req.param('id');
   const agentId = c.req.param('agentId');
 
-  const readable = agentRuntime.streamAgentOutput(projectId, agentId);
+  // Kayıt yoksa sanal kayıt oluştur — terminal bağlanabilsin ve yeni çıktıları beklesin
+  let readable = agentRuntime.streamAgentOutput(projectId, agentId);
   if (!readable) {
-    return c.json({ error: 'Aktif agent süreci bulunamadı' }, 404);
+    const agent = listProjectAgents(projectId).find((a) => a.id === agentId);
+    if (agent) {
+      agentRuntime.ensureVirtualProcess(projectId, agentId, agent.name);
+      readable = agentRuntime.streamAgentOutput(projectId, agentId);
+    }
+  }
+
+  if (!readable) {
+    return c.json({ error: 'Agent bulunamadı' }, 404);
   }
 
   return new Response(readable, {
