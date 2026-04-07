@@ -51,6 +51,9 @@ import {
   getProjectAnalytics,
   getAgentAnalytics,
   getActivityTimeline,
+  getProjectCostSummary,
+  getProjectCostBreakdown,
+  listTokenUsage,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { PM_SYSTEM_PROMPT, pmToolkit } from './pm-agent.js';
@@ -1728,6 +1731,31 @@ studio.get('/projects/:id/analytics/timeline', (c) => {
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Zaman çizelgesi hesaplanamadı' }, 500);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Token Usage & Cost Tracking
+// ---------------------------------------------------------------------------
+
+studio.get('/projects/:id/costs', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  return c.json(getProjectCostSummary(projectId));
+});
+
+studio.get('/projects/:id/costs/breakdown', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  return c.json(getProjectCostBreakdown(projectId));
+});
+
+studio.get('/projects/:id/costs/history', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  return c.json(listTokenUsage(projectId));
 });
 
 // ---------------------------------------------------------------------------

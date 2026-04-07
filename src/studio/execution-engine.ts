@@ -8,7 +8,7 @@ import { generateText, stepCountIs } from 'ai';
 import { taskEngine } from './task-engine.js';
 import { containerManager } from './container-manager.js';
 import { eventBus } from './event-bus.js';
-import { getAIModel } from './ai-provider-factory.js';
+import { getAIModelInfo, calculateCost } from './ai-provider-factory.js';
 import {
   getProject,
   listAgentConfigs,
@@ -18,6 +18,7 @@ import {
   updateTask,
   updatePhaseStatus,
   listProjects,
+  recordTokenUsage,
 } from './db.js';
 import { createAgentTools } from './agent-tools.js';
 import { agentRuntime } from './agent-runtime.js';
@@ -429,7 +430,7 @@ class ExecutionEngine {
       tracker,
     );
 
-    const model = getAIModel();
+    const { model, modelName, providerType } = getAIModelInfo();
 
     // Pass the AbortSignal to generateText so the AI SDK can honour cancellation
     const generatePromise = generateText({
@@ -443,7 +444,7 @@ class ExecutionEngine {
     });
 
     // Additionally race against the signal in case the SDK does not propagate it
-    const { text } = await new Promise<Awaited<typeof generatePromise>>((resolve, reject) => {
+    const { text, usage } = await new Promise<Awaited<typeof generatePromise>>((resolve, reject) => {
       const onAbort = () => reject(new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS));
       signal.addEventListener('abort', onAbort, { once: true });
       generatePromise
@@ -468,6 +469,26 @@ class ExecutionEngine {
     termLog(text.slice(0, 2000));
     termLog(`[${agent.name}] Task tamamlandı: ${task.title}`);
     agentRuntime.markVirtualStopped(projectId, agent.id);
+
+    // Record token usage for cost tracking
+    if (usage) {
+      const inputTokens = usage.inputTokens ?? 0;
+      const outputTokens = usage.outputTokens ?? 0;
+      const totalTokens = inputTokens + outputTokens;
+      const costUsd = calculateCost(modelName, inputTokens, outputTokens);
+      recordTokenUsage({
+        projectId,
+        taskId: task.id,
+        agentId: agent.id,
+        model: modelName,
+        provider: providerType,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        costUsd,
+      });
+      termLog(`[cost] ${modelName}: ${totalTokens} tokens ($${costUsd.toFixed(4)})`);
+    }
 
     // Merge tool-tracked files with any mentioned in the AI's final text
     const parsed = this.parseTaskOutput(text);

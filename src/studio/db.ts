@@ -272,6 +272,27 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_agent_runs_project ON agent_runs(project_id);
     CREATE INDEX IF NOT EXISTS idx_agent_runs_agent   ON agent_runs(agent_id);
   `);
+
+  // Token kullanım ve maliyet takibi tablosu
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS token_usage (
+      id              TEXT PRIMARY KEY,
+      project_id      TEXT NOT NULL,
+      task_id         TEXT NOT NULL,
+      agent_id        TEXT NOT NULL,
+      model           TEXT NOT NULL,
+      provider        TEXT NOT NULL DEFAULT '',
+      input_tokens    INTEGER NOT NULL DEFAULT 0,
+      output_tokens   INTEGER NOT NULL DEFAULT 0,
+      total_tokens    INTEGER NOT NULL DEFAULT 0,
+      cost_usd        REAL NOT NULL DEFAULT 0,
+      created_at      TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_token_usage_project ON token_usage(project_id);
+    CREATE INDEX IF NOT EXISTS idx_token_usage_task    ON token_usage(task_id);
+  `);
 }
 
 // ---------------------------------------------------------------------------
@@ -1589,5 +1610,116 @@ export function getActivityTimeline(projectId: string, days = 7) {
   return dates.map((date) => ({
     date, tasksCompleted: taskMap[date] ?? 0,
     runsStarted: rsMap[date] ?? 0, runsCompleted: rcMap[date] ?? 0,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Token Usage & Cost Tracking
+// ---------------------------------------------------------------------------
+
+import type { TokenUsage, ProjectCostSummary, CostBreakdownEntry } from './types.js';
+
+export function recordTokenUsage(data: {
+  projectId: string;
+  taskId: string;
+  agentId: string;
+  model: string;
+  provider: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}): TokenUsage {
+  const db = getDb();
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO token_usage (id, project_id, task_id, agent_id, model, provider, input_tokens, output_tokens, total_tokens, cost_usd, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, data.projectId, data.taskId, data.agentId, data.model, data.provider, data.inputTokens, data.outputTokens, data.totalTokens, data.costUsd, now);
+
+  return {
+    id,
+    projectId: data.projectId,
+    taskId: data.taskId,
+    agentId: data.agentId,
+    model: data.model,
+    provider: data.provider,
+    inputTokens: data.inputTokens,
+    outputTokens: data.outputTokens,
+    totalTokens: data.totalTokens,
+    costUsd: data.costUsd,
+    createdAt: now,
+  };
+}
+
+export function getProjectCostSummary(projectId: string): ProjectCostSummary {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT
+      COALESCE(SUM(cost_usd), 0) AS total_cost_usd,
+      COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
+      COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+      COALESCE(SUM(total_tokens), 0) AS total_tokens,
+      COUNT(*) AS task_count
+    FROM token_usage
+    WHERE project_id = ?
+  `).get(projectId) as any;
+
+  return {
+    totalCostUsd: row.total_cost_usd,
+    totalInputTokens: row.total_input_tokens,
+    totalOutputTokens: row.total_output_tokens,
+    totalTokens: row.total_tokens,
+    taskCount: row.task_count,
+  };
+}
+
+export function getProjectCostBreakdown(projectId: string): CostBreakdownEntry[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT
+      tu.agent_id,
+      pa.name AS agent_name,
+      tu.model,
+      COUNT(*) AS task_count,
+      SUM(tu.input_tokens) AS input_tokens,
+      SUM(tu.output_tokens) AS output_tokens,
+      SUM(tu.total_tokens) AS total_tokens,
+      SUM(tu.cost_usd) AS cost_usd
+    FROM token_usage tu
+    LEFT JOIN project_agents pa ON pa.id = tu.agent_id
+    WHERE tu.project_id = ?
+    GROUP BY tu.agent_id, tu.model
+    ORDER BY cost_usd DESC
+  `).all(projectId) as any[];
+
+  return rows.map((r: any) => ({
+    agentId: r.agent_id,
+    agentName: r.agent_name ?? undefined,
+    model: r.model,
+    taskCount: r.task_count,
+    inputTokens: r.input_tokens,
+    outputTokens: r.output_tokens,
+    totalTokens: r.total_tokens,
+    costUsd: r.cost_usd,
+  }));
+}
+
+export function listTokenUsage(projectId: string): TokenUsage[] {
+  const db = getDb();
+  const rows = db.prepare('SELECT * FROM token_usage WHERE project_id = ? ORDER BY created_at DESC').all(projectId) as any[];
+  return rows.map((r: any) => ({
+    id: r.id,
+    projectId: r.project_id,
+    taskId: r.task_id,
+    agentId: r.agent_id,
+    model: r.model,
+    provider: r.provider,
+    inputTokens: r.input_tokens,
+    outputTokens: r.output_tokens,
+    totalTokens: r.total_tokens,
+    costUsd: r.cost_usd,
+    createdAt: r.created_at,
   }));
 }

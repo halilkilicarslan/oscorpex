@@ -10,6 +10,8 @@ vi.mock('../lib/studio-api', () => ({
   fetchProjectAnalytics: vi.fn(),
   fetchAgentAnalytics: vi.fn(),
   fetchActivityTimeline: vi.fn(),
+  fetchProjectCosts: vi.fn().mockResolvedValue({ totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0, taskCount: 0 }),
+  fetchCostBreakdown: vi.fn().mockResolvedValue([]),
 }));
 
 // Ornek ozet veri
