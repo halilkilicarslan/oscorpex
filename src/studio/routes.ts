@@ -731,6 +731,83 @@ studio.get('/team-templates', (c) => {
   return c.json(listTeamTemplates());
 });
 
+// ---- Project Templates (scaffold) ----------------------------------------
+
+import { listProjectTemplates, getProjectTemplate, scaffoldFromTemplate } from './project-templates.js';
+
+studio.get('/project-templates', (c) => {
+  return c.json(listProjectTemplates());
+});
+
+studio.get('/project-templates/:id', (c) => {
+  const template = getProjectTemplate(c.req.param('id'));
+  if (!template) return c.json({ error: 'Template not found' }, 404);
+  // Return without file contents for listing
+  const { files: _f, ...rest } = template;
+  return c.json({ ...rest, fileCount: Object.keys(template.files).length });
+});
+
+// POST /projects/from-template — create project + scaffold files
+studio.post('/projects/from-template', async (c) => {
+  const body = (await c.req.json()) as {
+    name: string;
+    templateId: string;
+    description?: string;
+  };
+
+  const template = getProjectTemplate(body.templateId);
+  if (!template) return c.json({ error: 'Template not found' }, 400);
+
+  // Create project with template's tech stack
+  const project = createProject({
+    name: body.name,
+    description: body.description ?? template.description,
+    techStack: template.techStack,
+    repoPath: '',
+  });
+
+  // Copy team agents from matching team template
+  const templates = listTeamTemplates();
+  const teamTpl = templates.find((t) => t.name === template.teamTemplate) ?? templates[0];
+  if (teamTpl) {
+    const copiedAgents = copyAgentsToProject(project.id, teamTpl.roles);
+    for (const agent of copiedAgents) {
+      createAgentFiles(project.id, agent.name, {
+        skills: agent.skills,
+        systemPrompt: agent.systemPrompt,
+        personality: agent.personality,
+        role: agent.role,
+        model: agent.model,
+      }).catch((err) => console.error('Failed to create agent files:', err));
+    }
+  }
+
+  // Init git repo + scaffold template files
+  try {
+    const repoPath = join(resolve('.voltagent/repos'), project.id);
+    await mkdir(repoPath, { recursive: true });
+    await gitManager.initRepo(repoPath);
+
+    const { filesCreated } = await scaffoldFromTemplate(repoPath, body.templateId);
+
+    await gitManager.initDocs(repoPath);
+    await initLintConfig(repoPath);
+
+    // Initial commit with scaffolded files
+    if (filesCreated.length > 0) {
+      try {
+        await gitManager.commitFiles(repoPath, filesCreated, `chore: scaffold from ${template.name} template`);
+      } catch { /* commit might fail if no changes */ }
+    }
+
+    updateProject(project.id, { repoPath });
+    return c.json({ ...project, repoPath, filesCreated }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Scaffold failed';
+    return c.json({ ...project, error: msg }, 201);
+  }
+});
+
 // ---- Project Team (project_agents) ----------------------------------------
 
 // Projenin takım üyelerini listele
