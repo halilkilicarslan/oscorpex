@@ -14,6 +14,7 @@ import {
   Activity,
   DollarSign,
   FileText,
+  Shield,
 } from 'lucide-react';
 import {
   fetchProjectAnalytics,
@@ -22,12 +23,16 @@ import {
   fetchProjectCosts,
   fetchCostBreakdown,
   fetchDocsFreshness,
+  fetchSonarStatus,
+  fetchLatestSonarScan,
+  triggerSonarScan,
   type ProjectAnalytics,
   type AgentAnalytics,
   type ActivityTimeline,
   type ProjectCostSummary,
   type CostBreakdownEntry,
   type DocFreshnessItem,
+  type SonarLatestScan,
 } from '../../lib/studio-api';
 
 // ---------------------------------------------------------------------------
@@ -293,6 +298,9 @@ export default function AgentDashboard({ projectId }: Props) {
   const [costs, setCosts] = useState<ProjectCostSummary | null>(null);
   const [costBreakdown, setCostBreakdown] = useState<CostBreakdownEntry[]>([]);
   const [docsFreshness, setDocsFreshness] = useState<DocFreshnessItem[]>([]);
+  const [sonarEnabled, setSonarEnabled] = useState(false);
+  const [sonarScan, setSonarScan] = useState<SonarLatestScan | null>(null);
+  const [sonarScanning, setSonarScanning] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -302,13 +310,15 @@ export default function AgentDashboard({ projectId }: Props) {
     else setRefreshing(true);
     setError(null);
     try {
-      const [ov, ag, tl, cs, cb, df] = await Promise.all([
+      const [ov, ag, tl, cs, cb, df, ss, sl] = await Promise.all([
         fetchProjectAnalytics(projectId),
         fetchAgentAnalytics(projectId),
         fetchActivityTimeline(projectId, 7),
         fetchProjectCosts(projectId),
         fetchCostBreakdown(projectId),
         fetchDocsFreshness(projectId).catch(() => [] as DocFreshnessItem[]),
+        fetchSonarStatus(projectId).catch(() => ({ enabled: false })),
+        fetchLatestSonarScan(projectId).catch(() => null as SonarLatestScan | null),
       ]);
       setOverview(ov);
       setAgents(ag);
@@ -316,6 +326,8 @@ export default function AgentDashboard({ projectId }: Props) {
       setCosts(cs);
       setCostBreakdown(cb);
       setDocsFreshness(df);
+      setSonarEnabled(ss.enabled);
+      setSonarScan(sl);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Veri yuklenemedi');
     } finally {
@@ -573,6 +585,77 @@ export default function AgentDashboard({ projectId }: Props) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* SonarQube quality gate */}
+      {sonarEnabled && (
+        <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
+            <Shield size={14} className="text-[#a78bfa]" />
+            <h3 className="text-[12px] font-semibold text-[#fafafa]">SonarQube</h3>
+            <span className="ml-auto flex items-center gap-2">
+              {sonarScan?.qualityGate && (
+                <span
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                    sonarScan.qualityGate === 'OK'
+                      ? 'bg-[#052e16] text-[#22c55e]'
+                      : sonarScan.qualityGate === 'ERROR'
+                        ? 'bg-[#450a0a] text-[#ef4444]'
+                        : sonarScan.qualityGate === 'WARN'
+                          ? 'bg-[#422006] text-[#eab308]'
+                          : 'bg-[#1a1a1a] text-[#525252]'
+                  }`}
+                >
+                  {sonarScan.qualityGate}
+                </span>
+              )}
+              <button
+                onClick={async () => {
+                  setSonarScanning(true);
+                  try {
+                    const result = await triggerSonarScan(projectId);
+                    if (result.qualityGate) {
+                      setSonarScan({ qualityGate: result.qualityGate.status, conditions: result.qualityGate.conditions });
+                    }
+                  } catch { /* ignore */ }
+                  setSonarScanning(false);
+                }}
+                disabled={sonarScanning}
+                className="text-[10px] text-[#525252] hover:text-[#a3a3a3] transition-colors disabled:opacity-50"
+              >
+                {sonarScanning ? 'Taranıyor...' : 'Tara'}
+              </button>
+            </span>
+          </div>
+          {sonarScan?.conditions && sonarScan.conditions.length > 0 && (
+            <div className="p-3 space-y-1">
+              {sonarScan.conditions.map((cond, i) => (
+                <div key={i} className="flex items-center justify-between text-[11px]">
+                  <span className="text-[#a3a3a3]">{cond.metricKey}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-[#525252] font-mono">{cond.actualValue ?? '-'}</span>
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        cond.status === 'OK'
+                          ? 'bg-[#22c55e]'
+                          : cond.status === 'ERROR'
+                            ? 'bg-[#ef4444]'
+                            : 'bg-[#eab308]'
+                      }`}
+                    />
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {(!sonarScan?.conditions || sonarScan.conditions.length === 0) && (
+            <div className="flex items-center justify-center py-6 text-[11px] text-[#525252]">
+              {sonarScan?.createdAt
+                ? `Son tarama: ${new Date(sonarScan.createdAt).toLocaleString('tr-TR')}`
+                : 'Henuz tarama yapilmadi'}
+            </div>
+          )}
         </div>
       )}
 

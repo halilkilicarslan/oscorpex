@@ -11,6 +11,14 @@ import { join, resolve } from 'node:path';
 import { initLintConfig } from './lint-runner.js';
 import { checkDocsFreshness } from './docs-generator.js';
 import {
+  isSonarEnabled,
+  runSonarScan,
+  fetchQualityGate,
+  initSonarConfig,
+  recordSonarScan,
+  getLatestSonarScan,
+} from './sonar-runner.js';
+import {
   createProject,
   getProject,
   listProjects,
@@ -156,6 +164,9 @@ studio.post('/projects', async (c) => {
     await gitManager.initRepo(repoPath);
     await gitManager.initDocs(repoPath);
     await initLintConfig(repoPath);
+    if (isSonarEnabled()) {
+      await initSonarConfig(repoPath, `studio-${project.id}`, project.name);
+    }
     updateProject(project.id, { repoPath });
     return c.json({ ...project, repoPath }, 201);
   } catch {
@@ -1772,6 +1783,48 @@ studio.get('/projects/:id/docs/freshness', async (c) => {
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
   const results = await checkDocsFreshness(project.repoPath);
   return c.json(results);
+});
+
+// ---------------------------------------------------------------------------
+// SonarQube — scan / status / quality gate
+// ---------------------------------------------------------------------------
+
+studio.get('/projects/:id/sonar/status', (c) => {
+  return c.json({ enabled: isSonarEnabled() });
+});
+
+studio.post('/projects/:id/sonar/scan', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+
+  if (!isSonarEnabled()) {
+    return c.json({ error: 'SonarQube is not enabled. Set SONAR_ENABLED=true' }, 400);
+  }
+
+  // Ensure sonar config exists
+  await initSonarConfig(project.repoPath, `studio-${projectId}`, project.name);
+
+  const scanResult = await runSonarScan(project.repoPath);
+  if (!scanResult.success) {
+    return c.json({ error: scanResult.error || 'Scan failed', output: scanResult.output }, 500);
+  }
+
+  // Fetch quality gate after scan
+  const gate = await fetchQualityGate(`studio-${projectId}`);
+  const scanId = recordSonarScan(projectId, gate, scanResult.output);
+
+  return c.json({ scanId, qualityGate: gate });
+});
+
+studio.get('/projects/:id/sonar/latest', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const scan = getLatestSonarScan(projectId);
+  return c.json(scan ?? { status: 'NONE', conditions: [] });
 });
 
 // ---------------------------------------------------------------------------

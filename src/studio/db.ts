@@ -292,6 +292,18 @@ function migrate(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_token_usage_project ON token_usage(project_id);
     CREATE INDEX IF NOT EXISTS idx_token_usage_task    ON token_usage(task_id);
+
+    CREATE TABLE IF NOT EXISTS sonar_scans (
+      id              TEXT PRIMARY KEY,
+      project_id      TEXT NOT NULL,
+      quality_gate    TEXT NOT NULL DEFAULT 'NONE',
+      conditions      TEXT NOT NULL DEFAULT '[]',
+      scan_output     TEXT NOT NULL DEFAULT '',
+      created_at      TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sonar_scans_project ON sonar_scans(project_id);
   `);
 }
 
