@@ -20,6 +20,7 @@ import {
   pausePipeline,
   resumePipeline,
   advancePipeline,
+  retryTask,
   type PipelineState,
   type PipelineStage,
   type ProjectAgent,
@@ -285,42 +286,59 @@ function StageDetailPanel({ stage }: { stage: PipelineStage }) {
                 {agentTasks.length > 0 ? (
                   <div className="ml-10 flex flex-col gap-1.5">
                     {agentTasks.map((task, idx) => (
-                      <div
-                        key={task.id}
-                        className="flex items-start gap-2 text-[11px] text-[#a3a3a3]"
-                      >
-                        {/* Ağaç dalı sembolü */}
-                        <span className="text-[#333] shrink-0 mt-0.5 font-mono">
-                          {idx === agentTasks.length - 1 ? '└──' : '├──'}
-                        </span>
-                        <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                          <div className="mt-0.5 shrink-0">{TASK_STATUS_ICONS[task.status]}</div>
-                          <span className="truncate flex-1">{task.title}</span>
-                          {/* Karmaşıklık rozeti */}
-                          <span
-                            className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${
-                              COMPLEXITY_COLORS[task.complexity] ?? ''
-                            }`}
-                          >
-                            {task.complexity}
+                      <div key={task.id} className="flex flex-col">
+                        <div className="flex items-start gap-2 text-[11px] text-[#a3a3a3]">
+                          {/* Ağaç dalı sembolü */}
+                          <span className="text-[#333] shrink-0 mt-0.5 font-mono">
+                            {idx === agentTasks.length - 1 ? '└──' : '├──'}
                           </span>
-                          {/* Durum rozeti */}
-                          <span
-                            className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 font-medium ${
-                              task.status === 'done'
-                                ? 'bg-[#22c55e]/10 text-[#22c55e]'
-                                : task.status === 'running'
-                                ? 'bg-[#f59e0b]/10 text-[#f59e0b]'
-                                : task.status === 'failed'
-                                ? 'bg-[#ef4444]/10 text-[#ef4444]'
-                                : task.status === 'review'
-                                ? 'bg-[#a855f7]/10 text-[#a855f7]'
-                                : 'bg-[#262626] text-[#525252]'
-                            }`}
-                          >
-                            {task.status}
-                          </span>
+                          <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                            <div className="mt-0.5 shrink-0">{TASK_STATUS_ICONS[task.status]}</div>
+                            <span className="truncate flex-1">{task.title}</span>
+                            {/* Failed ise retry butonu */}
+                            {task.status === 'failed' && (
+                              <button
+                                onClick={() => handleRetryTask(task.id)}
+                                disabled={retryingTaskId === task.id}
+                                className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors shrink-0 disabled:opacity-50"
+                                title="Görevi yeniden dene"
+                              >
+                                <RotateCcw size={9} className={retryingTaskId === task.id ? 'animate-spin' : ''} />
+                                Retry
+                              </button>
+                            )}
+                            {/* Karmaşıklık rozeti */}
+                            <span
+                              className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${
+                                COMPLEXITY_COLORS[task.complexity] ?? ''
+                              }`}
+                            >
+                              {task.complexity}
+                            </span>
+                            {/* Durum rozeti */}
+                            <span
+                              className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 font-medium ${
+                                task.status === 'done'
+                                  ? 'bg-[#22c55e]/10 text-[#22c55e]'
+                                  : task.status === 'running'
+                                  ? 'bg-[#f59e0b]/10 text-[#f59e0b]'
+                                  : task.status === 'failed'
+                                  ? 'bg-[#ef4444]/10 text-[#ef4444]'
+                                  : task.status === 'review'
+                                  ? 'bg-[#a855f7]/10 text-[#a855f7]'
+                                  : 'bg-[#262626] text-[#525252]'
+                              }`}
+                            >
+                              {task.status}
+                            </span>
+                          </div>
                         </div>
+                        {/* Failed task hata mesajı */}
+                        {task.status === 'failed' && task.error && (
+                          <div className="ml-14 mt-1 text-[10px] text-[#ef4444] bg-[#ef4444]/5 border border-[#ef4444]/20 rounded px-2 py-1 max-w-md truncate" title={task.error}>
+                            {task.error}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -329,24 +347,39 @@ function StageDetailPanel({ stage }: { stage: PipelineStage }) {
                   stage.tasks.length > 0 && stage.agents.length === 1 ? (
                     <div className="ml-10 flex flex-col gap-1.5">
                       {stage.tasks.map((task, idx) => (
-                        <div
-                          key={task.id}
-                          className="flex items-start gap-2 text-[11px] text-[#a3a3a3]"
-                        >
-                          <span className="text-[#333] shrink-0 mt-0.5 font-mono">
-                            {idx === stage.tasks.length - 1 ? '└──' : '├──'}
-                          </span>
-                          <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                            <div className="mt-0.5 shrink-0">{TASK_STATUS_ICONS[task.status]}</div>
-                            <span className="truncate flex-1">{task.title}</span>
-                            <span
-                              className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${
-                                COMPLEXITY_COLORS[task.complexity] ?? ''
-                              }`}
-                            >
-                              {task.complexity}
+                        <div key={task.id} className="flex flex-col">
+                          <div className="flex items-start gap-2 text-[11px] text-[#a3a3a3]">
+                            <span className="text-[#333] shrink-0 mt-0.5 font-mono">
+                              {idx === stage.tasks.length - 1 ? '└──' : '├──'}
                             </span>
+                            <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                              <div className="mt-0.5 shrink-0">{TASK_STATUS_ICONS[task.status]}</div>
+                              <span className="truncate flex-1">{task.title}</span>
+                              {task.status === 'failed' && (
+                                <button
+                                  onClick={() => handleRetryTask(task.id)}
+                                  disabled={retryingTaskId === task.id}
+                                  className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors shrink-0 disabled:opacity-50"
+                                  title="Görevi yeniden dene"
+                                >
+                                  <RotateCcw size={9} className={retryingTaskId === task.id ? 'animate-spin' : ''} />
+                                  Retry
+                                </button>
+                              )}
+                              <span
+                                className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${
+                                  COMPLEXITY_COLORS[task.complexity] ?? ''
+                                }`}
+                              >
+                                {task.complexity}
+                              </span>
+                            </div>
                           </div>
+                          {task.status === 'failed' && task.error && (
+                            <div className="ml-14 mt-1 text-[10px] text-[#ef4444] bg-[#ef4444]/5 border border-[#ef4444]/20 rounded px-2 py-1 max-w-md truncate" title={task.error}>
+                              {task.error}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -376,6 +409,21 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
   const [error, setError] = useState<string | null>(null);
   // Seçili aşama indeksi (detay paneli için)
   const [selectedStageIdx, setSelectedStageIdx] = useState<number | null>(null);
+  // Retry edilmekte olan task ID'si
+  const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
+
+  // Başarısız görevi yeniden dene
+  const handleRetryTask = async (taskId: string) => {
+    setRetryingTaskId(taskId);
+    try {
+      await retryTask(projectId, taskId);
+      await fetchStatus();
+    } catch {
+      // sessizce geç — fetchStatus zaten güncel durumu yansıtır
+    } finally {
+      setRetryingTaskId(null);
+    }
+  };
 
   // Pipeline durumunu sunucudan getir
   const fetchStatus = useCallback(async () => {
