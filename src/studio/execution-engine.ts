@@ -15,6 +15,9 @@ import {
   getAgentConfig,
   getLatestPlan,
   listPhases,
+  updateTask,
+  updatePhaseStatus,
+  listProjects,
 } from './db.js';
 import { createAgentTools } from './agent-tools.js';
 import { agentRuntime } from './agent-runtime.js';
@@ -94,6 +97,52 @@ class ExecutionEngine {
   }
 
   // -------------------------------------------------------------------------
+  // Startup recovery — restart sonrası "running" kalan task'ları kurtarır
+  // -------------------------------------------------------------------------
+
+  /**
+   * Backend restart sonrası çalışır. Tüm projelerdeki "running" durumundaki
+   * task'ları "queued" durumuna geri alır ve ilgili projelerin execution'ını
+   * yeniden başlatır. Bu sayede yarıda kalmış görevler yeniden çalıştırılır.
+   */
+  async recoverStuckTasks(): Promise<void> {
+    const projects = listProjects();
+    for (const project of projects) {
+      if (project.status !== 'running') continue;
+
+      const plan = getLatestPlan(project.id);
+      if (!plan || plan.status !== 'approved') continue;
+
+      const phases = listPhases(plan.id);
+      let hasRecovered = false;
+
+      for (const phase of phases) {
+        if (phase.status !== 'running' && phase.status !== 'failed') continue;
+        let phaseRecovered = false;
+        for (const task of phase.tasks ?? []) {
+          if (task.status === 'running' || task.status === 'assigned') {
+            updateTask(task.id, { status: 'queued', startedAt: undefined });
+            console.log(`[execution-engine] Recovery: "${task.title}" → queued (was ${task.status})`);
+            phaseRecovered = true;
+          }
+        }
+        if (phaseRecovered && phase.status === 'failed') {
+          updatePhaseStatus(phase.id, 'running');
+          console.log(`[execution-engine] Recovery: phase "${phase.name}" → running (was failed)`);
+        }
+        hasRecovered = hasRecovered || phaseRecovered;
+      }
+
+      if (hasRecovered) {
+        console.log(`[execution-engine] Recovering project "${project.name}" — restarting execution`);
+        this.startProjectExecution(project.id).catch((err) => {
+          console.error(`[execution-engine] Recovery failed for "${project.name}":`, err);
+        });
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Main entry point — called after plan approval
   // -------------------------------------------------------------------------
 
@@ -136,10 +185,10 @@ class ExecutionEngine {
       payload: { readyTaskCount: readyTasks.length },
     });
 
-    // Dispatch all ready tasks in parallel
-    await Promise.allSettled(
-      readyTasks.map((task) => this.executeTask(projectId, task)),
-    );
+    // Dispatch tasks sequentially to avoid AI provider rate limits
+    for (const task of readyTasks) {
+      await this.executeTask(projectId, task);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -230,6 +279,7 @@ class ExecutionEngine {
     } catch (err) {
       const isTimeout = err instanceof TaskTimeoutError;
       const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[execution-engine] Task failed: "${task.title}" — ${errorMsg}`);
 
       if (isTimeout) {
         // Emit a dedicated timeout event before the generic error event
@@ -260,7 +310,19 @@ class ExecutionEngine {
     }
 
     // After this task is settled (done or failed), check if new tasks are ready
+    // First check the current phase, then check if a new phase was started
     await this.dispatchReadyTasks(projectId, task.phaseId);
+
+    // If the phase was completed and a new phase started, dispatch its tasks too
+    const plan = getLatestPlan(projectId);
+    if (plan) {
+      const phases = listPhases(plan.id);
+      for (const phase of phases) {
+        if (phase.status === 'running' && phase.id !== task.phaseId) {
+          await this.dispatchReadyTasks(projectId, phase.id);
+        }
+      }
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -370,6 +432,7 @@ class ExecutionEngine {
       prompt,
       tools,
       abortSignal: signal,
+      maxRetries: 8,
     });
 
     // Additionally race against the signal in case the SDK does not propagate it
@@ -476,9 +539,10 @@ class ExecutionEngine {
     const ready = taskEngine.getReadyTasks(phaseId);
     if (ready.length === 0) return;
 
-    await Promise.allSettled(
-      ready.map((task) => this.executeTask(projectId, task)),
-    );
+    // Execute tasks sequentially to avoid rate-limit issues with AI providers
+    for (const task of ready) {
+      await this.executeTask(projectId, task);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -610,3 +674,8 @@ Complete the task described in the user message. Be precise and produce working 
 }
 
 export const executionEngine = new ExecutionEngine();
+
+// Uygulama başlangıcında yarıda kalmış görevleri kurtart
+executionEngine.recoverStuckTasks().catch((err) => {
+  console.error('[execution-engine] Startup recovery failed:', err);
+});

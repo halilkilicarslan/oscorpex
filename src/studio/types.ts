@@ -81,6 +81,7 @@ export interface Task {
   branch: string;
   output?: TaskOutput;
   retryCount: number;
+  error?: string;
   startedAt?: string;
   completedAt?: string;
 }
