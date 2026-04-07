@@ -157,7 +157,7 @@ export default function ProjectPage() {
       </div>
 
       {/* Sekme içerikleri */}
-      <div className="flex-1 overflow-auto flex flex-col">
+      <div className="flex-1 overflow-y-auto flex flex-col min-h-0" style={{ maxHeight: 'calc(100vh - 140px)' }}>
         {activeTab === 'chat' && <PMChat projectId={projectId!} />}
         {activeTab === 'team' && <AgentGrid projectId={projectId!} />}
         {activeTab === 'board' && (

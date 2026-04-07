@@ -352,7 +352,7 @@ export default function AgentDashboard({ projectId }: Props) {
   const activeAgents = agents.filter((a) => a.isRunning).length;
 
   return (
-    <div className="flex flex-col gap-5 p-5 overflow-auto">
+    <div className="flex flex-col gap-5 p-5">
       {/* Baslik ve yenile butonu */}
       <div className="flex items-center justify-between">
         <div>
