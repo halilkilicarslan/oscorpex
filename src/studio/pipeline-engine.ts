@@ -475,7 +475,21 @@ class PipelineEngine {
     derivedStatus: PipelineStatus;
     warning?: string;
   } {
-    const pipelineState = this.getPipelineState(projectId);
+    let pipelineState = this.getPipelineState(projectId);
+
+    // Pipeline running durumdaysa, status sorgusu sırasında stage ilerlemesini kontrol et.
+    // Görevler pipeline dışında tamamlanmışsa (ör. pipeline başlamadan önce done olan task'lar)
+    // advanceStage burada yakalanır ve stage durumu güncellenir.
+    if (pipelineState?.status === 'running') {
+      try {
+        this.advanceStage(projectId);
+        // advanceStage state'i değiştirmiş olabilir — güncel halini al
+        pipelineState = this.getPipelineState(projectId);
+      } catch {
+        // status sorgusu sırasında hata olursa sessizce devam et
+      }
+    }
+
     const taskProgress = taskEngine.getProgress(projectId);
 
     const overall = taskProgress.overall;
