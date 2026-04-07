@@ -1081,6 +1081,28 @@ export async function fetchAppStatus(projectId: string): Promise<AppStatus> {
   return json(await fetch(`${BASE}/projects/${projectId}/app/status`));
 }
 
+// ---- Project Settings ------------------------------------------------------
+
+export type SettingsMap = Record<string, Record<string, string>>;
+
+export async function fetchProjectSettings(projectId: string): Promise<SettingsMap> {
+  return json(await fetch(`${BASE}/projects/${projectId}/settings`));
+}
+
+export async function saveProjectSettings(
+  projectId: string,
+  category: string,
+  entries: Record<string, string>,
+): Promise<{ ok: boolean }> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/settings/${category}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entries),
+    }),
+  );
+}
+
 // ---- Docs Freshness -------------------------------------------------------
 
 export interface DocFreshnessItem {

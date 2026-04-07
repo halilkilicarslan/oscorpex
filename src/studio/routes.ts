@@ -64,6 +64,8 @@ import {
   getProjectCostSummary,
   getProjectCostBreakdown,
   listTokenUsage,
+  getProjectSettingsMap,
+  setProjectSettings,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { PM_SYSTEM_PROMPT, pmToolkit } from './pm-agent.js';
@@ -1773,6 +1775,28 @@ studio.get('/projects/:id/costs/history', (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Project Settings — CRUD
+// ---------------------------------------------------------------------------
+
+studio.get('/projects/:id/settings', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  return c.json(getProjectSettingsMap(projectId));
+});
+
+studio.put('/projects/:id/settings/:category', async (c) => {
+  const projectId = c.req.param('id');
+  const category = c.req.param('category');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const body = await c.req.json<Record<string, string>>();
+  setProjectSettings(projectId, category, body);
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // Docs Freshness Check
 // ---------------------------------------------------------------------------
 
@@ -1790,7 +1814,8 @@ studio.get('/projects/:id/docs/freshness', async (c) => {
 // ---------------------------------------------------------------------------
 
 studio.get('/projects/:id/sonar/status', (c) => {
-  return c.json({ enabled: isSonarEnabled() });
+  const projectId = c.req.param('id');
+  return c.json({ enabled: isSonarEnabled(projectId) });
 });
 
 studio.post('/projects/:id/sonar/scan', async (c) => {
@@ -1799,20 +1824,20 @@ studio.post('/projects/:id/sonar/scan', async (c) => {
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
-  if (!isSonarEnabled()) {
-    return c.json({ error: 'SonarQube is not enabled. Set SONAR_ENABLED=true' }, 400);
+  if (!isSonarEnabled(projectId)) {
+    return c.json({ error: 'SonarQube is not enabled. Set SONAR_ENABLED=true or enable in project settings.' }, 400);
   }
 
   // Ensure sonar config exists
   await initSonarConfig(project.repoPath, `studio-${projectId}`, project.name);
 
-  const scanResult = await runSonarScan(project.repoPath);
+  const scanResult = await runSonarScan(project.repoPath, undefined, projectId);
   if (!scanResult.success) {
     return c.json({ error: scanResult.error || 'Scan failed', output: scanResult.output }, 500);
   }
 
   // Fetch quality gate after scan
-  const gate = await fetchQualityGate(`studio-${projectId}`);
+  const gate = await fetchQualityGate(`studio-${projectId}`, projectId);
   const scanId = recordSonarScan(projectId, gate, scanResult.output);
 
   return c.json({ scanId, qualityGate: gate });
