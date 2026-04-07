@@ -511,8 +511,9 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
   }
 
   // Seçili aşama nesnesi
+  const stages = pipelineState.stages ?? [];
   const selectedStage =
-    selectedStageIdx !== null ? pipelineState.stages[selectedStageIdx] ?? null : null;
+    selectedStageIdx !== null ? stages[selectedStageIdx] ?? null : null;
 
   const statusColor = PIPELINE_STATUS_COLORS[pipelineState.status] ?? '#525252';
   const statusLabel = PIPELINE_STATUS_LABELS[pipelineState.status] ?? pipelineState.status;
@@ -610,7 +611,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
 
         {/* ---- Yatay pipeline akışı ---------------------------------------- */}
         <div className="flex items-center gap-0 overflow-x-auto pb-2">
-          {pipelineState.stages.map((stage, idx) => (
+          {stages.map((stage, idx) => (
             <div key={stage.order} className="flex items-center shrink-0">
               {/* Aşama kartı */}
               <StageCard
@@ -621,7 +622,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
               />
 
               {/* Aşamalar arası ok — son aşamada yok */}
-              {idx < pipelineState.stages.length - 1 && (
+              {idx < stages.length - 1 && (
                 <div className="flex items-center px-1.5 shrink-0">
                   <ChevronRight
                     size={18}
@@ -637,7 +638,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
           ))}
 
           {/* Aşama yoksa bilgi mesajı */}
-          {pipelineState.stages.length === 0 && (
+          {stages.length === 0 && (
             <p className="text-[12px] text-[#525252] italic">
               Aşama bilgisi henüz yüklenmedi.
             </p>
