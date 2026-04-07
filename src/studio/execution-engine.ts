@@ -13,6 +13,8 @@ import {
   getProject,
   listAgentConfigs,
   getAgentConfig,
+  getLatestPlan,
+  listPhases,
 } from './db.js';
 import { createAgentTools } from './agent-tools.js';
 import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
@@ -22,6 +24,27 @@ import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
 // ---------------------------------------------------------------------------
 
 class ExecutionEngine {
+  constructor() {
+    // Register completion callback: when a task completes and a new phase starts,
+    // dispatch the newly ready tasks automatically
+    taskEngine.onTaskCompleted((_taskId, projectId) => {
+      // After checkAndAdvancePhase runs, check all phases for ready tasks
+      const plan = getLatestPlan(projectId);
+      if (!plan) return;
+      const phases = listPhases(plan.id);
+      for (const phase of phases) {
+        if (phase.status === 'running') {
+          const ready = taskEngine.getReadyTasks(phase.id);
+          if (ready.length > 0) {
+            Promise.allSettled(
+              ready.map((task: any) => this.executeTask(projectId, task)),
+            ).catch(() => {});
+          }
+        }
+      }
+    });
+  }
+
   // -------------------------------------------------------------------------
   // Main entry point — called after plan approval
   // -------------------------------------------------------------------------
@@ -37,8 +60,27 @@ class ExecutionEngine {
     const project = getProject(projectId);
     if (!project) throw new Error(`Project ${projectId} not found`);
 
-    // beginExecution starts the first phase and returns the initial ready tasks
-    const readyTasks = taskEngine.beginExecution(projectId);
+    let readyTasks: Task[] = [];
+
+    // First check if there are already running phases with queued tasks
+    const plan = getLatestPlan(projectId);
+    if (plan) {
+      const phases = listPhases(plan.id);
+      for (const phase of phases) {
+        if (phase.status === 'running') {
+          readyTasks.push(...taskEngine.getReadyTasks(phase.id));
+        }
+      }
+    }
+
+    // If no running phases have ready tasks, start a new phase
+    if (readyTasks.length === 0) {
+      try {
+        readyTasks = taskEngine.beginExecution(projectId);
+      } catch {
+        // No pending phase or no approved plan — nothing to do
+      }
+    }
 
     eventBus.emit({
       projectId,
@@ -46,7 +88,7 @@ class ExecutionEngine {
       payload: { readyTaskCount: readyTasks.length },
     });
 
-    // Dispatch all initially ready tasks in parallel
+    // Dispatch all ready tasks in parallel
     await Promise.allSettled(
       readyTasks.map((task) => this.executeTask(projectId, task)),
     );
