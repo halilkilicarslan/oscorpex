@@ -13,5 +13,7 @@ export { executionEngine } from './execution-engine.js';
 export { pipelineEngine } from './pipeline-engine.js';
 export { gitManager } from './git-manager.js';
 export { studioRoutes } from './routes.js';
+export { wsManager } from './ws-manager.js';
+export { startWSServer } from './ws-server.js';
 export * from './agent-files.js';
 export * from './agent-messaging.js';

@@ -53,6 +53,7 @@ export interface Task {
     logs: string[];
   };
   retryCount: number;
+  error?: string;
   startedAt?: string;
   completedAt?: string;
 }
@@ -560,9 +561,115 @@ export async function getAgentRunHistory(
   return json(await fetch(url));
 }
 
+// ---------------------------------------------------------------------------
+// WebSocket tabanlı Agent Output Streaming
+// ---------------------------------------------------------------------------
+//
+// SSE'ye kıyasla avantajları:
+//   - Bidirectional: ilerleyen süreçte client'tan agent'a komut gönderilebilir
+//   - Tek bir kalıcı bağlantı üzerinden tüm projeler için multiplexing
+//   - Daha düşük overhead (HTTP başlıkları her mesajda tekrar edilmez)
+//
+// Kullanım:
+//   const stop = streamAgentOutputWS(projectId, agentId, (line, index) => {
+//     console.log(line);
+//   });
+//   // Durdur:
+//   stop();
+
+const STUDIO_WS_URL = `ws://localhost:${import.meta.env.VITE_STUDIO_WS_PORT ?? 3142}/api/studio/ws`;
+const WS_RECONNECT_BASE_MS = 1_000;
+const WS_RECONNECT_MAX_MS  = 15_000;
+
+export function streamAgentOutputWS(
+  projectId: string,
+  agentId: string,
+  onLine: (line: string, index: number) => void,
+  onError?: (err: Error) => void,
+): () => void {
+  let stopped = false;
+  let ws: WebSocket | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let attempt = 0;
+
+  function connect() {
+    if (stopped) return;
+
+    try {
+      ws = new WebSocket(STUDIO_WS_URL);
+    } catch (err) {
+      onError?.(err instanceof Error ? err : new Error(String(err)));
+      return;
+    }
+
+    ws.onopen = () => {
+      attempt = 0;
+      // Projeye abone ol
+      ws!.send(JSON.stringify({ type: 'subscribe', projectId }));
+    };
+
+    ws.onmessage = (e: MessageEvent<string>) => {
+      if (stopped) return;
+      let msg: { type: string; payload?: unknown };
+      try {
+        msg = JSON.parse(e.data);
+      } catch {
+        return;
+      }
+
+      if (msg.type !== 'event') return;
+
+      const event = msg.payload as {
+        type: string;
+        agentId?: string;
+        payload?: { line?: string; index?: number };
+      };
+
+      // Yalnızca bu agent'ın output event'lerini filtrele
+      if (
+        event.type === 'agent:output' &&
+        event.agentId === agentId &&
+        event.payload
+      ) {
+        const { line, index } = event.payload;
+        if (typeof line === 'string' && typeof index === 'number') {
+          onLine(line, index);
+        }
+      }
+    };
+
+    ws.onerror = () => {
+      if (stopped) return;
+      onError?.(new Error('WebSocket bağlantı hatası'));
+    };
+
+    ws.onclose = () => {
+      if (stopped) return;
+      ws = null;
+      // Exponential backoff ile yeniden bağlan
+      const delay = Math.min(WS_RECONNECT_BASE_MS * 2 ** attempt, WS_RECONNECT_MAX_MS);
+      attempt += 1;
+      reconnectTimer = setTimeout(connect, delay);
+    };
+  }
+
+  connect();
+
+  return () => {
+    stopped = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    if (ws) {
+      ws.close(1000, 'caller stopped');
+      ws = null;
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
 // SSE akışını fetch + ReadableStream ile bağla.
 // EventSource yerine fetch tercih edilir: daha iyi hata yönetimi ve iptal desteği sağlar.
 // Dönen fonksiyon çağrıldığında bağlantıyı iptal eder (abort).
+// NOT: Yeni kodda streamAgentOutputWS tercih edilmeli; bu fonksiyon geriye uyumluluk içindir.
 export function streamAgentOutput(
   projectId: string,
   agentId: string,

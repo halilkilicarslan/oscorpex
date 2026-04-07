@@ -8,7 +8,10 @@ import {
   Zap,
   GitBranch,
   WifiOff,
+  Radio,
 } from 'lucide-react';
+import { useStudioWebSocket } from '../../hooks/useStudioWebSocket';
+import type { WSConnectionState } from '../../hooks/useStudioWebSocket';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,8 +36,6 @@ interface StudioEvent {
   payload: Record<string, unknown>;
   timestamp: string;
 }
-
-type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
 // ---------------------------------------------------------------------------
 // Event visual config
@@ -147,6 +148,53 @@ function payloadSummary(payload: Record<string, unknown>): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// ConnectionBadge
+// ---------------------------------------------------------------------------
+
+function ConnectionBadge({
+  state,
+  transport,
+}: {
+  state: WSConnectionState;
+  transport: 'ws' | 'sse';
+}) {
+  if (state === 'connected') {
+    return (
+      <>
+        <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+        <span className="text-[10px] text-[#22c55e] font-medium">Live</span>
+        <span className="text-[10px] text-[#383838] ml-0.5">
+          ({transport.toUpperCase()})
+        </span>
+      </>
+    );
+  }
+  if (state === 'connecting') {
+    return (
+      <>
+        <Loader2 size={10} className="text-[#f59e0b] animate-spin" />
+        <span className="text-[10px] text-[#f59e0b] font-medium">Connecting</span>
+      </>
+    );
+  }
+  if (state === 'error') {
+    return (
+      <>
+        <Radio size={10} className="text-[#f97316]" />
+        <span className="text-[10px] text-[#f97316] font-medium">WS Error — SSE fallback</span>
+      </>
+    );
+  }
+  return (
+    <>
+      <WifiOff size={10} className="text-[#ef4444]" />
+      <span className="text-[10px] text-[#ef4444] font-medium">Disconnected</span>
+      <span className="text-[10px] text-[#525252]">— retrying…</span>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // EventRow
 // ---------------------------------------------------------------------------
 
@@ -192,29 +240,66 @@ function EventRow({ event, isNew }: { event: StudioEvent; isNew: boolean }) {
 // EventFeed
 // ---------------------------------------------------------------------------
 
-const RECONNECT_DELAY_MS = 3000;
 const MAX_EVENTS = 200;
 
 export default function EventFeed({ projectId }: { projectId: string }) {
   const [events, setEvents] = useState<StudioEvent[]>([]);
-  const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
   const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Hangi transport aktif: WebSocket mi SSE mi */
+  const [transport, setTransport] = useState<'ws' | 'sse'>('ws');
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const esRef = useRef<EventSource | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const transportRef = useRef<'ws' | 'sse'>('ws');
 
-  // Auto-scroll to bottom when new events arrive
+  // SSE fallback referansları
+  const esRef = useRef<EventSource | null>(null);
+  const sseReconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // -------------------------------------------------------------------------
+  // WebSocket bağlantısı
+  // -------------------------------------------------------------------------
+  const { connectionState, lastEvent } = useStudioWebSocket(projectId);
+
+  // WS bağlantısı kurulduğunda SSE'yi kapat
+  useEffect(() => {
+    if (connectionState === 'connected') {
+      transportRef.current = 'ws';
+      setTransport('ws');
+      closeSse();
+    } else if (connectionState === 'error') {
+      // WS çalışmıyor — SSE fallback'e geç
+      transportRef.current = 'sse';
+      setTransport('sse');
+      if (!esRef.current) connectSse();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionState]);
+
+  // -------------------------------------------------------------------------
+  // WebSocket'ten gelen event'leri işle
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (!lastEvent || !mountedRef.current) return;
+
+    // agent:output event'lerini EventFeed'e dahil etme
+    if (lastEvent.type === 'agent:output') return;
+
+    appendEvents([lastEvent as unknown as StudioEvent], true);
+  }, [lastEvent]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // -------------------------------------------------------------------------
+  // Yardımcılar
+  // -------------------------------------------------------------------------
+
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, []);
 
-  // Append events, de-duplicate by id, cap at MAX_EVENTS
   const appendEvents = useCallback((incoming: StudioEvent[], markNew = false) => {
     setEvents((prev) => {
       const existingIds = new Set(prev.map((e) => e.id));
@@ -227,7 +312,6 @@ export default function EventFeed({ projectId }: { projectId: string }) {
     if (markNew) {
       const ids = new Set(incoming.map((e) => e.id));
       setNewEventIds((prev) => new Set([...prev, ...ids]));
-      // Clear "new" marker after 1.5s
       setTimeout(() => {
         setNewEventIds((prev) => {
           const next = new Set(prev);
@@ -238,7 +322,9 @@ export default function EventFeed({ projectId }: { projectId: string }) {
     }
   }, []);
 
-  // Fetch recent events on mount
+  // -------------------------------------------------------------------------
+  // Geçmiş event'leri yükle (REST)
+  // -------------------------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
 
@@ -264,29 +350,33 @@ export default function EventFeed({ projectId }: { projectId: string }) {
     };
   }, [projectId, appendEvents]);
 
-  // SSE connection
-  const connect = useCallback(() => {
-    if (!mountedRef.current) return;
+  // -------------------------------------------------------------------------
+  // SSE Fallback
+  // -------------------------------------------------------------------------
 
-    setConnectionState('connecting');
+  const closeSse = useCallback(() => {
+    esRef.current?.close();
+    esRef.current = null;
+    if (sseReconnectRef.current) {
+      clearTimeout(sseReconnectRef.current);
+      sseReconnectRef.current = null;
+    }
+  }, []);
+
+  const connectSse = useCallback(() => {
+    if (!mountedRef.current) return;
 
     const es = new EventSource(`/api/studio/projects/${projectId}/events`);
     esRef.current = es;
-
-    es.onopen = () => {
-      if (!mountedRef.current) return;
-      setConnectionState('connected');
-    };
 
     es.onmessage = (e: MessageEvent<string>) => {
       if (!mountedRef.current) return;
       try {
         const event = JSON.parse(e.data) as StudioEvent;
         appendEvents([event], true);
-        // Defer scroll so DOM has updated
         requestAnimationFrame(scrollToBottom);
       } catch {
-        // Malformed event — ignore
+        // Geçersiz JSON — yoksay
       }
     };
 
@@ -294,36 +384,39 @@ export default function EventFeed({ projectId }: { projectId: string }) {
       if (!mountedRef.current) return;
       es.close();
       esRef.current = null;
-      setConnectionState('disconnected');
-
-      // Schedule reconnect
-      reconnectTimer.current = setTimeout(() => {
-        if (mountedRef.current) connect();
-      }, RECONNECT_DELAY_MS);
+      // SSE yeniden bağlanma (yalnızca SSE modundayken)
+      sseReconnectRef.current = setTimeout(() => {
+        if (mountedRef.current && transportRef.current === 'sse') connectSse();
+      }, 3000);
     };
   }, [projectId, appendEvents, scrollToBottom]);
 
-  // Mount / unmount SSE lifecycle
-  useEffect(() => {
-    mountedRef.current = true;
-    connect();
-
-    return () => {
-      mountedRef.current = false;
-      esRef.current?.close();
-      esRef.current = null;
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-    };
-  }, [connect]);
-
-  // Scroll to bottom after initial events load
+  // -------------------------------------------------------------------------
+  // Scroll
+  // -------------------------------------------------------------------------
   useEffect(() => {
     if (!loading) requestAnimationFrame(scrollToBottom);
   }, [loading, scrollToBottom]);
 
-  // ---------------------------------------------------------------------------
+  // Yeni event geldiğinde aşağı kaydır
+  useEffect(() => {
+    requestAnimationFrame(scrollToBottom);
+  }, [events.length, scrollToBottom]);
+
+  // -------------------------------------------------------------------------
+  // Unmount
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      closeSse();
+    };
+  }, [closeSse]);
+
+  // -------------------------------------------------------------------------
   // Render
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
 
   return (
     <div className="flex flex-col h-full bg-[#0a0a0a]">
@@ -338,25 +431,7 @@ export default function EventFeed({ projectId }: { projectId: string }) {
 
         {/* Connection badge */}
         <div className="flex items-center gap-1.5">
-          {connectionState === 'connected' && (
-            <>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
-              <span className="text-[10px] text-[#22c55e] font-medium">Live</span>
-            </>
-          )}
-          {connectionState === 'connecting' && (
-            <>
-              <Loader2 size={10} className="text-[#f59e0b] animate-spin" />
-              <span className="text-[10px] text-[#f59e0b] font-medium">Connecting</span>
-            </>
-          )}
-          {connectionState === 'disconnected' && (
-            <>
-              <WifiOff size={10} className="text-[#ef4444]" />
-              <span className="text-[10px] text-[#ef4444] font-medium">Disconnected</span>
-              <span className="text-[10px] text-[#525252]">— retrying in {RECONNECT_DELAY_MS / 1000}s</span>
-            </>
-          )}
+          <ConnectionBadge state={connectionState} transport={transport} />
         </div>
       </div>
 

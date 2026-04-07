@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Loader2, Kanban, Zap } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Loader2, Kanban, Zap, AlertCircle, X } from 'lucide-react';
 import {
   fetchTasks,
   retryTask,
@@ -57,23 +57,76 @@ function PipelineAutoStartBadge({ status }: { status: AutoStartStatus }) {
   );
 }
 
+// ---- Toast bildirimi --------------------------------------------------------
+
+interface ToastMessage {
+  id: number;
+  message: string;
+}
+
+let toastCounter = 0;
+
+function ErrorToast({
+  toasts,
+  onDismiss,
+}: {
+  toasts: ToastMessage[];
+  onDismiss: (id: number) => void;
+}) {
+  if (toasts.length === 0) return null;
+  return (
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className="flex items-start gap-2 bg-[#1a0a0a] border border-[#ef4444]/30 text-[#ef4444] text-[12px] px-3 py-2 rounded-lg shadow-lg pointer-events-auto max-w-[320px]"
+        >
+          <AlertCircle size={14} className="shrink-0 mt-0.5" />
+          <span className="flex-1 leading-snug">{t.message}</span>
+          <button
+            type="button"
+            onClick={() => onDismiss(t.id)}
+            className="text-[#ef4444]/60 hover:text-[#ef4444] transition-colors ml-1"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- KanbanBoard ------------------------------------------------------------
+
 export default function KanbanBoard({ projectId }: { projectId: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [autoStartStatus, setAutoStartStatus] = useState<AutoStartStatus | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const load = () => {
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const showErrorToast = useCallback((message: string) => {
+    const id = ++toastCounter;
+    setToasts((prev) => [...prev, { id, message }]);
+    // 5 saniye sonra otomatik kapat
+    setTimeout(() => dismissToast(id), 5000);
+  }, [dismissToast]);
+
+  const load = useCallback(() => {
     fetchTasks(projectId)
       .then(setTasks)
       .catch(() => {})
       .finally(() => setLoading(false));
-  };
+  }, [projectId]);
 
-  const loadAutoStartStatus = () => {
+  const loadAutoStartStatus = useCallback(() => {
     fetchAutoStartStatus(projectId)
       .then(setAutoStartStatus)
       .catch(() => {});
-  };
+  }, [projectId]);
 
   useEffect(() => {
     load();
@@ -85,14 +138,27 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [projectId]);
+  }, [projectId, load, loadAutoStartStatus]);
 
-  const handleRetry = async (taskId: string) => {
+  const handleRetry = async (taskId: string): Promise<void> => {
+    // Optimistik guncelleme: task'i queued'a tasıyalım
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, status: 'queued' as const } : t,
+      ),
+    );
     try {
       await retryTask(projectId, taskId);
+      // Basarili ise backend'den taze veri al
       load();
-    } catch {
-      // ignore
+    } catch (err) {
+      // Hata olursa optimistik guncellemeyi geri al
+      load();
+      const message =
+        err instanceof Error
+          ? `Retry basarisiz: ${err.message}`
+          : 'Retry sirasinda beklenmeyen bir hata olustu.';
+      showErrorToast(message);
     }
   };
 
@@ -130,6 +196,8 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
   );
 
   return (
+    <>
+    <ErrorToast toasts={toasts} onDismiss={dismissToast} />
     <div className="p-6 h-full overflow-x-auto flex flex-col">
       {/* Pipeline auto-start durum cubugu */}
       {autoStartStatus && <PipelineAutoStartBadge status={autoStartStatus} />}
@@ -158,6 +226,7 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
                     task={task}
                     onRetry={task.status === 'failed' ? () => handleRetry(task.id) : undefined}
                   />
+
                 ))}
               </div>
             </div>
@@ -165,5 +234,6 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
         })}
       </div>
     </div>
+    </>
   );
 }

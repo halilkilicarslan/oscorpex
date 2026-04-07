@@ -10,6 +10,7 @@ import { LibSQLMemoryAdapter, LibSQLObservabilityAdapter } from "@voltagent/libs
 import { createPinoLogger } from "@voltagent/logger";
 import { honoServer } from "@voltagent/server-hono";
 import { studioRoutes } from "./studio/index.js";
+import { startWSServer } from "./studio/ws-server.js";
 import { expenseApprovalWorkflow } from "./workflows";
 import {
   weatherTool,
@@ -77,6 +78,9 @@ Focus on accuracy and cite your sources. Present findings in a structured format
 const codeAssistant = createCodeAssistant();
 const translator = createTranslator();
 const summarizer = createSummarizer();
+
+// AI Dev Studio WebSocket sunucusunu başlat (port 3142)
+startWSServer();
 
 new VoltAgent({
   agents: {
