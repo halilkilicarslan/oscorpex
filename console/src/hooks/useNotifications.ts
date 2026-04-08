@@ -17,6 +17,8 @@ const NOTIFY_EVENTS = new Set([
   'task:failed',
   'task:timeout',
   'pipeline:completed',
+  // Human-in-the-Loop: Onay gerektiren task bildirimi
+  'task:approval_required',
 ]);
 
 function getNotificationContent(event: StudioEvent): { title: string; body: string; icon: string } | null {
@@ -47,6 +49,13 @@ function getNotificationContent(event: StudioEvent): { title: string; body: stri
       return {
         title: 'Pipeline Tamamlandi',
         body: (p.message as string) || 'Tum asamalar bitti',
+        icon: '/favicon.ico',
+      };
+    // Human-in-the-Loop: Onay bekleyen task bildirimi
+    case 'task:approval_required':
+      return {
+        title: 'Onay Gerekiyor',
+        body: `${agentName ? agentName + ': ' : ''}${taskTitle} — Bu task icin onayiniz bekleniyor.`,
         icon: '/favicon.ico',
       };
     default:
@@ -83,8 +92,9 @@ export function useNotifications(lastEvent: StudioEvent | null) {
     if (eventId === lastEventIdRef.current) return;
     lastEventIdRef.current = eventId;
 
-    // Don't notify if the tab is focused
-    if (document.hasFocus()) return;
+    // Onay gerektiren event'ler sekme odaklı olsa bile gösterilir (kritik aksiyon)
+    const isApprovalEvent = lastEvent.type === 'task:approval_required';
+    if (!isApprovalEvent && document.hasFocus()) return;
 
     const content = getNotificationContent(lastEvent);
     if (!content) return;

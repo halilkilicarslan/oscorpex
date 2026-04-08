@@ -42,8 +42,8 @@ export interface Task {
   title: string;
   description: string;
   assignedAgent: string;
-  status: 'queued' | 'assigned' | 'running' | 'review' | 'revision' | 'done' | 'failed';
-  complexity: 'S' | 'M' | 'L';
+  status: 'queued' | 'assigned' | 'running' | 'review' | 'revision' | 'waiting_approval' | 'done' | 'failed';
+  complexity: 'S' | 'M' | 'L' | 'XL';
   dependsOn: string[];
   branch: string;
   output?: {
@@ -60,6 +60,10 @@ export interface Task {
   reviewerAgentId?: string;
   revisionCount?: number;
   assignedAgentId?: string;
+  // Human-in-the-Loop onay alanları
+  requiresApproval?: boolean;
+  approvalStatus?: 'pending' | 'approved' | 'rejected' | null;
+  approvalRejectionReason?: string;
 }
 
 export interface AgentConfig {
@@ -225,6 +229,18 @@ export async function deleteProject(id: string): Promise<void> {
   await fetch(`${BASE}/projects/${id}`, { method: 'DELETE' });
 }
 
+/**
+ * Proje için README.md oluşturur ve git repo'ya yazar.
+ * Backend template-based generation kullanır; AI çağrısı yapılmaz.
+ */
+export async function generateReadme(projectId: string): Promise<{ success: boolean; logs: string[] }> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/generate-readme`, {
+      method: 'POST',
+    }),
+  );
+}
+
 // ---- Plans ----------------------------------------------------------------
 
 export async function fetchPlan(projectId: string): Promise<ProjectPlan | null> {
@@ -258,6 +274,31 @@ export interface AutoStartStatus {
 
 export async function fetchAutoStartStatus(projectId: string): Promise<AutoStartStatus> {
   return json(await fetch(`${BASE}/projects/${projectId}/pipeline/auto-start-status`));
+}
+
+// ---- Plan Cost Estimate ---------------------------------------------------
+
+export interface PlanCostEstimate {
+  estimatedTokens: number;
+  estimatedCost: number;
+  currency: 'USD';
+  taskCount: number;
+  avgTokensPerTask: number;
+  model: string;
+  breakdown: {
+    inputTokens: number;
+    outputTokens: number;
+    inputCost: number;
+    outputCost: number;
+  };
+}
+
+/**
+ * Bir plan için tahmini maliyet bilgisini backend'den çeker.
+ * Plan onay butonunun yanında badge olarak gösterilir.
+ */
+export async function fetchPlanCostEstimate(projectId: string, planId: string): Promise<PlanCostEstimate> {
+  return json(await fetch(`${BASE}/projects/${projectId}/plans/${planId}/cost-estimate`));
 }
 
 export async function rejectPlan(projectId: string, feedback?: string): Promise<void> {
@@ -309,6 +350,45 @@ export async function restartRevision(projectId: string, taskId: string): Promis
   );
 }
 
+// ---- Human-in-the-Loop Onay API -------------------------------------------
+
+/**
+ * Waiting approval durumundaki bir task'ı onaylar.
+ * Onaylanan task execution engine tarafından çalıştırılır.
+ */
+export async function approveTask(projectId: string, taskId: string): Promise<Task> {
+  const result = await json<{ success: boolean; task: Task }>(
+    await fetch(`${BASE}/projects/${projectId}/tasks/${taskId}/approve`, { method: 'POST' }),
+  );
+  return result.task;
+}
+
+/**
+ * Waiting approval durumundaki bir task'ı reddeder.
+ * Reddedilen task failed durumuna alınır.
+ */
+export async function rejectTask(
+  projectId: string,
+  taskId: string,
+  reason?: string,
+): Promise<Task> {
+  const result = await json<{ success: boolean; task: Task }>(
+    await fetch(`${BASE}/projects/${projectId}/tasks/${taskId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    }),
+  );
+  return result.task;
+}
+
+/**
+ * Proje için bekleyen onay listesini getirir.
+ */
+export async function fetchPendingApprovals(projectId: string): Promise<Task[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/approvals`));
+}
+
 // ---- Agents ---------------------------------------------------------------
 
 export async function fetchAgentConfigs(): Promise<AgentConfig[]> {
@@ -347,6 +427,33 @@ export async function deleteAgent(id: string): Promise<void> {
 
 export async function fetchTeamTemplates(): Promise<TeamTemplate[]> {
   return json(await fetch(`${BASE}/team-templates`));
+}
+
+// ---- Custom Team Templates (user-created) ---------------------------------
+
+export interface CustomTeamTemplate {
+  id: string;
+  name: string;
+  description: string;
+  roles: string[];
+  dependencies: { from: string; to: string; type: string }[];
+  createdAt: string;
+}
+
+export async function fetchCustomTeams(): Promise<CustomTeamTemplate[]> {
+  return json(await fetch(`${BASE}/custom-teams`));
+}
+
+export async function createCustomTeam(data: { name: string; description?: string; roles: string[]; dependencies: { from: string; to: string; type: string }[] }): Promise<CustomTeamTemplate> {
+  return json(await fetch(`${BASE}/custom-teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
+}
+
+export async function updateCustomTeam(id: string, data: Partial<{ name: string; description: string; roles: string[]; dependencies: { from: string; to: string; type: string }[] }>): Promise<CustomTeamTemplate> {
+  return json(await fetch(`${BASE}/custom-teams/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
+}
+
+export async function deleteCustomTeam(id: string): Promise<void> {
+  await fetch(`${BASE}/custom-teams/${id}`, { method: 'DELETE' });
 }
 
 // ---- Project Team (project-scoped agents) ---------------------------------
@@ -487,7 +594,12 @@ export function streamPMChat(
             if (currentEvent === 'error' && parsed.error) {
               throw new Error(parsed.error);
             }
-            if (parsed.text) onText(parsed.text);
+            // Sadece text-delta event'lerinden gelen string text değerlerini işle.
+            // tool-call, tool-result, step-finish gibi AI SDK event'leri text içermez
+            // ve ekranda "undefined" olarak görünmelerine yol açar — bunları atla.
+            if (currentEvent === 'text-delta' && typeof parsed.text === 'string') {
+              onText(parsed.text);
+            }
           } catch (e) {
             if (e instanceof Error && e.message !== 'Unexpected end of JSON input') throw e;
           }
@@ -875,12 +987,36 @@ export interface AIProvider {
   model: string;
   isDefault: boolean;
   isActive: boolean;
+  /** Fallback zincirindeki sıra; küçük değer = daha önce denenir */
+  fallbackOrder: number;
   createdAt: string;
   updatedAt: string;
 }
 
 export async function fetchProviders(): Promise<AIProvider[]> {
   return json(await fetch(`${BASE}/providers`));
+}
+
+/**
+ * Aktif provider'ları fallback öncelik sırasına göre getirir.
+ * Default provider her zaman başta yer alır.
+ */
+export async function fetchFallbackChain(): Promise<AIProvider[]> {
+  return json(await fetch(`${BASE}/providers/fallback-chain`));
+}
+
+/**
+ * Provider'ların fallback sıralamasını günceller.
+ * @param orderedIds — Provider ID'leri, istenen sıraya göre dizili (birincisi en önce denenir).
+ */
+export async function updateFallbackOrder(orderedIds: string[]): Promise<AIProvider[]> {
+  return json(
+    await fetch(`${BASE}/providers/fallback-chain`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderedIds }),
+    }),
+  );
 }
 
 export async function createProvider(
@@ -1216,6 +1352,105 @@ export async function fetchAppConfig(projectId: string): Promise<AppConfig> {
   return json(await fetch(`${BASE}/projects/${projectId}/app/config`));
 }
 
+// ---- Webhooks ----------------------------------------------------------------
+// Proje bazlı Slack/Discord/Generic webhook yönetimi
+
+/** Desteklenen webhook türleri */
+export type WebhookType = 'slack' | 'discord' | 'generic';
+
+/** Webhook desteklenen event tipleri */
+export type WebhookEventType =
+  | 'task_completed'
+  | 'pipeline_finished'
+  | 'execution_error'
+  | 'budget_warning'
+  | 'plan_approved'
+  | 'task_failed'
+  | 'agent_started'
+  | 'agent_stopped'
+  | 'test';
+
+/** Webhook veri yapısı */
+export interface Webhook {
+  id: string;
+  projectId: string;
+  name: string;
+  url: string;
+  type: WebhookType;
+  events: WebhookEventType[];
+  active: boolean;
+  createdAt: string;
+}
+
+/** Webhook oluşturma isteği */
+export interface CreateWebhookData {
+  name: string;
+  url: string;
+  type: WebhookType;
+  events: WebhookEventType[];
+}
+
+/** Webhook güncelleme isteği — tüm alanlar isteğe bağlı */
+export type UpdateWebhookData = Partial<CreateWebhookData & { active: boolean }>;
+
+/** Projeye ait webhook'ları listele */
+export async function fetchWebhooks(projectId: string): Promise<Webhook[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/webhooks`));
+}
+
+/** Yeni webhook oluştur */
+export async function createWebhook(
+  projectId: string,
+  data: CreateWebhookData,
+): Promise<Webhook> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/webhooks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  );
+}
+
+/** Webhook'u güncelle */
+export async function updateWebhook(
+  projectId: string,
+  webhookId: string,
+  data: UpdateWebhookData,
+): Promise<Webhook> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/webhooks/${webhookId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  );
+}
+
+/** Webhook'u sil */
+export async function deleteWebhook(
+  projectId: string,
+  webhookId: string,
+): Promise<void> {
+  await json(
+    await fetch(`${BASE}/projects/${projectId}/webhooks/${webhookId}`, {
+      method: 'DELETE',
+    }),
+  );
+}
+
+/** Test bildirimi gönder */
+export async function testWebhook(
+  projectId: string,
+  webhookId: string,
+): Promise<{ success: boolean; message: string }> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/webhooks/${webhookId}/test`, {
+      method: 'POST',
+    }),
+  );
+}
+
 // ---- Project Settings ------------------------------------------------------
 
 export type SettingsMap = Record<string, Record<string, string>>;
@@ -1321,6 +1556,65 @@ export async function fetchGitDiff(projectId: string, ref?: string): Promise<{ d
 
 export async function fetchGitLog(projectId: string): Promise<GitLogEntry[]> {
   return json(await fetch(`${BASE}/projects/${projectId}/git/log`));
+}
+
+/**
+ * Son `limit` kadar commit'i döndürür.
+ * Commit geçmişi listesi için fetchGitLog'dan daha granüler kontrol sağlar.
+ */
+export async function fetchCommitLog(projectId: string, limit = 20): Promise<GitLogEntry[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/git/log?limit=${limit}`));
+}
+
+export interface RevertResult {
+  success: boolean;
+  revertCommit: string;
+  originalCommit: string;
+}
+
+/**
+ * Belirli bir commit'i geri alır.
+ * `git revert --no-edit` kullanır — orijinal commit silinmez.
+ */
+export async function revertCommit(projectId: string, commitHash: string): Promise<RevertResult> {
+  return json(await fetch(`${BASE}/projects/${projectId}/git/revert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ commitHash }),
+  }));
+}
+
+export interface BranchesResult {
+  branches: string[];
+  current: string;
+}
+
+/** Projenin branch listesini ve aktif branch'i döndürür. */
+export async function fetchBranches(projectId: string): Promise<BranchesResult> {
+  return json(await fetch(`${BASE}/projects/${projectId}/git/branches`));
+}
+
+export interface MergeResult {
+  success: boolean;
+  conflicts?: string[];
+  source?: string;
+  target?: string;
+}
+
+/**
+ * Kaynak branch'i hedef branch'e merge eder.
+ * Conflict durumunda `success: false` ve çakışan dosyalar döner.
+ */
+export async function mergeBranch(
+  projectId: string,
+  source: string,
+  target: string,
+): Promise<MergeResult> {
+  return json(await fetch(`${BASE}/projects/${projectId}/git/merge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, target }),
+  }));
 }
 
 // ---- Container Pool -------------------------------------------------------

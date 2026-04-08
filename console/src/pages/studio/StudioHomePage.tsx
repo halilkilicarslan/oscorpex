@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -14,19 +14,29 @@ import {
   X,
   FolderInput,
   LayoutTemplate,
+  Users,
+  ListTodo,
+  CheckCircle,
 } from 'lucide-react';
 import {
   fetchProjects,
   createProject,
   importProject,
+  fetchProjectAgents,
+  fetchProjectAnalytics,
   createProjectFromTemplate,
   deleteProject,
   fetchTeamTemplates,
+  fetchCustomTeams,
   fetchProjectTemplates,
   type Project,
   type TeamTemplate,
+  type CustomTeamTemplate,
   type ProjectTemplateInfo,
+  type ProjectAgent,
+  type ProjectAnalytics,
 } from '../../lib/studio-api';
+import AgentAvatarImg from '../../components/AgentAvatar';
 
 // ---------------------------------------------------------------------------
 // Status badge
@@ -64,8 +74,24 @@ function ProjectCard({
   onOpen: () => void;
   onDelete: () => void;
 }) {
+  const [agents, setAgents] = useState<ProjectAgent[]>([]);
+  const [analytics, setAnalytics] = useState<ProjectAnalytics | null>(null);
+
+  useEffect(() => {
+    fetchProjectAgents(project.id).then(setAgents).catch(() => {});
+    fetchProjectAnalytics(project.id).then(setAnalytics).catch(() => {});
+  }, [project.id]);
+
+  const completionPct = analytics && analytics.totalTasks > 0
+    ? Math.round((analytics.completedTasks / analytics.totalTasks) * 100)
+    : 0;
+
   return (
-    <div className="bg-[#111111] border border-[#262626] rounded-xl p-5 hover:border-[#333] transition-colors group">
+    <div
+      onClick={onOpen}
+      className="bg-[#111111] border border-[#262626] rounded-xl p-5 hover:border-[#333] transition-colors group cursor-pointer"
+    >
+      {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-lg bg-[#1f1f1f] flex items-center justify-center">
@@ -85,12 +111,14 @@ function ProjectCard({
         </button>
       </div>
 
+      {/* Description */}
       {project.description && (
         <p className="text-[12px] text-[#737373] mb-3 line-clamp-2">{project.description}</p>
       )}
 
+      {/* Tech stack */}
       {project.techStack.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-4">
+        <div className="flex flex-wrap gap-1 mb-3">
           {project.techStack.map((tech) => (
             <span
               key={tech}
@@ -102,12 +130,61 @@ function ProjectCard({
         </div>
       )}
 
+      {/* Team avatars */}
+      {agents.length > 0 && (
+        <div className="flex items-center gap-2 mb-3">
+          <div className="flex -space-x-1.5">
+            {agents.slice(0, 6).map((agent) => (
+              <AgentAvatarImg
+                key={agent.id}
+                avatar={agent.avatar}
+                name={agent.name}
+                size="xs"
+                className="ring-2 ring-[#111111]"
+              />
+            ))}
+          </div>
+          <span className="text-[10px] text-[#525252]">
+            {agents.length} {agents.length === 1 ? 'agent' : 'agents'}
+          </span>
+        </div>
+      )}
+
+      {/* Mini metrics */}
+      {analytics && analytics.totalTasks > 0 && (
+        <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-1">
+            <ListTodo size={11} className="text-[#525252]" />
+            <span className="text-[10px] text-[#a3a3a3]">{analytics.totalTasks}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <CheckCircle size={11} className="text-[#22c55e]" />
+            <span className="text-[10px] text-[#22c55e]">{analytics.completedTasks}</span>
+          </div>
+          {analytics.inProgressTasks > 0 && (
+            <div className="flex items-center gap-1">
+              <Loader2 size={11} className="text-[#3b82f6]" />
+              <span className="text-[10px] text-[#3b82f6]">{analytics.inProgressTasks}</span>
+            </div>
+          )}
+          {/* Progress bar */}
+          <div className="flex-1 h-1.5 bg-[#1f1f1f] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#22c55e] rounded-full transition-all"
+              style={{ width: `${completionPct}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-[#525252]">{completionPct}%</span>
+        </div>
+      )}
+
+      {/* Footer */}
       <div className="flex items-center justify-between pt-3 border-t border-[#1f1f1f]">
         <span className="text-[10px] text-[#525252]">
           {new Date(project.createdAt).toLocaleDateString()}
         </span>
         <button
-          onClick={onOpen}
+          onClick={(e) => { e.stopPropagation(); onOpen(); }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 transition-colors"
         >
           {project.status === 'planning' ? (
@@ -141,10 +218,12 @@ function CreateProjectModal({ onClose, onCreate }: {
   const [techStack, setTechStack] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<TeamTemplate[]>([]);
+  const [customTeams, setCustomTeams] = useState<CustomTeamTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
 
   useEffect(() => {
     fetchTeamTemplates().then(setTemplates).catch(() => {});
+    fetchCustomTeams().then(setCustomTeams).catch(() => {});
   }, []);
 
   const addTech = () => {
@@ -250,35 +329,72 @@ function CreateProjectModal({ onClose, onCreate }: {
           </div>
 
           {/* Team Template */}
-          {templates.length > 0 && (
+          {(templates.length > 0 || customTeams.length > 0) && (
             <div>
               <label className="text-[12px] text-[#737373] font-medium block mb-1.5">Team Template</label>
               <div className="flex flex-col gap-2">
-                {templates.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setSelectedTemplate(t.id === selectedTemplate ? '' : t.id)}
-                    className={`text-left p-3 rounded-lg border transition-colors ${
-                      selectedTemplate === t.id
-                        ? 'border-[#22c55e] bg-[#22c55e]/5'
-                        : 'border-[#262626] bg-[#0a0a0a] hover:border-[#333]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[13px] font-medium text-[#fafafa]">{t.name}</span>
-                      <span className="text-[11px] text-[#525252]">{t.roles.length} agents</span>
-                    </div>
-                    <p className="text-[11px] text-[#737373] mt-0.5">{t.description}</p>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {t.roles.map((role) => (
-                        <span key={role} className="text-[10px] px-1.5 py-0.5 rounded bg-[#1f1f1f] text-[#a3a3a3] border border-[#262626]">
-                          {role}
-                        </span>
-                      ))}
-                    </div>
-                  </button>
-                ))}
+                {/* Custom teams first */}
+                {customTeams.length > 0 && (
+                  <>
+                    <span className="text-[10px] text-[#525252] uppercase font-semibold mt-1">Custom Teams</span>
+                    {customTeams.map((t) => (
+                      <button
+                        key={`custom-${t.id}`}
+                        type="button"
+                        onClick={() => setSelectedTemplate(t.id === selectedTemplate ? '' : t.id)}
+                        className={`text-left p-3 rounded-lg border transition-colors ${
+                          selectedTemplate === t.id
+                            ? 'border-[#3b82f6] bg-[#3b82f6]/5'
+                            : 'border-[#262626] bg-[#0a0a0a] hover:border-[#333]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[13px] font-medium text-[#fafafa]">{t.name}</span>
+                          <span className="text-[11px] text-[#3b82f6]">{t.roles.length} agents</span>
+                        </div>
+                        {t.description && <p className="text-[11px] text-[#737373] mt-0.5">{t.description}</p>}
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {t.roles.map((role) => (
+                            <span key={role} className="text-[10px] px-1.5 py-0.5 rounded bg-[#1f1f1f] text-[#a3a3a3] border border-[#262626]">
+                              {role}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {/* Preset templates */}
+                {templates.length > 0 && (
+                  <>
+                    <span className="text-[10px] text-[#525252] uppercase font-semibold mt-1">Preset Teams</span>
+                    {templates.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setSelectedTemplate(t.id === selectedTemplate ? '' : t.id)}
+                        className={`text-left p-3 rounded-lg border transition-colors ${
+                          selectedTemplate === t.id
+                            ? 'border-[#22c55e] bg-[#22c55e]/5'
+                            : 'border-[#262626] bg-[#0a0a0a] hover:border-[#333]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[13px] font-medium text-[#fafafa]">{t.name}</span>
+                          <span className="text-[11px] text-[#525252]">{t.roles.length} agents</span>
+                        </div>
+                        <p className="text-[11px] text-[#737373] mt-0.5">{t.description}</p>
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {t.roles.map((role) => (
+                            <span key={role} className="text-[10px] px-1.5 py-0.5 rounded bg-[#1f1f1f] text-[#a3a3a3] border border-[#262626]">
+                              {role}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -597,7 +713,7 @@ export default function StudioHomePage() {
         <div>
           <h1 className="text-xl font-semibold text-[#fafafa]">AI Dev Studio</h1>
           <p className="text-sm text-[#737373] mt-1">
-            Create projects, plan with PM Agent, and let AI agents build your software
+            Create projects, plan with AI Planner, and let AI agents build your software
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -637,7 +753,7 @@ export default function StudioHomePage() {
           </div>
           <h3 className="text-[15px] font-medium text-[#a3a3a3] mb-1">No projects yet</h3>
           <p className="text-[13px] text-[#525252] max-w-sm mb-4">
-            Create your first project and start planning with the PM Agent. Your AI dev team will handle the rest.
+            Create your first project and start planning with AI Planner. Your AI dev team will handle the rest.
           </p>
           <button
             onClick={() => setShowCreate(true)}

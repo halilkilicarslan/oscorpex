@@ -217,7 +217,7 @@ describe('ProjectPage — sekme navigasyonu', () => {
     renderProjectPage();
 
     await waitFor(() => {
-      expect(screen.getByText('PM Chat')).toBeInTheDocument();
+      expect(screen.getByText('Planner')).toBeInTheDocument();
       expect(screen.getByText('Team')).toBeInTheDocument();
       expect(screen.getByText('Board')).toBeInTheDocument();
       expect(screen.getByText('Files')).toBeInTheDocument();
@@ -227,7 +227,7 @@ describe('ProjectPage — sekme navigasyonu', () => {
     });
   });
 
-  it('varsayilan olarak PM Chat sekmesi aktif olmali', async () => {
+  it('varsayilan olarak Planner sekmesi aktif olmali', async () => {
     renderProjectPage();
 
     await waitFor(() => {

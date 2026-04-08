@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { GitBranch, RefreshCw, Loader2, FileCode, Plus, Minus, ChevronDown, ChevronRight } from 'lucide-react';
-import { fetchGitDiff, fetchGitStatus, fetchGitLog, type GitStatus, type GitLogEntry } from '../../lib/studio-api';
+import { GitBranch, RefreshCw, Loader2, FileCode, Plus, Minus, ChevronDown, ChevronRight, RotateCcw, AlertTriangle } from 'lucide-react';
+import { fetchGitDiff, fetchGitStatus, fetchGitLog, revertCommit, type GitStatus, type GitLogEntry } from '../../lib/studio-api';
 
 // ---------------------------------------------------------------------------
 // Diff parser — splits unified diff into per-file hunks
@@ -113,6 +113,12 @@ export default function DiffViewer({ projectId }: { projectId: string }) {
   const [error, setError] = useState('');
   const [selectedRef, setSelectedRef] = useState('');
 
+  // Revert onay dialog state'leri
+  const [revertTarget, setRevertTarget] = useState<GitLogEntry | null>(null);
+  const [reverting, setReverting] = useState(false);
+  const [revertError, setRevertError] = useState('');
+  const [revertSuccess, setRevertSuccess] = useState('');
+
   const load = async (ref?: string) => {
     setLoading(true);
     setError('');
@@ -133,6 +139,25 @@ export default function DiffViewer({ projectId }: { projectId: string }) {
     }
   };
 
+  // Kullanıcı onayından sonra commit'i geri al
+  const handleRevertConfirm = async () => {
+    if (!revertTarget) return;
+    setReverting(true);
+    setRevertError('');
+    setRevertSuccess('');
+    try {
+      await revertCommit(projectId, revertTarget.hash);
+      setRevertSuccess(`"${revertTarget.message.slice(0, 50)}" commit'i başarıyla geri alındı.`);
+      setRevertTarget(null);
+      // Listeyi yenile
+      await load(selectedRef || undefined);
+    } catch (err: any) {
+      setRevertError(err?.message || 'Revert işlemi başarısız oldu.');
+    } finally {
+      setReverting(false);
+    }
+  };
+
   useEffect(() => { load(); }, [projectId]);
 
   const totalAdd = files.reduce((s, f) => s + f.additions, 0);
@@ -140,6 +165,48 @@ export default function DiffViewer({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Revert onay dialog */}
+      {revertTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#111111] border border-[#262626] rounded-xl p-5 max-w-md w-full mx-4 shadow-2xl">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle size={16} className="text-[#f59e0b]" />
+              <span className="text-[14px] font-semibold text-[#fafafa]">Commit Geri Al</span>
+            </div>
+            <p className="text-[12px] text-[#a3a3a3] mb-2">
+              Aşağıdaki commit geri alınacak. Bu işlem yeni bir revert commit oluşturur ve geri döndürülemez.
+            </p>
+            <div className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg px-3 py-2 mb-4">
+              <span className="text-[11px] font-mono text-[#22c55e]">{revertTarget.hash}</span>
+              <p className="text-[12px] text-[#fafafa] mt-0.5 truncate">{revertTarget.message}</p>
+              <p className="text-[11px] text-[#525252] mt-0.5">{revertTarget.author} — {new Date(revertTarget.date).toLocaleDateString('tr-TR')}</p>
+            </div>
+            {revertError && (
+              <p className="text-[11px] text-[#ef4444] bg-[#ef4444]/10 border border-[#ef4444]/20 rounded px-2 py-1 mb-3">
+                {revertError}
+              </p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { setRevertTarget(null); setRevertError(''); }}
+                disabled={reverting}
+                className="px-3 py-1.5 rounded-lg border border-[#262626] text-[12px] text-[#a3a3a3] hover:text-[#fafafa] hover:border-[#333] transition-colors disabled:opacity-50"
+              >
+                Vazgec
+              </button>
+              <button
+                onClick={handleRevertConfirm}
+                disabled={reverting}
+                className="px-3 py-1.5 rounded-lg bg-[#ef4444]/10 border border-[#ef4444]/30 text-[12px] text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {reverting ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                {reverting ? 'Geri Alınıyor...' : 'Geri Al'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -225,6 +292,14 @@ export default function DiffViewer({ projectId }: { projectId: string }) {
         </div>
       )}
 
+      {/* Revert işlemi başarı mesajı */}
+      {revertSuccess && (
+        <div className="text-[12px] text-[#22c55e] bg-[#22c55e]/10 border border-[#22c55e]/20 rounded-lg px-3 py-2 flex items-center gap-2">
+          <RotateCcw size={12} />
+          {revertSuccess}
+        </div>
+      )}
+
       {/* Diff summary + file list */}
       {!loading && files.length > 0 && (
         <>
@@ -239,6 +314,50 @@ export default function DiffViewer({ projectId }: { projectId: string }) {
             ))}
           </div>
         </>
+      )}
+
+      {/* Commit geçmişi — her satırda "Revert" butonu */}
+      {!loading && log.length > 0 && (
+        <div className="mt-2">
+          <h3 className="text-[13px] font-semibold text-[#fafafa] mb-2 flex items-center gap-2">
+            <GitBranch size={13} className="text-[#525252]" />
+            Commit Gecmisi
+          </h3>
+          <div className="border border-[#1f1f1f] rounded-xl overflow-hidden">
+            {log.slice(0, 20).map((entry, idx) => (
+              <div
+                key={entry.hash}
+                className={`flex items-center gap-3 px-3 py-2 ${idx !== 0 ? 'border-t border-[#1a1a1a]' : ''} hover:bg-[#111111] transition-colors group`}
+              >
+                {/* Hash */}
+                <span className="text-[11px] font-mono text-[#22c55e] shrink-0 w-[58px]">
+                  {entry.hash.slice(0, 7)}
+                </span>
+                {/* Mesaj */}
+                <span className="text-[12px] text-[#a3a3a3] flex-1 truncate" title={entry.message}>
+                  {entry.message}
+                </span>
+                {/* Yazar */}
+                <span className="text-[11px] text-[#525252] shrink-0 hidden sm:block max-w-[80px] truncate">
+                  {entry.author}
+                </span>
+                {/* Tarih */}
+                <span className="text-[11px] text-[#525252] shrink-0">
+                  {new Date(entry.date).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })}
+                </span>
+                {/* Revert butonu — sadece hover'da görünür */}
+                <button
+                  onClick={() => { setRevertTarget(entry); setRevertSuccess(''); setRevertError(''); }}
+                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-0.5 rounded border border-[#ef4444]/30 text-[11px] text-[#ef4444] hover:bg-[#ef4444]/10"
+                  title={`"${entry.message}" commit'ini geri al`}
+                >
+                  <RotateCcw size={11} />
+                  Revert
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

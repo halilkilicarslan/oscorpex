@@ -97,19 +97,23 @@ function migrate(db: Database.Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS tasks (
-      id              TEXT PRIMARY KEY,
-      phase_id        TEXT NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
-      title           TEXT NOT NULL,
-      description     TEXT NOT NULL DEFAULT '',
-      assigned_agent  TEXT NOT NULL DEFAULT '',
-      status          TEXT NOT NULL DEFAULT 'queued',
-      complexity      TEXT NOT NULL DEFAULT 'M',
-      depends_on      TEXT NOT NULL DEFAULT '[]',
-      branch          TEXT NOT NULL DEFAULT '',
-      output          TEXT,
-      retry_count     INTEGER NOT NULL DEFAULT 0,
-      started_at      TEXT,
-      completed_at    TEXT
+      id                        TEXT PRIMARY KEY,
+      phase_id                  TEXT NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
+      title                     TEXT NOT NULL,
+      description               TEXT NOT NULL DEFAULT '',
+      assigned_agent            TEXT NOT NULL DEFAULT '',
+      status                    TEXT NOT NULL DEFAULT 'queued',
+      complexity                TEXT NOT NULL DEFAULT 'M',
+      depends_on                TEXT NOT NULL DEFAULT '[]',
+      branch                    TEXT NOT NULL DEFAULT '',
+      output                    TEXT,
+      retry_count               INTEGER NOT NULL DEFAULT 0,
+      started_at                TEXT,
+      completed_at              TEXT,
+      -- Human-in-the-Loop onay alanları
+      requires_approval         INTEGER NOT NULL DEFAULT 0,
+      approval_status           TEXT,
+      approval_rejection_reason TEXT
     );
 
     CREATE TABLE IF NOT EXISTS agent_configs (
@@ -161,6 +165,19 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tasks_phase     ON tasks(phase_id);
     CREATE INDEX IF NOT EXISTS idx_events_project  ON events(project_id);
     CREATE INDEX IF NOT EXISTS idx_chat_project    ON chat_messages(project_id);
+  `);
+
+  // ---------------------------------------------------------------------------
+  // Incremental migration: ai_providers tablosuna fallback_order kolonu ekle
+  // Mevcut kayıtlar için sıfır varsayılan değer atanır.
+  // ---------------------------------------------------------------------------
+  try {
+    db.exec(`ALTER TABLE ai_providers ADD COLUMN fallback_order INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    // Kolon zaten varsa sessizce atla (SQLite "duplicate column" hatası)
+  }
+
+  db.exec(`
 
     -- Hazır takım şablonları (team templates)
     CREATE TABLE IF NOT EXISTS team_templates (
@@ -169,6 +186,16 @@ function migrate(db: Database.Database): void {
       description TEXT NOT NULL DEFAULT '',
       agent_ids   TEXT NOT NULL DEFAULT '[]',
       created_at  TEXT NOT NULL
+    );
+
+    -- Kullanıcının oluşturduğu özel takım şablonları
+    CREATE TABLE IF NOT EXISTS custom_team_templates (
+      id            TEXT PRIMARY KEY,
+      name          TEXT NOT NULL,
+      description   TEXT NOT NULL DEFAULT '',
+      roles         TEXT NOT NULL DEFAULT '[]',
+      dependencies  TEXT NOT NULL DEFAULT '[]',
+      created_at    TEXT NOT NULL
     );
 
     -- Projeye özel agent kopyaları (project-scoped team members)
@@ -255,6 +282,20 @@ function migrate(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_agent_caps_agent   ON agent_capabilities(agent_id);
     CREATE INDEX IF NOT EXISTS idx_agent_caps_project  ON agent_capabilities(project_id);
+
+    -- Webhook bildirimleri tablosu (Slack, Discord, Generic)
+    CREATE TABLE IF NOT EXISTS webhooks (
+      id         TEXT PRIMARY KEY,
+      project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      url        TEXT NOT NULL,
+      type       TEXT NOT NULL DEFAULT 'generic',
+      events     TEXT NOT NULL DEFAULT '[]',
+      active     INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_webhooks_project ON webhooks(project_id);
   `);
 
   // Additive migrations for existing databases — safe to run on every startup
@@ -330,6 +371,16 @@ function migrate(db: Database.Database): void {
   }
   if (!taskCols.includes('assigned_agent_id')) {
     db.exec("ALTER TABLE tasks ADD COLUMN assigned_agent_id TEXT");
+  }
+  // Human-in-the-Loop onay kolonları — mevcut DB'lere ekle
+  if (!taskCols.includes('requires_approval')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN requires_approval INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!taskCols.includes('approval_status')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN approval_status TEXT");
+  }
+  if (!taskCols.includes('approval_rejection_reason')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN approval_rejection_reason TEXT");
   }
 
   // Agent çalışma geçmişi tablosu — yerel CLI süreç kayıtları
@@ -551,14 +602,15 @@ export function updatePhaseStatus(id: string, status: PhaseStatus): void {
 // Tasks CRUD
 // ---------------------------------------------------------------------------
 
-export function createTask(data: Pick<Task, 'phaseId' | 'title' | 'description' | 'assignedAgent' | 'complexity' | 'dependsOn' | 'branch'> & { taskType?: Task['taskType'] }): Task {
+export function createTask(data: Pick<Task, 'phaseId' | 'title' | 'description' | 'assignedAgent' | 'complexity' | 'dependsOn' | 'branch'> & { taskType?: Task['taskType']; requiresApproval?: boolean }): Task {
   const db = getDb();
   const id = randomUUID();
   const taskType = data.taskType ?? 'ai';
+  const requiresApproval = data.requiresApproval ?? false;
   db.prepare(`
-    INSERT INTO tasks (id, phase_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type)
-    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, 0, ?)
-  `).run(id, data.phaseId, data.title, data.description, data.assignedAgent, data.complexity, JSON.stringify(data.dependsOn), data.branch, taskType);
+    INSERT INTO tasks (id, phase_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type, requires_approval)
+    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, 0, ?, ?)
+  `).run(id, data.phaseId, data.title, data.description, data.assignedAgent, data.complexity, JSON.stringify(data.dependsOn), data.branch, taskType, requiresApproval ? 1 : 0);
 
   return {
     id,
@@ -573,6 +625,7 @@ export function createTask(data: Pick<Task, 'phaseId' | 'title' | 'description' 
     taskType: taskType !== 'ai' ? taskType as Task['taskType'] : undefined,
     retryCount: 0,
     revisionCount: 0,
+    requiresApproval,
   };
 }
 
@@ -599,10 +652,28 @@ export function listProjectTasks(projectId: string): Task[] {
   return rows.map(rowToTask);
 }
 
-export function updateTask(id: string, data: Partial<Pick<Task, 'status' | 'assignedAgent' | 'output' | 'retryCount' | 'error' | 'startedAt' | 'completedAt' | 'reviewStatus' | 'reviewerAgentId' | 'revisionCount' | 'assignedAgentId'>>): Task | undefined {
+export function updateTask(
+  id: string,
+  data: Partial<Pick<Task,
+    | 'status'
+    | 'assignedAgent'
+    | 'output'
+    | 'retryCount'
+    | 'error'
+    | 'startedAt'
+    | 'completedAt'
+    | 'reviewStatus'
+    | 'reviewerAgentId'
+    | 'revisionCount'
+    | 'assignedAgentId'
+    | 'requiresApproval'
+    | 'approvalStatus'
+    | 'approvalRejectionReason'
+  >>,
+): Task | undefined {
   const db = getDb();
   const fields: string[] = [];
-  const values: any[] = [];
+  const values: unknown[] = [];
 
   if (data.status !== undefined) { fields.push('status = ?'); values.push(data.status); }
   if (data.assignedAgent !== undefined) { fields.push('assigned_agent = ?'); values.push(data.assignedAgent); }
@@ -615,12 +686,34 @@ export function updateTask(id: string, data: Partial<Pick<Task, 'status' | 'assi
   if (data.reviewerAgentId !== undefined) { fields.push('reviewer_agent_id = ?'); values.push(data.reviewerAgentId); }
   if (data.revisionCount !== undefined) { fields.push('revision_count = ?'); values.push(data.revisionCount); }
   if (data.assignedAgentId !== undefined) { fields.push('assigned_agent_id = ?'); values.push(data.assignedAgentId); }
+  // Human-in-the-Loop onay alanları
+  if (data.requiresApproval !== undefined) { fields.push('requires_approval = ?'); values.push(data.requiresApproval ? 1 : 0); }
+  if (data.approvalStatus !== undefined) { fields.push('approval_status = ?'); values.push(data.approvalStatus); }
+  if (data.approvalRejectionReason !== undefined) { fields.push('approval_rejection_reason = ?'); values.push(data.approvalRejectionReason); }
 
   if (fields.length === 0) return getTask(id);
 
   values.push(id);
   db.prepare(`UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`).run(...values);
   return getTask(id);
+}
+
+/**
+ * Bekleyen onay gerektiren task'ları listeler.
+ * approval_status = 'pending' olan tüm waiting_approval task'ları döner.
+ */
+export function listPendingApprovals(projectId: string): Task[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT t.* FROM tasks t
+    JOIN phases p ON t.phase_id = p.id
+    JOIN project_plans pp ON p.plan_id = pp.id
+    WHERE pp.project_id = ?
+      AND t.status = 'waiting_approval'
+      AND (t.approval_status = 'pending' OR t.approval_status IS NULL)
+    ORDER BY p."order", t.id
+  `).all(projectId) as any[];
+  return rows.map(rowToTask);
 }
 
 function rowToTask(row: any): Task {
@@ -644,6 +737,10 @@ function rowToTask(row: any): Task {
     reviewerAgentId: row.reviewer_agent_id ?? undefined,
     revisionCount: row.revision_count ?? 0,
     assignedAgentId: row.assigned_agent_id ?? undefined,
+    // Human-in-the-Loop onay alanları
+    requiresApproval: row.requires_approval === 1,
+    approvalStatus: (row.approval_status as Task['approvalStatus']) ?? undefined,
+    approvalRejectionReason: row.approval_rejection_reason ?? undefined,
   };
 }
 
@@ -815,6 +912,8 @@ function rowToProvider(row: any, masked = false): AIProvider {
     model: row.model,
     isDefault: row.is_default === 1,
     isActive: row.is_active === 1,
+    // fallback_order kolonu sonradan migration ile eklendi; null gelebilir
+    fallbackOrder: row.fallback_order ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -926,6 +1025,45 @@ export function getRawProviderApiKey(id: string): string {
   const db = getDb();
   const row = db.prepare('SELECT api_key FROM ai_providers WHERE id = ?').get(id) as any;
   return row?.api_key ?? '';
+}
+
+// ---------------------------------------------------------------------------
+// Fallback Chain — provider sıralaması
+// ---------------------------------------------------------------------------
+
+/**
+ * Aktif provider'ları fallback_order alanına göre sıralı olarak döndürür.
+ * Default provider her zaman başta yer alır (birincil), ardından sıradaki
+ * aktif provider'lar gelir. Pasif provider'lar zincire dahil edilmez.
+ */
+export function getFallbackChain(): AIProvider[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT * FROM ai_providers
+       WHERE is_active = 1
+       ORDER BY is_default DESC, fallback_order ASC, created_at ASC`,
+    )
+    .all() as any[];
+  return rows.map((r) => rowToProvider(r, true));
+}
+
+/**
+ * Fallback sıralamasını toplu olarak günceller.
+ * @param orderedIds — Provider ID'leri, istenen fallback sırasına göre dizili.
+ *                     Birinci eleman en önce denenir (fallback_order = 0).
+ */
+export function updateFallbackOrder(orderedIds: string[]): void {
+  const db = getDb();
+  const update = db.prepare(
+    'UPDATE ai_providers SET fallback_order = ?, updated_at = ? WHERE id = ?',
+  );
+  const batchUpdate = db.transaction((ids: string[]) => {
+    ids.forEach((id, index) => {
+      update.run(index, now(), id);
+    });
+  });
+  batchUpdate(orderedIds);
 }
 
 // ---------------------------------------------------------------------------
@@ -1261,6 +1399,71 @@ export function getTeamTemplate(id: string): TeamTemplate | undefined {
   const db = getDb();
   const row = db.prepare('SELECT * FROM team_templates WHERE id = ?').get(id) as any;
   return row ? rowToTeamTemplate(row) : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Custom Team Templates — kullanıcının oluşturduğu ekipler
+// ---------------------------------------------------------------------------
+
+export interface CustomTeamTemplate {
+  id: string;
+  name: string;
+  description: string;
+  roles: string[];
+  dependencies: { from: string; to: string; type: string }[];
+  createdAt: string;
+}
+
+function rowToCustomTeamTemplate(row: any): CustomTeamTemplate {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    roles: JSON.parse(row.roles),
+    dependencies: JSON.parse(row.dependencies),
+    createdAt: row.created_at,
+  };
+}
+
+export function listCustomTeamTemplates(): CustomTeamTemplate[] {
+  const db = getDb();
+  return (db.prepare('SELECT * FROM custom_team_templates ORDER BY created_at DESC').all() as any[]).map(rowToCustomTeamTemplate);
+}
+
+export function getCustomTeamTemplate(id: string): CustomTeamTemplate | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM custom_team_templates WHERE id = ?').get(id) as any;
+  return row ? rowToCustomTeamTemplate(row) : undefined;
+}
+
+export function createCustomTeamTemplate(data: { name: string; description?: string; roles: string[]; dependencies: { from: string; to: string; type: string }[] }): CustomTeamTemplate {
+  const db = getDb();
+  const id = randomUUID();
+  const createdAt = now();
+  db.prepare(
+    'INSERT INTO custom_team_templates (id, name, description, roles, dependencies, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(id, data.name, data.description ?? '', JSON.stringify(data.roles), JSON.stringify(data.dependencies), createdAt);
+  return { id, name: data.name, description: data.description ?? '', roles: data.roles, dependencies: data.dependencies, createdAt };
+}
+
+export function updateCustomTeamTemplate(id: string, data: { name?: string; description?: string; roles?: string[]; dependencies?: { from: string; to: string; type: string }[] }): CustomTeamTemplate | undefined {
+  const db = getDb();
+  const existing = getCustomTeamTemplate(id);
+  if (!existing) return undefined;
+  const name = data.name ?? existing.name;
+  const description = data.description ?? existing.description;
+  const roles = data.roles ?? existing.roles;
+  const dependencies = data.dependencies ?? existing.dependencies;
+  db.prepare(
+    'UPDATE custom_team_templates SET name = ?, description = ?, roles = ?, dependencies = ? WHERE id = ?',
+  ).run(name, description, JSON.stringify(roles), JSON.stringify(dependencies), id);
+  return { ...existing, name, description, roles, dependencies };
+}
+
+export function deleteCustomTeamTemplate(id: string): boolean {
+  const db = getDb();
+  const result = db.prepare('DELETE FROM custom_team_templates WHERE id = ?').run(id);
+  return result.changes > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -2182,4 +2385,109 @@ export function deleteAllCapabilities(projectId: string, agentId?: string): void
   } else {
     db.prepare('DELETE FROM agent_capabilities WHERE project_id = ?').run(projectId);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Webhooks CRUD
+// ---------------------------------------------------------------------------
+
+// Webhook veri yapısı — tip güvenliği için
+export interface Webhook {
+  id: string;
+  projectId: string;
+  name: string;
+  url: string;
+  /** Webhook türü: Slack, Discord veya Generic */
+  type: 'slack' | 'discord' | 'generic';
+  /** Dinlenen event tipleri: JSON dizisi olarak saklanır */
+  events: string[];
+  active: boolean;
+  createdAt: string;
+}
+
+/** DB satırını Webhook nesnesine dönüştür */
+function rowToWebhook(row: any): Webhook {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    url: row.url,
+    type: row.type as Webhook['type'],
+    events: JSON.parse(row.events ?? '[]'),
+    active: row.active === 1,
+    createdAt: row.created_at,
+  };
+}
+
+/** Yeni webhook oluştur — URL https:// ile başlamalı */
+export function createWebhook(data: {
+  projectId: string;
+  name: string;
+  url: string;
+  type: Webhook['type'];
+  events: string[];
+}): Webhook {
+  const db = getDb();
+  const id = randomUUID();
+  const ts = now();
+  db.prepare(
+    'INSERT INTO webhooks (id, project_id, name, url, type, events, active, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)',
+  ).run(id, data.projectId, data.name, data.url, data.type, JSON.stringify(data.events), ts);
+  return rowToWebhook(
+    db.prepare('SELECT * FROM webhooks WHERE id = ?').get(id) as any,
+  );
+}
+
+/** Projeye ait webhook'ları listele */
+export function listWebhooks(projectId: string): Webhook[] {
+  const db = getDb();
+  return (
+    db.prepare('SELECT * FROM webhooks WHERE project_id = ? ORDER BY created_at DESC').all(projectId) as any[]
+  ).map(rowToWebhook);
+}
+
+/** Tekil webhook'u getir */
+export function getWebhook(id: string): Webhook | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM webhooks WHERE id = ?').get(id) as any;
+  return row ? rowToWebhook(row) : undefined;
+}
+
+/** Webhook'u güncelle — kısmi güncelleme desteklenir */
+export function updateWebhook(
+  id: string,
+  data: Partial<Pick<Webhook, 'name' | 'url' | 'type' | 'events' | 'active'>>,
+): Webhook | undefined {
+  const db = getDb();
+  const fields: string[] = [];
+  const values: (string | number)[] = [];
+
+  if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
+  if (data.url !== undefined) { fields.push('url = ?'); values.push(data.url); }
+  if (data.type !== undefined) { fields.push('type = ?'); values.push(data.type); }
+  if (data.events !== undefined) { fields.push('events = ?'); values.push(JSON.stringify(data.events)); }
+  if (data.active !== undefined) { fields.push('active = ?'); values.push(data.active ? 1 : 0); }
+
+  if (fields.length === 0) return getWebhook(id);
+
+  values.push(id);
+  db.prepare(`UPDATE webhooks SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  return getWebhook(id);
+}
+
+/** Webhook'u sil */
+export function deleteWebhook(id: string): boolean {
+  const db = getDb();
+  return db.prepare('DELETE FROM webhooks WHERE id = ?').run(id).changes > 0;
+}
+
+/** Belirli bir event'i dinleyen aktif webhook'ları getir */
+export function listWebhooksForEvent(projectId: string, eventType: string): Webhook[] {
+  // Tüm aktif webhook'ları çek ve JavaScript tarafında filtrele
+  // (SQLite JSON fonksiyonu olmadan JSON içeriği kontrol edilir)
+  const db = getDb();
+  const all = (
+    db.prepare('SELECT * FROM webhooks WHERE project_id = ? AND active = 1').all(projectId) as any[]
+  ).map(rowToWebhook);
+  return all.filter((w) => w.events.includes(eventType));
 }

@@ -18,6 +18,7 @@ import {
   ExternalLink,
   Code2,
   Settings,
+  Users,
 } from 'lucide-react';
 
 interface NavItem {
@@ -70,6 +71,7 @@ const sections: NavSection[] = [
     title: 'AI DEV STUDIO',
     items: [
       { to: '/studio', label: 'Studio Home', icon: <Code2 size={18} />, badge: 'New' },
+      { to: '/studio/teams', label: 'Team Builder', icon: <Users size={18} /> },
       { to: '/studio/providers', label: 'Providers', icon: <Settings size={18} /> },
     ],
   },
@@ -159,7 +161,7 @@ export default function Sidebar() {
                 <NavLink
                   key={to}
                   to={to}
-                  end={to === '/'}
+                  end={to === '/' || to === '/studio'}
                   title={collapsed ? label : undefined}
                   className={({ isActive }) =>
                     [

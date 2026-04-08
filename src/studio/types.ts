@@ -58,10 +58,14 @@ export type TaskStatus =
   | 'running'
   | 'review'
   | 'revision'
+  | 'waiting_approval'
   | 'done'
   | 'failed';
 
-export type TaskComplexity = 'S' | 'M' | 'L';
+// Human-in-the-Loop onay durumu
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+export type TaskComplexity = 'S' | 'M' | 'L' | 'XL';
 
 export type TaskType = 'ai' | 'integration-test' | 'run-app';
 
@@ -93,6 +97,10 @@ export interface Task {
   reviewerAgentId?: string;
   revisionCount: number;
   assignedAgentId?: string; // FK to project_agents.id
+  // Human-in-the-Loop onay alanları
+  requiresApproval: boolean;
+  approvalStatus?: ApprovalStatus | null;
+  approvalRejectionReason?: string;
 }
 
 // ---- Agent Configuration ---------------------------------------------------
@@ -163,6 +171,9 @@ export type EventType =
   | 'task:failed'
   | 'task:timeout'
   | 'task:retry'
+  | 'task:approval_required'
+  | 'task:approved'
+  | 'task:rejected'
   | 'agent:started'
   | 'agent:stopped'
   | 'agent:output'
@@ -172,9 +183,14 @@ export type EventType =
   | 'plan:created'
   | 'plan:approved'
   | 'execution:started'
+  | 'execution:error'
   | 'escalation:user'
   | 'git:commit'
-  | 'git:pr-created';
+  | 'git:pr-created'
+  | 'task:timeout_warning'
+  | 'pipeline:completed'
+  | 'budget:warning'
+  | 'budget:exceeded';
 
 export interface StudioEvent {
   id: string;
@@ -229,6 +245,8 @@ export interface AIProvider {
   model: string;
   isDefault: boolean;
   isActive: boolean;
+  /** Fallback zincirindeki sıra. 0 = primary (default), küçük değer = daha önce denenir. */
+  fallbackOrder: number;
   createdAt: string;
   updatedAt: string;
 }

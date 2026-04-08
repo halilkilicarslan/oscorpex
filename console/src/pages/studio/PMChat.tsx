@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Loader2, Bot, User, AlertCircle, Zap, TriangleAlert } from 'lucide-react';
+import { Send, Loader2, Bot, User, AlertCircle, Zap, TriangleAlert, DollarSign } from 'lucide-react';
 import {
   fetchChatHistory,
   fetchPlan,
@@ -7,8 +7,10 @@ import {
   rejectPlan,
   streamPMChat,
   fetchConfigStatus,
+  fetchPlanCostEstimate,
   type ChatMessage,
   type ProjectPlan,
+  type PlanCostEstimate,
 } from '../../lib/studio-api';
 import PlanPreview from './PlanPreview';
 
@@ -128,6 +130,7 @@ function StreamingBubble({ text }: { text: string }) {
 export default function PMChat({ projectId }: { projectId: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [plan, setPlan] = useState<ProjectPlan | null>(null);
+  const [costEstimate, setCostEstimate] = useState<PlanCostEstimate | null>(null);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
@@ -136,6 +139,21 @@ export default function PMChat({ projectId }: { projectId: string }) {
   const [pipelineToast, setPipelineToast] = useState<PipelineToastState>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
+
+  // Bir plan yüklendiğinde maliyet tahminini de getir
+  const loadCostEstimate = async (loadedPlan: ProjectPlan) => {
+    if (loadedPlan.status !== 'draft') {
+      setCostEstimate(null);
+      return;
+    }
+    try {
+      const estimate = await fetchPlanCostEstimate(projectId, loadedPlan.id);
+      setCostEstimate(estimate);
+    } catch {
+      // Maliyet tahmini alınamazsa sessizce geç — kritik değil
+      setCostEstimate(null);
+    }
+  };
 
   // Load history, plan, and config status
   useEffect(() => {
@@ -147,7 +165,10 @@ export default function PMChat({ projectId }: { projectId: string }) {
           fetchConfigStatus(),
         ]);
         if (history.status === 'fulfilled') setMessages(history.value);
-        if (latestPlan.status === 'fulfilled' && latestPlan.value) setPlan(latestPlan.value);
+        if (latestPlan.status === 'fulfilled' && latestPlan.value) {
+          setPlan(latestPlan.value);
+          await loadCostEstimate(latestPlan.value);
+        }
         if (configStatus.status === 'fulfilled') setOpenaiConfigured(configStatus.value.openaiConfigured);
       } finally {
         setLoading(false);
@@ -208,7 +229,12 @@ export default function PMChat({ projectId }: { projectId: string }) {
 
         // Refresh plan in case PM agent created/updated one
         fetchPlan(projectId)
-          .then((p) => { if (p) setPlan(p); })
+          .then(async (p) => {
+            if (p) {
+              setPlan(p);
+              await loadCostEstimate(p);
+            }
+          })
           .catch(() => {});
       },
       (err) => {
@@ -233,6 +259,8 @@ export default function PMChat({ projectId }: { projectId: string }) {
       const result = await approvePlan(projectId);
       const updated = await fetchPlan(projectId);
       setPlan(updated);
+      // Onaylanan plan draft değil, maliyet tahmini artık gösterilmez
+      setCostEstimate(null);
 
       // Pipeline auto-start bildirimini goster
       if (result.pipeline.started) {
@@ -292,7 +320,7 @@ export default function PMChat({ projectId }: { projectId: string }) {
             <div className="w-12 h-12 rounded-2xl bg-[#22c55e]/10 flex items-center justify-center mb-3">
               <Bot size={24} className="text-[#22c55e]" />
             </div>
-            <h3 className="text-[14px] font-medium text-[#a3a3a3] mb-1">Chat with Kerem (PM Agent)</h3>
+            <h3 className="text-[14px] font-medium text-[#a3a3a3] mb-1">Chat with AI Planner</h3>
             <p className="text-[12px] text-[#525252] max-w-sm">
               Describe what you want to build and I'll help you create a project plan with phases and tasks.
             </p>
@@ -308,6 +336,21 @@ export default function PMChat({ projectId }: { projectId: string }) {
         {/* Plan preview */}
         {plan && (
           <div className="mt-2">
+            {/* Maliyet tahmini badge — sadece draft plan için gösterilir */}
+            {costEstimate && plan.status === 'draft' && (
+              <div className="flex items-center gap-1.5 mb-2 px-3 py-1.5 bg-[#0a0a0a] border border-[#262626] rounded-lg w-fit">
+                <DollarSign size={11} className="text-[#f59e0b] shrink-0" />
+                <span className="text-[11px] text-[#a3a3a3]">
+                  Tahmini maliyet:{' '}
+                  <span className="text-[#f59e0b] font-semibold">
+                    ~${costEstimate.estimatedCost.toFixed(2)} {costEstimate.currency}
+                  </span>
+                </span>
+                <span className="text-[10px] text-[#525252] ml-1">
+                  ({costEstimate.taskCount} task · {costEstimate.model})
+                </span>
+              </div>
+            )}
             <PlanPreview plan={plan} onApprove={handleApprove} onReject={handleReject} />
           </div>
         )}
@@ -329,7 +372,7 @@ export default function PMChat({ projectId }: { projectId: string }) {
       <div className="px-6 py-4 border-t border-[#262626]">
         {openaiConfigured === false && (
           <div className="mb-3 bg-[#f59e0b]/10 border border-[#f59e0b]/20 text-[#f59e0b] rounded-lg px-4 py-2 text-[12px]">
-            OpenAI API key is not configured. Add OPENAI_API_KEY to your .env file to enable PM Chat.
+            OpenAI API key is not configured. Add OPENAI_API_KEY to your .env file to enable the Planner.
           </div>
         )}
         <div className="flex items-center gap-2">

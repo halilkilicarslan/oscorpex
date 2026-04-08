@@ -10,6 +10,7 @@ const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
 const StudioHomePage = lazy(() => import('./pages/studio/StudioHomePage'));
 const ProjectPage = lazy(() => import('./pages/studio/ProjectPage'));
 const ProvidersPage = lazy(() => import('./pages/studio/ProvidersPage'));
+const TeamBuilderPage = lazy(() => import('./pages/studio/TeamBuilderPage'));
 
 function LoadingSpinner() {
   return (
@@ -43,8 +44,9 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/prompts" element={<PlaceholderPage title="Prompts" description="Prompt template management" />} />
             <Route path="/triggers" element={<PlaceholderPage title="Triggers" description="Event triggers and automation" />} />
             <Route path="/studio" element={<StudioHomePage />} />
-            <Route path="/studio/:projectId" element={<ProjectPage />} />
+            <Route path="/studio/teams" element={<TeamBuilderPage />} />
             <Route path="/studio/providers" element={<ProvidersPage />} />
+            <Route path="/studio/:projectId" element={<ProjectPage />} />
           </Route>
         </Routes>
       </Suspense>
