@@ -17,6 +17,7 @@ vi.mock('../lib/studio-api', () => ({
   fetchLatestSonarScan: vi.fn().mockResolvedValue(null),
   triggerSonarScan: vi.fn().mockResolvedValue({}),
   fetchPoolStatus: vi.fn().mockResolvedValue({ initialized: false, total: 0, ready: 0, busy: 0, unhealthy: 0, containers: [] }),
+  roleLabel: vi.fn((role: string) => role.charAt(0).toUpperCase() + role.slice(1)),
 }));
 
 // Ornek ozet veri

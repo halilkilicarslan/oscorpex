@@ -9,12 +9,14 @@ import type { Task } from '../lib/studio-api';
 vi.mock('../lib/studio-api', () => ({
   fetchTasks: vi.fn(),
   retryTask: vi.fn(),
+  fetchProjectAgents: vi.fn().mockResolvedValue([]),
   fetchAutoStartStatus: vi.fn().mockResolvedValue({
     projectId: 'test-project',
     planApproved: false,
     autoStartEnabled: true,
     pipeline: null,
   }),
+  roleLabel: vi.fn((role: string) => role),
 }));
 
 // TaskCard bagimliligi — sadece temel bilgileri goster

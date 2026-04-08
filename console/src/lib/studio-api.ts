@@ -277,6 +277,27 @@ export async function retryTask(projectId: string, taskId: string): Promise<void
   await json(await fetch(`${BASE}/projects/${projectId}/tasks/${taskId}/retry`, { method: 'POST' }));
 }
 
+export async function submitReview(
+  projectId: string,
+  taskId: string,
+  approved: boolean,
+  feedback?: string,
+): Promise<void> {
+  await json(
+    await fetch(`${BASE}/projects/${projectId}/tasks/${taskId}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved, feedback }),
+    }),
+  );
+}
+
+export async function restartRevision(projectId: string, taskId: string): Promise<void> {
+  await json(
+    await fetch(`${BASE}/projects/${projectId}/tasks/${taskId}/restart-revision`, { method: 'POST' }),
+  );
+}
+
 // ---- Agents ---------------------------------------------------------------
 
 export async function fetchAgentConfigs(): Promise<AgentConfig[]> {

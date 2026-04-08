@@ -12,6 +12,7 @@ vi.mock('../lib/studio-api', () => ({
   getAgentStatus: vi.fn(),
   getAgentRunHistory: vi.fn(),
   fetchUnreadCount: vi.fn(),
+  roleLabel: vi.fn((role: string) => role),
 }));
 
 // AgentTerminal bagimliligi — terminal testi yok, sadece mockla
