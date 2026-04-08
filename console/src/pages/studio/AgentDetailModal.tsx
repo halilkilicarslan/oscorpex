@@ -1,5 +1,5 @@
 import { X, Pencil } from 'lucide-react';
-import type { ProjectAgent } from '../../lib/studio-api';
+import { roleLabel, type ProjectAgent } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
 
 interface AgentDetailModalProps {
@@ -32,7 +32,7 @@ export default function AgentDetailModal({ agent, onClose, onEdit }: AgentDetail
                   {agent.sourceAgentId ? 'Template' : 'Custom'}
                 </span>
               </div>
-              <span className="text-[12px] text-[#525252] capitalize">{agent.role}</span>
+              <span className="text-[12px] text-[#525252]">{roleLabel(agent.role)}</span>
             </div>
           </div>
           <button

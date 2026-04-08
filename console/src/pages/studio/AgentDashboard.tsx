@@ -36,6 +36,7 @@ import {
   type DocFreshnessItem,
   type SonarLatestScan,
   type PoolStatus,
+  roleLabel,
 } from '../../lib/studio-api';
 
 // ---------------------------------------------------------------------------
@@ -51,21 +52,6 @@ function formatDuration(ms: number | null): string {
   return `${(ms / 3600000).toFixed(1)}sa`;
 }
 
-/** Rol adını Türkçe karşılığına çevirir */
-function roleLabel(role: string): string {
-  const map: Record<string, string> = {
-    pm: 'PM',
-    designer: 'Tasarımcı',
-    architect: 'Mimar',
-    frontend: 'Frontend',
-    backend: 'Backend',
-    coder: 'Yazılımcı',
-    qa: 'QA',
-    reviewer: 'Reviewer',
-    devops: 'DevOps',
-  };
-  return map[role] ?? role;
-}
 
 /** Tamamlanma oranına göre renk sınıfı */
 function rateColor(rate: number): string {

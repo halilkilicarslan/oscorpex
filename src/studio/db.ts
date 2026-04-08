@@ -252,15 +252,15 @@ function migrate(db: Database.Database): void {
 
   // Data migration: Update preset agents with name, avatar, gender (for existing DBs)
   const PRESET_MAP: Record<string, { name: string; avatar: string; gender: string }> = {
-    pm:       { name: 'Kerem',    avatar: 'https://untitledui.com/images/avatars/koray-okumus', gender: 'male' },
-    architect:{ name: 'Atlas',    avatar: 'https://untitledui.com/images/avatars/zahir-mays', gender: 'male' },
-    frontend: { name: 'Nova',     avatar: 'https://untitledui.com/images/avatars/sophia-perez', gender: 'female' },
-    backend:  { name: 'Forge',    avatar: 'https://untitledui.com/images/avatars/drew-cano', gender: 'male' },
-    qa:       { name: 'Shield',   avatar: 'https://untitledui.com/images/avatars/levi-rocha', gender: 'male' },
-    reviewer: { name: 'Sentinel', avatar: 'https://untitledui.com/images/avatars/ethan-campbell', gender: 'male' },
-    coder:    { name: 'Pixel',    avatar: 'https://untitledui.com/images/avatars/orlando-diggs', gender: 'male' },
-    designer: { name: 'Iris',     avatar: 'https://untitledui.com/images/avatars/amelie-laurent', gender: 'female' },
-    devops:   { name: 'Vanguard', avatar: 'https://untitledui.com/images/avatars/joshua-wilson', gender: 'male' },
+    pm:       { name: 'Koray Okumus',    avatar: 'https://untitledui.com/images/avatars/koray-okumus', gender: 'male' },
+    architect:{ name: 'Zahir Mays',     avatar: 'https://untitledui.com/images/avatars/zahir-mays', gender: 'male' },
+    frontend: { name: 'Sophia Perez',   avatar: 'https://untitledui.com/images/avatars/sophia-perez', gender: 'female' },
+    backend:  { name: 'Drew Cano',      avatar: 'https://untitledui.com/images/avatars/drew-cano', gender: 'male' },
+    qa:       { name: 'Levi Rocha',     avatar: 'https://untitledui.com/images/avatars/levi-rocha', gender: 'male' },
+    reviewer: { name: 'Ethan Campbell', avatar: 'https://untitledui.com/images/avatars/ethan-campbell', gender: 'male' },
+    coder:    { name: 'Orlando Diggs',  avatar: 'https://untitledui.com/images/avatars/orlando-diggs', gender: 'male' },
+    designer: { name: 'Amelie Laurent', avatar: 'https://untitledui.com/images/avatars/amelie-laurent', gender: 'female' },
+    devops:   { name: 'Joshua Wilson',  avatar: 'https://untitledui.com/images/avatars/joshua-wilson', gender: 'male' },
   };
   const updateConfig = db.prepare('UPDATE agent_configs SET name = ?, avatar = ?, gender = ? WHERE role = ? AND is_preset = 1');
   const updateProjectAgent = db.prepare('UPDATE project_agents SET name = ?, avatar = ?, gender = ? WHERE source_agent_id IN (SELECT id FROM agent_configs WHERE role = ? AND is_preset = 1)');
@@ -880,7 +880,7 @@ export function seedPresetAgents(): void {
 
   const presets: Omit<AgentConfig, 'id'>[] = [
     {
-      name: 'Kerem',
+      name: 'Koray Okumus',
       role: 'pm',
       avatar: 'https://untitledui.com/images/avatars/koray-okumus',
       gender: 'male' as const,
@@ -888,7 +888,7 @@ export function seedPresetAgents(): void {
       model: 'claude-sonnet-4-6',
       cliTool: 'none',
       skills: ['project-management', 'planning', 'communication'],
-      systemPrompt: `You are Kerem, a senior Project Manager for AI Dev Studio.
+      systemPrompt: `You are Koray Okumus, a senior Project Manager for AI Dev Studio.
 Your role:
 1. Understand user's project requirements through conversation
 2. Ask clarifying questions about tech stack, features, scope
@@ -902,7 +902,7 @@ Identify dependencies between tasks accurately.`,
       isPreset: true,
     },
     {
-      name: 'Atlas',
+      name: 'Zahir Mays',
       role: 'architect',
       avatar: 'https://untitledui.com/images/avatars/zahir-mays',
       gender: 'male' as const,
@@ -910,7 +910,7 @@ Identify dependencies between tasks accurately.`,
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['system-design', 'database', 'api-design', 'documentation'],
-      systemPrompt: `You are Atlas, a senior Software Architect.
+      systemPrompt: `You are Zahir Mays, a senior Software Architect.
 Your role:
 1. Design system architecture based on project requirements
 2. Create database schemas and API contracts
@@ -920,7 +920,7 @@ Your role:
       isPreset: true,
     },
     {
-      name: 'Nova',
+      name: 'Sophia Perez',
       role: 'frontend',
       avatar: 'https://untitledui.com/images/avatars/sophia-perez',
       gender: 'female' as const,
@@ -928,7 +928,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['react', 'typescript', 'tailwindcss', 'ui-design', 'accessibility'],
-      systemPrompt: `You are Nova, a senior Frontend Developer.
+      systemPrompt: `You are Sophia Perez, a senior Frontend Developer.
 Your role:
 1. Build responsive UI components following design specs
 2. Implement client-side state management
@@ -938,7 +938,7 @@ Your role:
       isPreset: true,
     },
     {
-      name: 'Forge',
+      name: 'Drew Cano',
       role: 'backend',
       avatar: 'https://untitledui.com/images/avatars/drew-cano',
       gender: 'male' as const,
@@ -946,7 +946,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['node.js', 'typescript', 'postgresql', 'rest-api', 'authentication'],
-      systemPrompt: `You are Forge, a senior Backend Developer.
+      systemPrompt: `You are Drew Cano, a senior Backend Developer.
 Your role:
 1. Implement API endpoints following the API contract
 2. Build database queries and migrations
@@ -956,7 +956,7 @@ Your role:
       isPreset: true,
     },
     {
-      name: 'Shield',
+      name: 'Levi Rocha',
       role: 'qa',
       avatar: 'https://untitledui.com/images/avatars/levi-rocha',
       gender: 'male' as const,
@@ -964,7 +964,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['testing', 'e2e', 'test-automation', 'bug-reporting'],
-      systemPrompt: `You are Shield, a senior QA Engineer.
+      systemPrompt: `You are Levi Rocha, a senior QA Engineer.
 Your role:
 1. Write comprehensive test suites (unit, integration, e2e)
 2. Identify edge cases and potential bugs
@@ -974,7 +974,7 @@ Your role:
       isPreset: true,
     },
     {
-      name: 'Sentinel',
+      name: 'Ethan Campbell',
       role: 'reviewer',
       avatar: 'https://untitledui.com/images/avatars/ethan-campbell',
       gender: 'male' as const,
@@ -982,7 +982,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['code-review', 'best-practices', 'security', 'performance'],
-      systemPrompt: `You are Sentinel, a senior Code Reviewer.
+      systemPrompt: `You are Ethan Campbell, a senior Code Reviewer.
 Your role:
 1. Review pull requests for quality and correctness
 2. Check adherence to coding standards
@@ -993,7 +993,7 @@ Your role:
     },
     // Solo Coder şablonu için tam-yığın geliştirici
     {
-      name: 'Pixel',
+      name: 'Orlando Diggs',
       role: 'coder',
       avatar: 'https://untitledui.com/images/avatars/orlando-diggs',
       gender: 'male' as const,
@@ -1001,7 +1001,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['full-stack', 'typescript', 'react', 'node.js', 'database', 'testing'],
-      systemPrompt: `You are Pixel, a senior Full-Stack Developer.
+      systemPrompt: `You are Orlando Diggs, a senior Full-Stack Developer.
 Your role:
 1. Implement features end-to-end (frontend + backend)
 2. Write clean, well-tested code
@@ -1011,7 +1011,7 @@ Your role:
       isPreset: true,
     },
     {
-      name: 'Iris',
+      name: 'Amelie Laurent',
       role: 'designer',
       avatar: 'https://untitledui.com/images/avatars/amelie-laurent',
       gender: 'female' as const,
@@ -1019,7 +1019,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['ui-design', 'ux-research', 'wireframing', 'design-systems', 'figma', 'accessibility'],
-      systemPrompt: `You are Iris, a senior UI/UX Designer.
+      systemPrompt: `You are Amelie Laurent, a senior UI/UX Designer.
 Your role:
 1. Create wireframes and UI mockups based on requirements
 2. Design user flows and interaction patterns
@@ -1030,7 +1030,7 @@ Your role:
       isPreset: true,
     },
     {
-      name: 'Vanguard',
+      name: 'Joshua Wilson',
       role: 'devops',
       avatar: 'https://untitledui.com/images/avatars/joshua-wilson',
       gender: 'male' as const,
@@ -1038,7 +1038,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['docker', 'ci-cd', 'kubernetes', 'aws', 'monitoring', 'infrastructure-as-code'],
-      systemPrompt: `You are Vanguard, a senior DevOps Engineer.
+      systemPrompt: `You are Joshua Wilson, a senior DevOps Engineer.
 Your role:
 1. Set up CI/CD pipelines for automated build, test, and deploy
 2. Create and manage Docker containers and orchestration

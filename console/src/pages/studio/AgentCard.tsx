@@ -20,6 +20,7 @@ import {
   fetchUnreadCount,
   type AgentProcessInfo,
   type AgentRunHistory,
+  roleLabel,
 } from '../../lib/studio-api';
 import AgentTerminal from './AgentTerminal';
 
@@ -240,7 +241,7 @@ export default function AgentCard({
 
           {/* Rol ve PID bilgisi */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#525252] truncate capitalize">{agent.role}</span>
+            <span className="text-[11px] text-[#525252] truncate">{roleLabel(agent.role)}</span>
             {/* PID — yalnızca süreç çalışırken göster */}
             {processInfo?.pid && (
               <span className="text-[10px] font-mono text-[#3b82f6] shrink-0">

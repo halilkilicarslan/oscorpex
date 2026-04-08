@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal, Loader2, Circle, ChevronDown } from 'lucide-react';
-import { fetchProjectAgents, type ProjectAgent } from '../../lib/studio-api';
+import { fetchProjectAgents, roleLabel, type ProjectAgent } from '../../lib/studio-api';
 
 const BASE = `/api/studio`;
 
@@ -181,7 +181,7 @@ export default function AgentLogViewer({ projectId }: { projectId: string }) {
             >
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name} ({a.role})
+                  {a.name} ({roleLabel(a.role)})
                 </option>
               ))}
             </select>
@@ -221,7 +221,7 @@ export default function AgentLogViewer({ projectId }: { projectId: string }) {
         <div className="flex items-center gap-2 px-3 py-2 bg-[#0d0d0d] border border-[#1f1f1f] rounded-lg text-[11px]">
           <span className="text-[#fafafa] font-medium">{selected.name}</span>
           <span className="text-[#525252]">|</span>
-          <span className="text-[#737373]">{selected.role}</span>
+          <span className="text-[#737373]">{roleLabel(selected.role)}</span>
           <span className="text-[#525252]">|</span>
           <span className="text-[#525252]">{selected.model}</span>
           <span className="ml-auto text-[#525252]">{lines.length} lines</span>

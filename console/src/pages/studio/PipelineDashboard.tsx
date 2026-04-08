@@ -28,6 +28,7 @@ import {
   type PipelineStage,
   type ProjectAgent,
   type Task,
+  roleLabel,
 } from '../../lib/studio-api';
 
 // ---- Sabit değerler --------------------------------------------------------
@@ -359,7 +360,7 @@ function StageDetailPanel({
                     <span className="text-[12px] font-semibold" style={{ color: agentColor }}>
                       {agent.name}
                     </span>
-                    <span className="text-[10px] text-[#525252] ml-1.5">{agent.role}</span>
+                    <span className="text-[10px] text-[#525252] ml-1.5">{roleLabel(agent.role)}</span>
                   </div>
                   {/* Terminal aç/kapat butonu */}
                   <button
