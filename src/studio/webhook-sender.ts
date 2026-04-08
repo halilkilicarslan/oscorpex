@@ -1,17 +1,27 @@
 // ---------------------------------------------------------------------------
 // AI Dev Studio — Webhook Bildirici
 // Slack, Discord ve Generic webhook formatlarını destekler.
+// HMAC-SHA256 imzası, exponential backoff retry ve teslimat loglama içerir.
 // ---------------------------------------------------------------------------
 
-import { listWebhooksForEvent } from './db.js';
+import { createHmac } from 'node:crypto';
+import { listWebhooksForEvent, insertWebhookDelivery } from './db.js';
 import type { Webhook } from './db.js';
+import { eventBus } from './event-bus.js';
+import type { StudioEvent, EventType } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Sabitler
 // ---------------------------------------------------------------------------
 
 /** HTTP isteği için maksimum bekleme süresi (milisaniye) */
-const WEBHOOK_TIMEOUT_MS = 5_000;
+const WEBHOOK_TIMEOUT_MS = 10_000;
+
+/** Maksimum yeniden deneme sayısı */
+const MAX_RETRIES = 3;
+
+/** Retry bekleme süreleri (ms): 1s, 5s, 15s */
+const RETRY_DELAYS_MS = [1_000, 5_000, 15_000];
 
 // ---------------------------------------------------------------------------
 // Payload oluşturucuları — her platform için ayrı format
@@ -107,6 +117,7 @@ function formatEventTitle(eventType: string): string {
     task_failed:       'Gorev Basarisiz',
     agent_started:     'Agent Basladi',
     agent_stopped:     'Agent Durdu',
+    test:              'Test Bildirimi',
   };
   return titles[eventType] ?? eventType.replace(/_/g, ' ');
 }
@@ -155,65 +166,258 @@ function buildDiscordFields(
 }
 
 // ---------------------------------------------------------------------------
-// Ana gönderim fonksiyonu
+// HMAC imza yardımcısı
 // ---------------------------------------------------------------------------
 
 /**
- * Tek bir webhook'a bildirim gönder.
- * Hata durumunda sessizce loglar — çağrıyı bloklamamak için tasarlandı.
+ * Webhook gövdesi için HMAC-SHA256 imzası üret.
+ * Secret yoksa undefined döner — başlık atlanır.
  */
-async function sendToWebhook(
-  webhook: Webhook,
-  eventType: string,
-  projectId: string,
-  data: Record<string, unknown>,
-): Promise<void> {
-  let payload: Record<string, unknown>;
+function computeSignature(body: string, secret: string | undefined): string | undefined {
+  if (!secret) return undefined;
+  const hmac = createHmac('sha256', secret);
+  hmac.update(body, 'utf8');
+  return `sha256=${hmac.digest('hex')}`;
+}
 
-  // Platform tipine göre payload seç
-  if (webhook.type === 'slack') {
-    payload = buildSlackPayload(eventType, projectId, data);
-  } else if (webhook.type === 'discord') {
-    payload = buildDiscordPayload(eventType, projectId, data);
-  } else {
-    payload = buildGenericPayload(eventType, projectId, data);
+// ---------------------------------------------------------------------------
+// WebhookSender sınıfı
+// ---------------------------------------------------------------------------
+
+class WebhookSender {
+  private initialized = false;
+
+  /**
+   * Event bus'a abone ol — tüm EventType'lar için tek handler.
+   * Uygulama başlangıcında bir kez çağrılmalıdır.
+   */
+  init(): void {
+    if (this.initialized) return;
+    this.initialized = true;
+
+    // Tüm desteklenen event tiplerini dinle
+    const eventTypes: EventType[] = [
+      'task:assigned',
+      'task:started',
+      'task:completed',
+      'task:failed',
+      'task:timeout',
+      'task:retry',
+      'task:approval_required',
+      'task:approved',
+      'task:rejected',
+      'agent:started',
+      'agent:stopped',
+      'agent:output',
+      'agent:error',
+      'phase:started',
+      'phase:completed',
+      'plan:created',
+      'plan:approved',
+      'execution:started',
+      'execution:error',
+      'escalation:user',
+      'git:commit',
+      'git:pr-created',
+      'task:timeout_warning',
+      'pipeline:completed',
+      'budget:warning',
+      'budget:exceeded',
+    ];
+
+    for (const type of eventTypes) {
+      eventBus.on(type, (event) => {
+        // Arka planda çalışır — event akışını bloklamamak için
+        this.processEvent(event).catch((err) => {
+          console.warn(`[webhook-sender] processEvent hatasi (${type}):`, err instanceof Error ? err.message : err);
+        });
+      });
+    }
+
+    console.log(`[webhook-sender] Baslatildi — ${eventTypes.length} event tipi dinleniyor`);
   }
 
-  // AbortController ile timeout uygula
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+  /**
+   * Gelen event için eşleşen aktif webhook'ları bulup gönderim başlatır.
+   * EventType -> webhook event string eşlemesi burada yapılır.
+   */
+  async processEvent(event: StudioEvent): Promise<void> {
+    // EventBus tipi ('task:completed') → webhook event string ('task_completed')
+    const webhookEventType = event.type.replace(':', '_');
 
-  try {
-    const res = await fetch(webhook.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
+    let webhooks: Webhook[];
+    try {
+      webhooks = listWebhooksForEvent(event.projectId, webhookEventType);
+    } catch (err) {
+      console.warn('[webhook-sender] Webhook listesi alinamadi:', err instanceof Error ? err.message : err);
+      return;
+    }
 
-    if (!res.ok) {
-      console.warn(
-        `[webhook] Bildirim başarısız — ${webhook.name} (${webhook.type}): HTTP ${res.status}`,
-      );
+    if (webhooks.length === 0) return;
+
+    const payload = event.payload as Record<string, unknown>;
+
+    // Tüm webhook'ları paralel gönder — Promise.allSettled ile hata izolasyonu
+    await Promise.allSettled(
+      webhooks.map((wh) =>
+        this.sendWithRetry(wh, webhookEventType, event.projectId, payload, 1),
+      ),
+    );
+  }
+
+  /**
+   * Tek bir webhook'a POST gönder.
+   * Platform tipine göre payload formatı seçilir.
+   * HMAC-SHA256 imzası webhook.secret varsa eklenir.
+   */
+  async sendWebhook(
+    webhook: Webhook,
+    eventType: string,
+    projectId: string,
+    data: Record<string, unknown>,
+    attempt: number,
+  ): Promise<{ success: boolean; statusCode?: number; responseBody?: string; durationMs: number }> {
+    // Platform tipine göre payload seç
+    let body: Record<string, unknown>;
+    if (webhook.type === 'slack') {
+      body = buildSlackPayload(eventType, projectId, data);
+    } else if (webhook.type === 'discord') {
+      body = buildDiscordPayload(eventType, projectId, data);
     } else {
+      // Generic format: görev tanımındaki standart yapı
+      body = {
+        event: eventType,
+        payload: data,
+        timestamp: new Date().toISOString(),
+        projectId,
+      };
+    }
+
+    const bodyStr = JSON.stringify(body);
+    const signature = computeSignature(bodyStr, webhook.secret);
+
+    // İstek başlıkları
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Webhook-Event': eventType,
+    };
+    if (webhook.secret) {
+      // Secret'ı loglamıyoruz — sadece imzayı ekliyoruz
+      headers['X-Webhook-Secret'] = webhook.secret;
+    }
+    if (signature) {
+      headers['X-Webhook-Signature'] = signature;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+    const startMs = Date.now();
+
+    try {
+      const res = await fetch(webhook.url, {
+        method: 'POST',
+        headers,
+        body: bodyStr,
+        signal: controller.signal,
+      });
+
+      const durationMs = Date.now() - startMs;
+
+      // Yanıt gövdesini truncate et (maksimum 500 karakter)
+      let responseBody: string | undefined;
+      try {
+        const rawText = await res.text();
+        responseBody = rawText.slice(0, 500);
+      } catch {
+        responseBody = undefined;
+      }
+
+      return {
+        success: res.ok,
+        statusCode: res.status,
+        responseBody,
+        durationMs,
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startMs;
+      if (err instanceof Error && err.name === 'AbortError') {
+        return { success: false, durationMs, responseBody: `Timeout: ${WEBHOOK_TIMEOUT_MS}ms asildi` };
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, durationMs, responseBody: `Network hatasi: ${msg}` };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Exponential backoff ile yeniden deneme.
+   * Başarılı veya maksimum deneme sayısına ulaşıldığında durur.
+   * Her deneme webhook_deliveries tablosuna kaydedilir.
+   */
+  async sendWithRetry(
+    webhook: Webhook,
+    eventType: string,
+    projectId: string,
+    data: Record<string, unknown>,
+    attempt: number,
+  ): Promise<void> {
+    const result = await this.sendWebhook(webhook, eventType, projectId, data, attempt);
+
+    // Teslimat kaydını logla
+    try {
+      insertWebhookDelivery({
+        webhookId: webhook.id,
+        eventType,
+        status: result.success ? 'success' : 'failed',
+        statusCode: result.statusCode,
+        responseBody: result.responseBody,
+        durationMs: result.durationMs,
+        attempt,
+      });
+    } catch (logErr) {
+      // Log hatası ana akışı engellemez
+      console.warn('[webhook-sender] Teslimat kaydedilemedi:', logErr instanceof Error ? logErr.message : logErr);
+    }
+
+    if (result.success) {
       console.log(
-        `[webhook] Gonderildi — ${webhook.name} (${webhook.type}), event: ${eventType}`,
+        `[webhook-sender] Gonderildi — ${webhook.name} (${webhook.type}), event: ${eventType}, ` +
+        `${result.durationMs}ms, HTTP ${result.statusCode}`,
       );
+      return;
     }
-  } catch (err) {
-    // Timeout veya ağ hatası — sessizce logla, üst katmanı bloklama
-    if (err instanceof Error && err.name === 'AbortError') {
-      console.warn(`[webhook] Timeout — ${webhook.name}: ${WEBHOOK_TIMEOUT_MS}ms asildi`);
-    } else {
+
+    // Başarısız — retry gerekiyor mu?
+    if (attempt >= MAX_RETRIES) {
       console.warn(
-        `[webhook] Gonderim hatasi — ${webhook.name}:`,
-        err instanceof Error ? err.message : err,
+        `[webhook-sender] Maksimum deneme sayisina ulasildi — ${webhook.name}, event: ${eventType}, ` +
+        `deneme: ${attempt}/${MAX_RETRIES}, HTTP ${result.statusCode ?? 'N/A'}`,
       );
+      return;
     }
-  } finally {
-    clearTimeout(timer);
+
+    const delay = RETRY_DELAYS_MS[attempt - 1] ?? 15_000;
+    console.warn(
+      `[webhook-sender] Gonderim basarisiz — ${webhook.name}, event: ${eventType}, ` +
+      `HTTP ${result.statusCode ?? 'N/A'}, ${delay}ms sonra tekrar denenecek (${attempt}/${MAX_RETRIES})`,
+    );
+
+    // Asenkron bekleme — retry gecikmesi
+    await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    await this.sendWithRetry(webhook, eventType, projectId, data, attempt + 1);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Singleton export
+// ---------------------------------------------------------------------------
+
+export const webhookSender = new WebhookSender();
+
+// ---------------------------------------------------------------------------
+// Geriye dönük uyumluluk — routes.ts sendWebhookNotification kullanıyor
+// ---------------------------------------------------------------------------
 
 /**
  * Proje için belirli bir event'te kayıtlı tüm aktif webhook'lara bildirim gönder.
@@ -233,14 +437,14 @@ export async function sendWebhookNotification(
     webhooks = listWebhooksForEvent(projectId, eventType);
   } catch (err) {
     // DB hatası — sessizce logla
-    console.warn('[webhook] Webhook listesi alinamadi:', err);
+    console.warn('[webhook-sender] Webhook listesi alinamadi:', err instanceof Error ? err.message : err);
     return;
   }
 
   if (webhooks.length === 0) return;
 
-  // Tüm webhook'ları paralel olarak gönder — birbirini bloklamamak için
+  // Tüm webhook'ları paralel gönder — birbirini bloklamamak için
   await Promise.allSettled(
-    webhooks.map((wh) => sendToWebhook(wh, eventType, projectId, payload)),
+    webhooks.map((wh) => webhookSender.sendWithRetry(wh, eventType, projectId, payload, 1)),
   );
 }

@@ -450,6 +450,36 @@ function migrate(db: Database.Database): void {
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_project_settings_unique ON project_settings(project_id, category, key);
   `);
+
+  // webhook_deliveries — her teslimat girişimi loglanır
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id            TEXT PRIMARY KEY,
+      webhook_id    TEXT NOT NULL,
+      event_type    TEXT NOT NULL,
+      status        TEXT NOT NULL DEFAULT 'failed',
+      status_code   INTEGER,
+      response_body TEXT,
+      duration_ms   INTEGER NOT NULL DEFAULT 0,
+      attempt       INTEGER NOT NULL DEFAULT 1,
+      created_at    TEXT NOT NULL,
+      FOREIGN KEY (webhook_id) REFERENCES webhooks(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
+    CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_created ON webhook_deliveries(created_at);
+  `);
+
+  // webhooks tablosuna secret kolonu ekle (mevcut DB'ler için migration)
+  const webhookCols = (db.prepare("PRAGMA table_info(webhooks)").all() as Array<{ name: string }>).map(
+    (c) => c.name,
+  );
+  if (!webhookCols.includes('secret')) {
+    db.exec("ALTER TABLE webhooks ADD COLUMN secret TEXT");
+  }
+  if (!webhookCols.includes('updated_at')) {
+    db.exec("ALTER TABLE webhooks ADD COLUMN updated_at TEXT");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2402,6 +2432,21 @@ export interface Webhook {
   /** Dinlenen event tipleri: JSON dizisi olarak saklanır */
   events: string[];
   active: boolean;
+  /** HMAC imzası için gizli anahtar — opsiyonel */
+  secret?: string;
+  createdAt: string;
+}
+
+/** Webhook teslimat log kaydı */
+export interface WebhookDelivery {
+  id: string;
+  webhookId: string;
+  eventType: string;
+  status: 'success' | 'failed';
+  statusCode?: number;
+  responseBody?: string;
+  durationMs: number;
+  attempt: number;
   createdAt: string;
 }
 
@@ -2415,6 +2460,7 @@ function rowToWebhook(row: any): Webhook {
     type: row.type as Webhook['type'],
     events: JSON.parse(row.events ?? '[]'),
     active: row.active === 1,
+    secret: row.secret ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -2426,13 +2472,14 @@ export function createWebhook(data: {
   url: string;
   type: Webhook['type'];
   events: string[];
+  secret?: string;
 }): Webhook {
   const db = getDb();
   const id = randomUUID();
   const ts = now();
   db.prepare(
-    'INSERT INTO webhooks (id, project_id, name, url, type, events, active, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)',
-  ).run(id, data.projectId, data.name, data.url, data.type, JSON.stringify(data.events), ts);
+    'INSERT INTO webhooks (id, project_id, name, url, type, events, active, secret, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)',
+  ).run(id, data.projectId, data.name, data.url, data.type, JSON.stringify(data.events), data.secret ?? null, ts);
   return rowToWebhook(
     db.prepare('SELECT * FROM webhooks WHERE id = ?').get(id) as any,
   );
@@ -2456,17 +2503,18 @@ export function getWebhook(id: string): Webhook | undefined {
 /** Webhook'u güncelle — kısmi güncelleme desteklenir */
 export function updateWebhook(
   id: string,
-  data: Partial<Pick<Webhook, 'name' | 'url' | 'type' | 'events' | 'active'>>,
+  data: Partial<Pick<Webhook, 'name' | 'url' | 'type' | 'events' | 'active' | 'secret'>>,
 ): Webhook | undefined {
   const db = getDb();
   const fields: string[] = [];
-  const values: (string | number)[] = [];
+  const values: (string | number | null)[] = [];
 
   if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
   if (data.url !== undefined) { fields.push('url = ?'); values.push(data.url); }
   if (data.type !== undefined) { fields.push('type = ?'); values.push(data.type); }
   if (data.events !== undefined) { fields.push('events = ?'); values.push(JSON.stringify(data.events)); }
   if (data.active !== undefined) { fields.push('active = ?'); values.push(data.active ? 1 : 0); }
+  if (data.secret !== undefined) { fields.push('secret = ?'); values.push(data.secret ?? null); }
 
   if (fields.length === 0) return getWebhook(id);
 
@@ -2489,5 +2537,59 @@ export function listWebhooksForEvent(projectId: string, eventType: string): Webh
   const all = (
     db.prepare('SELECT * FROM webhooks WHERE project_id = ? AND active = 1').all(projectId) as any[]
   ).map(rowToWebhook);
+  // 'test' event türü tüm aktif webhook'lara gönderilir
+  if (eventType === 'test') return all;
   return all.filter((w) => w.events.includes(eventType));
+}
+
+// ---------------------------------------------------------------------------
+// Webhook Deliveries CRUD
+// ---------------------------------------------------------------------------
+
+/** DB satırını WebhookDelivery nesnesine dönüştür */
+function rowToDelivery(row: any): WebhookDelivery {
+  return {
+    id: row.id,
+    webhookId: row.webhook_id,
+    eventType: row.event_type,
+    status: row.status as 'success' | 'failed',
+    statusCode: row.status_code ?? undefined,
+    responseBody: row.response_body ?? undefined,
+    durationMs: row.duration_ms,
+    attempt: row.attempt,
+    createdAt: row.created_at,
+  };
+}
+
+/** Yeni teslimat kaydı oluştur */
+export function insertWebhookDelivery(data: Omit<WebhookDelivery, 'id' | 'createdAt'>): WebhookDelivery {
+  const db = getDb();
+  const id = randomUUID();
+  const ts = now();
+  db.prepare(
+    `INSERT INTO webhook_deliveries
+       (id, webhook_id, event_type, status, status_code, response_body, duration_ms, attempt, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    data.webhookId,
+    data.eventType,
+    data.status,
+    data.statusCode ?? null,
+    data.responseBody ?? null,
+    data.durationMs,
+    data.attempt,
+    ts,
+  );
+  return rowToDelivery(db.prepare('SELECT * FROM webhook_deliveries WHERE id = ?').get(id) as any);
+}
+
+/** Webhook'a ait son N teslimat kaydını getir */
+export function listWebhookDeliveries(webhookId: string, limit = 50): WebhookDelivery[] {
+  const db = getDb();
+  return (
+    db.prepare(
+      'SELECT * FROM webhook_deliveries WHERE webhook_id = ? ORDER BY created_at DESC LIMIT ?',
+    ).all(webhookId, limit) as any[]
+  ).map(rowToDelivery);
 }

@@ -11,6 +11,7 @@ import { createPinoLogger } from "@voltagent/logger";
 import { honoServer } from "@voltagent/server-hono";
 import { studioRoutes } from "./studio/index.js";
 import { startWSServer } from "./studio/ws-server.js";
+import { webhookSender } from "./studio/webhook-sender.js";
 import { observabilityRoutes } from "./observability-routes.js";
 import { containerPool } from "./studio/container-pool.js";
 import { expenseApprovalWorkflow } from "./workflows";
@@ -83,6 +84,9 @@ const summarizer = createSummarizer();
 
 // AI Dev Studio WebSocket sunucusunu başlat (port 3142)
 startWSServer();
+
+// Webhook sender — event bus'a abone ol, tüm event tiplerini dinle
+webhookSender.init();
 
 // Container pool warm-up (non-blocking — fails silently if Docker not available)
 containerPool.initialize().catch((err) => {

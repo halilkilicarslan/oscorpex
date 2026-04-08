@@ -16,7 +16,8 @@ import {
   Settings,
   ChevronUp,
   ChevronDown,
-  ListOrdered,
+  Link,
+  ArrowRight,
 } from 'lucide-react';
 import {
   fetchProviders,
@@ -551,11 +552,65 @@ function ProviderModal({
 }
 
 // ---------------------------------------------------------------------------
-// Main page
+// Fallback Chain helpers and sub-components
 // ---------------------------------------------------------------------------
 
+// Helper: zincirdeki konuma göre etiket döndürür
+
+function getFallbackLabel(index: number): { text: string; className: string } {
+  if (index === 0) {
+    return {
+      text: 'Primary',
+      className:
+        'text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/30',
+    };
+  }
+  return {
+    text: `Fallback ${index}`,
+    className:
+      'text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#262626] text-[#737373] border border-[#333]',
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Fallback Order panel — sürükle bırak yerine basit up/down butonları
+// Fallback akış göstergesi (Primary -> Fallback 1 -> Fallback 2 ...)
+// ---------------------------------------------------------------------------
+
+function FallbackFlowIndicator({ chain }: { chain: AIProvider[] }) {
+  if (chain.length < 2) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mb-4 px-1">
+      {chain.map((provider, index) => {
+        const label = getFallbackLabel(index);
+        return (
+          <div key={provider.id} className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
+              <span
+                className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                  index === 0
+                    ? 'bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/30'
+                    : 'bg-[#1a1a1a] text-[#525252] border border-[#2a2a2a]'
+                }`}
+              >
+                {label.text}
+              </span>
+              <span className="text-[11px] text-[#404040] truncate max-w-[80px]">
+                {provider.name}
+              </span>
+            </div>
+            {index < chain.length - 1 && (
+              <ArrowRight size={11} className="text-[#333] shrink-0" />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fallback Order panel — up/down butonlarıyla sıralama
 // ---------------------------------------------------------------------------
 
 function FallbackOrderPanel({
@@ -572,7 +627,7 @@ function FallbackOrderPanel({
   if (chain.length === 0) {
     return (
       <div className="text-[12px] text-[#525252] py-4 text-center">
-        Henüz aktif provider yok
+        No active providers yet
       </div>
     );
   }
@@ -581,55 +636,83 @@ function FallbackOrderPanel({
     <div className="flex flex-col gap-2">
       {chain.map((provider, index) => {
         const meta = PROVIDER_META[provider.type];
-        return (
-          <div
-            key={provider.id}
-            className="flex items-center gap-3 bg-[#111111] border border-[#262626] rounded-lg px-3 py-2.5"
-          >
-            {/* Sıra numarası */}
-            <span className="text-[11px] font-mono text-[#525252] w-5 shrink-0 text-center">
-              {index + 1}
-            </span>
+        const isPrimary = index === 0;
+        const label = getFallbackLabel(index);
 
-            {/* Provider bilgisi */}
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className={`text-[10px] font-semibold ${meta.color}`}>
-                {meta.label}
-              </span>
-              <span className="text-[12px] text-[#fafafa] truncate">{provider.name}</span>
-              {provider.model && (
-                <span className="text-[10px] text-[#525252] truncate">{provider.model}</span>
+        return (
+          <div key={provider.id} className="flex items-stretch gap-0">
+            {/* Sol: zincir çizgisi */}
+            <div className="flex flex-col items-center w-6 shrink-0 mr-2">
+              {/* Üst bağlantı çizgisi */}
+              {index > 0 && (
+                <div className="w-px flex-1 bg-[#2a2a2a] mb-0.5" />
               )}
-              {provider.isDefault && (
-                <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/30 shrink-0">
-                  <Star size={7} />
-                  PRIMARY
-                </span>
+              {/* Nokta */}
+              <div
+                className={`w-2 h-2 rounded-full shrink-0 my-1 ${
+                  isPrimary ? 'bg-[#22c55e]' : 'bg-[#333]'
+                }`}
+              />
+              {/* Alt bağlantı çizgisi */}
+              {index < chain.length - 1 && (
+                <div className="w-px flex-1 bg-[#2a2a2a] mt-0.5" />
               )}
             </div>
 
-            {/* Taşıma butonları */}
-            <div className="flex items-center gap-0.5 shrink-0">
-              <button
-                onClick={() => onMoveUp(index)}
-                disabled={index === 0 || saving}
-                className="p-1 rounded text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                title="Yukarı taşı"
-              >
-                <ChevronUp size={14} />
-              </button>
-              <button
-                onClick={() => onMoveDown(index)}
-                disabled={index === chain.length - 1 || saving}
-                className="p-1 rounded text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                title="Aşağı taşı"
-              >
-                <ChevronDown size={14} />
-              </button>
+            {/* Sağ: kart */}
+            <div
+              className={`flex items-center gap-3 flex-1 rounded-lg px-3 py-2.5 mb-1.5 transition-colors ${
+                isPrimary
+                  ? 'bg-[#0d1a0d] border border-[#22c55e]/25'
+                  : 'bg-[#111111] border border-[#262626]'
+              }`}
+            >
+              {/* Sıra etiketi */}
+              <span className={`shrink-0 ${label.className}`}>
+                {label.text}
+              </span>
+
+              {/* Provider bilgisi */}
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <TypeBadge type={provider.type} />
+                <span className="text-[12px] text-[#fafafa] truncate font-medium">
+                  {provider.name}
+                </span>
+                {provider.model && (
+                  <span className="text-[10px] text-[#525252] truncate hidden sm:block">
+                    {provider.model}
+                  </span>
+                )}
+              </div>
+
+              {/* Taşıma butonları */}
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button
+                  onClick={() => onMoveUp(index)}
+                  disabled={index === 0 || saving}
+                  className="p-1 rounded text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                  title="Move up"
+                >
+                  <ChevronUp size={14} />
+                </button>
+                <button
+                  onClick={() => onMoveDown(index)}
+                  disabled={index === chain.length - 1 || saving}
+                  className="p-1 rounded text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                  title="Move down"
+                >
+                  <ChevronDown size={14} />
+                </button>
+              </div>
             </div>
           </div>
         );
       })}
+
+      {/* Açıklama notu */}
+      <p className="text-[11px] text-[#404040] mt-1 pl-8">
+        If the primary provider fails, the next provider in the chain is tried automatically.
+      </p>
     </div>
   );
 }
@@ -836,25 +919,31 @@ export default function ProvidersPage() {
             ))}
           </div>
 
-          {/* Fallback Order paneli — sadece en az 2 aktif provider varsa göster */}
+          {/* Fallback Chain paneli — sadece en az 2 aktif provider varsa göster */}
           {fallbackChain.length >= 2 && (
             <div className="bg-[#0a0a0a] border border-[#262626] rounded-xl p-5">
               {/* Panel başlığı */}
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-[#1f1f1f] flex items-center justify-center shrink-0">
-                  <ListOrdered size={15} className="text-[#22c55e]" />
+              <div className="flex items-start gap-2.5 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-[#1f1f1f] flex items-center justify-center shrink-0 mt-0.5">
+                  <Link size={15} className="text-[#22c55e]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-[14px] font-semibold text-[#fafafa]">Fallback Order</h2>
-                  <p className="text-[11px] text-[#525252]">
-                    Birincil model hata verirse sıradaki provider'a geçilir. Sıralamayı up/down butonları ile değiştirin.
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-[14px] font-semibold text-[#fafafa]">Fallback Chain</h2>
+                    {fallbackSaving && (
+                      <Loader2 size={12} className="text-[#525252] animate-spin" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#525252] mt-0.5">
+                    When the primary provider fails, the system automatically tries the next provider in order.
                   </p>
                 </div>
-                {fallbackSaving && (
-                  <Loader2 size={14} className="text-[#525252] animate-spin shrink-0" />
-                )}
               </div>
 
+              {/* Akış özet göstergesi */}
+              <FallbackFlowIndicator chain={fallbackChain} />
+
+              {/* Sıralama listesi */}
               <FallbackOrderPanel
                 chain={fallbackChain}
                 onMoveUp={handleFallbackMoveUp}
