@@ -4,6 +4,7 @@ import {
   fetchOrgStructure,
   type OrgNode,
   type PipelineAgent,
+  roleLabel,
 } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
 
@@ -27,7 +28,7 @@ function OrgTreeNode({ node, level = 0 }: { node: OrgNode; level?: number }) {
           className="text-[10px] font-medium px-1.5 py-0.5 rounded mt-1 truncate max-w-full text-center"
           style={{ backgroundColor: node.color + '20', color: node.color }}
         >
-          {node.role}
+          {roleLabel(node.role)}
         </span>
       </div>
 
@@ -104,7 +105,7 @@ function PipelineView({ pipeline }: { pipeline: PipelineAgent[] }) {
                     {agent.name}
                   </span>
                   <span className="text-[10px] block truncate" style={{ color: agent.color }}>
-                    {agent.role}
+                    {roleLabel(agent.role)}
                   </span>
                 </div>
               </div>

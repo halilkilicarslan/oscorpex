@@ -1291,3 +1291,21 @@ export interface PoolStatus {
 export async function fetchPoolStatus(): Promise<PoolStatus> {
   return json(await fetch(`${BASE}/pool/status`));
 }
+
+// ---- Helpers ---------------------------------------------------------------
+
+const ROLE_LABELS: Record<string, string> = {
+  pm: 'Project Manager',
+  architect: 'Software Architect',
+  frontend: 'Frontend Developer',
+  backend: 'Backend Developer',
+  coder: 'Full-Stack Developer',
+  qa: 'QA Engineer',
+  reviewer: 'Code Reviewer',
+  designer: 'UI/UX Designer',
+  devops: 'DevOps Engineer',
+};
+
+export function roleLabel(role: string): string {
+  return ROLE_LABELS[role] ?? role.charAt(0).toUpperCase() + role.slice(1);
+}
