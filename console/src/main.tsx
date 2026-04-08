@@ -7,10 +7,13 @@ import Layout from './components/Layout';
 const DashboardWrapper = lazy(() => import('./pages/DashboardWrapper'));
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'));
 const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
+const TracesPage = lazy(() => import('./pages/TracesPage'));
+const MemoryPage = lazy(() => import('./pages/MemoryPage'));
 const StudioHomePage = lazy(() => import('./pages/studio/StudioHomePage'));
 const ProjectPage = lazy(() => import('./pages/studio/ProjectPage'));
 const ProvidersPage = lazy(() => import('./pages/studio/ProvidersPage'));
 const TeamBuilderPage = lazy(() => import('./pages/studio/TeamBuilderPage'));
+const LogsPage = lazy(() => import('./pages/LogsPage'));
 
 function LoadingSpinner() {
   return (
@@ -35,11 +38,11 @@ createRoot(document.getElementById('root')!).render(
           <Route element={<Layout />}>
             <Route index element={<DashboardWrapper />} />
             <Route path="/dashboard" element={<ObservabilityPage />} />
-            <Route path="/traces" element={<PlaceholderPage title="Traces" description="View and analyze execution traces" />} />
-            <Route path="/logs" element={<PlaceholderPage title="Logs" description="View agent execution logs" />} />
+            <Route path="/traces" element={<TracesPage />} />
+            <Route path="/logs" element={<LogsPage />} />
             <Route path="/feedbacks" element={<PlaceholderPage title="Feedbacks" description="Manage user feedback" />} />
             <Route path="/alerts" element={<PlaceholderPage title="Alerts" description="Configure and manage alerts" />} />
-            <Route path="/memory" element={<PlaceholderPage title="Memory" description="Agent memory management" />} />
+            <Route path="/memory" element={<MemoryPage />} />
             <Route path="/rag" element={<PlaceholderPage title="RAG" description="Retrieval Augmented Generation" />} />
             <Route path="/prompts" element={<PlaceholderPage title="Prompts" description="Prompt template management" />} />
             <Route path="/triggers" element={<PlaceholderPage title="Triggers" description="Event triggers and automation" />} />
