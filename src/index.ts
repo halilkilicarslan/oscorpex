@@ -11,6 +11,7 @@ import { createPinoLogger } from "@voltagent/logger";
 import { honoServer } from "@voltagent/server-hono";
 import { studioRoutes } from "./studio/index.js";
 import { startWSServer } from "./studio/ws-server.js";
+import { observabilityRoutes } from "./observability-routes.js";
 import { containerPool } from "./studio/container-pool.js";
 import { expenseApprovalWorkflow } from "./workflows";
 import {
@@ -103,6 +104,7 @@ new VoltAgent({
     port: 3141,
     configureApp: (app) => {
       app.route('/api/studio', studioRoutes);
+      app.route('/api/observability', observabilityRoutes);
     },
   }),
   logger,
