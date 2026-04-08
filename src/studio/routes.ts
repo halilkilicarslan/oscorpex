@@ -611,6 +611,29 @@ studio.post('/projects/:id/tasks/:taskId/retry', async (c) => {
   }
 });
 
+// POST /projects/:id/tasks/:taskId/review — Reviewer onay veya ret verir
+studio.post('/projects/:id/tasks/:taskId/review', async (c) => {
+  try {
+    const body = await c.req.json<{ approved: boolean; feedback?: string }>();
+    const updated = taskEngine.submitReview(c.req.param('taskId'), body.approved, body.feedback);
+    return c.json({ success: true, task: updated });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Review failed';
+    return c.json({ error: msg }, 400);
+  }
+});
+
+// POST /projects/:id/tasks/:taskId/restart-revision — Revision durumundaki task'ı tekrar çalıştır
+studio.post('/projects/:id/tasks/:taskId/restart-revision', async (c) => {
+  try {
+    const updated = taskEngine.restartRevision(c.req.param('taskId'));
+    return c.json({ success: true, task: updated });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Restart revision failed';
+    return c.json({ error: msg }, 400);
+  }
+});
+
 // GET /projects/:id/tasks/:taskId/logs
 // Returns stored logs from task.output.logs as JSON.
 // For still-running tasks also appends the agent's live terminal buffer.

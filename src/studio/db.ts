@@ -599,7 +599,7 @@ export function listProjectTasks(projectId: string): Task[] {
   return rows.map(rowToTask);
 }
 
-export function updateTask(id: string, data: Partial<Pick<Task, 'status' | 'assignedAgent' | 'output' | 'retryCount' | 'error' | 'startedAt' | 'completedAt'>>): Task | undefined {
+export function updateTask(id: string, data: Partial<Pick<Task, 'status' | 'assignedAgent' | 'output' | 'retryCount' | 'error' | 'startedAt' | 'completedAt' | 'reviewStatus' | 'reviewerAgentId' | 'revisionCount' | 'assignedAgentId'>>): Task | undefined {
   const db = getDb();
   const fields: string[] = [];
   const values: any[] = [];
@@ -611,6 +611,10 @@ export function updateTask(id: string, data: Partial<Pick<Task, 'status' | 'assi
   if (data.startedAt !== undefined) { fields.push('started_at = ?'); values.push(data.startedAt); }
   if (data.completedAt !== undefined) { fields.push('completed_at = ?'); values.push(data.completedAt); }
   if (data.error !== undefined) { fields.push('error = ?'); values.push(data.error); }
+  if (data.reviewStatus !== undefined) { fields.push('review_status = ?'); values.push(data.reviewStatus); }
+  if (data.reviewerAgentId !== undefined) { fields.push('reviewer_agent_id = ?'); values.push(data.reviewerAgentId); }
+  if (data.revisionCount !== undefined) { fields.push('revision_count = ?'); values.push(data.revisionCount); }
+  if (data.assignedAgentId !== undefined) { fields.push('assigned_agent_id = ?'); values.push(data.assignedAgentId); }
 
   if (fields.length === 0) return getTask(id);
 
