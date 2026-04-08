@@ -9,7 +9,7 @@ import { taskEngine } from './task-engine.js';
 import { containerManager } from './container-manager.js';
 import { containerPool, type TaskResult as PoolTaskResult } from './container-pool.js';
 import { eventBus } from './event-bus.js';
-import { getAIModelInfo, calculateCost } from './ai-provider-factory.js';
+import { getAIModelInfo, calculateCost, getAIModelWithFallback } from './ai-provider-factory.js';
 import {
   getProject,
   listAgentConfigs,
@@ -23,6 +23,7 @@ import {
   listProjectTasks,
   getTask,
   listProjectAgents,
+  getProjectSetting,
 } from './db.js';
 import { createAgentTools } from './agent-tools.js';
 import { agentRuntime } from './agent-runtime.js';
@@ -37,32 +38,87 @@ import { updateDocsAfterTask } from './docs-generator.js';
 // Timeout configuration
 // ---------------------------------------------------------------------------
 
-/** Default task timeout: 5 minutes (in milliseconds) */
-const DEFAULT_TASK_TIMEOUT_MS = 5 * 60 * 1000;
+/**
+ * Complexity'ye göre temel timeout değerleri (milisaniye):
+ *   S  → 5 dakika
+ *   M  → 15 dakika
+ *   L  → 30 dakika
+ *   XL → 60 dakika
+ */
+const COMPLEXITY_TIMEOUT_MS: Record<string, number> = {
+  S: 5 * 60 * 1000,
+  M: 15 * 60 * 1000,
+  L: 30 * 60 * 1000,
+  XL: 60 * 60 * 1000,
+};
+
+/** Bilinmeyen complexity için varsayılan: 5 dakika */
+const DEFAULT_TASK_TIMEOUT_MS = COMPLEXITY_TIMEOUT_MS.S;
+
+/**
+ * Timeout'a yaklaşıldığında uyarı vermek için eşik: son %20.
+ * Örneğin 30 dk'lık timeout'ta 24. dakikada warning emit edilir.
+ */
+const TIMEOUT_WARNING_THRESHOLD = 0.8; // Timeout'un %80'i geçince warning
+
+/**
+ * Task complexity ve proje timeout_multiplier ayarına göre efektif timeout hesaplar.
+ * Öncelik sırası: agent.taskTimeout > complexity tabanlı değer × multiplier
+ */
+function resolveTaskTimeoutMs(
+  projectId: string,
+  complexity: string | undefined,
+  agentTimeout: number | undefined,
+): number {
+  // Agent seviyesinde açıkça belirlenmiş timeout önceliklidir
+  if (agentTimeout != null && agentTimeout > 0) return agentTimeout;
+
+  // Complexity bazlı temel timeout
+  const baseMs = COMPLEXITY_TIMEOUT_MS[complexity ?? 'S'] ?? DEFAULT_TASK_TIMEOUT_MS;
+
+  // Proje ayarlarından kullanıcının belirlediği çarpan (varsayılan 1.0)
+  const multiplierStr = getProjectSetting(projectId, 'execution', 'task_timeout_multiplier');
+  const multiplier = multiplierStr ? parseFloat(multiplierStr) : 1.0;
+  const safeMultiplier = Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1.0;
+
+  return Math.round(baseMs * safeMultiplier);
+}
 
 /**
  * Wraps a promise with a timeout using AbortController.
  * If the promise does not resolve within `timeoutMs`, the AbortController is
  * aborted and a TaskTimeoutError is thrown.
  *
- * @param operation - Factory that receives an AbortSignal and returns the promise to race.
- * @param timeoutMs - Maximum allowed duration in milliseconds.
+ * @param operation   - Factory that receives an AbortSignal and returns the promise to race.
+ * @param timeoutMs   - Maximum allowed duration in milliseconds.
+ * @param onWarning   - Timeout'un %80'i dolduğunda çağrılır (opsiyonel).
  * @returns The resolved value of the operation promise.
  */
 function withTimeout<T>(
   operation: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
+  onWarning?: () => void,
 ): Promise<T> {
   const controller = new AbortController();
 
   const timeoutPromise = new Promise<never>((_, reject) => {
+    // Timeout'un %80'inde warning tetikle (son %20'ye girildiğinde)
+    const warningMs = Math.round(timeoutMs * TIMEOUT_WARNING_THRESHOLD);
+    const warningTimer = onWarning
+      ? setTimeout(() => { onWarning(); }, warningMs)
+      : null;
+
     const timer = setTimeout(() => {
+      if (warningTimer) clearTimeout(warningTimer);
       controller.abort();
       reject(new TaskTimeoutError(timeoutMs));
     }, timeoutMs);
 
-    // If the operation resolves/rejects first, clear the timer to avoid leaks
-    controller.signal.addEventListener('abort', () => clearTimeout(timer));
+    // İşlem erken biterse timer'ları temizle
+    controller.signal.addEventListener('abort', () => {
+      clearTimeout(timer);
+      if (warningTimer) clearTimeout(warningTimer);
+    });
   });
 
   return Promise.race([operation(controller.signal), timeoutPromise]);
@@ -247,8 +303,27 @@ class ExecutionEngine {
 
     const prompt = this.buildTaskPrompt(task, project);
 
-    // Resolve the effective timeout: agent-level config takes priority over the default
-    const timeoutMs = agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS;
+    // Complexity ve proje timeout_multiplier ayarına göre efektif timeout hesapla
+    const timeoutMs = resolveTaskTimeoutMs(projectId, task.complexity, agent.taskTimeout);
+
+    // Timeout'un %80'ine girildiğinde warning event emit edecek callback
+    const onTimeoutWarning = () => {
+      const remainingMs = Math.round(timeoutMs * (1 - TIMEOUT_WARNING_THRESHOLD));
+      const remainingSec = Math.round(remainingMs / 1000);
+      console.warn(`[execution-engine] Timeout uyarısı: "${task.title}" — ${remainingSec}sn kaldı`);
+      eventBus.emit({
+        projectId,
+        type: 'task:timeout_warning',
+        agentId: agent.id,
+        taskId: task.id,
+        payload: {
+          timeoutMs,
+          remainingMs,
+          taskTitle: task.title,
+          message: `Görev timeout'a ${remainingSec} saniye kaldı (toplam ${(timeoutMs / 60_000).toFixed(0)} dk).`,
+        },
+      });
+    };
 
     try {
       let output: TaskOutput | undefined;
@@ -270,7 +345,7 @@ class ExecutionEngine {
               systemPrompt: agent.systemPrompt || this.defaultSystemPrompt(agent),
               timeoutMs,
               model: 'sonnet',
-              signal: undefined, // timeout handled by CLI --max-budget-usd
+              signal: undefined, // timeout CLI'nın kendi mekanizmasıyla yönetiliyor
             });
 
             output = {
@@ -356,6 +431,7 @@ class ExecutionEngine {
             output = await withTimeout(
               (signal) => this.executeInContainer(projectId, agent, project, task, prompt, signal),
               timeoutMs,
+              onTimeoutWarning,
             );
             executionMode = 'docker';
           } catch (dockerErr) {
@@ -372,12 +448,14 @@ class ExecutionEngine {
             output = await withTimeout(
               (signal) => this.executeLocally(projectId, agent, task, prompt, signal),
               timeoutMs,
+              onTimeoutWarning,
             );
           }
         } else {
           output = await withTimeout(
             (signal) => this.executeLocally(projectId, agent, task, prompt, signal),
             timeoutMs,
+            onTimeoutWarning,
           );
         }
       }
@@ -600,64 +678,134 @@ class ExecutionEngine {
       tracker,
     );
 
-    const { model, modelName, providerType } = getAIModelInfo();
+    // Maliyet takibi için model bilgilerini dışarı taşıyacak değişkenler.
+    // getAIModelWithFallback başarıyla seçtiği provider'ın bilgilerini buraya yazar.
+    let _resolvedModelName = 'unknown';
+    let _resolvedProviderType = 'unknown';
 
-    // Pass the AbortSignal to generateText so the AI SDK can honour cancellation
-    const generatePromise = generateText({
-      model,
-      stopWhen: stepCountIs(20),
-      system: agent.systemPrompt || this.defaultSystemPrompt(agent),
-      prompt,
-      tools,
-      abortSignal: signal,
-      maxRetries: 8,
-    });
+    /**
+     * generateText çağrısını fallback zinciri + exponential backoff ile yeniden dener.
+     * Birincil provider başarısız olursa sıradaki aktif provider'a geçilir.
+     * AbortError veya TaskTimeoutError alınırsa retry/fallback yapılmaz.
+     * Maksimum 2 retry (aynı provider): 1. denemede 1sn, 2. denemede 3sn beklenir.
+     */
+    const MAX_GENERATE_RETRIES = 2;
+    const RETRY_DELAYS_MS = [1_000, 3_000];
 
-    // Additionally race against the signal in case the SDK does not propagate it
-    const { text, usage } = await new Promise<Awaited<typeof generatePromise>>((resolve, reject) => {
-      const onAbort = () => reject(new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS));
-      signal.addEventListener('abort', onAbort, { once: true });
-      generatePromise
-        .then((result) => {
-          signal.removeEventListener('abort', onAbort);
-          resolve(result);
-        })
-        .catch((err) => {
-          signal.removeEventListener('abort', onAbort);
-          // If the SDK itself throws an abort error, translate it to TaskTimeoutError
-          if (
-            err instanceof Error &&
-            (err.name === 'AbortError' || err.message.toLowerCase().includes('abort'))
-          ) {
-            reject(new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS));
-          } else {
-            reject(err);
+    const callGenerateText = async (): Promise<Awaited<ReturnType<typeof generateText>>> => {
+      // Fallback zinciri: birincil provider başarısız olursa sıradakine geç
+      return getAIModelWithFallback(async (model, { modelName, providerType }) => {
+        // Başarıyla seçilen model bilgilerini maliyet takibi için kaydet
+        _resolvedModelName = modelName;
+        _resolvedProviderType = providerType;
+
+        let lastError: unknown;
+
+        for (let attempt = 0; attempt <= MAX_GENERATE_RETRIES; attempt++) {
+          // Sinyal zaten iptal edildiyse hemen TaskTimeoutError fırlat
+          if (signal.aborted) {
+            throw new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS);
           }
-        });
-    });
+
+          try {
+            // generateText'e AbortSignal'ı ilet; SDK iptali destekliyor
+            const generatePromise = generateText({
+              model,
+              stopWhen: stepCountIs(20),
+              system: agent.systemPrompt || this.defaultSystemPrompt(agent),
+              prompt,
+              tools,
+              abortSignal: signal,
+              maxRetries: 0, // Retry'ı kendimiz yönetiyoruz
+            });
+
+            // SDK'nın sinyal yayılımı yetersiz kaldığı durumlarda da abort race yapalım
+            const abortTimeoutMs = agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS;
+            const abortPromise = new Promise<never>((_, reject) => {
+              const onAbort = () => reject(new TaskTimeoutError(abortTimeoutMs));
+              signal.addEventListener('abort', onAbort, { once: true });
+              // generatePromise sonuçlanınca listener'ı temizle (memory leak önlemi)
+              generatePromise.finally(() => signal.removeEventListener('abort', onAbort)).catch(() => {});
+            });
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const result = await Promise.race([generatePromise, abortPromise]) as any;
+            return result;
+          } catch (err) {
+            // Timeout veya iptal hatalarını anında yukarı ilet — retry yok
+            if (err instanceof TaskTimeoutError) throw err;
+            if (
+              err instanceof Error &&
+              (err.name === 'AbortError' || err.message.toLowerCase().includes('abort'))
+            ) {
+              throw new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS);
+            }
+
+            lastError = err;
+            const errMsg = err instanceof Error ? err.message : String(err);
+
+            if (attempt < MAX_GENERATE_RETRIES) {
+              const delayMs = RETRY_DELAYS_MS[attempt] ?? 3_000;
+              termLog(
+                `[${agent.name}] Provider hatası (deneme ${attempt + 1}/${MAX_GENERATE_RETRIES + 1}): ${errMsg.slice(0, 200)}. ${delayMs / 1000}sn sonra yeniden denenecek...`,
+              );
+              console.warn(
+                `[execution-engine] generateText hatası (attempt ${attempt + 1}), ${delayMs}ms sonra retry:`,
+                errMsg,
+              );
+              // Bekleme sırasında sinyal iptal edilirse erken çık
+              await new Promise<void>((resolve, reject) => {
+                const timer = setTimeout(resolve, delayMs);
+                const onAbort = () => { clearTimeout(timer); reject(new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS)); };
+                signal.addEventListener('abort', onAbort, { once: true });
+              });
+            } else {
+              // Tüm denemeler tükendi — fallback zinciri bu hatayı yakalayıp sıradaki provider'ı dener
+              eventBus.emit({
+                projectId,
+                type: 'execution:error',
+                agentId: agent.id,
+                taskId: task.id,
+                payload: {
+                  error: errMsg,
+                  attempts: attempt + 1,
+                  taskTitle: task.title,
+                },
+              });
+              throw lastError;
+            }
+          }
+        }
+
+        // TypeScript için — buraya asla ulaşılmamalı
+        throw lastError ?? new Error('generateText başarısız oldu');
+      });
+    };
+
+    const { text, usage } = await callGenerateText();
 
     termLog(text.slice(0, 2000));
     termLog(`[${agent.name}] Task tamamlandı: ${task.title}`);
     agentRuntime.markVirtualStopped(projectId, agent.id);
 
-    // Record token usage for cost tracking
+    // Maliyet takibi — fallback zinciri tarafından seçilen model bilgilerini kullan
     if (usage) {
       const inputTokens = usage.inputTokens ?? 0;
       const outputTokens = usage.outputTokens ?? 0;
       const totalTokens = inputTokens + outputTokens;
-      const costUsd = calculateCost(modelName, inputTokens, outputTokens);
+      const costUsd = calculateCost(_resolvedModelName, inputTokens, outputTokens);
       recordTokenUsage({
         projectId,
         taskId: task.id,
         agentId: agent.id,
-        model: modelName,
-        provider: providerType,
+        model: _resolvedModelName,
+        provider: _resolvedProviderType,
         inputTokens,
         outputTokens,
         totalTokens,
         costUsd,
       });
-      termLog(`[cost] ${modelName}: ${totalTokens} tokens ($${costUsd.toFixed(4)})`);
+      termLog(`[cost] ${_resolvedModelName}: ${totalTokens} tokens ($${costUsd.toFixed(4)})`);
     }
 
     // Merge tool-tracked files with any mentioned in the AI's final text
@@ -919,7 +1067,7 @@ class ExecutionEngine {
       'Then list what you found and any changes you made.',
     ].join('\n');
 
-    const { model, modelName, providerType } = getAIModelInfo();
+    // Kod inceleme için araçlar
     const tracker = { filesCreated: [] as string[], filesModified: [] as string[], logs: [] as string[] };
     const tools = createAgentTools(
       { projectId, agentId: reviewer.id, taskId: task.id, repoPath: project.repoPath },
@@ -927,35 +1075,40 @@ class ExecutionEngine {
     );
 
     try {
-      const { text, usage } = await generateText({
-        model,
-        stopWhen: stepCountIs(15),
-        system: reviewer.systemPrompt || this.defaultSystemPrompt(reviewer),
-        prompt: reviewPrompt,
-        tools,
-        maxRetries: 4,
-      });
-
-      termLog(text.slice(0, 1500));
-
-      // Record token usage for the review
-      if (usage) {
-        const inputTokens = usage.inputTokens ?? 0;
-        const outputTokens = usage.outputTokens ?? 0;
-        const costUsd = calculateCost(modelName, inputTokens, outputTokens);
-        recordTokenUsage({
-          projectId,
-          taskId: task.id,
-          agentId: reviewer.id,
-          model: modelName,
-          provider: providerType,
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
-          costUsd,
+      // Fallback zinciriyle model seç; birincil model başarısız olursa sıradakine geç
+      const { text, usage } = await getAIModelWithFallback(async (model, { modelName, providerType }) => {
+        const result = await generateText({
+          model,
+          stopWhen: stepCountIs(15),
+          system: reviewer.systemPrompt || this.defaultSystemPrompt(reviewer),
+          prompt: reviewPrompt,
+          tools,
+          maxRetries: 4,
         });
-        termLog(`[review-cost] ${modelName}: ${inputTokens + outputTokens} tokens ($${costUsd.toFixed(4)})`);
-      }
+
+        termLog(result.text.slice(0, 1500));
+
+        // Maliyet takibi — fallback zinciri tarafından seçilen model
+        if (result.usage) {
+          const inputTokens = result.usage.inputTokens ?? 0;
+          const outputTokens = result.usage.outputTokens ?? 0;
+          const costUsd = calculateCost(modelName, inputTokens, outputTokens);
+          recordTokenUsage({
+            projectId,
+            taskId: task.id,
+            agentId: reviewer.id,
+            model: modelName,
+            provider: providerType,
+            inputTokens,
+            outputTokens,
+            totalTokens: inputTokens + outputTokens,
+            costUsd,
+          });
+          termLog(`[review-cost] ${modelName}: ${inputTokens + outputTokens} tokens ($${costUsd.toFixed(4)})`);
+        }
+
+        return result;
+      });
 
       const status = text.toUpperCase().includes('APPROVED') ? 'APPROVED' : 'FIXED';
       termLog(`[review] Sonuc: ${status}`);

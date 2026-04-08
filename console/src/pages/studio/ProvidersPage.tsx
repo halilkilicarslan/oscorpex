@@ -14,6 +14,9 @@ import {
   ToggleLeft,
   ToggleRight,
   Settings,
+  ChevronUp,
+  ChevronDown,
+  ListOrdered,
 } from 'lucide-react';
 import {
   fetchProviders,
@@ -22,6 +25,8 @@ import {
   deleteProvider,
   setDefaultProvider,
   testProvider,
+  fetchFallbackChain,
+  updateFallbackOrder,
   type AIProvider,
   type AIProviderType,
 } from '../../lib/studio-api';
@@ -549,6 +554,90 @@ function ProviderModal({
 // Main page
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Fallback Order panel — sürükle bırak yerine basit up/down butonları
+// ---------------------------------------------------------------------------
+
+function FallbackOrderPanel({
+  chain,
+  onMoveUp,
+  onMoveDown,
+  saving,
+}: {
+  chain: AIProvider[];
+  onMoveUp: (index: number) => void;
+  onMoveDown: (index: number) => void;
+  saving: boolean;
+}) {
+  if (chain.length === 0) {
+    return (
+      <div className="text-[12px] text-[#525252] py-4 text-center">
+        Henüz aktif provider yok
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {chain.map((provider, index) => {
+        const meta = PROVIDER_META[provider.type];
+        return (
+          <div
+            key={provider.id}
+            className="flex items-center gap-3 bg-[#111111] border border-[#262626] rounded-lg px-3 py-2.5"
+          >
+            {/* Sıra numarası */}
+            <span className="text-[11px] font-mono text-[#525252] w-5 shrink-0 text-center">
+              {index + 1}
+            </span>
+
+            {/* Provider bilgisi */}
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className={`text-[10px] font-semibold ${meta.color}`}>
+                {meta.label}
+              </span>
+              <span className="text-[12px] text-[#fafafa] truncate">{provider.name}</span>
+              {provider.model && (
+                <span className="text-[10px] text-[#525252] truncate">{provider.model}</span>
+              )}
+              {provider.isDefault && (
+                <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/30 shrink-0">
+                  <Star size={7} />
+                  PRIMARY
+                </span>
+              )}
+            </div>
+
+            {/* Taşıma butonları */}
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button
+                onClick={() => onMoveUp(index)}
+                disabled={index === 0 || saving}
+                className="p-1 rounded text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Yukarı taşı"
+              >
+                <ChevronUp size={14} />
+              </button>
+              <button
+                onClick={() => onMoveDown(index)}
+                disabled={index === chain.length - 1 || saving}
+                className="p-1 rounded text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Aşağı taşı"
+              >
+                <ChevronDown size={14} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
+
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<AIProvider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -557,10 +646,15 @@ export default function ProvidersPage() {
   const [testStates, setTestStates] = useState<Record<string, TestState>>({});
   const [testMessages, setTestMessages] = useState<Record<string, string>>({});
 
+  // Fallback zinciri state'leri
+  const [fallbackChain, setFallbackChain] = useState<AIProvider[]>([]);
+  const [fallbackSaving, setFallbackSaving] = useState(false);
+
   const load = async () => {
     try {
-      const data = await fetchProviders();
+      const [data, chain] = await Promise.all([fetchProviders(), fetchFallbackChain()]);
       setProviders(data);
+      setFallbackChain(chain);
     } catch {
       // API not ready yet
     } finally {
@@ -632,6 +726,46 @@ export default function ProvidersPage() {
     }
   };
 
+  // Fallback sıralamasında bir provider'ı yukarı taşı
+  const handleFallbackMoveUp = async (index: number) => {
+    if (index === 0 || fallbackSaving) return;
+    const newChain = [...fallbackChain];
+    // Elemanları yer değiştir
+    [newChain[index - 1], newChain[index]] = [newChain[index], newChain[index - 1]];
+    setFallbackChain(newChain);
+    setFallbackSaving(true);
+    try {
+      const updated = await updateFallbackOrder(newChain.map((p) => p.id));
+      setFallbackChain(updated);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Sıralama güncellenemedi');
+      // Hata durumunda eski sırayı geri yükle
+      load();
+    } finally {
+      setFallbackSaving(false);
+    }
+  };
+
+  // Fallback sıralamasında bir provider'ı aşağı taşı
+  const handleFallbackMoveDown = async (index: number) => {
+    if (index === fallbackChain.length - 1 || fallbackSaving) return;
+    const newChain = [...fallbackChain];
+    // Elemanları yer değiştir
+    [newChain[index], newChain[index + 1]] = [newChain[index + 1], newChain[index]];
+    setFallbackChain(newChain);
+    setFallbackSaving(true);
+    try {
+      const updated = await updateFallbackOrder(newChain.map((p) => p.id));
+      setFallbackChain(updated);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Sıralama güncellenemedi');
+      // Hata durumunda eski sırayı geri yükle
+      load();
+    } finally {
+      setFallbackSaving(false);
+    }
+  };
+
   const openAdd = () => {
     setEditingProvider(undefined);
     setShowModal(true);
@@ -684,20 +818,51 @@ export default function ProvidersPage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {providers.map((provider) => (
-            <ProviderCard
-              key={provider.id}
-              provider={provider}
-              onEdit={() => openEdit(provider)}
-              onDelete={() => handleDelete(provider.id)}
-              onSetDefault={() => handleSetDefault(provider.id)}
-              onToggleActive={() => handleToggleActive(provider)}
-              onTest={() => handleTest(provider.id)}
-              testState={testStates[provider.id] ?? 'idle'}
-              testMessage={testMessages[provider.id]}
-            />
-          ))}
+        <div className="space-y-8">
+          {/* Provider kartları grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {providers.map((provider) => (
+              <ProviderCard
+                key={provider.id}
+                provider={provider}
+                onEdit={() => openEdit(provider)}
+                onDelete={() => handleDelete(provider.id)}
+                onSetDefault={() => handleSetDefault(provider.id)}
+                onToggleActive={() => handleToggleActive(provider)}
+                onTest={() => handleTest(provider.id)}
+                testState={testStates[provider.id] ?? 'idle'}
+                testMessage={testMessages[provider.id]}
+              />
+            ))}
+          </div>
+
+          {/* Fallback Order paneli — sadece en az 2 aktif provider varsa göster */}
+          {fallbackChain.length >= 2 && (
+            <div className="bg-[#0a0a0a] border border-[#262626] rounded-xl p-5">
+              {/* Panel başlığı */}
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-[#1f1f1f] flex items-center justify-center shrink-0">
+                  <ListOrdered size={15} className="text-[#22c55e]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-[14px] font-semibold text-[#fafafa]">Fallback Order</h2>
+                  <p className="text-[11px] text-[#525252]">
+                    Birincil model hata verirse sıradaki provider'a geçilir. Sıralamayı up/down butonları ile değiştirin.
+                  </p>
+                </div>
+                {fallbackSaving && (
+                  <Loader2 size={14} className="text-[#525252] animate-spin shrink-0" />
+                )}
+              </div>
+
+              <FallbackOrderPanel
+                chain={fallbackChain}
+                onMoveUp={handleFallbackMoveUp}
+                onMoveDown={handleFallbackMoveDown}
+                saving={fallbackSaving}
+              />
+            </div>
+          )}
         </div>
       )}
 

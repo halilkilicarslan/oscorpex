@@ -7,7 +7,8 @@ import { openai, createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
-import { getDefaultProvider, getRawProviderApiKey } from './db.js';
+import { getDefaultProvider, getRawProviderApiKey, getFallbackChain } from './db.js';
+import type { AIProvider } from './types.js';
 
 /**
  * Varsayılan AI provider'ı veritabanından okuyarak uygun AI SDK modelini
@@ -142,4 +143,118 @@ export function isAnyProviderConfigured(): boolean {
   const dbProvider = getDefaultProvider();
   if (dbProvider) return true;
   return !!process.env.OPENAI_API_KEY;
+}
+
+// ---------------------------------------------------------------------------
+// Fallback Chain — birincil model başarısız olursa sıradaki provider'a geç
+// ---------------------------------------------------------------------------
+
+/** Belirli bir provider kaydından LanguageModelV3 nesnesi oluşturur. */
+function buildModelFromProvider(provider: AIProvider): LanguageModelV3 {
+  const apiKey = getRawProviderApiKey(provider.id);
+  const modelName = provider.model?.trim() || defaultModelForType(provider.type);
+
+  switch (provider.type) {
+    case 'openai': {
+      if (provider.baseUrl?.trim()) {
+        return createOpenAI({ apiKey, baseURL: provider.baseUrl.trim() })(modelName);
+      }
+      return createOpenAI({ apiKey })(modelName);
+    }
+    case 'anthropic': {
+      if (provider.baseUrl?.trim()) {
+        return createAnthropic({ apiKey, baseURL: provider.baseUrl.trim() })(modelName);
+      }
+      return createAnthropic({ apiKey })(modelName);
+    }
+    case 'google': {
+      if (provider.baseUrl?.trim()) {
+        return createGoogleGenerativeAI({ apiKey, baseURL: provider.baseUrl.trim() })(modelName);
+      }
+      return createGoogleGenerativeAI({ apiKey })(modelName);
+    }
+    case 'ollama': {
+      const baseURL = provider.baseUrl?.trim() || 'http://localhost:11434/v1';
+      return createOpenAI({ baseURL, apiKey: 'ollama' })(modelName);
+    }
+    case 'custom': {
+      const baseURL = provider.baseUrl?.trim();
+      if (baseURL) {
+        return createOpenAI({ baseURL, apiKey })(modelName);
+      }
+      return createOpenAI({ apiKey })(modelName);
+    }
+    default:
+      return openai('gpt-4o-mini');
+  }
+}
+
+/**
+ * Fallback zinciri ile AI modeli çağrısı yapar.
+ *
+ * Birincil model başarısız olursa (timeout, rate limit, API hatası) sıradaki
+ * aktif provider'a geçer. Maksimum 3 deneme yapılır.
+ *
+ * @param callFn - Model alıp asenkron işlem yapan fonksiyon. Model başarısız
+ *                 olursa hata fırlatmalıdır; fonksiyon başarılı sonucu döndürür.
+ *
+ * Kullanım örneği:
+ * ```ts
+ * const result = await getAIModelWithFallback(async (model) => {
+ *   return generateText({ model, prompt: '...' });
+ * });
+ * ```
+ */
+export async function getAIModelWithFallback<T>(
+  callFn: (model: LanguageModelV3, providerInfo: { modelName: string; providerType: string }) => Promise<T>,
+): Promise<T> {
+  // Maksimum deneme sayısı
+  const MAX_ATTEMPTS = 3;
+
+  // Fallback zincirini DB'den al (fallback_order'a göre sıralı, aktif olanlar)
+  const chain = getFallbackChain();
+
+  // Zincir boşsa varsayılan modeli kullan (env tabanlı fallback)
+  if (chain.length === 0) {
+    const fallbackModel = openai('gpt-4o-mini');
+    return callFn(fallbackModel, { modelName: 'gpt-4o-mini', providerType: 'openai' });
+  }
+
+  // Yalnızca ilk MAX_ATTEMPTS provider'ı dene
+  const candidates = chain.slice(0, MAX_ATTEMPTS);
+  let lastError: unknown;
+
+  for (let i = 0; i < candidates.length; i++) {
+    const provider = candidates[i];
+    const modelName = provider.model?.trim() || defaultModelForType(provider.type);
+
+    if (i > 0) {
+      // Birinci model dışındakilerde fallback log yaz
+      console.log(`[AI Fallback] Primary failed, trying fallback: ${modelName} (${provider.name})`);
+    }
+
+    try {
+      const model = buildModelFromProvider(provider);
+      return await callFn(model, { modelName, providerType: provider.type });
+    } catch (err) {
+      lastError = err;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[AI Fallback] Provider "${provider.name}" (${modelName}) başarısız oldu: ${errMsg}`,
+      );
+    }
+  }
+
+  // Tüm denemeler başarısız oldu — son hatayı yeniden fırlat
+  throw lastError;
+}
+
+/**
+ * Fallback zinciri bilgisiyle birlikte birincil model bilgisini döndürür.
+ * Execution engine'de maliyet takibi için kullanılır.
+ */
+export async function getAIModelInfoWithFallback<T>(
+  callFn: (model: LanguageModelV3, providerInfo: { modelName: string; providerType: string }) => Promise<T>,
+): Promise<T> {
+  return getAIModelWithFallback(callFn);
 }

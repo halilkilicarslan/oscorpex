@@ -15,9 +15,26 @@ import {
   getProject,
   listProjectAgents,
   listAgentDependencies,
+  getProjectCostSummary,
+  getProjectSettingsMap,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import type { Task, Phase, TaskOutput, ProjectAgent } from './types.js';
+
+// Onay gerektiren task keyword'leri — büyük/küçük harf duyarsız kontrol
+const APPROVAL_KEYWORDS = ['deploy', 'database migration', 'delete', 'drop', 'truncate', 'migration', 'seed', 'production'];
+
+/**
+ * Task'ın onay gerektirip gerektirmediğini belirler.
+ * XL complexity veya kritik keyword içeren task'lar onay gerektirir.
+ */
+function shouldRequireApproval(task: Pick<Task, 'title' | 'description' | 'complexity'>): boolean {
+  // XL complexity her zaman onay gerektirir
+  if (task.complexity === 'XL') return true;
+  // Başlık veya açıklamada kritik keyword var mı kontrol et
+  const searchText = `${task.title} ${task.description}`.toLowerCase();
+  return APPROVAL_KEYWORDS.some((kw) => searchText.includes(kw));
+}
 
 // Max review döngüsü — aşılırsa tech-lead'e eskalasyon
 const MAX_REVISION_CYCLES = 3;
@@ -66,10 +83,146 @@ class TaskEngine {
     return updated;
   }
 
+  // -------------------------------------------------------------------------
+  // Budget kontrolü — task başlatılmadan önce proje harcamasını kontrol eder
+  // -------------------------------------------------------------------------
+
+  /**
+   * Projenin budget ayarlarını okur ve mevcut harcamayı kontrol eder.
+   * - Budget devre dışıysa: null döner (devam et)
+   * - Budget aşılmamışsa: null döner (devam et)
+   * - Budget aşılmışsa: { exceeded: true, level: 'error' | 'warning', message } döner
+   */
+  private checkProjectBudget(projectId: string): { exceeded: boolean; level: 'warning' | 'error'; message: string } | null {
+    try {
+      const settingsMap = getProjectSettingsMap(projectId);
+      const budgetSettings = settingsMap['budget'];
+
+      // Budget özelliği aktif değilse kontrol etme
+      if (!budgetSettings || budgetSettings['enabled'] !== 'true') return null;
+
+      const maxCostStr = budgetSettings['maxCostUsd'];
+      const warnThresholdStr = budgetSettings['warningThreshold'];
+
+      // maxCostUsd tanımlı değilse kontrol etme
+      const maxCost = maxCostStr ? parseFloat(maxCostStr) : null;
+      if (maxCost === null || isNaN(maxCost) || maxCost <= 0) return null;
+
+      // Mevcut harcamayı al
+      const costSummary = getProjectCostSummary(projectId);
+      const currentCost = costSummary.totalCostUsd;
+
+      // %100 limit aşımı — execution durdurulacak
+      if (currentCost >= maxCost) {
+        return {
+          exceeded: true,
+          level: 'error',
+          message: `Budget limit exceeded: $${currentCost.toFixed(4)} / $${maxCost.toFixed(2)} USD. Task execution blocked.`,
+        };
+      }
+
+      // Uyarı eşiği kontrolü
+      const warnThreshold = warnThresholdStr ? parseFloat(warnThresholdStr) : null;
+      if (warnThreshold !== null && !isNaN(warnThreshold) && warnThreshold > 0 && currentCost >= warnThreshold) {
+        return {
+          exceeded: false,
+          level: 'warning',
+          message: `Budget warning: $${currentCost.toFixed(4)} / $${maxCost.toFixed(2)} USD (${Math.round((currentCost / maxCost) * 100)}% used).`,
+        };
+      }
+
+      return null;
+    } catch {
+      // Budget kontrolü hataları task'ı durdurmamalı
+      return null;
+    }
+  }
+
   startTask(taskId: string): Task {
     const task = this.requireTask(taskId);
     if (task.status !== 'assigned' && task.status !== 'queued') {
       throw new Error(`Task ${taskId} cannot be started (status: ${task.status})`);
+    }
+
+    const projectId = this.getProjectIdForTask(task);
+
+    // Human-in-the-Loop: Onay kontrolü — budget kontrolünden önce yapılır
+    const needsApproval = task.requiresApproval || shouldRequireApproval(task);
+    const alreadyApproved = task.approvalStatus === 'approved';
+    if (needsApproval && !alreadyApproved) {
+      // Task'ı waiting_approval durumuna al ve kullanıcıdan onay iste
+      const waiting = updateTask(taskId, {
+        status: 'waiting_approval',
+        requiresApproval: true,
+        approvalStatus: 'pending',
+      })!;
+
+      eventBus.emit({
+        projectId,
+        type: 'task:approval_required',
+        taskId,
+        payload: {
+          title: task.title,
+          taskTitle: task.title,
+          agentName: task.assignedAgent,
+          complexity: task.complexity,
+          description: task.description,
+        },
+      });
+
+      console.log(`[task-engine] Task ${taskId} onay bekliyor: "${task.title}" (complexity: ${task.complexity})`);
+      return waiting;
+    }
+
+    // Budget limiti kontrolü — aşıldıysa task'ı blocked yap ve event emit et
+    // (projectId yukarıda zaten tanımlandı)
+    const budgetStatus = this.checkProjectBudget(projectId);
+
+    if (budgetStatus && budgetStatus.exceeded) {
+      // Task'ı 'blocked' statüsüne al (failed yerine ayrı bir durum olarak işaretlenir)
+      const blocked = updateTask(taskId, {
+        status: 'failed',
+        error: budgetStatus.message,
+      })!;
+
+      eventBus.emit({
+        projectId,
+        type: 'task:failed',
+        taskId,
+        payload: {
+          title: task.title,
+          error: budgetStatus.message,
+          budgetExceeded: true,
+        },
+      });
+
+      // Kullanıcıya budget aşım uyarısı gönder
+      eventBus.emit({
+        projectId,
+        type: 'escalation:user',
+        taskId,
+        payload: {
+          question: `Budget limit exceeded. Task "${task.title}" could not be started. ${budgetStatus.message}`,
+          budgetExceeded: true,
+        },
+      });
+
+      console.warn(`[task-engine] Budget limit aşıldı, task blocked: ${taskId} — ${budgetStatus.message}`);
+      return blocked;
+    }
+
+    // Uyarı seviyesindeyse event emit et ama task'ı durdurma
+    if (budgetStatus && budgetStatus.level === 'warning') {
+      eventBus.emit({
+        projectId,
+        type: 'escalation:user',
+        taskId,
+        payload: {
+          question: budgetStatus.message,
+          budgetWarning: true,
+        },
+      });
+      console.warn(`[task-engine] Budget uyarısı: ${budgetStatus.message}`);
     }
 
     const updated = updateTask(taskId, {
@@ -77,8 +230,7 @@ class TaskEngine {
       startedAt: new Date().toISOString(),
     })!;
 
-    const projectId = this.getProjectIdForTask(task);
-
+    // projectId budget kontrolünde zaten tanımlandı, tekrar tanımlamaya gerek yok
     eventBus.emit({
       projectId,
       type: 'task:started',
@@ -86,6 +238,79 @@ class TaskEngine {
       payload: { title: task.title },
     });
 
+    return updated;
+  }
+
+  // -------------------------------------------------------------------------
+  // Human-in-the-Loop: Onay mekanizması
+  // -------------------------------------------------------------------------
+
+  /**
+   * Bekleyen onay task'ını onaylar.
+   * Task 'queued' durumuna döner ve execution engine tarafından çalıştırılabilir.
+   */
+  approveTask(taskId: string): Task {
+    const task = this.requireTask(taskId);
+    if (task.status !== 'waiting_approval') {
+      throw new Error(`Task ${taskId} onay beklemiyor (status: ${task.status})`);
+    }
+
+    const updated = updateTask(taskId, {
+      status: 'queued',
+      approvalStatus: 'approved',
+    })!;
+
+    const projectId = this.getProjectIdForTask(task);
+
+    eventBus.emit({
+      projectId,
+      type: 'task:approved',
+      taskId,
+      payload: {
+        title: task.title,
+        taskTitle: task.title,
+        agentName: task.assignedAgent,
+      },
+    });
+
+    console.log(`[task-engine] Task ${taskId} onaylandı: "${task.title}" — kuyruğa alındı`);
+    return updated;
+  }
+
+  /**
+   * Bekleyen onay task'ını reddeder.
+   * Task 'failed' durumuna alınır, execution devam etmez.
+   */
+  rejectTask(taskId: string, reason?: string): Task {
+    const task = this.requireTask(taskId);
+    if (task.status !== 'waiting_approval') {
+      throw new Error(`Task ${taskId} onay beklemiyor (status: ${task.status})`);
+    }
+
+    const rejectionReason = reason ?? 'Kullanıcı tarafından reddedildi';
+
+    const updated = updateTask(taskId, {
+      status: 'failed',
+      approvalStatus: 'rejected',
+      approvalRejectionReason: rejectionReason,
+      error: `Onay reddedildi: ${rejectionReason}`,
+    })!;
+
+    const projectId = this.getProjectIdForTask(task);
+
+    eventBus.emit({
+      projectId,
+      type: 'task:rejected',
+      taskId,
+      payload: {
+        title: task.title,
+        taskTitle: task.title,
+        agentName: task.assignedAgent,
+        reason: rejectionReason,
+      },
+    });
+
+    console.log(`[task-engine] Task ${taskId} reddedildi: "${task.title}" — sebep: ${rejectionReason}`);
     return updated;
   }
 
@@ -523,7 +748,7 @@ class TaskEngine {
   getProgress(projectId: string) {
     const plan = getLatestPlan(projectId);
     if (!plan) {
-      return { phases: [], overall: { total: 0, done: 0, running: 0, failed: 0, queued: 0, review: 0, revision: 0 } };
+      return { phases: [], overall: { total: 0, done: 0, running: 0, failed: 0, queued: 0, review: 0, revision: 0, waitingApproval: 0 } };
     }
 
     let total = 0;
@@ -533,6 +758,7 @@ class TaskEngine {
     let queued = 0;
     let review = 0;
     let revision = 0;
+    let waitingApproval = 0;
 
     const phases = plan.phases.map((phase) => {
       const tasks = phase.tasks;
@@ -544,6 +770,8 @@ class TaskEngine {
       queued += tasks.filter((t) => t.status === 'queued' || t.status === 'assigned').length;
       review += tasks.filter((t) => t.status === 'review').length;
       revision += tasks.filter((t) => t.status === 'revision').length;
+      // Human-in-the-Loop: Onay bekleyen task sayısını takip et
+      waitingApproval += tasks.filter((t) => t.status === 'waiting_approval').length;
 
       return {
         id: phase.id,
@@ -554,7 +782,7 @@ class TaskEngine {
       };
     });
 
-    return { phases, overall: { total, done, running, failed, queued, review, revision } };
+    return { phases, overall: { total, done, running, failed, queued, review, revision, waitingApproval } };
   }
 
   // -------------------------------------------------------------------------

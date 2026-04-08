@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Users, Plus, LayoutGrid, Network, ArrowRight, Workflow, BookTemplate } from 'lucide-react';
+import { Loader2, Users, Plus, LayoutGrid, Network, ArrowRight, BookTemplate } from 'lucide-react';
 import {
   fetchProjectAgents,
   deleteProjectAgent,
@@ -15,7 +15,6 @@ import AgentCard from './AgentCard';
 import AgentDetailModal from './AgentDetailModal';
 import AgentFormModal from './AgentFormModal';
 import OrgChart from './OrgChart';
-import TeamBuilder from './TeamBuilder';
 import TeamTemplatePreview from './TeamTemplatePreview';
 
 type RuntimeStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
@@ -79,7 +78,7 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
   const [agents, setAgents] = useState<ProjectAgent[]>([]);
   const [statuses, setStatuses] = useState<Record<string, RuntimeStatus>>({});
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'grid' | 'org' | 'pipeline' | 'builder' | 'templates'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'org' | 'pipeline' | 'templates'>('grid');
 
   // Modal state
   const [detailAgent, setDetailAgent] = useState<ProjectAgent | null>(null);
@@ -262,17 +261,6 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
               Pipeline
             </button>
             <button
-              onClick={() => setViewMode('builder')}
-              className={`px-3 py-1 rounded text-[11px] font-medium transition-colors ${
-                viewMode === 'builder'
-                  ? 'bg-[#1f1f1f] text-[#fafafa]'
-                  : 'text-[#525252] hover:text-[#a3a3a3]'
-              }`}
-            >
-              <Workflow size={13} className="inline mr-1" />
-              Builder
-            </button>
-            <button
               onClick={() => setViewMode('templates')}
               className={`px-3 py-1 rounded text-[11px] font-medium transition-colors ${
                 viewMode === 'templates'
@@ -301,13 +289,6 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
           projectId={projectId}
           initialView={viewMode === 'pipeline' ? 'pipeline' : 'hierarchy'}
         />
-      )}
-
-      {/* Team Builder (React Flow) */}
-      {viewMode === 'builder' && (
-        <div className="flex-1 min-h-[500px]">
-          <TeamBuilder projectId={projectId} />
-        </div>
       )}
 
       {/* Team Templates Preview */}

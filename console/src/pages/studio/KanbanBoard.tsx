@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Kanban, Zap, AlertCircle, X } from 'lucide-react';
+import { Loader2, Kanban, Zap, AlertCircle, X, ShieldAlert, Check, XCircle } from 'lucide-react';
 import {
   fetchTasks,
   retryTask,
   fetchAutoStartStatus,
   fetchProjectAgents,
+  approveTask,
+  rejectTask,
   roleLabel,
   type Task,
   type AutoStartStatus,
@@ -18,6 +20,8 @@ const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
   { key: 'running', label: 'Running', color: 'border-[#f59e0b]' },
   { key: 'review', label: 'Review', color: 'border-[#a855f7]' },
   { key: 'revision', label: 'Revision', color: 'border-[#f97316]' },
+  // Human-in-the-Loop: Onay bekleyen task'lar için özel sütun
+  { key: 'waiting_approval', label: 'Awaiting Approval', color: 'border-[#f59e0b]' },
   { key: 'done', label: 'Done', color: 'border-[#22c55e]' },
   { key: 'failed', label: 'Failed', color: 'border-[#ef4444]' },
 ];
@@ -66,6 +70,7 @@ function PipelineAutoStartBadge({ status }: { status: AutoStartStatus }) {
 interface ToastMessage {
   id: number;
   message: string;
+  type?: 'error' | 'success';
 }
 
 let toastCounter = 0;
@@ -83,19 +88,177 @@ function ErrorToast({
       {toasts.map((t) => (
         <div
           key={t.id}
-          className="flex items-start gap-2 bg-[#1a0a0a] border border-[#ef4444]/30 text-[#ef4444] text-[12px] px-3 py-2 rounded-lg shadow-lg pointer-events-auto max-w-[320px]"
+          className={[
+            'flex items-start gap-2 text-[12px] px-3 py-2 rounded-lg shadow-lg pointer-events-auto max-w-[320px]',
+            t.type === 'success'
+              ? 'bg-[#0a1a0a] border border-[#22c55e]/30 text-[#22c55e]'
+              : 'bg-[#1a0a0a] border border-[#ef4444]/30 text-[#ef4444]',
+          ].join(' ')}
         >
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
           <span className="flex-1 leading-snug">{t.message}</span>
           <button
             type="button"
             onClick={() => onDismiss(t.id)}
-            className="text-[#ef4444]/60 hover:text-[#ef4444] transition-colors ml-1"
+            className="opacity-60 hover:opacity-100 transition-colors ml-1"
           >
             <X size={12} />
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---- Red sebebi modal -------------------------------------------------------
+
+interface RejectModalProps {
+  taskTitle: string;
+  onConfirm: (reason: string) => void;
+  onCancel: () => void;
+}
+
+function RejectModal({ taskTitle, onConfirm, onCancel }: RejectModalProps) {
+  const [reason, setReason] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+      <div className="bg-[#111] border border-[#262626] rounded-xl p-5 w-[360px] shadow-2xl">
+        {/* Baslik */}
+        <div className="flex items-center gap-2 mb-3">
+          <XCircle size={16} className="text-[#ef4444]" />
+          <h2 className="text-[13px] font-semibold text-[#e5e5e5]">Task'ı Reddet</h2>
+        </div>
+
+        {/* Task adi */}
+        <p className="text-[11px] text-[#737373] mb-3 leading-snug">
+          <span className="text-[#a3a3a3] font-medium">"{taskTitle}"</span> task'ini reddetmek istiyorsunuz.
+        </p>
+
+        {/* Red sebebi */}
+        <label className="block text-[11px] text-[#737373] mb-1.5">
+          Red sebebi (isteğe bağlı)
+        </label>
+        <textarea
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Neden reddediyorsunuz?"
+          rows={3}
+          className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-2 text-[12px] text-[#e5e5e5] placeholder-[#3a3a3a] resize-none focus:outline-none focus:border-[#ef4444]/50 transition-colors"
+        />
+
+        {/* Butonlar */}
+        <div className="flex gap-2 mt-4 justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1.5 text-[11px] text-[#737373] hover:text-[#a3a3a3] transition-colors"
+          >
+            Vazgec
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm(reason.trim())}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#ef4444] hover:bg-[#ef4444]/20 rounded-lg transition-colors"
+          >
+            <XCircle size={12} />
+            Reddet
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Onay bekleyen task kartı -----------------------------------------------
+
+interface ApprovalTaskCardProps {
+  task: Task;
+  agents: ProjectAgent[];
+  onApprove: () => Promise<void>;
+  onReject: () => void;
+}
+
+function ApprovalTaskCard({ task, agents, onApprove, onReject }: ApprovalTaskCardProps) {
+  const [approving, setApproving] = useState(false);
+
+  const agent = agents.find(
+    (a) => a.role.toLowerCase() === task.assignedAgent.toLowerCase()
+      || a.name.toLowerCase() === task.assignedAgent.toLowerCase(),
+  );
+
+  const handleApprove = async () => {
+    if (approving) return;
+    setApproving(true);
+    try {
+      await onApprove();
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  return (
+    <div className="bg-[#111111] border-2 border-[#f59e0b]/40 rounded-lg p-3 hover:border-[#f59e0b]/70 transition-colors">
+      {/* Awaiting Approval badge */}
+      <div className="flex items-center gap-1.5 mb-2">
+        <ShieldAlert size={12} className="text-[#f59e0b]" />
+        <span className="text-[10px] font-semibold text-[#f59e0b] uppercase tracking-wide">
+          Awaiting Approval
+        </span>
+        {task.complexity && (
+          <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b]">
+            {task.complexity}
+          </span>
+        )}
+      </div>
+
+      {/* Task baslik */}
+      <p className="text-[12px] font-medium text-[#e5e5e5] mb-1.5 leading-snug">
+        {task.title}
+      </p>
+
+      {/* Aciklama */}
+      {task.description && (
+        <p className="text-[11px] text-[#525252] mb-2 line-clamp-2">
+          {task.description}
+        </p>
+      )}
+
+      {/* Agent bilgisi */}
+      {agent && (
+        <div className="flex items-center gap-1.5 mb-3">
+          <span className="text-[10px] text-[#737373]">{roleLabel(agent.role)}</span>
+          <span className="text-[10px] font-medium text-[#a3a3a3]">{agent.name}</span>
+        </div>
+      )}
+
+      {/* Onay / Red butonları */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={handleApprove}
+          disabled={approving}
+          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/20 hover:border-[#22c55e]/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {approving ? (
+            <Loader2 size={11} className="animate-spin" />
+          ) : (
+            <Check size={11} />
+          )}
+          {approving ? 'Onaylaniyor...' : 'Onayla'}
+        </button>
+        <button
+          type="button"
+          onClick={onReject}
+          disabled={approving}
+          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#ef4444] hover:bg-[#ef4444]/20 hover:border-[#ef4444]/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <X size={11} />
+          Reddet
+        </button>
+      </div>
     </div>
   );
 }
@@ -108,15 +271,16 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [autoStartStatus, setAutoStartStatus] = useState<AutoStartStatus | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  // Red modal için seçili task
+  const [rejectingTask, setRejectingTask] = useState<Task | null>(null);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const showErrorToast = useCallback((message: string) => {
+  const showToast = useCallback((message: string, type: 'error' | 'success' = 'error') => {
     const id = ++toastCounter;
-    setToasts((prev) => [...prev, { id, message }]);
-    // 5 saniye sonra otomatik kapat
+    setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => dismissToast(id), 5000);
   }, [dismissToast]);
 
@@ -146,7 +310,7 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
   }, [projectId, load, loadAutoStartStatus]);
 
   const handleRetry = async (taskId: string): Promise<void> => {
-    // Optimistik guncelleme: task'i queued'a tasıyalım
+    // Optimistik guncelleme: task'i queued'a tasiyalim
     setTasks((prev) =>
       prev.map((t) =>
         t.id === taskId ? { ...t, status: 'queued' as const } : t,
@@ -154,16 +318,60 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
     );
     try {
       await retryTask(projectId, taskId);
-      // Basarili ise backend'den taze veri al
       load();
     } catch (err) {
-      // Hata olursa optimistik guncellemeyi geri al
       load();
       const message =
         err instanceof Error
           ? `Retry basarisiz: ${err.message}`
           : 'Retry sirasinda beklenmeyen bir hata olustu.';
-      showErrorToast(message);
+      showToast(message);
+    }
+  };
+
+  // Onay ver — task'i queued'a geri alir, execution baslar
+  const handleApprove = async (taskId: string): Promise<void> => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, status: 'queued' as const, approvalStatus: 'approved' } : t,
+      ),
+    );
+    try {
+      await approveTask(projectId, taskId);
+      load();
+      showToast('Task onaylandi — execution basliyor.', 'success');
+    } catch (err) {
+      load();
+      const message = err instanceof Error ? `Onay basarisiz: ${err.message}` : 'Onay sirasinda hata olustu.';
+      showToast(message);
+    }
+  };
+
+  // Red modal acma
+  const handleOpenReject = (task: Task) => {
+    setRejectingTask(task);
+  };
+
+  // Red onayi — sebep ile birlikte API'ye gonder
+  const handleConfirmReject = async (reason: string) => {
+    if (!rejectingTask) return;
+    const taskId = rejectingTask.id;
+    const taskTitle = rejectingTask.title;
+    setRejectingTask(null);
+
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, status: 'failed' as const, approvalStatus: 'rejected' } : t,
+      ),
+    );
+    try {
+      await rejectTask(projectId, taskId, reason || undefined);
+      load();
+      showToast(`"${taskTitle}" reddedildi.`, 'error');
+    } catch (err) {
+      load();
+      const message = err instanceof Error ? `Red basarisiz: ${err.message}` : 'Red sirasinda hata olustu.';
+      showToast(message);
     }
   };
 
@@ -181,13 +389,13 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
         <Kanban size={32} className="text-[#333] mb-3" />
         <h3 className="text-[14px] font-medium text-[#a3a3a3] mb-1">No Tasks Yet</h3>
         <p className="text-[12px] text-[#525252] max-w-sm">
-          Tasks will appear here after you create and approve a project plan in the PM Chat.
+          Tasks will appear here after you create and approve a project plan in the Planner.
         </p>
       </div>
     );
   }
 
-  // Group tasks by status
+  // Task'ları status'e göre grupla
   const grouped = new Map<Task['status'], Task[]>();
   for (const col of COLUMNS) grouped.set(col.key, []);
   for (const task of tasks) {
@@ -195,51 +403,75 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
     if (list) list.push(task);
   }
 
-  // Only show columns that have tasks or are always-visible
+  // Yalnizca task olan veya her zaman görünen sütunlari göster
   const activeColumns = COLUMNS.filter(
     (col) => (grouped.get(col.key)?.length ?? 0) > 0 || ['queued', 'running', 'done'].includes(col.key),
   );
 
   return (
     <>
-    <ErrorToast toasts={toasts} onDismiss={dismissToast} />
-    <div className="p-6 h-full overflow-x-auto flex flex-col">
-      {/* Pipeline auto-start durum cubugu */}
-      {autoStartStatus && <PipelineAutoStartBadge status={autoStartStatus} />}
+      {/* Red modal */}
+      {rejectingTask && (
+        <RejectModal
+          taskTitle={rejectingTask.title}
+          onConfirm={handleConfirmReject}
+          onCancel={() => setRejectingTask(null)}
+        />
+      )}
 
-      <div className="flex gap-4 min-w-min flex-1">
-        {activeColumns.map((col) => {
-          const colTasks = grouped.get(col.key) ?? [];
-          return (
-            <div
-              key={col.key}
-              className="w-[280px] shrink-0 flex flex-col"
-            >
-              {/* Column header */}
-              <div className={`flex items-center gap-2 px-3 py-2 mb-3 border-t-2 ${col.color} rounded-t-sm`}>
-                <span className="text-[12px] font-semibold text-[#a3a3a3] uppercase">{col.label}</span>
-                <span className="text-[11px] text-[#525252] bg-[#1f1f1f] px-1.5 py-0.5 rounded-full">
-                  {colTasks.length}
-                </span>
+      <ErrorToast toasts={toasts} onDismiss={dismissToast} />
+      <div className="p-6 h-full overflow-x-auto flex flex-col">
+        {/* Pipeline auto-start durum cubugu */}
+        {autoStartStatus && <PipelineAutoStartBadge status={autoStartStatus} />}
+
+        <div className="flex gap-4 min-w-min flex-1">
+          {activeColumns.map((col) => {
+            const colTasks = grouped.get(col.key) ?? [];
+            const isApprovalCol = col.key === 'waiting_approval';
+
+            return (
+              <div
+                key={col.key}
+                className="w-[280px] shrink-0 flex flex-col"
+              >
+                {/* Column header */}
+                <div className={`flex items-center gap-2 px-3 py-2 mb-3 border-t-2 ${col.color} rounded-t-sm`}>
+                  {isApprovalCol && <ShieldAlert size={12} className="text-[#f59e0b]" />}
+                  <span className={`text-[12px] font-semibold uppercase ${isApprovalCol ? 'text-[#f59e0b]' : 'text-[#a3a3a3]'}`}>
+                    {col.label}
+                  </span>
+                  <span className="text-[11px] text-[#525252] bg-[#1f1f1f] px-1.5 py-0.5 rounded-full">
+                    {colTasks.length}
+                  </span>
+                </div>
+
+                {/* Tasks */}
+                <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
+                  {colTasks.map((task) =>
+                    isApprovalCol ? (
+                      // waiting_approval task'lari için özel kart — onay/red butonları ile
+                      <ApprovalTaskCard
+                        key={task.id}
+                        task={task}
+                        agents={agents}
+                        onApprove={() => handleApprove(task.id)}
+                        onReject={() => handleOpenReject(task)}
+                      />
+                    ) : (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        agents={agents}
+                        onRetry={task.status === 'failed' ? () => handleRetry(task.id) : undefined}
+                      />
+                    ),
+                  )}
+                </div>
               </div>
-
-              {/* Tasks */}
-              <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
-                {colTasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    agents={agents}
-                    onRetry={task.status === 'failed' ? () => handleRetry(task.id) : undefined}
-                  />
-
-                ))}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
     </>
   );
 }

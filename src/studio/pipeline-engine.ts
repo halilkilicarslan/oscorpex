@@ -26,6 +26,8 @@ import {
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { taskEngine } from './task-engine.js';
+import { gitManager } from './git-manager.js';
+import { generateReadme } from './docs-generator.js';
 import type {
   PipelineStage,
   PipelineState,
@@ -367,6 +369,11 @@ class PipelineEngine {
 
     persistState(state);
 
+    // Phase başlarken otomatik git branch oluştur — pipeline'ı bloklamaz
+    this.createPhaseBranch(projectId, stageIndex, stage).catch((err) =>
+      console.warn(`[pipeline-engine] Phase branch oluşturulamadı (stage ${stageIndex}):`, err),
+    );
+
     eventBus.emit({
       projectId,
       type: 'pipeline:stage_started' as any,
@@ -383,6 +390,45 @@ class PipelineEngine {
     }
   }
 
+  /**
+   * Phase başlangıcında `phase/{stageIndex}-{agentRoles}` formatında
+   * git branch oluşturur. Başarısızlık pipeline'ı durdurmaz.
+   */
+  private async createPhaseBranch(
+    projectId: string,
+    stageIndex: number,
+    stage: PipelineStage,
+  ): Promise<void> {
+    const project = getProject(projectId);
+    if (!project?.repoPath) return;
+
+    // Branch adı: phase/0-backend, phase/1-frontend vb.
+    const roleSlug = stage.agents
+      .map((a) => a.role.toLowerCase().replace(/[^a-z0-9]+/g, '-'))
+      .join('-')
+      .slice(0, 30); // Git branch adı sınırı
+    const branchName = `phase/${stageIndex}-${roleSlug || 'stage'}`;
+
+    try {
+      const branches = await gitManager.listBranches(project.repoPath);
+      if (branches.includes(branchName)) {
+        // Branch zaten varsa geçiş yap
+        await gitManager.checkout(project.repoPath, branchName);
+      } else {
+        // Yeni branch oluştur
+        await gitManager.createBranch(project.repoPath, branchName);
+      }
+
+      eventBus.emit({
+        projectId,
+        type: 'pipeline:branch_created' as any,
+        payload: { branch: branchName, stageIndex },
+      });
+    } catch (err) {
+      console.warn(`[pipeline-engine] Branch oluşturulamadı: ${branchName}`, err);
+    }
+  }
+
   private completeStage(projectId: string, stageIndex: number): void {
     const state = _states.get(projectId);
     if (!state) return;
@@ -392,6 +438,11 @@ class PipelineEngine {
 
     stage.status = 'completed';
     persistState(state);
+
+    // Phase tamamlanınca branch'i main'e merge et — pipeline'ı bloklamaz
+    this.mergePhaseBranchToMain(projectId, stageIndex, stage).catch((err) =>
+      console.warn(`[pipeline-engine] Phase branch merge edilemedi (stage ${stageIndex}):`, err),
+    );
 
     eventBus.emit({
       projectId,
@@ -410,6 +461,66 @@ class PipelineEngine {
     }
   }
 
+  /**
+   * Tamamlanan phase branch'ini main'e merge eder.
+   * Commit'lenecek değişiklik varsa önce commit atar.
+   * Conflict durumunda uyarı log'u bırakır ama pipeline devam eder.
+   */
+  private async mergePhaseBranchToMain(
+    projectId: string,
+    stageIndex: number,
+    stage: PipelineStage,
+  ): Promise<void> {
+    const project = getProject(projectId);
+    if (!project?.repoPath) return;
+
+    const roleSlug = stage.agents
+      .map((a) => a.role.toLowerCase().replace(/[^a-z0-9]+/g, '-'))
+      .join('-')
+      .slice(0, 30);
+    const branchName = `phase/${stageIndex}-${roleSlug || 'stage'}`;
+
+    try {
+      // Aktif branch bu phase branch'i mi kontrol et
+      const currentBranch = await gitManager.getCurrentBranch(project.repoPath);
+      if (currentBranch !== branchName) return; // Farklı branch'teyiz, işlem yapma
+
+      // Uncommitted değişiklik varsa commit at
+      const status = await gitManager.getStatus(project.repoPath);
+      const hasChanges =
+        status.modified.length > 0 ||
+        status.untracked.length > 0 ||
+        status.staged.length > 0;
+
+      if (hasChanges) {
+        await gitManager.commit(
+          project.repoPath,
+          `feat: phase ${stageIndex} tamamlandı (${roleSlug || 'stage'})`,
+        );
+      }
+
+      // main branch'e merge et
+      const result = await gitManager.mergeBranch(project.repoPath, branchName, 'main');
+
+      if (result.success) {
+        eventBus.emit({
+          projectId,
+          type: 'pipeline:branch_merged' as any,
+          payload: { branch: branchName, target: 'main', stageIndex },
+        });
+      } else {
+        // Conflict varsa main'e geri dön
+        console.warn(
+          `[pipeline-engine] Merge conflict tespit edildi: ${branchName} → main`,
+          result.conflicts,
+        );
+        await gitManager.checkout(project.repoPath, 'main').catch(() => {});
+      }
+    } catch (err) {
+      console.warn(`[pipeline-engine] Branch merge atlandı: ${branchName}`, err);
+    }
+  }
+
   private markCompleted(projectId: string): void {
     const state = _states.get(projectId);
     if (!state) return;
@@ -422,6 +533,13 @@ class PipelineEngine {
       projectId,
       type: 'pipeline:completed' as any,
       payload: { completedAt: state.completedAt },
+    });
+
+    // Pipeline tamamlandığında README.md otomatik oluştur — non-blocking
+    generateReadme(projectId, (msg) => {
+      console.log(`[pipeline-engine] ${msg}`);
+    }).catch((err) => {
+      console.error('[pipeline-engine] README oluşturma hatası:', err);
     });
   }
 
@@ -482,7 +600,7 @@ class PipelineEngine {
 
     const anyFailed = statuses.some((s) => s === 'failed');
     // v2: review ve revision durumundaki task'lar henüz tamamlanmadı
-    const allDone = statuses.every((s) => s === 'done' || s === 'completed');
+    const allDone = statuses.every((s) => s === 'done');
 
     if (anyFailed) {
       this.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
@@ -517,8 +635,7 @@ class PipelineEngine {
 
   private getTaskStatus(taskId: string): string {
     const task = getTask(taskId);
-    const raw = task?.status ?? 'queued';
-    return raw === 'completed' ? 'done' : raw;
+    return task?.status ?? 'queued';
   }
 
   // -------------------------------------------------------------------------

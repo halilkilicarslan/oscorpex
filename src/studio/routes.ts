@@ -9,7 +9,7 @@ import { getAIModel, isAnyProviderConfigured } from './ai-provider-factory.js';
 import { mkdir, readFile, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { initLintConfig } from './lint-runner.js';
-import { checkDocsFreshness } from './docs-generator.js';
+import { checkDocsFreshness, generateReadme } from './docs-generator.js';
 import { AVATARS, FEMALE_AVATARS, MALE_AVATARS } from './avatars.js';
 import {
   isSonarEnabled,
@@ -44,6 +44,11 @@ import {
   seedTeamTemplates,
   listTeamTemplates,
   getTeamTemplate,
+  listCustomTeamTemplates,
+  getCustomTeamTemplate,
+  createCustomTeamTemplate,
+  updateCustomTeamTemplate,
+  deleteCustomTeamTemplate,
   createProjectAgent,
   getProjectAgent,
   listProjectAgents,
@@ -58,6 +63,8 @@ import {
   setDefaultProvider,
   getRawProviderApiKey,
   getDefaultProvider,
+  getFallbackChain,
+  updateFallbackOrder,
   listAgentRuns,
   getProjectAnalytics,
   getAgentAnalytics,
@@ -77,9 +84,17 @@ import {
   listAgentCapabilities,
   deleteAgentCapability,
   deleteAllCapabilities,
+  createWebhook,
+  listWebhooks,
+  getWebhook,
+  updateWebhook,
+  deleteWebhook,
+  type Webhook,
+  listPendingApprovals,
 } from './db.js';
+import { sendWebhookNotification } from './webhook-sender.js';
 import { eventBus } from './event-bus.js';
-import { PM_SYSTEM_PROMPT, pmToolkit } from './pm-agent.js';
+import { PM_SYSTEM_PROMPT, pmToolkit, estimatePlanCost } from './pm-agent.js';
 import { taskEngine } from './task-engine.js';
 import { containerManager } from './container-manager.js';
 import { agentRuntime } from './agent-runtime.js';
@@ -112,6 +127,47 @@ import {
 seedPresetAgents();
 seedTeamTemplates();
 
+// ---------------------------------------------------------------------------
+// Webhook Event Entegrasyonu — global event listener
+// Önemli event'lerde proje webhook'larına bildirim gönderir.
+// ---------------------------------------------------------------------------
+eventBus.on('task:completed', (event) => {
+  const payload = event.payload as Record<string, unknown>;
+  // Webhook gönderimi arka planda çalışır — event akışını bloklamamak için
+  sendWebhookNotification(event.projectId, 'task_completed', {
+    taskId: event.taskId ?? '',
+    taskTitle: payload.title ?? payload.taskTitle ?? '',
+    agentId: event.agentId ?? '',
+    ...payload,
+  }).catch((err) => console.warn('[webhook] task_completed gonderilemedi:', err));
+});
+
+eventBus.on('task:failed', (event) => {
+  const payload = event.payload as Record<string, unknown>;
+  sendWebhookNotification(event.projectId, 'execution_error', {
+    taskId: event.taskId ?? '',
+    taskTitle: payload.title ?? payload.taskTitle ?? '',
+    error: payload.error ?? 'Bilinmeyen hata',
+    agentId: event.agentId ?? '',
+    ...payload,
+  }).catch((err) => console.warn('[webhook] task_failed gonderilemedi:', err));
+});
+
+eventBus.on('pipeline:completed', (event) => {
+  sendWebhookNotification(event.projectId, 'pipeline_finished', {
+    ...(event.payload as Record<string, unknown>),
+  }).catch((err) => console.warn('[webhook] pipeline_finished gonderilemedi:', err));
+});
+
+eventBus.on('budget:warning', (event) => {
+  const payload = event.payload as Record<string, unknown>;
+  sendWebhookNotification(event.projectId, 'budget_warning', {
+    currentCost: payload.currentCostUsd ?? payload.currentCost ?? 0,
+    limitCost: payload.maxCostUsd ?? payload.limitCost ?? 0,
+    ...payload,
+  }).catch((err) => console.warn('[webhook] budget_warning gonderilemedi:', err));
+});
+
 const studio = new Hono();
 
 // ---- Projects CRUD --------------------------------------------------------
@@ -138,10 +194,12 @@ studio.post('/projects', async (c) => {
   // Proje oluşturulduktan sonra takım şablonundan agentları kopyala
   const templateId = body.teamTemplateId;
   if (templateId) {
-    // Kullanıcının belirttiği şablon
-    const template = getTeamTemplate(templateId);
-    if (template) {
-      const copiedAgents = copyAgentsToProject(project.id, template.roles);
+    // Önce preset template'lerde ara, yoksa custom team template'lerde ara
+    const presetTemplate = getTeamTemplate(templateId);
+    const customTemplate = !presetTemplate ? getCustomTeamTemplate(templateId) : undefined;
+    const roles = presetTemplate?.roles ?? customTemplate?.roles;
+    if (roles) {
+      const copiedAgents = copyAgentsToProject(project.id, roles);
       for (const agent of copiedAgents) {
         createAgentFiles(project.id, agent.name, {
           skills: agent.skills,
@@ -295,7 +353,7 @@ studio.delete('/projects/:id', (c) => {
   return c.json({ success: true });
 });
 
-// ---- PM Chat (SSE streaming) ----------------------------------------------
+// ---- Planner Chat (SSE streaming) -----------------------------------------
 
 studio.post('/projects/:id/chat', async (c) => {
   // Veritabanında varsayılan provider yoksa ve OPENAI_API_KEY de ayarlanmamışsa hata döndür
@@ -361,10 +419,10 @@ ${teamInfo}`;
       // fullStream ile tüm event'leri dinle (error dahil)
       for await (const part of result.fullStream) {
         if (part.type === 'text-delta') {
-          fullResponse += part.textDelta;
+          fullResponse += part.text;
           await stream.writeSSE({
             event: 'text-delta',
-            data: JSON.stringify({ text: part.textDelta }),
+            data: JSON.stringify({ text: part.text }),
           });
         } else if (part.type === 'error') {
           const err = part.error;
@@ -400,7 +458,7 @@ ${teamInfo}`;
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[PM Chat Error]', errorMsg);
+      console.error('[Planner Error]', errorMsg);
       await stream.writeSSE({
         event: 'error',
         data: JSON.stringify({ error: errorMsg }),
@@ -529,6 +587,25 @@ studio.post('/projects/:id/plan/reject', async (c) => {
   return c.json({ success: true, planId: plan.id, feedback: body.feedback });
 });
 
+// GET /projects/:id/plans/:planId/cost-estimate
+// Plan onaylanmadan önce tahmini maliyet hesaplar.
+// Response: { estimatedTokens, estimatedCost, currency, taskCount, avgTokensPerTask, model, breakdown }
+studio.get('/projects/:id/plans/:planId/cost-estimate', (c) => {
+  const projectId = c.req.param('id');
+  const planId = c.req.param('planId');
+
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  try {
+    const estimate = estimatePlanCost(projectId, planId);
+    return c.json(estimate);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Maliyet tahmini hesaplanamadı';
+    return c.json({ error: message }, 500);
+  }
+});
+
 // ---- Execution ------------------------------------------------------------
 
 // Manual trigger to start or resume execution for a project.
@@ -632,6 +709,40 @@ studio.post('/projects/:id/tasks/:taskId/restart-revision', async (c) => {
     const msg = error instanceof Error ? error.message : 'Restart revision failed';
     return c.json({ error: msg }, 400);
   }
+});
+
+// POST /projects/:id/tasks/:taskId/approve — Human-in-the-Loop onay ver
+studio.post('/projects/:id/tasks/:taskId/approve', async (c) => {
+  try {
+    const projectId = c.req.param('id');
+    const taskId = c.req.param('taskId');
+    const updated = taskEngine.approveTask(taskId);
+    // Onaylanan task'ı execution engine'e gönder
+    executionEngine.executeTask(projectId, updated).catch(() => {});
+    return c.json({ success: true, task: updated });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Onay işlemi başarısız';
+    return c.json({ error: msg }, 400);
+  }
+});
+
+// POST /projects/:id/tasks/:taskId/reject — Human-in-the-Loop reddet
+studio.post('/projects/:id/tasks/:taskId/reject', async (c) => {
+  try {
+    const taskId = c.req.param('taskId');
+    const body = await c.req.json<{ reason?: string }>().catch(() => ({} as { reason?: string }));
+    const updated = taskEngine.rejectTask(taskId, body.reason);
+    return c.json({ success: true, task: updated });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Red işlemi başarısız';
+    return c.json({ error: msg }, 400);
+  }
+});
+
+// GET /projects/:id/approvals — Bekleyen onayları listele
+studio.get('/projects/:id/approvals', (c) => {
+  const pendingTasks = listPendingApprovals(c.req.param('id'));
+  return c.json(pendingTasks);
 });
 
 // GET /projects/:id/tasks/:taskId/logs
@@ -794,6 +905,37 @@ studio.delete('/agents/:id', (c) => {
 // Tüm takım şablonlarını listele
 studio.get('/team-templates', (c) => {
   return c.json(listTeamTemplates());
+});
+
+// ---- Custom Team Templates (user-created) ---------------------------------
+
+studio.get('/custom-teams', (c) => {
+  return c.json(listCustomTeamTemplates());
+});
+
+studio.get('/custom-teams/:id', (c) => {
+  const template = getCustomTeamTemplate(c.req.param('id'));
+  if (!template) return c.json({ error: 'Not found' }, 404);
+  return c.json(template);
+});
+
+studio.post('/custom-teams', async (c) => {
+  const body = await c.req.json();
+  const template = createCustomTeamTemplate(body);
+  return c.json(template, 201);
+});
+
+studio.put('/custom-teams/:id', async (c) => {
+  const body = await c.req.json();
+  const template = updateCustomTeamTemplate(c.req.param('id'), body);
+  if (!template) return c.json({ error: 'Not found' }, 404);
+  return c.json(template);
+});
+
+studio.delete('/custom-teams/:id', (c) => {
+  const ok = deleteCustomTeamTemplate(c.req.param('id'));
+  if (!ok) return c.json({ error: 'Not found' }, 404);
+  return c.json({ success: true });
 });
 
 // ---- Project Templates (scaffold) ----------------------------------------
@@ -1607,6 +1749,52 @@ studio.get('/projects/:id/git/status', async (c) => {
   }
 });
 
+// POST /projects/:id/git/revert — Belirli bir commit'i geri al
+studio.post('/projects/:id/git/revert', async (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+
+  const body = (await c.req.json()) as { commitHash?: string };
+  if (!body.commitHash || typeof body.commitHash !== 'string') {
+    return c.json({ error: 'commitHash is required' }, 400);
+  }
+
+  try {
+    const revertHash = await gitManager.revertCommit(project.repoPath, body.commitHash);
+    return c.json({ success: true, revertCommit: revertHash, originalCommit: body.commitHash });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Revert başarısız oldu';
+    return c.json({ error: msg }, 500);
+  }
+});
+
+// POST /projects/:id/git/merge — Kaynak branch'i hedef branch'e merge et
+studio.post('/projects/:id/git/merge', async (c) => {
+  const project = getProject(c.req.param('id'));
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+
+  const body = (await c.req.json()) as { source?: string; target?: string };
+  if (!body.source || typeof body.source !== 'string') {
+    return c.json({ error: 'source branch is required' }, 400);
+  }
+  if (!body.target || typeof body.target !== 'string') {
+    return c.json({ error: 'target branch is required' }, 400);
+  }
+
+  try {
+    const result = await gitManager.mergeBranch(project.repoPath, body.source, body.target);
+    if (!result.success) {
+      return c.json({ success: false, conflicts: result.conflicts ?? [] }, 409);
+    }
+    return c.json({ success: true, source: body.source, target: body.target });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Merge başarısız oldu';
+    return c.json({ error: msg }, 500);
+  }
+});
+
 studio.post('/projects/:id/git/commit', async (c) => {
   const project = getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
@@ -1722,6 +1910,38 @@ studio.post('/providers', async (c) => {
 
   return c.json(provider, 201);
 });
+
+// ---- Fallback Chain — parametreli /:id rotasından ÖNCE tanımlanmalı -------
+
+/**
+ * GET /providers/fallback-chain
+ * Aktif provider'ları fallback_order'a göre sıralı döndürür.
+ * Default provider her zaman başta gelir.
+ * NOT: Bu route /:id rotasından önce tanımlanmalıdır; aksi takdirde
+ * Hono "fallback-chain" string'ini ID parametresi olarak yakalar.
+ */
+studio.get('/providers/fallback-chain', (c) => {
+  return c.json(getFallbackChain());
+});
+
+/**
+ * PUT /providers/fallback-chain
+ * Body: { orderedIds: string[] }
+ * Provider'ların fallback sıralamasını toplu olarak günceller.
+ * orderedIds dizisinin sırası fallback önceliğini belirler (0-indexed).
+ */
+studio.put('/providers/fallback-chain', async (c) => {
+  const body = (await c.req.json()) as { orderedIds?: string[] };
+
+  if (!Array.isArray(body.orderedIds) || body.orderedIds.length === 0) {
+    return c.json({ error: 'orderedIds array is required' }, 400);
+  }
+
+  updateFallbackOrder(body.orderedIds);
+  return c.json(getFallbackChain());
+});
+
+// ---------------------------------------------------------------------------
 
 studio.get('/providers/:id', (c) => {
   const provider = getProvider(c.req.param('id'));
@@ -2291,6 +2511,164 @@ studio.delete('/projects/:id/capabilities', (c) => {
   const agentId = c.req.query('agentId');
   deleteAllCapabilities(projectId, agentId);
   return c.json({ ok: true });
+});
+
+// ---- README Auto-Generation -----------------------------------------------
+
+/**
+ * POST /projects/:id/generate-readme
+ * Proje bilgilerinden README.md oluşturur ve repo köküne yazar.
+ * Proje tamamlanmamış olsa da manuel tetikleme desteklenir.
+ */
+studio.post('/projects/:id/generate-readme', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  if (!project.repoPath) {
+    return c.json({ error: 'Project has no repository path' }, 400);
+  }
+
+  const logs: string[] = [];
+  try {
+    await generateReadme(projectId, (msg) => logs.push(msg));
+    return c.json({ success: true, logs });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: msg, logs }, 500);
+  }
+});
+
+// ---- Webhooks ----------------------------------------------------------------
+// Proje bazlı webhook yönetimi: liste, oluştur, güncelle, sil, test
+
+// GET /projects/:id/webhooks — projeye ait webhook'ları listele
+studio.get('/projects/:id/webhooks', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  return c.json(listWebhooks(projectId));
+});
+
+// POST /projects/:id/webhooks — yeni webhook oluştur
+studio.post('/projects/:id/webhooks', async (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const body = (await c.req.json()) as {
+    name?: string;
+    url?: string;
+    type?: string;
+    events?: string[];
+  };
+
+  // Zorunlu alan kontrolü
+  if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+  if (!body.url?.trim()) return c.json({ error: 'url is required' }, 400);
+
+  // URL doğrulaması — güvenli HTTPS veya geliştirme ortamı için HTTP kabul edilir
+  const url = body.url.trim();
+  if (!url.startsWith('https://') && !url.startsWith('http://')) {
+    return c.json({ error: 'url must start with https:// (or http:// for local dev)' }, 400);
+  }
+
+  // Desteklenen webhook türleri
+  const validTypes: Webhook['type'][] = ['slack', 'discord', 'generic'];
+  const type = (body.type ?? 'generic') as Webhook['type'];
+  if (!validTypes.includes(type)) {
+    return c.json({ error: `type must be one of: ${validTypes.join(', ')}` }, 400);
+  }
+
+  const webhook = createWebhook({
+    projectId,
+    name: body.name.trim(),
+    url,
+    type,
+    events: Array.isArray(body.events) ? body.events : [],
+  });
+
+  return c.json(webhook, 201);
+});
+
+// PUT /projects/:id/webhooks/:webhookId — webhook güncelle
+studio.put('/projects/:id/webhooks/:webhookId', async (c) => {
+  const projectId = c.req.param('id');
+  const webhookId = c.req.param('webhookId');
+
+  const existing = getWebhook(webhookId);
+  if (!existing || existing.projectId !== projectId) {
+    return c.json({ error: 'Webhook not found' }, 404);
+  }
+
+  const body = (await c.req.json()) as {
+    name?: string;
+    url?: string;
+    type?: string;
+    events?: string[];
+    active?: boolean;
+  };
+
+  // URL güncelleniyorsa doğrula
+  if (body.url !== undefined) {
+    const url = body.url.trim();
+    if (!url.startsWith('https://') && !url.startsWith('http://')) {
+      return c.json({ error: 'url must start with https:// (or http:// for local dev)' }, 400);
+    }
+  }
+
+  const updated = updateWebhook(webhookId, {
+    name: body.name?.trim(),
+    url: body.url?.trim(),
+    type: body.type as Webhook['type'] | undefined,
+    events: body.events,
+    active: body.active,
+  });
+
+  return c.json(updated);
+});
+
+// DELETE /projects/:id/webhooks/:webhookId — webhook sil
+studio.delete('/projects/:id/webhooks/:webhookId', (c) => {
+  const projectId = c.req.param('id');
+  const webhookId = c.req.param('webhookId');
+
+  const existing = getWebhook(webhookId);
+  if (!existing || existing.projectId !== projectId) {
+    return c.json({ error: 'Webhook not found' }, 404);
+  }
+
+  const ok = deleteWebhook(webhookId);
+  if (!ok) return c.json({ error: 'Webhook could not be deleted' }, 500);
+  return c.json({ success: true });
+});
+
+// POST /projects/:id/webhooks/:webhookId/test — test bildirimi gönder
+studio.post('/projects/:id/webhooks/:webhookId/test', async (c) => {
+  const projectId = c.req.param('id');
+  const webhookId = c.req.param('webhookId');
+
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const webhook = getWebhook(webhookId);
+  if (!webhook || webhook.projectId !== projectId) {
+    return c.json({ error: 'Webhook not found' }, 404);
+  }
+
+  // Test payload — gerçek event'leri simüle eder
+  try {
+    await sendWebhookNotification(projectId, 'test', {
+      message: 'Bu bir test bildirimidir — AI Dev Studio',
+      projectName: project.name,
+      webhookName: webhook.name,
+      webhookType: webhook.type,
+    });
+    return c.json({ success: true, message: 'Test bildirimi gonderildi' });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Test bildirimi gonderilemedi';
+    return c.json({ error: msg }, 500);
+  }
 });
 
 export { studio as studioRoutes };

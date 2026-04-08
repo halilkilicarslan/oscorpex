@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   RotateCcw,
+  ShieldAlert,
 } from 'lucide-react';
 import { roleLabel, type Task, type ProjectAgent } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
@@ -20,6 +21,8 @@ const STATUS_ICON: Record<Task['status'], React.ReactNode> = {
   running: <Loader2 size={12} className="text-[#f59e0b] animate-spin" />,
   review: <Eye size={12} className="text-[#a855f7]" />,
   revision: <RotateCcw size={12} className="text-[#f97316]" />,
+  // Human-in-the-Loop: Onay bekleyen task'lar için kalkan ikonu
+  waiting_approval: <ShieldAlert size={12} className="text-[#f59e0b]" />,
   done: <CheckCircle2 size={12} className="text-[#22c55e]" />,
   failed: <XCircle size={12} className="text-[#ef4444]" />,
 };

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — PM Agent (Kerem) — AI SDK tool definitions + system prompt
+// AI Dev Studio — AI Planner — AI SDK tool definitions + system prompt
 // ---------------------------------------------------------------------------
 
 import { tool } from 'ai';
@@ -14,16 +14,123 @@ import {
   listProjectTasks,
   getDb,
   getProjectAgentsWithSkills,
+  getDefaultProvider,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import type { TaskComplexity } from './types.js';
 import { gitManager } from './git-manager.js';
 
 // ---------------------------------------------------------------------------
+// Maliyet Tahmini — Model fiyat tablosu (USD / 1M token)
+// ---------------------------------------------------------------------------
+
+/** Model ismine göre input/output fiyatlarını döndürür (USD per 1M token). */
+function getModelPricing(modelName: string): { inputPer1M: number; outputPer1M: number } {
+  const m = modelName.toLowerCase();
+
+  // Claude Sonnet ailesi
+  if (m.includes('claude') && m.includes('sonnet')) {
+    return { inputPer1M: 3.0, outputPer1M: 15.0 };
+  }
+  // Claude Opus ailesi
+  if (m.includes('claude') && m.includes('opus')) {
+    return { inputPer1M: 15.0, outputPer1M: 75.0 };
+  }
+  // Claude Haiku ailesi
+  if (m.includes('claude') && m.includes('haiku')) {
+    return { inputPer1M: 0.25, outputPer1M: 1.25 };
+  }
+  // GPT-4o
+  if (m.includes('gpt-4o')) {
+    return { inputPer1M: 2.5, outputPer1M: 10.0 };
+  }
+  // GPT-4 Turbo
+  if (m.includes('gpt-4-turbo') || m.includes('gpt-4-1106') || m.includes('gpt-4-0125')) {
+    return { inputPer1M: 10.0, outputPer1M: 30.0 };
+  }
+  // GPT-3.5 Turbo
+  if (m.includes('gpt-3.5')) {
+    return { inputPer1M: 0.5, outputPer1M: 1.5 };
+  }
+  // Gemini Pro / Flash
+  if (m.includes('gemini-1.5-pro')) {
+    return { inputPer1M: 1.25, outputPer1M: 5.0 };
+  }
+  if (m.includes('gemini')) {
+    return { inputPer1M: 0.075, outputPer1M: 0.3 };
+  }
+
+  // Varsayılan: claude-sonnet fiyatı
+  return { inputPer1M: 3.0, outputPer1M: 15.0 };
+}
+
+/** Her task için varsayılan token tahminleri. */
+const AVG_INPUT_TOKENS_PER_TASK = 2000;
+const AVG_OUTPUT_TOKENS_PER_TASK = 1000;
+
+export interface PlanCostEstimate {
+  estimatedTokens: number;
+  estimatedCost: number;
+  currency: 'USD';
+  taskCount: number;
+  avgTokensPerTask: number;
+  model: string;
+  breakdown: { inputTokens: number; outputTokens: number; inputCost: number; outputCost: number };
+}
+
+/**
+ * Bir plan için tahmini maliyet hesaplar.
+ * Task başına ortalama 2000 input + 1000 output token varsayar.
+ * Model fiyatı: default provider'ın model ayarından alınır.
+ */
+export function estimatePlanCost(projectId: string, planId: string): PlanCostEstimate {
+  const db = getDb();
+
+  // Plan'a ait task sayısını hesapla
+  const taskCountRow = db.prepare(`
+    SELECT COUNT(*) AS cnt
+    FROM tasks t
+    JOIN phases ph ON ph.id = t.phase_id
+    JOIN project_plans pp ON pp.id = ph.plan_id
+    WHERE pp.id = ? AND pp.project_id = ?
+  `).get(planId, projectId) as { cnt: number } | undefined;
+
+  const taskCount = taskCountRow?.cnt ?? 0;
+
+  // Default provider'dan model bilgisi al
+  const defaultProvider = getDefaultProvider();
+  const model = defaultProvider?.model || 'claude-sonnet-4-6';
+  const pricing = getModelPricing(model);
+
+  const totalInputTokens = taskCount * AVG_INPUT_TOKENS_PER_TASK;
+  const totalOutputTokens = taskCount * AVG_OUTPUT_TOKENS_PER_TASK;
+  const totalTokens = totalInputTokens + totalOutputTokens;
+
+  const inputCost = (totalInputTokens / 1_000_000) * pricing.inputPer1M;
+  const outputCost = (totalOutputTokens / 1_000_000) * pricing.outputPer1M;
+  const totalCost = inputCost + outputCost;
+
+  return {
+    estimatedTokens: totalTokens,
+    estimatedCost: Math.round(totalCost * 10000) / 10000, // 4 ondalık basamak
+    currency: 'USD',
+    taskCount,
+    avgTokensPerTask: AVG_INPUT_TOKENS_PER_TASK + AVG_OUTPUT_TOKENS_PER_TASK,
+    model,
+    breakdown: {
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      inputCost: Math.round(inputCost * 10000) / 10000,
+      outputCost: Math.round(outputCost * 10000) / 10000,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // System prompt
 // ---------------------------------------------------------------------------
 
-export const PM_SYSTEM_PROMPT = `You are Kerem, a senior Project Manager for AI Dev Studio.
+export const PM_SYSTEM_PROMPT = `You are the AI Planner, a senior Project Manager for AI Dev Studio.
 
 ## Your Role
 You help users plan and manage software projects end-to-end. You work with a team of AI developer agents who will implement the project in Docker containers.
@@ -81,7 +188,7 @@ When assigning tasks:
 Their names, roles, and capabilities are provided in the [Your Team] section of the context. When the user asks about the team:
 - Introduce each team member by name, role, and specialties
 - Explain what each agent does and what kind of tasks they handle
-- You (Kerem) are the PM — you plan and coordinate, the others implement
+- You (AI Planner) are the PM — you plan and coordinate, the others implement
 - When creating plans, assign tasks using the exact role names from the team (e.g., "frontend", "backend", "architect", "qa", "reviewer")
 
 ## Smart Assignment
@@ -122,7 +229,7 @@ const phaseSchema = z.object({
       assignedRole: z
         .enum(['architect', 'frontend', 'backend', 'qa', 'reviewer', 'devops', 'coder'])
         .describe('Which agent role should handle this'),
-      complexity: z.enum(['S', 'M', 'L']).describe('S=small, M=medium, L=large'),
+      complexity: z.enum(['S', 'M', 'L', 'XL']).describe('S=small, M=medium, L=large, XL=extra-large (requires human approval)'),
       dependsOnTaskTitles: z
         .array(z.string())
         .default([])
@@ -158,6 +265,12 @@ async function buildPlan(projectId: string, phases: PhaseInput[]) {
 
   for (const { input, created } of createdPhases) {
     for (const t of input.tasks) {
+      // Human-in-the-Loop: XL complexity veya kritik keyword içeren task'lar onay gerektirir
+      const APPROVAL_KEYWORDS = ['deploy', 'database migration', 'delete', 'drop', 'truncate', 'migration', 'seed', 'production'];
+      const searchText = `${t.title} ${t.description}`.toLowerCase();
+      const autoRequiresApproval =
+        t.complexity === 'XL' || APPROVAL_KEYWORDS.some((kw) => searchText.includes(kw));
+
       const task = createTask({
         phaseId: created.id,
         title: t.title,
@@ -167,6 +280,7 @@ async function buildPlan(projectId: string, phases: PhaseInput[]) {
         dependsOn: [],
         branch: t.branch,
         taskType: t.taskType as any,
+        requiresApproval: autoRequiresApproval,
       });
       titleToId.set(t.title, task.id);
     }

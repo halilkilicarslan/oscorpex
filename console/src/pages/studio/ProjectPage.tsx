@@ -18,6 +18,8 @@ import {
   BellOff,
   Terminal,
   Eye,
+  FileText,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   fetchProject,
@@ -26,6 +28,7 @@ import {
   startApp,
   stopApp,
   fetchAppStatus,
+  generateReadme,
   type Project,
   type AppStatus,
 } from '../../lib/studio-api';
@@ -52,7 +55,7 @@ type Tab = 'chat' | 'team' | 'board' | 'preview' | 'files' | 'events' | 'message
 
 // Sabit sekme listesi (messages badge'i dinamik olarak eklenir)
 const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: 'chat', label: 'PM Chat', icon: <MessageSquare size={16} /> },
+  { id: 'chat', label: 'Planner', icon: <MessageSquare size={16} /> },
   { id: 'team', label: 'Team', icon: <Users size={16} /> },
   { id: 'board', label: 'Board', icon: <Kanban size={16} /> },
   { id: 'preview', label: 'Preview', icon: <Eye size={16} /> },
@@ -83,6 +86,10 @@ export default function ProjectPage() {
   // WebSocket + browser notifications
   const { lastEvent } = useStudioWebSocket(projectId ?? '');
   const { enabled: notifyEnabled, requestPermission } = useNotifications(lastEvent);
+
+  // README oluşturma durumu
+  const [readmeLoading, setReadmeLoading] = useState(false);
+  const [readmeDone, setReadmeDone] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -144,6 +151,22 @@ export default function ProjectPage() {
       setAppStatus(status);
     } catch { /* ignore */ }
     setAppLoading(false);
+  };
+
+  // README oluşturma handler — backend'e istek atar, dosyayı git'e commit eder
+  const handleGenerateReadme = async () => {
+    if (!projectId || readmeLoading) return;
+    setReadmeLoading(true);
+    setReadmeDone(false);
+    try {
+      await generateReadme(projectId);
+      setReadmeDone(true);
+      // 3 saniye sonra checkmark ikonunu sıfırla
+      setTimeout(() => setReadmeDone(false), 3000);
+    } catch {
+      // Hata durumunda sessizce geç; gelecekte toast gösterilebilir
+    }
+    setReadmeLoading(false);
   };
 
   if (loading) {
@@ -220,6 +243,22 @@ export default function ProjectPage() {
             <Play size={14} />
           )}
           {appStatus.running ? 'Stop App' : 'Run App'}
+        </button>
+        {/* README oluşturma butonu — küçük, secondary stil */}
+        <button
+          onClick={handleGenerateReadme}
+          disabled={readmeLoading || !project.repoPath}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors bg-[#1f1f1f] text-[#a3a3a3] hover:bg-[#262626] hover:text-[#fafafa] disabled:opacity-40"
+          title="README.md oluştur ve git repo'ya yaz"
+        >
+          {readmeLoading ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : readmeDone ? (
+            <CheckCircle2 size={14} className="text-[#22c55e]" />
+          ) : (
+            <FileText size={14} />
+          )}
+          {readmeDone ? 'README Ready' : 'Gen README'}
         </button>
         <button
           onClick={() => { if (!notifyEnabled) requestPermission(); }}
