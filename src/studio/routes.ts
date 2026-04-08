@@ -1845,9 +1845,26 @@ studio.get('/projects/:id/pipeline/status', (c) => {
     return c.json({ error: 'Bu proje için pipeline kaydı bulunamadı' }, 404);
   }
 
+  // Pipeline stage'lerindeki task status'larını DB'den güncel haliyle eşleştir
+  // Pipeline in-memory state oluşturulduğunda task'lar kopyalanıyor ama
+  // execution sırasında DB'deki status güncellenirken pipeline kopyası stale kalıyor.
+  const pipelineState = enriched.pipelineState;
+  if (pipelineState?.stages) {
+    for (const stage of pipelineState.stages) {
+      if (stage.tasks) {
+        for (let i = 0; i < stage.tasks.length; i++) {
+          const fresh = getTask(stage.tasks[i].id);
+          if (fresh) {
+            stage.tasks[i] = { ...stage.tasks[i], ...fresh };
+          }
+        }
+      }
+    }
+  }
+
   return c.json({
     // Ham pipeline state (null olabilir — kayıt henüz oluşmamışsa)
-    pipeline: enriched.pipelineState,
+    pipeline: pipelineState,
     // Task engine'den gelen anlık ilerleme
     taskProgress: enriched.taskProgress,
     // Task durumlarına göre türetilen gerçek durum
