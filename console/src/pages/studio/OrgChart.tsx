@@ -5,6 +5,7 @@ import {
   type OrgNode,
   type PipelineAgent,
 } from '../../lib/studio-api';
+import AgentAvatarImg from '../../components/AgentAvatar';
 
 // ---------------------------------------------------------------------------
 // Hierarchy tree node
@@ -18,7 +19,7 @@ function OrgTreeNode({ node, level = 0 }: { node: OrgNode; level?: number }) {
         className="flex flex-col items-center p-3 rounded-xl bg-[#111111] border-2 transition-colors hover:bg-[#1a1a1a] cursor-default w-[110px]"
         style={{ borderColor: node.color }}
       >
-        <span className="text-2xl mb-1">{node.avatar}</span>
+        <AgentAvatarImg avatar={node.avatar} name={node.name} size="lg" className="mb-1" />
         <span className="text-[13px] font-semibold text-[#fafafa] text-center leading-tight truncate w-full text-center">
           {node.name}
         </span>
@@ -97,7 +98,7 @@ function PipelineView({ pipeline }: { pipeline: PipelineAgent[] }) {
                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#111111] border-2"
                 style={{ borderColor: agent.color }}
               >
-                <span className="text-lg">{agent.avatar}</span>
+                <AgentAvatarImg avatar={agent.avatar} name={agent.name} size="sm" />
                 <div className="min-w-0">
                   <span className="text-[12px] font-semibold text-[#fafafa] block truncate">
                     {agent.name}

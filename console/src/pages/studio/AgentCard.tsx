@@ -11,6 +11,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import type { ProjectAgent } from '../../lib/studio-api';
+import AgentAvatar from '../../components/AgentAvatar';
 import {
   startAgentProcess,
   stopAgentProcess,
@@ -209,9 +210,7 @@ export default function AgentCard({
       >
         {/* Avatar — okunmamış mesaj varsa kırmızı rozet göster */}
         <div className="relative shrink-0">
-          <div className="w-10 h-10 rounded-lg bg-[#1f1f1f] flex items-center justify-center text-lg">
-            {agent.avatar}
-          </div>
+          <AgentAvatar avatar={agent.avatar} name={agent.name} size="lg" />
           {unreadCount > 0 && (
             <span
               className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-[#ef4444] text-[#fafafa] text-[8px] font-bold flex items-center justify-center leading-none"

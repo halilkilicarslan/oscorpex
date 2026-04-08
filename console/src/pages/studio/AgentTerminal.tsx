@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { Eraser, Wifi, WifiOff } from 'lucide-react';
+import AgentAvatarImg from '../../components/AgentAvatar';
 import {
   getAgentOutput,
   getAgentStatus,
@@ -226,7 +227,7 @@ export default function AgentTerminal({
         <div className="flex items-center gap-2">
           {/* Ajan adı ve avatarı */}
           {agentAvatar && (
-            <span className="text-[13px]">{agentAvatar}</span>
+            <AgentAvatarImg avatar={agentAvatar} name={agentName ?? agentId} size="xs" />
           )}
           <span className="text-[12px] font-mono text-[#a3a3a3]">
             {agentName ?? agentId}

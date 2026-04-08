@@ -16,6 +16,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import AgentTerminal from './AgentTerminal';
+import AgentAvatarImg from '../../components/AgentAvatar';
 import {
   startPipeline,
   getPipelineStatus,
@@ -117,16 +118,12 @@ function countDoneTasks(tasks: Task[]): number {
 
 // Ajan avatar dairesi
 function AgentAvatar({ agent, size = 'sm' }: { agent: ProjectAgent; size?: 'sm' | 'lg' }) {
-  const color = getAgentColor(agent);
-  const dim = size === 'lg' ? 'w-8 h-8 text-[14px]' : 'w-6 h-6 text-[11px]';
   return (
-    <div
-      className={`${dim} rounded-full flex items-center justify-center font-bold shrink-0`}
-      style={{ backgroundColor: `${color}20`, color, border: `1.5px solid ${color}40` }}
-      title={`${agent.name} (${agent.role})`}
-    >
-      {agent.avatar || agent.name.charAt(0).toUpperCase()}
-    </div>
+    <AgentAvatarImg
+      avatar={agent.avatar}
+      name={agent.name}
+      size={size === 'lg' ? 'md' : 'sm'}
+    />
   );
 }
 

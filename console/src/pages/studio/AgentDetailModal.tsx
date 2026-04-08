@@ -1,5 +1,6 @@
 import { X, Pencil } from 'lucide-react';
 import type { ProjectAgent } from '../../lib/studio-api';
+import AgentAvatarImg from '../../components/AgentAvatar';
 
 interface AgentDetailModalProps {
   agent: ProjectAgent;
@@ -17,9 +18,7 @@ export default function AgentDetailModal({ agent, onClose, onEdit }: AgentDetail
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-5 border-b border-[#1f1f1f] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-[#1f1f1f] flex items-center justify-center text-2xl shrink-0">
-              {agent.avatar}
-            </div>
+            <AgentAvatarImg avatar={agent.avatar} name={agent.name} size="xl" />
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-[16px] font-semibold text-[#fafafa]">{agent.name}</h2>
