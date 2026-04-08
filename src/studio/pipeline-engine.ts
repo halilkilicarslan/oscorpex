@@ -386,7 +386,7 @@ class PipelineEngine {
     const statuses = freshTaskIds.map((id) => this.getTaskStatus(id));
 
     const anyFailed = statuses.some((s) => s === 'failed');
-    const allDone = statuses.every((s) => s === 'done');
+    const allDone = statuses.every((s) => s === 'done' || s === 'completed');
 
     if (anyFailed) {
       this.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
@@ -438,7 +438,9 @@ class PipelineEngine {
    */
   private getTaskStatus(taskId: string): string {
     const task = getTask(taskId);
-    return task?.status ?? 'queued';
+    const raw = task?.status ?? 'queued';
+    // DB 'completed' kullanır, pipeline engine 'done' bekler — normalize et
+    return raw === 'completed' ? 'done' : raw;
   }
 
   // -------------------------------------------------------------------------

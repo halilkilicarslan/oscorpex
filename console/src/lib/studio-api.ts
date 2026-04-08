@@ -387,12 +387,17 @@ export function streamPMChat(
     signal: controller.signal,
   })
     .then(async (res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        const msg = body?.error || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
       const reader = res.body?.getReader();
       if (!reader) throw new Error('No reader');
 
       const decoder = new TextDecoder();
       let buffer = '';
+      let currentEvent = '';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -404,14 +409,22 @@ export function streamPMChat(
 
         for (const line of lines) {
           const trimmed = line.trim();
+          if (trimmed.startsWith('event: ')) {
+            currentEvent = trimmed.slice(7);
+            continue;
+          }
           if (!trimmed.startsWith('data: ')) continue;
           const jsonStr = trimmed.slice(6);
           try {
             const parsed = JSON.parse(jsonStr);
+            if (currentEvent === 'error' && parsed.error) {
+              throw new Error(parsed.error);
+            }
             if (parsed.text) onText(parsed.text);
-          } catch {
-            // skip
+          } catch (e) {
+            if (e instanceof Error && e.message !== 'Unexpected end of JSON input') throw e;
           }
+          currentEvent = '';
         }
       }
       onDone();
@@ -1093,13 +1106,34 @@ export async function fetchCostBreakdown(projectId: string): Promise<CostBreakdo
 // App Runner
 // ---------------------------------------------------------------------------
 
+export interface AppService {
+  name: string;
+  url: string;
+  isPreview: boolean;
+}
+
 export interface AppStatus {
   running: boolean;
+  services: AppService[];
+  previewUrl: string | null;
+  // backward compat
   backendUrl: string | null;
   frontendUrl: string | null;
 }
 
-export async function startApp(projectId: string): Promise<{ ok: boolean }> {
+export interface AppConfig {
+  services: {
+    name: string;
+    path: string;
+    command: string;
+    port: number;
+    readyPattern: string;
+    env?: Record<string, string>;
+  }[];
+  preview: string;
+}
+
+export async function startApp(projectId: string): Promise<{ ok: boolean; services: { name: string; url: string }[]; previewUrl: string | null }> {
   return json(await fetch(`${BASE}/projects/${projectId}/app/start`, { method: 'POST' }));
 }
 
@@ -1109,6 +1143,10 @@ export async function stopApp(projectId: string): Promise<{ ok: boolean }> {
 
 export async function fetchAppStatus(projectId: string): Promise<AppStatus> {
   return json(await fetch(`${BASE}/projects/${projectId}/app/status`));
+}
+
+export async function fetchAppConfig(projectId: string): Promise<AppConfig> {
+  return json(await fetch(`${BASE}/projects/${projectId}/app/config`));
 }
 
 // ---- Project Settings ------------------------------------------------------
