@@ -112,6 +112,17 @@ export interface ProjectAgent {
   pipelineOrder: number;
 }
 
+export type DependencyType = 'hierarchy' | 'workflow' | 'review' | 'gate';
+
+export interface AgentDependency {
+  id: string;
+  projectId: string;
+  fromAgentId: string;
+  toAgentId: string;
+  type: DependencyType;
+  createdAt: string;
+}
+
 export interface OrgNode {
   id: string;
   name: string;
@@ -401,6 +412,23 @@ export async function copyTeamFromTemplate(projectId: string, templateId: string
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ templateId }),
+  }));
+}
+
+// ---- Dependencies ---------------------------------------------------------
+
+export async function fetchDependencies(projectId: string): Promise<AgentDependency[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/dependencies`));
+}
+
+export async function saveDependencies(
+  projectId: string,
+  deps: { fromAgentId: string; toAgentId: string; type: DependencyType }[],
+): Promise<AgentDependency[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/dependencies`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(deps),
   }));
 }
 
