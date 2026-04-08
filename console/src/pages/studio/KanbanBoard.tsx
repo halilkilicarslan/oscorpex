@@ -4,8 +4,11 @@ import {
   fetchTasks,
   retryTask,
   fetchAutoStartStatus,
+  fetchProjectAgents,
+  roleLabel,
   type Task,
   type AutoStartStatus,
+  type ProjectAgent,
 } from '../../lib/studio-api';
 import TaskCard from './TaskCard';
 
@@ -100,6 +103,7 @@ function ErrorToast({
 
 export default function KanbanBoard({ projectId }: { projectId: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [agents, setAgents] = useState<ProjectAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [autoStartStatus, setAutoStartStatus] = useState<AutoStartStatus | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -116,8 +120,8 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
   }, [dismissToast]);
 
   const load = useCallback(() => {
-    fetchTasks(projectId)
-      .then(setTasks)
+    Promise.all([fetchTasks(projectId), fetchProjectAgents(projectId)])
+      .then(([t, a]) => { setTasks(t); setAgents(a); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [projectId]);
@@ -224,6 +228,7 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
                   <TaskCard
                     key={task.id}
                     task={task}
+                    agents={agents}
                     onRetry={task.status === 'failed' ? () => handleRetry(task.id) : undefined}
                   />
 

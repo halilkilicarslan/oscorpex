@@ -10,7 +10,8 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import type { Task } from '../../lib/studio-api';
+import { roleLabel, type Task, type ProjectAgent } from '../../lib/studio-api';
+import AgentAvatarImg from '../../components/AgentAvatar';
 
 const STATUS_ICON: Record<Task['status'], React.ReactNode> = {
   queued: <Clock size={12} className="text-[#525252]" />,
@@ -29,9 +30,11 @@ const COMPLEXITY_COLORS: Record<string, string> = {
 
 export default function TaskCard({
   task,
+  agents = [],
   onRetry,
 }: {
   task: Task;
+  agents?: ProjectAgent[];
   onRetry?: () => Promise<void>;
 }) {
   const [retrying, setRetrying] = useState(false);
@@ -72,9 +75,22 @@ export default function TaskCard({
         </p>
       )}
 
-      {/* Alt bilgi satiri */}
+      {/* Alt bilgi satiri — atanan agent */}
       <div className="flex items-center justify-between pl-5">
-        <span className="text-[10px] text-[#525252]">{task.assignedAgent}</span>
+        {(() => {
+          const agent = agents.find(
+            (a) => a.role.toLowerCase() === task.assignedAgent.toLowerCase() || a.name.toLowerCase() === task.assignedAgent.toLowerCase(),
+          );
+          return agent ? (
+            <div className="flex items-center gap-1.5">
+              <AgentAvatarImg avatar={agent.avatar} name={agent.name} size="xs" />
+              <span className="text-[10px] text-[#a3a3a3] font-medium">{agent.name}</span>
+              <span className="text-[9px] text-[#525252]">{roleLabel(agent.role)}</span>
+            </div>
+          ) : (
+            <span className="text-[10px] text-[#525252]">{roleLabel(task.assignedAgent)}</span>
+          );
+        })()}
 
         <div className="flex items-center gap-2">
           {/* Retry count rozeti */}
