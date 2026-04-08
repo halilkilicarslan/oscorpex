@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
-  getDb,
   createProject,
   getProject,
   listProjects,
@@ -25,22 +24,29 @@ import {
   insertChatMessage,
   listChatMessages,
 } from '../db.js';
+import { execute } from '../pg.js';
 
-// Use in-memory DB for tests by overriding the module-level DB path
-// We achieve this by calling getDb() which initialises on first call
-// The DB is file-based, so we reset between runs by deleting records
+// Use PostgreSQL DB for tests. Tables must already exist (run migrations before tests).
+// Reset state between runs by deleting records in beforeAll.
 
 describe('Studio DB', () => {
-  beforeAll(() => {
-    // Initialise DB (creates tables)
-    getDb();
+  beforeAll(async () => {
+    // Clean up tables so tests start with a known empty state
+    await execute('DELETE FROM chat_messages');
+    await execute('DELETE FROM events');
+    await execute('DELETE FROM tasks');
+    await execute('DELETE FROM phases');
+    await execute('DELETE FROM plans');
+    await execute('DELETE FROM project_agents');
+    await execute('DELETE FROM projects');
+    await execute('DELETE FROM agent_configs');
   });
 
   // ---- Projects -----------------------------------------------------------
 
   describe('Projects', () => {
-    it('should create and retrieve a project', () => {
-      const project = createProject({
+    it('should create and retrieve a project', async () => {
+      const project = await createProject({
         name: 'Test App',
         description: 'A test project',
         techStack: ['React', 'Node.js'],
@@ -52,49 +58,49 @@ describe('Studio DB', () => {
       expect(project.status).toBe('planning');
       expect(project.techStack).toEqual(['React', 'Node.js']);
 
-      const fetched = getProject(project.id);
+      const fetched = await getProject(project.id);
       expect(fetched).toBeDefined();
       expect(fetched!.name).toBe('Test App');
     });
 
-    it('should list projects', () => {
-      const projects = listProjects();
+    it('should list projects', async () => {
+      const projects = await listProjects();
       expect(projects.length).toBeGreaterThan(0);
     });
 
-    it('should update a project', () => {
-      const project = createProject({
+    it('should update a project', async () => {
+      const project = await createProject({
         name: 'Update Test',
         description: '',
         techStack: [],
         repoPath: '',
       });
-      const updated = updateProject(project.id, { status: 'running', techStack: ['Vue'] });
+      const updated = await updateProject(project.id, { status: 'running', techStack: ['Vue'] });
       expect(updated!.status).toBe('running');
       expect(updated!.techStack).toEqual(['Vue']);
     });
 
-    it('should delete a project', () => {
-      const project = createProject({ name: 'Delete Me', description: '', techStack: [], repoPath: '' });
-      expect(deleteProject(project.id)).toBe(true);
-      expect(getProject(project.id)).toBeUndefined();
+    it('should delete a project', async () => {
+      const project = await createProject({ name: 'Delete Me', description: '', techStack: [], repoPath: '' });
+      expect(await deleteProject(project.id)).toBe(true);
+      expect(await getProject(project.id)).toBeUndefined();
     });
   });
 
   // ---- Plans & Phases & Tasks ---------------------------------------------
 
   describe('Plans, Phases, Tasks', () => {
-    it('should create a full plan hierarchy', () => {
-      const project = createProject({ name: 'Plan Test', description: '', techStack: [], repoPath: '' });
-      const plan = createPlan(project.id);
+    it('should create a full plan hierarchy', async () => {
+      const project = await createProject({ name: 'Plan Test', description: '', techStack: [], repoPath: '' });
+      const plan = await createPlan(project.id);
 
       expect(plan.version).toBe(1);
       expect(plan.status).toBe('draft');
 
-      const phase = createPhase({ planId: plan.id, name: 'Foundation', order: 1, dependsOn: [] });
+      const phase = await createPhase({ planId: plan.id, name: 'Foundation', order: 1, dependsOn: [] });
       expect(phase.status).toBe('pending');
 
-      const task = createTask({
+      const task = await createTask({
         phaseId: phase.id,
         title: 'Setup project',
         description: 'Initialize the project',
@@ -107,50 +113,50 @@ describe('Studio DB', () => {
       expect(task.retryCount).toBe(0);
 
       // Retrieve full plan with phases and tasks
-      const fullPlan = getPlan(plan.id);
+      const fullPlan = await getPlan(plan.id);
       expect(fullPlan!.phases).toHaveLength(1);
       expect(fullPlan!.phases[0].tasks).toHaveLength(1);
       expect(fullPlan!.phases[0].tasks[0].title).toBe('Setup project');
     });
 
-    it('should update task status', () => {
-      const project = createProject({ name: 'Task Test', description: '', techStack: [], repoPath: '' });
-      const plan = createPlan(project.id);
-      const phase = createPhase({ planId: plan.id, name: 'P1', order: 1, dependsOn: [] });
-      const task = createTask({ phaseId: phase.id, title: 'T1', description: '', assignedAgent: '', complexity: 'M', dependsOn: [], branch: '' });
+    it('should update task status', async () => {
+      const project = await createProject({ name: 'Task Test', description: '', techStack: [], repoPath: '' });
+      const plan = await createPlan(project.id);
+      const phase = await createPhase({ planId: plan.id, name: 'P1', order: 1, dependsOn: [] });
+      const task = await createTask({ phaseId: phase.id, title: 'T1', description: '', assignedAgent: '', complexity: 'M', dependsOn: [], branch: '' });
 
-      const updated = updateTask(task.id, { status: 'running', startedAt: new Date().toISOString() });
+      const updated = await updateTask(task.id, { status: 'running', startedAt: new Date().toISOString() });
       expect(updated!.status).toBe('running');
       expect(updated!.startedAt).toBeTruthy();
     });
 
-    it('should list project tasks across phases', () => {
-      const project = createProject({ name: 'Multi Phase', description: '', techStack: [], repoPath: '' });
-      const plan = createPlan(project.id);
-      const p1 = createPhase({ planId: plan.id, name: 'P1', order: 1, dependsOn: [] });
-      const p2 = createPhase({ planId: plan.id, name: 'P2', order: 2, dependsOn: [p1.id] });
-      createTask({ phaseId: p1.id, title: 'T1', description: '', assignedAgent: '', complexity: 'S', dependsOn: [], branch: '' });
-      createTask({ phaseId: p2.id, title: 'T2', description: '', assignedAgent: '', complexity: 'L', dependsOn: [], branch: '' });
+    it('should list project tasks across phases', async () => {
+      const project = await createProject({ name: 'Multi Phase', description: '', techStack: [], repoPath: '' });
+      const plan = await createPlan(project.id);
+      const p1 = await createPhase({ planId: plan.id, name: 'P1', order: 1, dependsOn: [] });
+      const p2 = await createPhase({ planId: plan.id, name: 'P2', order: 2, dependsOn: [p1.id] });
+      await createTask({ phaseId: p1.id, title: 'T1', description: '', assignedAgent: '', complexity: 'S', dependsOn: [], branch: '' });
+      await createTask({ phaseId: p2.id, title: 'T2', description: '', assignedAgent: '', complexity: 'L', dependsOn: [], branch: '' });
 
-      const tasks = listProjectTasks(project.id);
+      const tasks = await listProjectTasks(project.id);
       expect(tasks).toHaveLength(2);
     });
 
-    it('should get latest plan', () => {
-      const project = createProject({ name: 'Version Test', description: '', techStack: [], repoPath: '' });
-      createPlan(project.id);
-      const plan2 = createPlan(project.id);
+    it('should get latest plan', async () => {
+      const project = await createProject({ name: 'Version Test', description: '', techStack: [], repoPath: '' });
+      await createPlan(project.id);
+      const plan2 = await createPlan(project.id);
 
-      const latest = getLatestPlan(project.id);
+      const latest = await getLatestPlan(project.id);
       expect(latest!.version).toBe(2);
       expect(latest!.id).toBe(plan2.id);
     });
 
-    it('should update plan status', () => {
-      const project = createProject({ name: 'Approve Test', description: '', techStack: [], repoPath: '' });
-      const plan = createPlan(project.id);
-      updatePlanStatus(plan.id, 'approved');
-      const fetched = getPlan(plan.id);
+    it('should update plan status', async () => {
+      const project = await createProject({ name: 'Approve Test', description: '', techStack: [], repoPath: '' });
+      const plan = await createPlan(project.id);
+      await updatePlanStatus(plan.id, 'approved');
+      const fetched = await getPlan(plan.id);
       expect(fetched!.status).toBe('approved');
     });
   });
@@ -158,8 +164,8 @@ describe('Studio DB', () => {
   // ---- Agent Configs ------------------------------------------------------
 
   describe('Agent Configs', () => {
-    it('should create and list agent configs', () => {
-      const agent = createAgentConfig({
+    it('should create and list agent configs', async () => {
+      const agent = await createAgentConfig({
         name: 'TestBot',
         role: 'coder',
         avatar: '🤖',
@@ -173,12 +179,12 @@ describe('Studio DB', () => {
       });
 
       expect(agent.id).toBeTruthy();
-      const all = listAgentConfigs();
+      const all = await listAgentConfigs();
       expect(all.some((a) => a.id === agent.id)).toBe(true);
     });
 
-    it('should not delete preset agents', () => {
-      const preset = createAgentConfig({
+    it('should not delete preset agents', async () => {
+      const preset = await createAgentConfig({
         name: 'Preset',
         role: 'pm',
         avatar: '📋',
@@ -191,14 +197,14 @@ describe('Studio DB', () => {
         isPreset: true,
       });
 
-      expect(deleteAgentConfig(preset.id)).toBe(false);
+      expect(await deleteAgentConfig(preset.id)).toBe(false);
     });
 
-    it('should seed preset agents only once', () => {
-      seedPresetAgents();
-      const presets1 = listPresetAgents();
-      seedPresetAgents(); // idempotent
-      const presets2 = listPresetAgents();
+    it('should seed preset agents only once', async () => {
+      await seedPresetAgents();
+      const presets1 = await listPresetAgents();
+      await seedPresetAgents(); // idempotent
+      const presets2 = await listPresetAgents();
       expect(presets1.length).toBe(presets2.length);
       expect(presets1.length).toBeGreaterThanOrEqual(1);
     });
@@ -207,12 +213,12 @@ describe('Studio DB', () => {
   // ---- Events -------------------------------------------------------------
 
   describe('Events', () => {
-    it('should insert and list events', () => {
-      const project = createProject({ name: 'Event Test', description: '', techStack: [], repoPath: '' });
-      insertEvent({ projectId: project.id, type: 'task:started', payload: { foo: 'bar' } });
-      insertEvent({ projectId: project.id, type: 'task:completed', agentId: 'a1', taskId: 't1', payload: {} });
+    it('should insert and list events', async () => {
+      const project = await createProject({ name: 'Event Test', description: '', techStack: [], repoPath: '' });
+      await insertEvent({ projectId: project.id, type: 'task:started', payload: { foo: 'bar' } });
+      await insertEvent({ projectId: project.id, type: 'task:completed', agentId: 'a1', taskId: 't1', payload: {} });
 
-      const events = listEvents(project.id);
+      const events = await listEvents(project.id);
       expect(events).toHaveLength(2);
       expect(events.map((e) => e.type)).toContain('task:completed');
     });
@@ -221,12 +227,12 @@ describe('Studio DB', () => {
   // ---- Chat Messages ------------------------------------------------------
 
   describe('Chat Messages', () => {
-    it('should insert and list chat messages', () => {
-      const project = createProject({ name: 'Chat Test', description: '', techStack: [], repoPath: '' });
-      insertChatMessage({ projectId: project.id, role: 'user', content: 'Hello PM' });
-      insertChatMessage({ projectId: project.id, role: 'assistant', content: 'Hi! How can I help?' });
+    it('should insert and list chat messages', async () => {
+      const project = await createProject({ name: 'Chat Test', description: '', techStack: [], repoPath: '' });
+      await insertChatMessage({ projectId: project.id, role: 'user', content: 'Hello PM' });
+      await insertChatMessage({ projectId: project.id, role: 'assistant', content: 'Hi! How can I help?' });
 
-      const messages = listChatMessages(project.id);
+      const messages = await listChatMessages(project.id);
       expect(messages).toHaveLength(2);
       expect(messages[0].role).toBe('user'); // ASC order
       expect(messages[1].role).toBe('assistant');

@@ -63,10 +63,10 @@ async function generateProjectMd(
   docsDir: string,
   log?: (msg: string) => void,
 ): Promise<void> {
-  const plan = getLatestPlan(project.id);
+  const plan = await getLatestPlan(project.id);
   if (!plan) return;
 
-  const phases = listPhases(plan.id);
+  const phases = await listPhases(plan.id);
   const techStack = project.techStack.length > 0 ? project.techStack.join(', ') : 'Not specified';
 
   const lines = [
@@ -349,7 +349,7 @@ export async function generateReadme(
   log?: (msg: string) => void,
 ): Promise<void> {
   // Proje kaydını veritabanından al
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) {
     log?.('[readme] Proje bulunamadı, README oluşturma atlandı');
     return;
@@ -362,8 +362,8 @@ export async function generateReadme(
 
   try {
     // ---- Plan ve görev bilgilerini topla ----
-    const plan = getLatestPlan(projectId);
-    const phases: Phase[] = plan ? listPhases(plan.id) : [];
+    const plan = await getLatestPlan(projectId);
+    const phases: Phase[] = plan ? await listPhases(plan.id) : [];
 
     const totalTasks = phases.reduce((sum, p) => sum + (p.tasks?.length ?? 0), 0);
     const doneTasks = phases.reduce(
@@ -372,7 +372,7 @@ export async function generateReadme(
     );
 
     // ---- Agent takım bilgilerini topla ----
-    const agents = listProjectAgents(projectId);
+    const agents = await listProjectAgents(projectId);
     const agentCount = agents.length;
 
     // Rol → benzersiz agent isimlerini grupla (kısa takım özeti için)

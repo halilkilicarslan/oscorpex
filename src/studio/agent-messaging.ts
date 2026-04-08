@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from 'node:crypto';
-import { getDb } from './db.js';
 import { listProjectAgents } from './db.js';
+import { query, queryOne, execute } from './pg.js';
 import type { AgentMessage, MessageType, MessageStatus } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ const PIPELINE_ORDER: Record<string, number> = {
  * Bir ajandan diğerine yeni mesaj gönderir.
  * İsteğe bağlı olarak thread bağlamı için parentMessageId verilebilir.
  */
-export function sendMessage(
+export async function sendMessage(
   projectId: string,
   fromAgentId: string,
   toAgentId: string,
@@ -68,16 +68,15 @@ export function sendMessage(
   content: string,
   metadata?: Record<string, any>,
   parentMessageId?: string,
-): AgentMessage {
-  const db = getDb();
+): Promise<AgentMessage> {
   const id = randomUUID();
   const ts = now();
 
-  db.prepare(`
+  await execute(`
     INSERT INTO agent_messages
       (id, project_id, from_agent_id, to_agent_id, type, subject, content, metadata, status, parent_message_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unread', ?, ?)
-  `).run(
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'unread', $9, $10)
+  `, [
     id,
     projectId,
     fromAgentId,
@@ -88,17 +87,16 @@ export function sendMessage(
     JSON.stringify(metadata ?? {}),
     parentMessageId ?? null,
     ts,
-  );
+  ]);
 
-  return getMessage(id)!;
+  return (await getMessage(id))!;
 }
 
 /**
  * Tek bir mesajı ID'ye göre getirir.
  */
-export function getMessage(id: string): AgentMessage | undefined {
-  const db = getDb();
-  const row = db.prepare('SELECT * FROM agent_messages WHERE id = ?').get(id) as any;
+export async function getMessage(id: string): Promise<AgentMessage | undefined> {
+  const row = await queryOne<any>('SELECT * FROM agent_messages WHERE id = $1', [id]);
   return row ? rowToAgentMessage(row) : undefined;
 }
 
@@ -106,125 +104,114 @@ export function getMessage(id: string): AgentMessage | undefined {
  * Bir ajanın gelen kutusunu döndürür.
  * İsteğe bağlı status filtresi ile sadece 'unread', 'read' veya 'archived' mesajlar getirilebilir.
  */
-export function getInbox(
+export async function getInbox(
   projectId: string,
   agentId: string,
   status?: MessageStatus,
-): AgentMessage[] {
-  const db = getDb();
-
-  // Status filtresi varsa WHERE koşuluna ekle
+): Promise<AgentMessage[]> {
   if (status) {
-    return (
-      db
-        .prepare(
-          `SELECT * FROM agent_messages
-           WHERE project_id = ? AND to_agent_id = ? AND status = ?
-           ORDER BY created_at DESC`,
-        )
-        .all(projectId, agentId, status) as any[]
-    ).map(rowToAgentMessage);
+    const rows = await query<any>(
+      `SELECT * FROM agent_messages
+       WHERE project_id = $1 AND to_agent_id = $2 AND status = $3
+       ORDER BY created_at DESC`,
+      [projectId, agentId, status],
+    );
+    return rows.map(rowToAgentMessage);
   }
 
-  return (
-    db
-      .prepare(
-        `SELECT * FROM agent_messages
-         WHERE project_id = ? AND to_agent_id = ?
-         ORDER BY created_at DESC`,
-      )
-      .all(projectId, agentId) as any[]
-  ).map(rowToAgentMessage);
+  const rows = await query<any>(
+    `SELECT * FROM agent_messages
+     WHERE project_id = $1 AND to_agent_id = $2
+     ORDER BY created_at DESC`,
+    [projectId, agentId],
+  );
+  return rows.map(rowToAgentMessage);
 }
 
 /**
  * Bir mesajın tüm thread zincirini döndürür (kök mesaj + tüm yanıtlar).
  * Kök mesajı bulmak için parent zinciri geriye doğru takip edilir.
  */
-export function getThread(messageId: string): AgentMessage[] {
-  const db = getDb();
-
+export async function getThread(messageId: string): Promise<AgentMessage[]> {
   // Kök mesajı bul — parent_message_id olmayan mesaja kadar çık
   let rootId = messageId;
-  let current = getMessage(messageId);
+  let current = await getMessage(messageId);
   while (current?.parentMessageId) {
     rootId = current.parentMessageId;
-    current = getMessage(rootId);
+    current = await getMessage(rootId);
   }
 
   // Kök mesaj + ona bağlı tüm mesajları getir
-  return (
-    db
-      .prepare(
-        `SELECT * FROM agent_messages
-         WHERE id = ? OR parent_message_id = ?
-         ORDER BY created_at ASC`,
-      )
-      .all(rootId, rootId) as any[]
-  ).map(rowToAgentMessage);
+  const rows = await query<any>(
+    `SELECT * FROM agent_messages
+     WHERE id = $1 OR parent_message_id = $2
+     ORDER BY created_at ASC`,
+    [rootId, rootId],
+  );
+  return rows.map(rowToAgentMessage);
 }
 
 /**
  * Mesajı okundu olarak işaretler ve read_at zaman damgasını kaydeder.
  */
-export function markAsRead(messageId: string): AgentMessage | undefined {
-  const db = getDb();
+export async function markAsRead(messageId: string): Promise<AgentMessage | undefined> {
   const ts = now();
-  db.prepare(
-    `UPDATE agent_messages SET status = 'read', read_at = ? WHERE id = ? AND status = 'unread'`,
-  ).run(ts, messageId);
+  await execute(
+    `UPDATE agent_messages SET status = 'read', read_at = $1 WHERE id = $2 AND status = 'unread'`,
+    [ts, messageId],
+  );
   return getMessage(messageId);
 }
 
 /**
  * Mesajı arşivler (archived durumuna geçirir).
  */
-export function archiveMessage(messageId: string): AgentMessage | undefined {
-  const db = getDb();
-  db.prepare(`UPDATE agent_messages SET status = 'archived' WHERE id = ?`).run(messageId);
+export async function archiveMessage(messageId: string): Promise<AgentMessage | undefined> {
+  await execute(`UPDATE agent_messages SET status = 'archived' WHERE id = $1`, [messageId]);
   return getMessage(messageId);
 }
 
 /**
  * Belirli bir ajanın projede okunmamış mesaj sayısını döndürür.
  */
-export function getUnreadCount(projectId: string, agentId: string): number {
-  const db = getDb();
-  const row = db
-    .prepare(
-      `SELECT COUNT(*) as count FROM agent_messages
-       WHERE project_id = ? AND to_agent_id = ? AND status = 'unread'`,
-    )
-    .get(projectId, agentId) as any;
-  return row?.count ?? 0;
+export async function getUnreadCount(projectId: string, agentId: string): Promise<number> {
+  const row = await queryOne<any>(
+    `SELECT COUNT(*) as count FROM agent_messages
+     WHERE project_id = $1 AND to_agent_id = $2 AND status = 'unread'`,
+    [projectId, agentId],
+  );
+  return Number(row?.count ?? 0);
 }
 
 /**
  * Projedeki tüm mesajları listeler.
  * İsteğe bağlı agentId ve status filtreleri uygulanabilir.
  */
-export function listProjectMessages(
+export async function listProjectMessages(
   projectId: string,
   agentId?: string,
   status?: MessageStatus,
-): AgentMessage[] {
-  const db = getDb();
-  const conditions: string[] = ['project_id = ?'];
+): Promise<AgentMessage[]> {
+  const conditions: string[] = ['project_id = $1'];
   const params: any[] = [projectId];
+  let idx = 2;
 
   // agentId verilmişse hem gönderen hem de alıcı olarak filtrele
   if (agentId) {
-    conditions.push('(from_agent_id = ? OR to_agent_id = ?)');
+    conditions.push(`(from_agent_id = $${idx} OR to_agent_id = $${idx + 1})`);
     params.push(agentId, agentId);
+    idx += 2;
   }
 
   if (status) {
-    conditions.push('status = ?');
+    conditions.push(`status = $${idx}`);
     params.push(status);
+    idx++;
   }
 
   const sql = `SELECT * FROM agent_messages WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`;
-  return (db.prepare(sql).all(...params) as any[]).map(rowToAgentMessage);
+  const rows = await query<any>(sql, params);
+  return rows.map(rowToAgentMessage);
 }
 
 // ---------------------------------------------------------------------------
@@ -235,20 +222,20 @@ export function listProjectMessages(
  * Bir ajandan projedeki tüm diğer takım üyelerine yayın mesajı gönderir.
  * Gönderen ajan kendisine mesaj almaz.
  */
-export function broadcastToTeam(
+export async function broadcastToTeam(
   projectId: string,
   fromAgentId: string,
   subject: string,
   content: string,
   metadata?: Record<string, any>,
-): AgentMessage[] {
+): Promise<AgentMessage[]> {
   // Projedeki tüm ajanları getir ve göndereni çıkar
-  const teamMembers = listProjectAgents(projectId).filter((a) => a.id !== fromAgentId);
+  const teamMembers = (await listProjectAgents(projectId)).filter((a) => a.id !== fromAgentId);
 
   // Her takım üyesine ayrı ayrı bildirim mesajı gönder
   const sent: AgentMessage[] = [];
   for (const member of teamMembers) {
-    const msg = sendMessage(
+    const msg = await sendMessage(
       projectId,
       fromAgentId,
       member.id,
@@ -272,13 +259,13 @@ export function broadcastToTeam(
  * @param taskId      İlgili görevin ID'si (metadata olarak eklenir)
  * @param message     Mesaj içeriği
  */
-export function notifyNextInPipeline(
+export async function notifyNextInPipeline(
   projectId: string,
   fromAgentId: string,
   taskId: string,
   message: string,
-): AgentMessage[] {
-  const agents = listProjectAgents(projectId);
+): Promise<AgentMessage[]> {
+  const agents = await listProjectAgents(projectId);
 
   // Gönderen ajanı bul
   const sender = agents.find((a) => a.id === fromAgentId);
@@ -309,7 +296,7 @@ export function notifyNextInPipeline(
   // Her bir sonraki ajana görev atama mesajı gönder
   const sent: AgentMessage[] = [];
   for (const target of nextAgents) {
-    const msg = sendMessage(
+    const msg = await sendMessage(
       projectId,
       fromAgentId,
       target.id,

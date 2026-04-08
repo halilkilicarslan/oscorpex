@@ -1,39 +1,13 @@
 // ---------------------------------------------------------------------------
 // AI Dev Studio — Vector Store with Embedding Engine
-// SQLite (better-sqlite3) tabanlı embedding depolama ve cosine similarity arama.
-// Harici vektör DB'ye ihtiyaç duymaz; Float32Array → BLOB olarak saklanır.
+// PostgreSQL + pgvector tabanlı embedding depolama ve native cosine similarity arama.
+// text-embedding-3-small → 1536 boyutlu vektörler, pgvector <=> operatörü ile aranır.
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
 import { openai } from "@ai-sdk/openai";
 import { embed, embedMany } from "ai";
-import { getDb } from "./db.js";
-
-// ---------------------------------------------------------------------------
-// Schema
-// ---------------------------------------------------------------------------
-
-let _tablesInitialised = false;
-
-function ensureTables(): void {
-	if (_tablesInitialised) return;
-	const db = getDb();
-	db.exec(`
-    CREATE TABLE IF NOT EXISTS rag_embeddings (
-      id           TEXT PRIMARY KEY,
-      kb_id        TEXT NOT NULL,
-      doc_id       TEXT NOT NULL,
-      chunk_index  INTEGER NOT NULL,
-      content      TEXT NOT NULL,
-      metadata     TEXT,
-      vector       BLOB NOT NULL,
-      created_at   TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_rag_emb_kb  ON rag_embeddings(kb_id);
-    CREATE INDEX IF NOT EXISTS idx_rag_emb_doc ON rag_embeddings(doc_id);
-  `);
-	_tablesInitialised = true;
-}
+import { query, queryOne, execute, getPool } from "./pg.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,6 +20,15 @@ export interface SearchResult {
 	content: string;
 	score: number;
 	metadata: Record<string, unknown> | null;
+}
+
+// ---------------------------------------------------------------------------
+// Vector Serialization
+// ---------------------------------------------------------------------------
+
+/** number[] → pgvector string formatı: '[0.1,0.2,...]' */
+function vectorToString(v: number[]): string {
+	return `[${v.join(",")}]`;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,166 +137,117 @@ export function chunkText(
 }
 
 // ---------------------------------------------------------------------------
-// Vector Storage Helpers
-// ---------------------------------------------------------------------------
-
-/** number[] → Buffer (Float32Array aracılığıyla) */
-function vectorToBuffer(vector: number[]): Buffer {
-	const float32 = new Float32Array(vector);
-	return Buffer.from(float32.buffer);
-}
-
-/** Buffer → number[] (Float32Array aracılığıyla) */
-function bufferToVector(buf: Buffer): number[] {
-	const float32 = new Float32Array(
-		buf.buffer,
-		buf.byteOffset,
-		buf.byteLength / 4,
-	);
-	return Array.from(float32);
-}
-
-// ---------------------------------------------------------------------------
 // CRUD
 // ---------------------------------------------------------------------------
 
 /**
- * Bir chunk embedding'ini SQLite'e kaydeder.
+ * Bir chunk embedding'ini PostgreSQL'e kaydeder.
  * @returns Yeni kaydın UUID'si
  */
-export function storeEmbedding(
+export async function storeEmbedding(
 	kbId: string,
 	docId: string,
 	chunkIndex: number,
 	content: string,
 	vector: number[],
 	metadata?: Record<string, unknown>,
-): string {
-	ensureTables();
-	const db = getDb();
+): Promise<string> {
 	const id = randomUUID();
-	const now = new Date().toISOString();
 
-	db.prepare(`
-    INSERT INTO rag_embeddings (id, kb_id, doc_id, chunk_index, content, metadata, vector, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-		id,
-		kbId,
-		docId,
-		chunkIndex,
-		content,
-		metadata ? JSON.stringify(metadata) : null,
-		vectorToBuffer(vector),
-		now,
+	await execute(
+		`INSERT INTO rag_embeddings (id, kb_id, doc_id, chunk_index, content, metadata, vector, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		[
+			id,
+			kbId,
+			docId,
+			chunkIndex,
+			content,
+			metadata ? JSON.stringify(metadata) : null,
+			vectorToString(vector),
+			new Date().toISOString(),
+		],
 	);
 
 	return id;
 }
 
 /** Bir dokümana ait tüm embedding'leri siler. */
-export function deleteDocEmbeddings(docId: string): void {
-	ensureTables();
-	getDb().prepare("DELETE FROM rag_embeddings WHERE doc_id = ?").run(docId);
+export async function deleteDocEmbeddings(docId: string): Promise<void> {
+	await execute("DELETE FROM rag_embeddings WHERE doc_id = $1", [docId]);
 }
 
 /** Bir knowledge base'e ait tüm embedding'leri siler. */
-export function deleteKBEmbeddings(kbId: string): void {
-	ensureTables();
-	getDb().prepare("DELETE FROM rag_embeddings WHERE kb_id = ?").run(kbId);
-}
-
-// ---------------------------------------------------------------------------
-// Cosine Similarity
-// ---------------------------------------------------------------------------
-
-function cosineSimilarity(a: number[], b: number[]): number {
-	let dot = 0;
-	let normA = 0;
-	let normB = 0;
-	const len = Math.min(a.length, b.length);
-	for (let i = 0; i < len; i++) {
-		dot += a[i] * b[i];
-		normA += a[i] * a[i];
-		normB += b[i] * b[i];
-	}
-	const denom = Math.sqrt(normA) * Math.sqrt(normB);
-	if (denom === 0) return 0;
-	return dot / denom;
+export async function deleteKBEmbeddings(kbId: string): Promise<void> {
+	await execute("DELETE FROM rag_embeddings WHERE kb_id = $1", [kbId]);
 }
 
 // ---------------------------------------------------------------------------
 // Similarity Search
 // ---------------------------------------------------------------------------
 
-interface EmbeddingRow {
-	id: string;
-	kb_id: string;
-	doc_id: string;
-	content: string;
-	metadata: string | null;
-	vector: Buffer;
-}
-
 /**
- * Verilen knowledge base içinde cosine similarity ile en yakın chunk'ları bulur.
+ * Verilen knowledge base içinde pgvector native cosine similarity ile
+ * en yakın chunk'ları bulur.
  *
- * @param kbId  - Aranacak knowledge base'in ID'si
- * @param query - Arama sorgusu (metin)
- * @param topK  - Döndürülecek maksimum sonuç sayısı (varsayılan: 5)
- * @param model - Embedding modeli (varsayılan: text-embedding-3-small)
+ * pgvector `<=>` operatörü cosine distance döndürür; `1 - distance = similarity`.
+ *
+ * @param kbId      - Aranacak knowledge base'in ID'si
+ * @param queryText - Arama sorgusu (metin)
+ * @param topK      - Döndürülecek maksimum sonuç sayısı (varsayılan: 5)
+ * @param model     - Embedding modeli (varsayılan: text-embedding-3-small)
  */
 export async function searchSimilar(
 	kbId: string,
-	query: string,
+	queryText: string,
 	topK = 5,
 	model = "text-embedding-3-small",
 ): Promise<SearchResult[]> {
-	ensureTables();
-
-	if (!query.trim()) return [];
+	if (!queryText.trim()) return [];
 
 	console.log(
-		`[VectorStore] Searching kbId=${kbId} topK=${topK} query="${query.slice(0, 80)}..."`,
+		`[VectorStore] Searching kbId=${kbId} topK=${topK} query="${queryText.slice(0, 80)}..."`,
 	);
 
 	// 1. Sorgu embedding'i üret
-	const queryVector = await generateEmbedding(query, model);
+	const queryVector = await generateEmbedding(queryText, model);
 
-	// 2. KB'ye ait tüm embedding'leri yükle
-	const rows = getDb()
-		.prepare(
-			"SELECT id, kb_id, doc_id, content, metadata, vector FROM rag_embeddings WHERE kb_id = ?",
-		)
-		.all(kbId) as EmbeddingRow[];
+	// 2. pgvector native cosine distance ile en yakın chunk'ları getir
+	const rows = await query<{
+		id: string;
+		doc_id: string;
+		kb_id: string;
+		content: string;
+		metadata: string | null;
+		score: number;
+	}>(
+		`SELECT id, doc_id, kb_id, content, metadata,
+		        1 - (vector <=> $1::vector) AS score
+		 FROM rag_embeddings
+		 WHERE kb_id = $2
+		 ORDER BY vector <=> $1::vector
+		 LIMIT $3`,
+		[vectorToString(queryVector), kbId, topK],
+	);
 
 	if (rows.length === 0) {
 		console.log(`[VectorStore] No embeddings found for kbId=${kbId}`);
 		return [];
 	}
 
-	// 3. Cosine similarity hesapla
-	const scored = rows.map((row) => {
-		const vec = bufferToVector(row.vector);
-		const score = cosineSimilarity(queryVector, vec);
-		return {
-			chunkId: row.id,
-			docId: row.doc_id,
-			kbId: row.kb_id,
-			content: row.content,
-			score,
-			metadata: row.metadata
-				? (JSON.parse(row.metadata) as Record<string, unknown>)
-				: null,
-		};
-	});
-
-	// 4. Skora göre sırala ve top-K döndür
-	scored.sort((a, b) => b.score - a.score);
-	const results = scored.slice(0, topK);
+	const results = rows.map((row) => ({
+		chunkId: row.id,
+		docId: row.doc_id,
+		kbId: row.kb_id,
+		content: row.content,
+		score: row.score,
+		metadata: row.metadata
+			? (JSON.parse(row.metadata) as Record<string, unknown>)
+			: null,
+	}));
 
 	console.log(
-		`[VectorStore] Search complete: ${rows.length} chunks scanned, top score=${results[0]?.score.toFixed(4) ?? "n/a"}`,
+		`[VectorStore] Search complete: ${rows.length} results, top score=${results[0]?.score.toFixed(4) ?? "n/a"}`,
 	);
 
 	return results;
@@ -326,8 +260,9 @@ export async function searchSimilar(
 /**
  * Tam indeksleme pipeline'ı: chunk → embed → store.
  *
- * Dökümanı parçalara böler, toplu embedding üretir ve SQLite'e kaydeder.
+ * Dökümanı parçalara böler, toplu embedding üretir ve PostgreSQL'e kaydeder.
  * Mevcut embedding'ler önce silinir (yeniden indeksleme desteği).
+ * Tüm insert işlemleri tek bir transaction içinde gerçekleşir.
  *
  * @returns Oluşturulan chunk sayısı
  */
@@ -339,8 +274,6 @@ export async function indexDocument(
 	chunkOverlap = 50,
 	model = "text-embedding-3-small",
 ): Promise<{ chunkCount: number }> {
-	ensureTables();
-
 	if (!content || !content.trim()) {
 		console.warn(
 			`[VectorStore] indexDocument called with empty content for docId=${docId}`,
@@ -351,9 +284,6 @@ export async function indexDocument(
 	console.log(
 		`[VectorStore] Indexing docId=${docId} kbId=${kbId} model=${model}`,
 	);
-
-	// Mevcut embedding'leri temizle (yeniden indeksleme)
-	deleteDocEmbeddings(docId);
 
 	// 1. Metni chunk'lara böl
 	const chunks = chunkText(content, chunkSize, chunkOverlap);
@@ -375,14 +305,40 @@ export async function indexDocument(
 		throw err;
 	}
 
-	// 3. Her chunk'ı SQLite'e kaydet
-	const db = getDb();
-	const insertMany = db.transaction(() => {
+	// 3. Transaction içinde: önce mevcut embedding'leri sil, sonra yenilerini ekle
+	const client = await getPool().connect();
+	try {
+		await client.query("BEGIN");
+
+		// Mevcut embedding'leri temizle (yeniden indeksleme)
+		await client.query("DELETE FROM rag_embeddings WHERE doc_id = $1", [docId]);
+
+		// Batch insert
 		for (let i = 0; i < chunks.length; i++) {
-			storeEmbedding(kbId, docId, i, chunks[i], embeddings[i]);
+			const id = randomUUID();
+			await client.query(
+				`INSERT INTO rag_embeddings (id, kb_id, doc_id, chunk_index, content, metadata, vector, created_at)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				[
+					id,
+					kbId,
+					docId,
+					i,
+					chunks[i],
+					null,
+					vectorToString(embeddings[i]),
+					new Date().toISOString(),
+				],
+			);
 		}
-	});
-	insertMany();
+
+		await client.query("COMMIT");
+	} catch (err) {
+		await client.query("ROLLBACK");
+		throw err;
+	} finally {
+		client.release();
+	}
 
 	console.log(
 		`[VectorStore] Indexed ${chunks.length} chunks for docId=${docId}`,

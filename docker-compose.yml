@@ -10,6 +10,29 @@ version: '3.9'
 # ---------------------------------------------------------------------------
 
 services:
+  # ---- PostgreSQL + pgvector -----------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: voltagent-postgres
+    environment:
+      POSTGRES_DB: voltagent
+      POSTGRES_USER: voltagent
+      POSTGRES_PASSWORD: voltagent_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - studio-frontend
+      - studio-agents
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voltagent"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   # ---- Backend (Hono API Server) ------------------------------------------
   backend:
     build:
@@ -47,6 +70,8 @@ services:
     ports:
       - "5173:80"
     depends_on:
+      postgres:
+        condition: service_healthy
       backend:
         condition: service_healthy
     networks:
@@ -175,6 +200,8 @@ volumes:
   studio-data:
     driver: local
   repos:
+    driver: local
+  pgdata:
     driver: local
   sonar-data:
     driver: local

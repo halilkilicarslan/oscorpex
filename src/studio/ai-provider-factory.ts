@@ -25,11 +25,11 @@ import type { AIProvider } from './types.js';
  * kullanarak gpt-4o-mini modeline geri döner.
  */
 /** Returns the model along with its name and provider type for cost tracking */
-export function getAIModelInfo(): { model: LanguageModelV3; modelName: string; providerType: string } {
-  const provider = getDefaultProvider();
+export async function getAIModelInfo(): Promise<{ model: LanguageModelV3; modelName: string; providerType: string }> {
+  const provider = await getDefaultProvider();
   const providerType = provider?.type ?? 'openai';
   const modelName = provider?.model?.trim() || defaultModelForType(providerType);
-  return { model: getAIModel(), modelName, providerType };
+  return { model: await getAIModel(), modelName, providerType };
 }
 
 /** Model bazlı fiyat tablosu (USD per 1M tokens) */
@@ -62,15 +62,15 @@ export function calculateCost(modelName: string, inputTokens: number, outputToke
   return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
 }
 
-export function getAIModel(): LanguageModelV3 {
-  const provider = getDefaultProvider();
+export async function getAIModel(): Promise<LanguageModelV3> {
+  const provider = await getDefaultProvider();
 
   // Kayıtlı varsayılan provider yok — env değişkenine geri dön
   if (!provider) {
     return openai('gpt-4o-mini');
   }
 
-  const apiKey = getRawProviderApiKey(provider.id);
+  const apiKey = await getRawProviderApiKey(provider.id);
   // Provider'ın model adı boşsa tip bazlı bir varsayılan kullan
   const modelName = provider.model?.trim() || defaultModelForType(provider.type);
 
@@ -139,8 +139,8 @@ function defaultModelForType(type: string): string {
  * Hem veritabanındaki varsayılan provider'ı hem de OPENAI_API_KEY env değişkenini
  * denetler.
  */
-export function isAnyProviderConfigured(): boolean {
-  const dbProvider = getDefaultProvider();
+export async function isAnyProviderConfigured(): Promise<boolean> {
+  const dbProvider = await getDefaultProvider();
   if (dbProvider) return true;
   return !!process.env.OPENAI_API_KEY;
 }
@@ -150,8 +150,8 @@ export function isAnyProviderConfigured(): boolean {
 // ---------------------------------------------------------------------------
 
 /** Belirli bir provider kaydından LanguageModelV3 nesnesi oluşturur. */
-function buildModelFromProvider(provider: AIProvider): LanguageModelV3 {
-  const apiKey = getRawProviderApiKey(provider.id);
+async function buildModelFromProvider(provider: AIProvider): Promise<LanguageModelV3> {
+  const apiKey = await getRawProviderApiKey(provider.id);
   const modelName = provider.model?.trim() || defaultModelForType(provider.type);
 
   switch (provider.type) {
@@ -212,7 +212,7 @@ export async function getAIModelWithFallback<T>(
   const MAX_ATTEMPTS = 3;
 
   // Fallback zincirini DB'den al (fallback_order'a göre sıralı, aktif olanlar)
-  const chain = getFallbackChain();
+  const chain = await getFallbackChain();
 
   // Zincir boşsa varsayılan modeli kullan (env tabanlı fallback)
   if (chain.length === 0) {
@@ -234,7 +234,7 @@ export async function getAIModelWithFallback<T>(
     }
 
     try {
-      const model = buildModelFromProvider(provider);
+      const model = await buildModelFromProvider(provider);
       return await callFn(model, { modelName, providerType: provider.type });
     } catch (err) {
       lastError = err;

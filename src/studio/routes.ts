@@ -172,8 +172,8 @@ const studio = new Hono();
 
 // ---- Projects CRUD --------------------------------------------------------
 
-studio.get('/projects', (c) => {
-  return c.json(listProjects());
+studio.get('/projects', async (c) => {
+  return c.json(await listProjects());
 });
 
 studio.post('/projects', async (c) => {
@@ -184,7 +184,7 @@ studio.post('/projects', async (c) => {
     // İsteğe bağlı takım şablonu — belirtilmezse Full Stack Team varsayılan olarak seçilir
     teamTemplateId?: string;
   };
-  const project = createProject({
+  const project = await createProject({
     name: body.name,
     description: body.description ?? '',
     techStack: body.techStack ?? [],
@@ -195,11 +195,11 @@ studio.post('/projects', async (c) => {
   const templateId = body.teamTemplateId;
   if (templateId) {
     // Önce preset template'lerde ara, yoksa custom team template'lerde ara
-    const presetTemplate = getTeamTemplate(templateId);
-    const customTemplate = !presetTemplate ? getCustomTeamTemplate(templateId) : undefined;
+    const presetTemplate = await getTeamTemplate(templateId);
+    const customTemplate = !presetTemplate ? await getCustomTeamTemplate(templateId) : undefined;
     const roles = presetTemplate?.roles ?? customTemplate?.roles;
     if (roles) {
-      const copiedAgents = copyAgentsToProject(project.id, roles);
+      const copiedAgents = await copyAgentsToProject(project.id, roles);
       for (const agent of copiedAgents) {
         createAgentFiles(project.id, agent.name, {
           skills: agent.skills,
@@ -212,10 +212,10 @@ studio.post('/projects', async (c) => {
     }
   } else {
     // Varsayılan: Full Stack Team
-    const templates = listTeamTemplates();
+    const templates = await listTeamTemplates();
     const fullStack = templates.find((t) => t.name === 'Full Stack Team');
     if (fullStack) {
-      const copiedAgents = copyAgentsToProject(project.id, fullStack.roles);
+      const copiedAgents = await copyAgentsToProject(project.id, fullStack.roles);
       for (const agent of copiedAgents) {
         createAgentFiles(project.id, agent.name, {
           skills: agent.skills,
@@ -235,10 +235,10 @@ studio.post('/projects', async (c) => {
     await gitManager.initRepo(repoPath);
     await gitManager.initDocs(repoPath);
     await initLintConfig(repoPath);
-    if (isSonarEnabled()) {
+    if (await isSonarEnabled()) {
       await initSonarConfig(repoPath, `studio-${project.id}`, project.name);
     }
-    updateProject(project.id, { repoPath });
+    await updateProject(project.id, { repoPath });
     return c.json({ ...project, repoPath }, 201);
   } catch {
     // Repo init failed — return the project without a repoPath
@@ -281,7 +281,7 @@ studio.post('/projects/import', async (c) => {
     // No package.json or parse error — fine
   }
 
-  const project = createProject({
+  const project = await createProject({
     name: body.name,
     description,
     techStack,
@@ -291,9 +291,9 @@ studio.post('/projects/import', async (c) => {
   // Copy team template agents (same logic as POST /projects)
   const templateId = body.teamTemplateId;
   if (templateId) {
-    const template = getTeamTemplate(templateId);
+    const template = await getTeamTemplate(templateId);
     if (template) {
-      const copiedAgents = copyAgentsToProject(project.id, template.roles);
+      const copiedAgents = await copyAgentsToProject(project.id, template.roles);
       for (const agent of copiedAgents) {
         createAgentFiles(project.id, agent.name, {
           skills: agent.skills,
@@ -305,10 +305,10 @@ studio.post('/projects/import', async (c) => {
       }
     }
   } else {
-    const templates = listTeamTemplates();
+    const templates = await listTeamTemplates();
     const fullStack = templates.find((t) => t.name === 'Full Stack Team');
     if (fullStack) {
-      const copiedAgents = copyAgentsToProject(project.id, fullStack.roles);
+      const copiedAgents = await copyAgentsToProject(project.id, fullStack.roles);
       for (const agent of copiedAgents) {
         createAgentFiles(project.id, agent.name, {
           skills: agent.skills,
@@ -324,7 +324,7 @@ studio.post('/projects/import', async (c) => {
   // Initialize lint config + sonar if enabled (for imported repos too)
   try {
     await initLintConfig(body.repoPath);
-    if (isSonarEnabled()) {
+    if (await isSonarEnabled()) {
       await initSonarConfig(body.repoPath, `studio-${project.id}`, project.name);
     }
   } catch {
@@ -334,21 +334,21 @@ studio.post('/projects/import', async (c) => {
   return c.json(project, 201);
 });
 
-studio.get('/projects/:id', (c) => {
-  const project = getProject(c.req.param('id'));
+studio.get('/projects/:id', async (c) => {
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   return c.json(project);
 });
 
 studio.patch('/projects/:id', async (c) => {
   const body = await c.req.json();
-  const project = updateProject(c.req.param('id'), body);
+  const project = await updateProject(c.req.param('id'), body);
   if (!project) return c.json({ error: 'Project not found' }, 404);
   return c.json(project);
 });
 
-studio.delete('/projects/:id', (c) => {
-  const ok = deleteProject(c.req.param('id'));
+studio.delete('/projects/:id', async (c) => {
+  const ok = await deleteProject(c.req.param('id'));
   if (!ok) return c.json({ error: 'Project not found' }, 404);
   return c.json({ success: true });
 });
@@ -365,20 +365,20 @@ studio.post('/projects/:id/chat', async (c) => {
   }
 
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const body = (await c.req.json()) as { message: string };
   const userMessage = body.message;
 
   // Persist user message
-  insertChatMessage({ projectId, role: 'user', content: userMessage });
+  await insertChatMessage({ projectId, role: 'user', content: userMessage });
 
   // Build conversation history for context
-  const history = listChatMessages(projectId);
+  const history = await listChatMessages(projectId);
 
   // Projeye özel takım bilgisini al (project_agents tablosundan)
-  const agents = listProjectAgents(projectId);
+  const agents = await listProjectAgents(projectId);
   const teamInfo = agents
     .map((a) => `- ${a.avatar} **${a.name}** (${a.role}) — ${a.personality}. Skills: ${a.skills.join(', ')}`)
     .join('\n');
@@ -409,7 +409,7 @@ ${teamInfo}`;
     try {
       const result = streamText({
         // Veritabanındaki varsayılan provider'ı kullan; yoksa gpt-4o-mini'ye geri dön
-        model: getAIModel(),
+        model: await getAIModel(),
         system: systemPrompt,
         messages,
         tools: pmToolkit,
@@ -449,7 +449,7 @@ ${teamInfo}`;
 
       // Persist assistant response
       if (fullResponse) {
-        insertChatMessage({ projectId, role: 'assistant', content: fullResponse });
+        await insertChatMessage({ projectId, role: 'assistant', content: fullResponse });
       }
 
       await stream.writeSSE({
@@ -467,28 +467,28 @@ ${teamInfo}`;
   });
 });
 
-studio.get('/projects/:id/chat/history', (c) => {
+studio.get('/projects/:id/chat/history', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
-  return c.json(listChatMessages(projectId));
+  return c.json(await listChatMessages(projectId));
 });
 
 // ---- Plans ----------------------------------------------------------------
 
-studio.get('/projects/:id/plan', (c) => {
-  const plan = getLatestPlan(c.req.param('id'));
+studio.get('/projects/:id/plan', async (c) => {
+  const plan = await getLatestPlan(c.req.param('id'));
   if (!plan) return c.json({ error: 'No plan found' }, 404);
   return c.json(plan);
 });
 
-studio.post('/projects/:id/plan/approve', (c) => {
+studio.post('/projects/:id/plan/approve', async (c) => {
   const projectId = c.req.param('id');
-  const plan = getLatestPlan(projectId);
+  const plan = await getLatestPlan(projectId);
   if (!plan) return c.json({ error: 'No plan found' }, 404);
   if (plan.status !== 'draft') return c.json({ error: 'Plan is not in draft status' }, 400);
 
-  updatePlanStatus(plan.id, 'approved');
+  await updatePlanStatus(plan.id, 'approved');
 
   eventBus.emit({
     projectId,
@@ -509,7 +509,7 @@ studio.post('/projects/:id/plan/approve', (c) => {
   let pipelineWarning: string | undefined;
 
   try {
-    const agents = listProjectAgents(projectId);
+    const agents = await listProjectAgents(projectId);
     if (agents.length === 0) {
       // Agent yoksa pipeline başlatılamaz ama execution devam edebilir
       pipelineWarning = 'Projeye atanmış agent bulunamadı; pipeline stage koordinasyonu devre dışı.';
@@ -541,16 +541,16 @@ studio.post('/projects/:id/plan/approve', (c) => {
 // Pipeline auto-start durumunu sorgula
 // Task durumlarıyla zenginleştirilmiş yanıt döner; "Hata" göstermek yerine
 // task'lar çalışıyorsa "running" statüsü türetilir.
-studio.get('/projects/:id/pipeline/auto-start-status', (c) => {
+studio.get('/projects/:id/pipeline/auto-start-status', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
-  const plan = getLatestPlan(projectId);
+  const plan = await getLatestPlan(projectId);
   const planApproved = plan?.status === 'approved';
 
   // Zenginleştirilmiş durum: pipeline + task progress + derived status
-  const enriched = pipelineEngine.getEnrichedPipelineStatus(projectId);
+  const enriched = await pipelineEngine.getEnrichedPipelineStatus(projectId);
   const pipelineState = enriched.pipelineState;
 
   return c.json({
@@ -577,12 +577,12 @@ studio.get('/projects/:id/pipeline/auto-start-status', (c) => {
 });
 
 studio.post('/projects/:id/plan/reject', async (c) => {
-  const plan = getLatestPlan(c.req.param('id'));
+  const plan = await getLatestPlan(c.req.param('id'));
   if (!plan) return c.json({ error: 'No plan found' }, 404);
   if (plan.status !== 'draft') return c.json({ error: 'Plan is not in draft status' }, 400);
 
   const body = (await c.req.json()) as { feedback?: string };
-  updatePlanStatus(plan.id, 'rejected');
+  await updatePlanStatus(plan.id, 'rejected');
 
   return c.json({ success: true, planId: plan.id, feedback: body.feedback });
 });
@@ -590,11 +590,11 @@ studio.post('/projects/:id/plan/reject', async (c) => {
 // GET /projects/:id/plans/:planId/cost-estimate
 // Plan onaylanmadan önce tahmini maliyet hesaplar.
 // Response: { estimatedTokens, estimatedCost, currency, taskCount, avgTokensPerTask, model, breakdown }
-studio.get('/projects/:id/plans/:planId/cost-estimate', (c) => {
+studio.get('/projects/:id/plans/:planId/cost-estimate', async (c) => {
   const projectId = c.req.param('id');
   const planId = c.req.param('planId');
 
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   try {
@@ -609,9 +609,9 @@ studio.get('/projects/:id/plans/:planId/cost-estimate', (c) => {
 // ---- Execution ------------------------------------------------------------
 
 // Manual trigger to start or resume execution for a project.
-studio.post('/projects/:id/execute', (c) => {
+studio.post('/projects/:id/execute', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   // Fire and forget — progress is observable via SSE events and /progress
@@ -623,9 +623,9 @@ studio.post('/projects/:id/execute', (c) => {
 });
 
 // Execution status snapshot: running containers + task progress.
-studio.get('/projects/:id/execution/status', (c) => {
+studio.get('/projects/:id/execution/status', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
   return c.json(executionEngine.getExecutionStatus(projectId));
 });
@@ -636,8 +636,8 @@ studio.get('/projects/:id/progress', (c) => {
 
 // ---- Tasks ----------------------------------------------------------------
 
-studio.get('/projects/:id/tasks', (c) => {
-  const tasks = listProjectTasks(c.req.param('id'));
+studio.get('/projects/:id/tasks', async (c) => {
+  const tasks = await listProjectTasks(c.req.param('id'));
 
   // Attach a lightweight output summary so task cards can show badges
   // without requiring a separate fetch of the full output payload.
@@ -656,8 +656,8 @@ studio.get('/projects/:id/tasks', (c) => {
   return c.json(tasksWithSummary);
 });
 
-studio.get('/projects/:id/tasks/:taskId', (c) => {
-  const task = getTask(c.req.param('taskId'));
+studio.get('/projects/:id/tasks/:taskId', async (c) => {
+  const task = await getTask(c.req.param('taskId'));
   if (!task) return c.json({ error: 'Task not found' }, 404);
   return c.json(task);
 });
@@ -671,14 +671,14 @@ studio.patch('/projects/:id/tasks/:taskId', async (c) => {
   if (body.status === 'done' && !body.completedAt) {
     body.completedAt = new Date().toISOString();
   }
-  const task = updateTask(c.req.param('taskId'), body);
+  const task = await updateTask(c.req.param('taskId'), body);
   if (!task) return c.json({ error: 'Task not found' }, 404);
   return c.json(task);
 });
 
 studio.post('/projects/:id/tasks/:taskId/retry', async (c) => {
   try {
-    const updated = taskEngine.retryTask(c.req.param('taskId'));
+    const updated = await taskEngine.retryTask(c.req.param('taskId'));
     // Re-trigger execution for the retried task
     executionEngine.executeTask(c.req.param('id'), updated).catch(() => {});
     return c.json({ success: true, task: updated });
@@ -692,7 +692,7 @@ studio.post('/projects/:id/tasks/:taskId/retry', async (c) => {
 studio.post('/projects/:id/tasks/:taskId/review', async (c) => {
   try {
     const body = await c.req.json<{ approved: boolean; feedback?: string }>();
-    const updated = taskEngine.submitReview(c.req.param('taskId'), body.approved, body.feedback);
+    const updated = await taskEngine.submitReview(c.req.param('taskId'), body.approved, body.feedback);
     return c.json({ success: true, task: updated });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Review failed';
@@ -703,7 +703,7 @@ studio.post('/projects/:id/tasks/:taskId/review', async (c) => {
 // POST /projects/:id/tasks/:taskId/restart-revision — Revision durumundaki task'ı tekrar çalıştır
 studio.post('/projects/:id/tasks/:taskId/restart-revision', async (c) => {
   try {
-    const updated = taskEngine.restartRevision(c.req.param('taskId'));
+    const updated = await taskEngine.restartRevision(c.req.param('taskId'));
     return c.json({ success: true, task: updated });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Restart revision failed';
@@ -716,7 +716,7 @@ studio.post('/projects/:id/tasks/:taskId/approve', async (c) => {
   try {
     const projectId = c.req.param('id');
     const taskId = c.req.param('taskId');
-    const updated = taskEngine.approveTask(taskId);
+    const updated = await taskEngine.approveTask(taskId);
     // Onaylanan task'ı execution engine'e gönder
     executionEngine.executeTask(projectId, updated).catch(() => {});
     return c.json({ success: true, task: updated });
@@ -731,7 +731,7 @@ studio.post('/projects/:id/tasks/:taskId/reject', async (c) => {
   try {
     const taskId = c.req.param('taskId');
     const body = await c.req.json<{ reason?: string }>().catch(() => ({} as { reason?: string }));
-    const updated = taskEngine.rejectTask(taskId, body.reason);
+    const updated = await taskEngine.rejectTask(taskId, body.reason);
     return c.json({ success: true, task: updated });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Red işlemi başarısız';
@@ -740,16 +740,16 @@ studio.post('/projects/:id/tasks/:taskId/reject', async (c) => {
 });
 
 // GET /projects/:id/approvals — Bekleyen onayları listele
-studio.get('/projects/:id/approvals', (c) => {
-  const pendingTasks = listPendingApprovals(c.req.param('id'));
+studio.get('/projects/:id/approvals', async (c) => {
+  const pendingTasks = await listPendingApprovals(c.req.param('id'));
   return c.json(pendingTasks);
 });
 
 // GET /projects/:id/tasks/:taskId/logs
 // Returns stored logs from task.output.logs as JSON.
 // For still-running tasks also appends the agent's live terminal buffer.
-studio.get('/projects/:id/tasks/:taskId/logs', (c) => {
-  const task = getTask(c.req.param('taskId'));
+studio.get('/projects/:id/tasks/:taskId/logs', async (c) => {
+  const task = await getTask(c.req.param('taskId'));
   if (!task) return c.json({ error: 'Task not found' }, 404);
 
   const storedLogs: string[] = task.output?.logs ?? [];
@@ -776,8 +776,8 @@ studio.get('/projects/:id/tasks/:taskId/logs', (c) => {
 
 // GET /projects/:id/tasks/:taskId/output
 // Returns the full TaskOutput for a task (files, test results, logs).
-studio.get('/projects/:id/tasks/:taskId/output', (c) => {
-  const task = getTask(c.req.param('taskId'));
+studio.get('/projects/:id/tasks/:taskId/output', async (c) => {
+  const task = await getTask(c.req.param('taskId'));
   if (!task) return c.json({ error: 'Task not found' }, 404);
 
   if (!task.output) {
@@ -803,7 +803,7 @@ studio.get('/projects/:id/tasks/:taskId/stream', async (c) => {
   const projectId = c.req.param('id');
   const taskId = c.req.param('taskId');
 
-  const task = getTask(taskId);
+  const task = await getTask(taskId);
   if (!task) return c.json({ error: 'Task not found' }, 404);
 
   return streamSSE(c, async (stream) => {
@@ -832,7 +832,7 @@ studio.get('/projects/:id/tasks/:taskId/stream', async (c) => {
           const text = typeof event.payload.output === 'string' ? event.payload.output : '';
           await stream.writeSSE({ event: 'log', data: JSON.stringify({ text }) });
           // Persist the incoming log line(s) to the task record.
-          if (text) appendTaskLogs(taskId, [text]);
+          if (text) await appendTaskLogs(taskId, [text]);
         }
 
         if (
@@ -859,12 +859,12 @@ studio.get('/projects/:id/tasks/:taskId/stream', async (c) => {
 
 // ---- Agent Configs --------------------------------------------------------
 
-studio.get('/agents', (c) => {
-  return c.json(listAgentConfigs());
+studio.get('/agents', async (c) => {
+  return c.json(await listAgentConfigs());
 });
 
-studio.get('/agents/presets', (c) => {
-  return c.json(listPresetAgents());
+studio.get('/agents/presets', async (c) => {
+  return c.json(await listPresetAgents());
 });
 
 // Avatar listesi — gender'a göre filtrelenebilir
@@ -877,25 +877,25 @@ studio.get('/avatars', (c) => {
 
 studio.post('/agents', async (c) => {
   const body = await c.req.json();
-  const agent = createAgentConfig({ ...body, isPreset: false });
+  const agent = await createAgentConfig({ ...body, isPreset: false });
   return c.json(agent, 201);
 });
 
-studio.get('/agents/:id', (c) => {
-  const agent = getAgentConfig(c.req.param('id'));
+studio.get('/agents/:id', async (c) => {
+  const agent = await getAgentConfig(c.req.param('id'));
   if (!agent) return c.json({ error: 'Agent not found' }, 404);
   return c.json(agent);
 });
 
 studio.put('/agents/:id', async (c) => {
   const body = await c.req.json();
-  const agent = updateAgentConfig(c.req.param('id'), body);
+  const agent = await updateAgentConfig(c.req.param('id'), body);
   if (!agent) return c.json({ error: 'Agent not found' }, 404);
   return c.json(agent);
 });
 
-studio.delete('/agents/:id', (c) => {
-  const ok = deleteAgentConfig(c.req.param('id'));
+studio.delete('/agents/:id', async (c) => {
+  const ok = await deleteAgentConfig(c.req.param('id'));
   if (!ok) return c.json({ error: 'Agent not found or is a preset' }, 404);
   return c.json({ success: true });
 });
@@ -903,37 +903,37 @@ studio.delete('/agents/:id', (c) => {
 // ---- Team Templates -------------------------------------------------------
 
 // Tüm takım şablonlarını listele
-studio.get('/team-templates', (c) => {
-  return c.json(listTeamTemplates());
+studio.get('/team-templates', async (c) => {
+  return c.json(await listTeamTemplates());
 });
 
 // ---- Custom Team Templates (user-created) ---------------------------------
 
-studio.get('/custom-teams', (c) => {
-  return c.json(listCustomTeamTemplates());
+studio.get('/custom-teams', async (c) => {
+  return c.json(await listCustomTeamTemplates());
 });
 
-studio.get('/custom-teams/:id', (c) => {
-  const template = getCustomTeamTemplate(c.req.param('id'));
+studio.get('/custom-teams/:id', async (c) => {
+  const template = await getCustomTeamTemplate(c.req.param('id'));
   if (!template) return c.json({ error: 'Not found' }, 404);
   return c.json(template);
 });
 
 studio.post('/custom-teams', async (c) => {
   const body = await c.req.json();
-  const template = createCustomTeamTemplate(body);
+  const template = await createCustomTeamTemplate(body);
   return c.json(template, 201);
 });
 
 studio.put('/custom-teams/:id', async (c) => {
   const body = await c.req.json();
-  const template = updateCustomTeamTemplate(c.req.param('id'), body);
+  const template = await updateCustomTeamTemplate(c.req.param('id'), body);
   if (!template) return c.json({ error: 'Not found' }, 404);
   return c.json(template);
 });
 
-studio.delete('/custom-teams/:id', (c) => {
-  const ok = deleteCustomTeamTemplate(c.req.param('id'));
+studio.delete('/custom-teams/:id', async (c) => {
+  const ok = await deleteCustomTeamTemplate(c.req.param('id'));
   if (!ok) return c.json({ error: 'Not found' }, 404);
   return c.json({ success: true });
 });
@@ -966,7 +966,7 @@ studio.post('/projects/from-template', async (c) => {
   if (!template) return c.json({ error: 'Template not found' }, 400);
 
   // Create project with template's tech stack
-  const project = createProject({
+  const project = await createProject({
     name: body.name,
     description: body.description ?? template.description,
     techStack: template.techStack,
@@ -974,10 +974,10 @@ studio.post('/projects/from-template', async (c) => {
   });
 
   // Copy team agents from matching team template
-  const templates = listTeamTemplates();
+  const templates = await listTeamTemplates();
   const teamTpl = templates.find((t) => t.name === template.teamTemplate) ?? templates[0];
   if (teamTpl) {
-    const copiedAgents = copyAgentsToProject(project.id, teamTpl.roles);
+    const copiedAgents = await copyAgentsToProject(project.id, teamTpl.roles);
     for (const agent of copiedAgents) {
       createAgentFiles(project.id, agent.name, {
         skills: agent.skills,
@@ -1007,7 +1007,7 @@ studio.post('/projects/from-template', async (c) => {
       } catch { /* commit might fail if no changes */ }
     }
 
-    updateProject(project.id, { repoPath });
+    await updateProject(project.id, { repoPath });
     return c.json({ ...project, repoPath, filesCreated }, 201);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Scaffold failed';
@@ -1018,17 +1018,17 @@ studio.post('/projects/from-template', async (c) => {
 // ---- Project Team (project_agents) ----------------------------------------
 
 // Projenin takım üyelerini listele
-studio.get('/projects/:id/team', (c) => {
+studio.get('/projects/:id/team', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
-  return c.json(listProjectAgents(projectId));
+  return c.json(await listProjectAgents(projectId));
 });
 
 // Projeye yeni takım üyesi ekle (manuel veya preset'ten kopyalama)
 studio.post('/projects/:id/team', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const body = (await c.req.json()) as {
@@ -1045,9 +1045,9 @@ studio.post('/projects/:id/team', async (c) => {
 
   // sourceAgentId verilmişse preset'ten kopyala
   if (body.sourceAgentId) {
-    const preset = getAgentConfig(body.sourceAgentId);
+    const preset = await getAgentConfig(body.sourceAgentId);
     if (!preset) return c.json({ error: 'Source agent not found' }, 404);
-    const agent = createProjectAgent({
+    const agent = await createProjectAgent({
       projectId,
       sourceAgentId: preset.id,
       name: body.name ?? preset.name,
@@ -1075,7 +1075,7 @@ studio.post('/projects/:id/team', async (c) => {
     return c.json({ error: 'name and role are required' }, 400);
   }
 
-  const agent = createProjectAgent({
+  const agent = await createProjectAgent({
     projectId,
     sourceAgentId: body.sourceAgentId,
     name: body.name,
@@ -1100,12 +1100,12 @@ studio.post('/projects/:id/team', async (c) => {
 
 // Get org structure for a project (tree format + pipeline order)
 // NOTE: Must be defined BEFORE /team/:agentId to prevent "org" matching as agentId
-studio.get('/projects/:id/team/org', (c) => {
+studio.get('/projects/:id/team/org', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
-  const agents = listProjectAgents(projectId);
+  const agents = await listProjectAgents(projectId);
 
   const tree = buildOrgTree(agents);
 
@@ -1125,8 +1125,8 @@ studio.get('/projects/:id/team/org', (c) => {
 });
 
 // Tekil proje agentını getir
-studio.get('/projects/:id/team/:agentId', (c) => {
-  const agent = getProjectAgent(c.req.param('agentId'));
+studio.get('/projects/:id/team/:agentId', async (c) => {
+  const agent = await getProjectAgent(c.req.param('agentId'));
   if (!agent || agent.projectId !== c.req.param('id')) {
     return c.json({ error: 'Agent not found' }, 404);
   }
@@ -1136,13 +1136,13 @@ studio.get('/projects/:id/team/:agentId', (c) => {
 // Proje agentını güncelle
 studio.put('/projects/:id/team/:agentId', async (c) => {
   const agentId = c.req.param('agentId');
-  const existing = getProjectAgent(agentId);
+  const existing = await getProjectAgent(agentId);
   if (!existing || existing.projectId !== c.req.param('id')) {
     return c.json({ error: 'Agent not found' }, 404);
   }
 
   const body = await c.req.json();
-  const updated = updateProjectAgent(agentId, body);
+  const updated = await updateProjectAgent(agentId, body);
   if (!updated) return c.json({ error: 'Agent not found' }, 404);
   updateAgentFiles(c.req.param('id'), updated.name, {
     skills: updated.skills,
@@ -1155,13 +1155,13 @@ studio.put('/projects/:id/team/:agentId', async (c) => {
 });
 
 // Proje agentını takımdan çıkar
-studio.delete('/projects/:id/team/:agentId', (c) => {
+studio.delete('/projects/:id/team/:agentId', async (c) => {
   const agentId = c.req.param('agentId');
-  const existing = getProjectAgent(agentId);
+  const existing = await getProjectAgent(agentId);
   if (!existing || existing.projectId !== c.req.param('id')) {
     return c.json({ error: 'Agent not found' }, 404);
   }
-  const ok = deleteProjectAgent(agentId);
+  const ok = await deleteProjectAgent(agentId);
   if (!ok) return c.json({ error: 'Agent not found' }, 404);
   deleteAgentFiles(c.req.param('id'), existing.name).catch(() => {});
   return c.json({ success: true });
@@ -1170,16 +1170,16 @@ studio.delete('/projects/:id/team/:agentId', (c) => {
 // Şablondan agentları projeye toplu kopyala
 studio.post('/projects/:id/team/from-template', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const body = (await c.req.json()) as { templateId: string };
   if (!body.templateId) return c.json({ error: 'templateId is required' }, 400);
 
-  const template = getTeamTemplate(body.templateId);
+  const template = await getTeamTemplate(body.templateId);
   if (!template) return c.json({ error: 'Template not found' }, 404);
 
-  const agents = copyAgentsToProject(projectId, template.roles);
+  const agents = await copyAgentsToProject(projectId, template.roles);
   for (const agent of agents) {
     createAgentFiles(projectId, agent.name, {
       skills: agent.skills,
@@ -1196,7 +1196,7 @@ studio.post('/projects/:id/team/from-template', async (c) => {
 
 // List .md files for a project agent
 studio.get('/projects/:id/team/:agentId/files', async (c) => {
-  const agent = getProjectAgent(c.req.param('agentId'));
+  const agent = await getProjectAgent(c.req.param('agentId'));
   if (!agent || agent.projectId !== c.req.param('id')) {
     return c.json({ error: 'Agent not found' }, 404);
   }
@@ -1206,7 +1206,7 @@ studio.get('/projects/:id/team/:agentId/files', async (c) => {
 
 // Read a specific .md file
 studio.get('/projects/:id/team/:agentId/files/:fileName', async (c) => {
-  const agent = getProjectAgent(c.req.param('agentId'));
+  const agent = await getProjectAgent(c.req.param('agentId'));
   if (!agent || agent.projectId !== c.req.param('id')) {
     return c.json({ error: 'Agent not found' }, 404);
   }
@@ -1217,7 +1217,7 @@ studio.get('/projects/:id/team/:agentId/files/:fileName', async (c) => {
 
 // Write/update a .md file
 studio.put('/projects/:id/team/:agentId/files/:fileName', async (c) => {
-  const agent = getProjectAgent(c.req.param('agentId'));
+  const agent = await getProjectAgent(c.req.param('agentId'));
   if (!agent || agent.projectId !== c.req.param('id')) {
     return c.json({ error: 'Agent not found' }, 404);
   }
@@ -1233,7 +1233,7 @@ studio.put('/projects/:id/team/:agentId/files/:fileName', async (c) => {
 // Projeye yeni mesaj gönder
 studio.post('/projects/:id/messages', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const body = (await c.req.json()) as {
@@ -1266,9 +1266,9 @@ studio.post('/projects/:id/messages', async (c) => {
 });
 
 // Projedeki tüm mesajları listele — isteğe bağlı ?agentId= ve ?status= filtreleri
-studio.get('/projects/:id/messages', (c) => {
+studio.get('/projects/:id/messages', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const agentId = c.req.query('agentId');
@@ -1280,7 +1280,7 @@ studio.get('/projects/:id/messages', (c) => {
 // Takıma toplu yayın mesajı gönder
 studio.post('/projects/:id/messages/broadcast', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const body = (await c.req.json()) as {
@@ -1294,14 +1294,14 @@ studio.post('/projects/:id/messages/broadcast', async (c) => {
     return c.json({ error: 'fromAgentId, subject and content are required' }, 400);
   }
 
-  const sent = broadcastToTeam(projectId, body.fromAgentId, body.subject, body.content, body.metadata);
+  const sent = await broadcastToTeam(projectId, body.fromAgentId, body.subject, body.content, body.metadata);
   return c.json({ sent: sent.length, messages: sent }, 201);
 });
 
 // Pipeline'daki bir sonraki aşamayı bilgilendir
 studio.post('/projects/:id/messages/pipeline-notify', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const body = (await c.req.json()) as {
@@ -1314,7 +1314,7 @@ studio.post('/projects/:id/messages/pipeline-notify', async (c) => {
     return c.json({ error: 'fromAgentId, taskId and message are required' }, 400);
   }
 
-  const sent = notifyNextInPipeline(projectId, body.fromAgentId, body.taskId, body.message);
+  const sent = await notifyNextInPipeline(projectId, body.fromAgentId, body.taskId, body.message);
 
   if (sent.length === 0) {
     return c.json({ error: 'No next pipeline stage found or agent not found' }, 404);
@@ -1324,19 +1324,19 @@ studio.post('/projects/:id/messages/pipeline-notify', async (c) => {
 });
 
 // Belirli bir mesajın thread zincirini getir
-studio.get('/projects/:id/messages/:messageId/thread', (c) => {
-  const project = getProject(c.req.param('id'));
+studio.get('/projects/:id/messages/:messageId/thread', async (c) => {
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
-  const thread = getThread(c.req.param('messageId'));
+  const thread = await getThread(c.req.param('messageId'));
   if (thread.length === 0) return c.json({ error: 'Message not found' }, 404);
 
   return c.json(thread);
 });
 
 // Mesajı okundu olarak işaretle
-studio.put('/projects/:id/messages/:messageId/read', (c) => {
-  const project = getProject(c.req.param('id'));
+studio.put('/projects/:id/messages/:messageId/read', async (c) => {
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const msg = markAsRead(c.req.param('messageId'));
@@ -1346,8 +1346,8 @@ studio.put('/projects/:id/messages/:messageId/read', (c) => {
 });
 
 // Mesajı arşivle
-studio.put('/projects/:id/messages/:messageId/archive', (c) => {
-  const project = getProject(c.req.param('id'));
+studio.put('/projects/:id/messages/:messageId/archive', async (c) => {
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const msg = archiveMessage(c.req.param('messageId'));
@@ -1357,8 +1357,8 @@ studio.put('/projects/:id/messages/:messageId/archive', (c) => {
 });
 
 // Ajanın gelen kutusunu getir
-studio.get('/projects/:id/agents/:agentId/inbox', (c) => {
-  const project = getProject(c.req.param('id'));
+studio.get('/projects/:id/agents/:agentId/inbox', async (c) => {
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const status = c.req.query('status') as any;
@@ -1368,8 +1368,8 @@ studio.get('/projects/:id/agents/:agentId/inbox', (c) => {
 });
 
 // Ajanın okunmamış mesaj sayısını getir
-studio.get('/projects/:id/agents/:agentId/inbox/count', (c) => {
-  const project = getProject(c.req.param('id'));
+studio.get('/projects/:id/agents/:agentId/inbox/count', async (c) => {
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const count = getUnreadCount(c.req.param('id'), c.req.param('agentId'));
@@ -1387,11 +1387,11 @@ studio.post('/projects/:id/agents/:agentId/start', async (c) => {
   const projectId = c.req.param('id');
   const agentId = c.req.param('agentId');
 
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Proje bulunamadı' }, 404);
 
   // Önce project_agents tablosunda ara (yerel süreç için birincil kaynak)
-  const projectAgent = getProjectAgent(agentId);
+  const projectAgent = await getProjectAgent(agentId);
   if (!projectAgent || projectAgent.projectId !== projectId) {
     return c.json({ error: 'Agent bulunamadı' }, 404);
   }
@@ -1401,7 +1401,7 @@ studio.post('/projects/:id/agents/:agentId/start', async (c) => {
   // cliTool == 'none' ise yerel süreç başlatma
   if (projectAgent.cliTool && projectAgent.cliTool !== 'none') {
     try {
-      const record = agentRuntime.startAgent(
+      const record = await agentRuntime.startAgent(
         projectId,
         {
           id: projectAgent.id,
@@ -1426,7 +1426,7 @@ studio.post('/projects/:id/agents/:agentId/start', async (c) => {
   }
 
   // Docker fallback — agent_configs'ten al
-  const agentConfig = getAgentConfig(agentId);
+  const agentConfig = await getAgentConfig(agentId);
   if (agentConfig) {
     try {
       const containerId = await containerManager.createContainer(agentConfig, project);
@@ -1465,7 +1465,7 @@ studio.post('/projects/:id/agents/:agentId/stop', async (c) => {
 /**
  * Agent durum bilgisi — yerel süreç veya Docker runtime'ını döndürür.
  */
-studio.get('/projects/:id/agents/:agentId/status', (c) => {
+studio.get('/projects/:id/agents/:agentId/status', async (c) => {
   const projectId = c.req.param('id');
   const agentId = c.req.param('agentId');
 
@@ -1484,7 +1484,7 @@ studio.get('/projects/:id/agents/:agentId/status', (c) => {
   }
 
   // Sanal kayıt yoksa agent bilgisinden idle durumlu kayıt döndür
-  const agent = listProjectAgents(projectId).find((a) => a.id === agentId);
+  const agent = (await listProjectAgents(projectId)).find((a) => a.id === agentId);
   if (agent) {
     return c.json({ mode: 'virtual', status: 'idle', agentId, agentName: agent.name });
   }
@@ -1509,14 +1509,14 @@ studio.get('/projects/:id/agents/:agentId/output', (c) => {
 /**
  * Agent çıktı SSE akışı — yeni satırlar geldiğinde server-sent event olarak iletir.
  */
-studio.get('/projects/:id/agents/:agentId/stream', (c) => {
+studio.get('/projects/:id/agents/:agentId/stream', async (c) => {
   const projectId = c.req.param('id');
   const agentId = c.req.param('agentId');
 
   // Kayıt yoksa sanal kayıt oluştur — terminal bağlanabilsin ve yeni çıktıları beklesin
   let readable = agentRuntime.streamAgentOutput(projectId, agentId);
   if (!readable) {
-    const agent = listProjectAgents(projectId).find((a) => a.id === agentId);
+    const agent = (await listProjectAgents(projectId)).find((a) => a.id === agentId);
     if (agent) {
       agentRuntime.ensureVirtualProcess(projectId, agentId, agent.name);
       readable = agentRuntime.streamAgentOutput(projectId, agentId);
@@ -1563,11 +1563,11 @@ studio.get('/projects/:id/runtimes', (c) => {
  * Agent çalışma geçmişi — agent_runs tablosundan.
  * Sorgu parametresi: ?limit=<sayı> (varsayılan 50)
  */
-studio.get('/projects/:id/agents/:agentId/runs', (c) => {
+studio.get('/projects/:id/agents/:agentId/runs', async (c) => {
   const projectId = c.req.param('id');
   const agentId = c.req.param('agentId');
   const limit = Number(c.req.query('limit') ?? 50);
-  const runs = listAgentRuns(projectId, agentId, limit);
+  const runs = await listAgentRuns(projectId, agentId, limit);
   return c.json(runs);
 });
 
@@ -1595,7 +1595,7 @@ studio.get('/docker/status', async (c) => {
 // ---- Files & Git ----------------------------------------------------------
 
 studio.get('/projects/:id/files', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1609,7 +1609,7 @@ studio.get('/projects/:id/files', async (c) => {
 });
 
 studio.get('/projects/:id/files/*', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1630,7 +1630,7 @@ studio.get('/projects/:id/files/*', async (c) => {
 });
 
 studio.put('/projects/:id/files/*', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1653,7 +1653,7 @@ studio.put('/projects/:id/files/*', async (c) => {
 });
 
 studio.get('/projects/:id/git/log', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1668,7 +1668,7 @@ studio.get('/projects/:id/git/log', async (c) => {
 });
 
 studio.get('/projects/:id/git/diff', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1683,7 +1683,7 @@ studio.get('/projects/:id/git/diff', async (c) => {
 });
 
 studio.get('/projects/:id/git/branches', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1700,7 +1700,7 @@ studio.get('/projects/:id/git/branches', async (c) => {
 // ---- File Create / Delete / Git Status & Commit ----------------------------
 
 studio.post('/projects/:id/files', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1718,7 +1718,7 @@ studio.post('/projects/:id/files', async (c) => {
 });
 
 studio.delete('/projects/:id/files', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1736,7 +1736,7 @@ studio.delete('/projects/:id/files', async (c) => {
 });
 
 studio.get('/projects/:id/git/status', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1751,7 +1751,7 @@ studio.get('/projects/:id/git/status', async (c) => {
 
 // POST /projects/:id/git/revert — Belirli bir commit'i geri al
 studio.post('/projects/:id/git/revert', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1771,7 +1771,7 @@ studio.post('/projects/:id/git/revert', async (c) => {
 
 // POST /projects/:id/git/merge — Kaynak branch'i hedef branch'e merge et
 studio.post('/projects/:id/git/merge', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1796,7 +1796,7 @@ studio.post('/projects/:id/git/merge', async (c) => {
 });
 
 studio.post('/projects/:id/git/commit', async (c) => {
-  const project = getProject(c.req.param('id'));
+  const project = await getProject(c.req.param('id'));
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
@@ -1824,14 +1824,14 @@ studio.post('/projects/:id/git/commit', async (c) => {
 
 // ---- Event Stream (SSE) ---------------------------------------------------
 
-studio.get('/projects/:id/events', (c) => {
+studio.get('/projects/:id/events', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   return streamSSE(c, async (stream) => {
     // Send recent events first
-    const recent = listEvents(projectId, 20);
+    const recent = await listEvents(projectId, 20);
     for (const event of recent.reverse()) {
       await stream.writeSSE({
         event: event.type,
@@ -1861,16 +1861,16 @@ studio.get('/projects/:id/events', (c) => {
 
 // ---- Recent events (REST) -------------------------------------------------
 
-studio.get('/projects/:id/events/recent', (c) => {
+studio.get('/projects/:id/events/recent', async (c) => {
   const limit = Number(c.req.query('limit') ?? 50);
-  return c.json(listEvents(c.req.param('id'), limit));
+  return c.json(await listEvents(c.req.param('id'), limit));
 });
 
 // ---- Config status --------------------------------------------------------
 
-studio.get('/config/status', (c) => {
+studio.get('/config/status', async (c) => {
   // Veritabanındaki varsayılan provider bilgisini de döndür
-  const defaultProvider = getDefaultProvider();
+  const defaultProvider = await getDefaultProvider();
 
   return c.json({
     openaiConfigured: !!process.env.OPENAI_API_KEY,
@@ -1881,8 +1881,8 @@ studio.get('/config/status', (c) => {
 
 // ---- AI Providers ---------------------------------------------------------
 
-studio.get('/providers', (c) => {
-  return c.json(listProviders());
+studio.get('/providers', async (c) => {
+  return c.json(await listProviders());
 });
 
 studio.post('/providers', async (c) => {
@@ -1899,7 +1899,7 @@ studio.post('/providers', async (c) => {
     return c.json({ error: 'name is required' }, 400);
   }
 
-  const provider = createProvider({
+  const provider = await createProvider({
     name: body.name.trim(),
     type: (body.type ?? 'openai') as any,
     apiKey: body.apiKey ?? '',
@@ -1920,8 +1920,8 @@ studio.post('/providers', async (c) => {
  * NOT: Bu route /:id rotasından önce tanımlanmalıdır; aksi takdirde
  * Hono "fallback-chain" string'ini ID parametresi olarak yakalar.
  */
-studio.get('/providers/fallback-chain', (c) => {
-  return c.json(getFallbackChain());
+studio.get('/providers/fallback-chain', async (c) => {
+  return c.json(await getFallbackChain());
 });
 
 /**
@@ -1937,14 +1937,14 @@ studio.put('/providers/fallback-chain', async (c) => {
     return c.json({ error: 'orderedIds array is required' }, 400);
   }
 
-  updateFallbackOrder(body.orderedIds);
-  return c.json(getFallbackChain());
+  await updateFallbackOrder(body.orderedIds);
+  return c.json(await getFallbackChain());
 });
 
 // ---------------------------------------------------------------------------
 
-studio.get('/providers/:id', (c) => {
-  const provider = getProvider(c.req.param('id'));
+studio.get('/providers/:id', async (c) => {
+  const provider = await getProvider(c.req.param('id'));
   if (!provider) return c.json({ error: 'Provider not found' }, 404);
   return c.json(provider);
 });
@@ -1959,7 +1959,7 @@ studio.put('/providers/:id', async (c) => {
     isActive?: boolean;
   };
 
-  const provider = updateProvider(c.req.param('id'), {
+  const provider = await updateProvider(c.req.param('id'), {
     name: body.name,
     type: body.type as any,
     apiKey: body.apiKey,
@@ -1972,22 +1972,22 @@ studio.put('/providers/:id', async (c) => {
   return c.json(provider);
 });
 
-studio.delete('/providers/:id', (c) => {
-  const result = deleteProvider(c.req.param('id'));
+studio.delete('/providers/:id', async (c) => {
+  const result = await deleteProvider(c.req.param('id'));
   if (!result.success) {
     return c.json({ error: result.error }, result.error === 'Provider not found' ? 404 : 400);
   }
   return c.json({ success: true });
 });
 
-studio.post('/providers/:id/default', (c) => {
-  const provider = setDefaultProvider(c.req.param('id'));
+studio.post('/providers/:id/default', async (c) => {
+  const provider = await setDefaultProvider(c.req.param('id'));
   if (!provider) return c.json({ error: 'Provider not found' }, 404);
   return c.json(provider);
 });
 
 studio.post('/providers/:id/test', async (c) => {
-  const provider = getProvider(c.req.param('id'));
+  const provider = await getProvider(c.req.param('id'));
   if (!provider) return c.json({ error: 'Provider not found' }, 404);
 
   if (provider.type !== 'openai') {
@@ -1995,7 +1995,7 @@ studio.post('/providers/:id/test', async (c) => {
   }
 
   try {
-    const apiKey = getRawProviderApiKey(provider.id);
+    const apiKey = await getRawProviderApiKey(provider.id);
     const res = await fetch('https://api.openai.com/v1/models', {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
@@ -2062,12 +2062,12 @@ function buildOrgTree(agents: ProjectAgent[]): OrgNode[] {
 // Update agent hierarchy (set reports_to and optional pipeline_order)
 studio.put('/projects/:id/team/:agentId/hierarchy', async (c) => {
   const agentId = c.req.param('agentId');
-  const existing = getProjectAgent(agentId);
+  const existing = await getProjectAgent(agentId);
   if (!existing || existing.projectId !== c.req.param('id')) {
     return c.json({ error: 'Agent not found' }, 404);
   }
   const body = (await c.req.json()) as { reportsTo: string | null; pipelineOrder?: number };
-  const updated = updateProjectAgent(agentId, {
+  const updated = await updateProjectAgent(agentId, {
     reportsTo: body.reportsTo ?? undefined,
     pipelineOrder: body.pipelineOrder,
   });
@@ -2078,9 +2078,9 @@ studio.put('/projects/:id/team/:agentId/hierarchy', async (c) => {
 // Pipeline'ı başlatma, durum sorgulama, durdurma ve devam ettirme endpoint'leri
 
 // POST /projects/:id/pipeline/start — pipeline'ı başlatır
-studio.post('/projects/:id/pipeline/start', (c) => {
+studio.post('/projects/:id/pipeline/start', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   try {
@@ -2093,13 +2093,13 @@ studio.post('/projects/:id/pipeline/start', (c) => {
 });
 
 // GET /projects/:id/pipeline/status — mevcut pipeline durumunu task durumlarıyla birlikte döner
-studio.get('/projects/:id/pipeline/status', (c) => {
+studio.get('/projects/:id/pipeline/status', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   // Zenginleştirilmiş durum: pipeline state + task progress + derived status
-  const enriched = pipelineEngine.getEnrichedPipelineStatus(projectId);
+  const enriched = await pipelineEngine.getEnrichedPipelineStatus(projectId);
 
   // Pipeline kaydı hiç yoksa ve task'lar da çalışmıyorsa 404 dön
   if (!enriched.pipelineState && enriched.taskProgress.overall.total === 0) {
@@ -2114,7 +2114,7 @@ studio.get('/projects/:id/pipeline/status', (c) => {
     for (const stage of pipelineState.stages) {
       if (stage.tasks) {
         for (let i = 0; i < stage.tasks.length; i++) {
-          const fresh = getTask(stage.tasks[i].id);
+          const fresh = await getTask(stage.tasks[i].id);
           if (fresh) {
             stage.tasks[i] = { ...stage.tasks[i], ...fresh };
           }
@@ -2137,9 +2137,9 @@ studio.get('/projects/:id/pipeline/status', (c) => {
 });
 
 // POST /projects/:id/pipeline/pause — pipeline'ı duraklatır
-studio.post('/projects/:id/pipeline/pause', (c) => {
+studio.post('/projects/:id/pipeline/pause', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   try {
@@ -2152,9 +2152,9 @@ studio.post('/projects/:id/pipeline/pause', (c) => {
 });
 
 // POST /projects/:id/pipeline/resume — duraklatılmış pipeline'ı devam ettirir
-studio.post('/projects/:id/pipeline/resume', (c) => {
+studio.post('/projects/:id/pipeline/resume', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   try {
@@ -2167,9 +2167,9 @@ studio.post('/projects/:id/pipeline/resume', (c) => {
 });
 
 // POST /projects/:id/pipeline/advance — manuel olarak bir sonraki aşamaya geçer (test amaçlı)
-studio.post('/projects/:id/pipeline/advance', (c) => {
+studio.post('/projects/:id/pipeline/advance', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   try {
@@ -2183,35 +2183,35 @@ studio.post('/projects/:id/pipeline/advance', (c) => {
 
 // ---- Analytics Routes -------------------------------------------------------
 
-studio.get('/projects/:id/analytics/overview', (c) => {
+studio.get('/projects/:id/analytics/overview', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
   try {
-    return c.json(getProjectAnalytics(projectId));
+    return c.json(await getProjectAnalytics(projectId));
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Analytics hesaplanamadı' }, 500);
   }
 });
 
-studio.get('/projects/:id/analytics/agents', (c) => {
+studio.get('/projects/:id/analytics/agents', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
   try {
-    return c.json(getAgentAnalytics(projectId));
+    return c.json(await getAgentAnalytics(projectId));
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Ajan metrikleri hesaplanamadı' }, 500);
   }
 });
 
-studio.get('/projects/:id/analytics/timeline', (c) => {
+studio.get('/projects/:id/analytics/timeline', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
   const days = Math.min(Math.max(parseInt(c.req.query('days') ?? '7', 10) || 7, 1), 30);
   try {
-    return c.json(getActivityTimeline(projectId, days));
+    return c.json(await getActivityTimeline(projectId, days));
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'Zaman çizelgesi hesaplanamadı' }, 500);
   }
@@ -2221,46 +2221,46 @@ studio.get('/projects/:id/analytics/timeline', (c) => {
 // Token Usage & Cost Tracking
 // ---------------------------------------------------------------------------
 
-studio.get('/projects/:id/costs', (c) => {
+studio.get('/projects/:id/costs', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
-  return c.json(getProjectCostSummary(projectId));
+  return c.json(await getProjectCostSummary(projectId));
 });
 
-studio.get('/projects/:id/costs/breakdown', (c) => {
+studio.get('/projects/:id/costs/breakdown', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
-  return c.json(getProjectCostBreakdown(projectId));
+  return c.json(await getProjectCostBreakdown(projectId));
 });
 
-studio.get('/projects/:id/costs/history', (c) => {
+studio.get('/projects/:id/costs/history', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
-  return c.json(listTokenUsage(projectId));
+  return c.json(await listTokenUsage(projectId));
 });
 
 // ---------------------------------------------------------------------------
 // Project Settings — CRUD
 // ---------------------------------------------------------------------------
 
-studio.get('/projects/:id/settings', (c) => {
+studio.get('/projects/:id/settings', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
-  return c.json(getProjectSettingsMap(projectId));
+  return c.json(await getProjectSettingsMap(projectId));
 });
 
 studio.put('/projects/:id/settings/:category', async (c) => {
   const projectId = c.req.param('id');
   const category = c.req.param('category');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const body = await c.req.json<Record<string, string>>();
-  setProjectSettings(projectId, category, body);
+  await setProjectSettings(projectId, category, body);
   return c.json({ ok: true });
 });
 
@@ -2270,7 +2270,7 @@ studio.put('/projects/:id/settings/:category', async (c) => {
 
 studio.get('/projects/:id/docs/freshness', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
   const results = await checkDocsFreshness(project.repoPath);
@@ -2281,18 +2281,18 @@ studio.get('/projects/:id/docs/freshness', async (c) => {
 // SonarQube — scan / status / quality gate
 // ---------------------------------------------------------------------------
 
-studio.get('/projects/:id/sonar/status', (c) => {
+studio.get('/projects/:id/sonar/status', async (c) => {
   const projectId = c.req.param('id');
-  return c.json({ enabled: isSonarEnabled(projectId) });
+  return c.json({ enabled: await isSonarEnabled(projectId) });
 });
 
 studio.post('/projects/:id/sonar/scan', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
 
-  if (!isSonarEnabled(projectId)) {
+  if (!await isSonarEnabled(projectId)) {
     return c.json({ error: 'SonarQube is not enabled. Set SONAR_ENABLED=true or enable in project settings.' }, 400);
   }
 
@@ -2306,17 +2306,17 @@ studio.post('/projects/:id/sonar/scan', async (c) => {
 
   // Fetch quality gate after scan
   const gate = await fetchQualityGate(`studio-${projectId}`, projectId);
-  const scanId = recordSonarScan(projectId, gate, scanResult.output);
+  const scanId = await recordSonarScan(projectId, gate, scanResult.output);
 
   return c.json({ scanId, qualityGate: gate });
 });
 
-studio.get('/projects/:id/sonar/latest', (c) => {
+studio.get('/projects/:id/sonar/latest', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
-  const scan = getLatestSonarScan(projectId);
+  const scan = await getLatestSonarScan(projectId);
   return c.json(scan ?? { status: 'NONE', conditions: [] });
 });
 
@@ -2328,7 +2328,7 @@ import { startApp, stopApp, getAppStatus, getResolvedConfig } from './app-runner
 
 studio.post('/projects/:id/app/start', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   try {
@@ -2343,24 +2343,24 @@ studio.post('/projects/:id/app/start', async (c) => {
 
 studio.post('/projects/:id/app/stop', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   await stopApp(projectId);
   return c.json({ ok: true });
 });
 
-studio.get('/projects/:id/app/status', (c) => {
+studio.get('/projects/:id/app/status', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   return c.json(getAppStatus(projectId));
 });
 
-studio.get('/projects/:id/app/config', (c) => {
+studio.get('/projects/:id/app/config', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const config = getResolvedConfig(project.repoPath);
@@ -2385,7 +2385,7 @@ studio.post('/worker/generate', async (c) => {
   };
 
   try {
-    const { model, modelName, providerType } = workerGetAIModelInfo();
+    const { model, modelName, providerType } = await workerGetAIModelInfo();
     const { text, usage } = await workerGenerateText({
       model,
       system: body.systemPrompt || 'You are a software development agent. Complete the task precisely.',
@@ -2398,7 +2398,7 @@ studio.post('/worker/generate', async (c) => {
       const inputTokens = usage.inputTokens ?? 0;
       const outputTokens = usage.outputTokens ?? 0;
       const costUsd = workerCalculateCost(modelName, inputTokens, outputTokens);
-      recordTokenUsage({
+      await recordTokenUsage({
         projectId: body.projectId,
         taskId: body.taskId,
         agentId: body.agentId,
@@ -2447,10 +2447,10 @@ studio.get('/pool/status', async (c) => {
 
 // ---- Agent Dependencies (v2 org structure) --------------------------------
 
-studio.get('/projects/:id/dependencies', (c) => {
+studio.get('/projects/:id/dependencies', async (c) => {
   const projectId = c.req.param('id');
   const type = c.req.query('type') as DependencyType | undefined;
-  return c.json(listAgentDependencies(projectId, type));
+  return c.json(await listAgentDependencies(projectId, type));
 });
 
 studio.post('/projects/:id/dependencies', async (c) => {
@@ -2459,30 +2459,30 @@ studio.post('/projects/:id/dependencies', async (c) => {
   if (!body.fromAgentId || !body.toAgentId) {
     return c.json({ error: 'fromAgentId and toAgentId required' }, 400);
   }
-  const dep = createAgentDependency(projectId, body.fromAgentId, body.toAgentId, body.type ?? 'workflow');
+  const dep = await createAgentDependency(projectId, body.fromAgentId, body.toAgentId, body.type ?? 'workflow');
   return c.json(dep, 201);
 });
 
 studio.put('/projects/:id/dependencies', async (c) => {
   const projectId = c.req.param('id');
   const body = await c.req.json<{ dependencies: { fromAgentId: string; toAgentId: string; type: DependencyType }[] }>();
-  deleteAllDependencies(projectId);
-  const deps = bulkCreateDependencies(projectId, body.dependencies ?? []);
+  await deleteAllDependencies(projectId);
+  const deps = await bulkCreateDependencies(projectId, body.dependencies ?? []);
   return c.json(deps);
 });
 
-studio.delete('/projects/:id/dependencies/:depId', (c) => {
+studio.delete('/projects/:id/dependencies/:depId', async (c) => {
   const depId = c.req.param('depId');
-  deleteAgentDependency(depId);
+  await deleteAgentDependency(depId);
   return c.json({ ok: true });
 });
 
 // ---- Agent Capabilities (file scope restrictions) -------------------------
 
-studio.get('/projects/:id/capabilities', (c) => {
+studio.get('/projects/:id/capabilities', async (c) => {
   const projectId = c.req.param('id');
   const agentId = c.req.query('agentId');
-  return c.json(listAgentCapabilities(projectId, agentId));
+  return c.json(await listAgentCapabilities(projectId, agentId));
 });
 
 studio.post('/projects/:id/capabilities', async (c) => {
@@ -2496,20 +2496,20 @@ studio.post('/projects/:id/capabilities', async (c) => {
   if (!body.agentId || !body.pattern) {
     return c.json({ error: 'agentId and pattern required' }, 400);
   }
-  const cap = createAgentCapability(body.agentId, projectId, body.pattern, body.scopeType, body.permission);
+  const cap = await createAgentCapability(body.agentId, projectId, body.pattern, body.scopeType, body.permission);
   return c.json(cap, 201);
 });
 
-studio.delete('/projects/:id/capabilities/:capId', (c) => {
+studio.delete('/projects/:id/capabilities/:capId', async (c) => {
   const capId = c.req.param('capId');
-  deleteAgentCapability(capId);
+  await deleteAgentCapability(capId);
   return c.json({ ok: true });
 });
 
-studio.delete('/projects/:id/capabilities', (c) => {
+studio.delete('/projects/:id/capabilities', async (c) => {
   const projectId = c.req.param('id');
   const agentId = c.req.query('agentId');
-  deleteAllCapabilities(projectId, agentId);
+  await deleteAllCapabilities(projectId, agentId);
   return c.json({ ok: true });
 });
 
@@ -2522,7 +2522,7 @@ studio.delete('/projects/:id/capabilities', (c) => {
  */
 studio.post('/projects/:id/generate-readme', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   if (!project.repoPath) {
@@ -2543,17 +2543,17 @@ studio.post('/projects/:id/generate-readme', async (c) => {
 // Proje bazlı webhook yönetimi: liste, oluştur, güncelle, sil, test
 
 // GET /projects/:id/webhooks — projeye ait webhook'ları listele
-studio.get('/projects/:id/webhooks', (c) => {
+studio.get('/projects/:id/webhooks', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
-  return c.json(listWebhooks(projectId));
+  return c.json(await listWebhooks(projectId));
 });
 
 // POST /projects/:id/webhooks — yeni webhook oluştur
 studio.post('/projects/:id/webhooks', async (c) => {
   const projectId = c.req.param('id');
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   const body = (await c.req.json()) as {
@@ -2580,7 +2580,7 @@ studio.post('/projects/:id/webhooks', async (c) => {
     return c.json({ error: `type must be one of: ${validTypes.join(', ')}` }, 400);
   }
 
-  const webhook = createWebhook({
+  const webhook = await createWebhook({
     projectId,
     name: body.name.trim(),
     url,
@@ -2596,7 +2596,7 @@ studio.put('/projects/:id/webhooks/:webhookId', async (c) => {
   const projectId = c.req.param('id');
   const webhookId = c.req.param('webhookId');
 
-  const existing = getWebhook(webhookId);
+  const existing = await getWebhook(webhookId);
   if (!existing || existing.projectId !== projectId) {
     return c.json({ error: 'Webhook not found' }, 404);
   }
@@ -2617,7 +2617,7 @@ studio.put('/projects/:id/webhooks/:webhookId', async (c) => {
     }
   }
 
-  const updated = updateWebhook(webhookId, {
+  const updated = await updateWebhook(webhookId, {
     name: body.name?.trim(),
     url: body.url?.trim(),
     type: body.type as Webhook['type'] | undefined,
@@ -2629,16 +2629,16 @@ studio.put('/projects/:id/webhooks/:webhookId', async (c) => {
 });
 
 // DELETE /projects/:id/webhooks/:webhookId — webhook sil
-studio.delete('/projects/:id/webhooks/:webhookId', (c) => {
+studio.delete('/projects/:id/webhooks/:webhookId', async (c) => {
   const projectId = c.req.param('id');
   const webhookId = c.req.param('webhookId');
 
-  const existing = getWebhook(webhookId);
+  const existing = await getWebhook(webhookId);
   if (!existing || existing.projectId !== projectId) {
     return c.json({ error: 'Webhook not found' }, 404);
   }
 
-  const ok = deleteWebhook(webhookId);
+  const ok = await deleteWebhook(webhookId);
   if (!ok) return c.json({ error: 'Webhook could not be deleted' }, 500);
   return c.json({ success: true });
 });
@@ -2648,10 +2648,10 @@ studio.post('/projects/:id/webhooks/:webhookId/test', async (c) => {
   const projectId = c.req.param('id');
   const webhookId = c.req.param('webhookId');
 
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
-  const webhook = getWebhook(webhookId);
+  const webhook = await getWebhook(webhookId);
   if (!webhook || webhook.projectId !== projectId) {
     return c.json({ error: 'Webhook not found' }, 404);
   }

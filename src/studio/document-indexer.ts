@@ -5,7 +5,7 @@
 
 import { extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { getDb } from './db.js';
+import { query, queryOne, execute } from './pg.js';
 import { gitManager } from './git-manager.js';
 import { vectorStore } from './vector-store.js';
 import type { FileTreeNode } from './types.js';
@@ -113,26 +113,25 @@ async function indexDocumentContent(
       options?.model,
     );
 
-    const db = getDb();
     const now = new Date().toISOString();
 
     // Update document record
-    db.prepare(`
-      UPDATE rag_documents
-      SET chunk_count = ?, status = 'ready'
-      WHERE id = ?
-    `).run(chunkCount, docId);
+    await execute(
+      `UPDATE rag_documents SET chunk_count = $1, status = 'ready' WHERE id = $2`,
+      [chunkCount, docId],
+    );
 
     // Increment KB counters
-    db.prepare(`
-      UPDATE rag_knowledge_bases
-      SET
-        document_count = document_count + 1,
-        total_chunks   = total_chunks + ?,
-        last_indexed_at = ?,
-        updated_at     = ?
-      WHERE id = ?
-    `).run(chunkCount, now, now, kbId);
+    await execute(
+      `UPDATE rag_knowledge_bases
+       SET
+         document_count = document_count + 1,
+         total_chunks   = total_chunks + $1,
+         last_indexed_at = $2,
+         updated_at     = $3
+       WHERE id = $4`,
+      [chunkCount, now, now, kbId],
+    );
 
     console.log(`[DocumentIndexer] Indexed "${filename}" → ${chunkCount} chunks`);
     return { docId, filename, chunkCount, status: 'indexed' };
@@ -142,8 +141,7 @@ async function indexDocumentContent(
 
     // Mark document as failed in DB
     try {
-      const db = getDb();
-      db.prepare(`UPDATE rag_documents SET status = 'failed' WHERE id = ?`).run(docId);
+      await execute(`UPDATE rag_documents SET status = 'failed' WHERE id = $1`, [docId]);
     } catch {
       // best-effort
     }
@@ -192,7 +190,6 @@ async function indexCodebase(options: CodebaseIndexOptions): Promise<CodebaseInd
     chunkOverlap,
   } = options;
 
-  const db = getDb();
   const now = new Date().toISOString();
 
   console.log(`[DocumentIndexer] Starting codebase index for KB ${kbId} at path: ${projectPath}`);
@@ -249,10 +246,11 @@ async function indexCodebase(options: CodebaseIndexOptions): Promise<CodebaseInd
     const contentPreview = content.slice(0, 500);
 
     try {
-      db.prepare(`
-        INSERT INTO rag_documents (id, kb_id, name, source, content_preview, chunk_count, size_bytes, status, metadata, created_at)
-        VALUES (?, ?, ?, ?, ?, 0, ?, 'pending', '{}', ?)
-      `).run(docId, kbId, filePath, filePath, contentPreview, sizeBytes, now);
+      await execute(
+        `INSERT INTO rag_documents (id, kb_id, name, source, content_preview, chunk_count, size_bytes, status, metadata, created_at)
+         VALUES ($1, $2, $3, $4, $5, 0, $6, 'pending', '{}', $7)`,
+        [docId, kbId, filePath, filePath, contentPreview, sizeBytes, now],
+      );
     } catch (err: any) {
       summary.skippedFiles++;
       summary.errors.push(`DB insert error for ${filePath}: ${err?.message ?? 'unknown'}`);
@@ -293,8 +291,6 @@ async function reindexChanged(
   kbId: string,
   sinceCommit?: string,
 ): Promise<ReindexSummary> {
-  const db = getDb();
-
   console.log(`[DocumentIndexer] Starting incremental re-index for KB ${kbId}`);
 
   // Collect changed file paths
@@ -337,9 +333,10 @@ async function reindexChanged(
 
   for (const filePath of changedPaths) {
     // Find existing document record for this file
-    const existing = db
-      .prepare('SELECT id, chunk_count FROM rag_documents WHERE kb_id = ? AND source = ?')
-      .get(kbId, filePath) as { id: string; chunk_count: number } | undefined;
+    const existing = await queryOne<{ id: string; chunk_count: number }>(
+      'SELECT id, chunk_count FROM rag_documents WHERE kb_id = $1 AND source = $2',
+      [kbId, filePath],
+    );
 
     if (existing) {
       // Delete old embeddings from vector store
@@ -350,17 +347,18 @@ async function reindexChanged(
       }
 
       // Update KB counters to remove old chunks
-      db.prepare(`
-        UPDATE rag_knowledge_bases
-        SET
-          document_count = MAX(0, document_count - 1),
-          total_chunks   = MAX(0, total_chunks - ?),
-          updated_at     = ?
-        WHERE id = ?
-      `).run(existing.chunk_count, now, kbId);
+      await execute(
+        `UPDATE rag_knowledge_bases
+         SET
+           document_count = GREATEST(0, document_count - 1),
+           total_chunks   = GREATEST(0, total_chunks - $1),
+           updated_at     = $2
+         WHERE id = $3`,
+        [existing.chunk_count, now, kbId],
+      );
 
       // Remove old document record
-      db.prepare('DELETE FROM rag_documents WHERE id = ?').run(existing.id);
+      await execute('DELETE FROM rag_documents WHERE id = $1', [existing.id]);
     }
 
     // Read updated file content
@@ -378,10 +376,11 @@ async function reindexChanged(
     const contentPreview = content.slice(0, 500);
 
     try {
-      db.prepare(`
-        INSERT INTO rag_documents (id, kb_id, name, source, content_preview, chunk_count, size_bytes, status, metadata, created_at)
-        VALUES (?, ?, ?, ?, ?, 0, ?, 'pending', '{}', ?)
-      `).run(docId, kbId, filePath, filePath, contentPreview, sizeBytes, now);
+      await execute(
+        `INSERT INTO rag_documents (id, kb_id, name, source, content_preview, chunk_count, size_bytes, status, metadata, created_at)
+         VALUES ($1, $2, $3, $4, $5, 0, $6, 'pending', '{}', $7)`,
+        [docId, kbId, filePath, filePath, contentPreview, sizeBytes, now],
+      );
     } catch (err: any) {
       console.error(`[DocumentIndexer] DB insert error for ${filePath}: ${err?.message}`);
       continue;
@@ -415,14 +414,13 @@ async function autoIndexProject(
   projectPath: string,
   projectName: string,
 ): Promise<string> {
-  const db = getDb();
   const kbId = randomUUID();
   const now = new Date().toISOString();
 
   console.log(`[DocumentIndexer] Auto-indexing project "${projectName}" (${projectId})`);
 
-  // Ensure RAG tables exist (they are created lazily in observability-routes.ts)
-  db.exec(`
+  // Ensure RAG tables exist (idempotent)
+  await execute(`
     CREATE TABLE IF NOT EXISTS rag_knowledge_bases (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -437,8 +435,10 @@ async function autoIndexProject(
       last_indexed_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    );
+    )
+  `);
 
+  await execute(`
     CREATE TABLE IF NOT EXISTS rag_documents (
       id TEXT PRIMARY KEY,
       kb_id TEXT NOT NULL REFERENCES rag_knowledge_bases(id) ON DELETE CASCADE,
@@ -450,21 +450,22 @@ async function autoIndexProject(
       status TEXT NOT NULL DEFAULT 'pending',
       metadata TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_rag_docs_kb ON rag_documents(kb_id);
+    )
   `);
 
+  await execute(`CREATE INDEX IF NOT EXISTS idx_rag_docs_kb ON rag_documents(kb_id)`);
+
   // Create the knowledge base record
-  db.prepare(`
-    INSERT INTO rag_knowledge_bases (id, name, description, type, embedding_model, chunk_size, chunk_overlap, status, document_count, total_chunks, last_indexed_at, created_at, updated_at)
-    VALUES (?, ?, ?, 'code', 'text-embedding-3-small', 512, 50, 'active', 0, 0, NULL, ?, ?)
-  `).run(
-    kbId,
-    `${projectName} — Codebase`,
-    `Auto-indexed codebase for project: ${projectName} (${projectId})`,
-    now,
-    now,
+  await execute(
+    `INSERT INTO rag_knowledge_bases (id, name, description, type, embedding_model, chunk_size, chunk_overlap, status, document_count, total_chunks, last_indexed_at, created_at, updated_at)
+     VALUES ($1, $2, $3, 'code', 'text-embedding-3-small', 512, 50, 'active', 0, 0, NULL, $4, $5)`,
+    [
+      kbId,
+      `${projectName} — Codebase`,
+      `Auto-indexed codebase for project: ${projectName} (${projectId})`,
+      now,
+      now,
+    ],
   );
 
   // Index the codebase
