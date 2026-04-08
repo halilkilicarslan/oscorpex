@@ -250,23 +250,23 @@ function migrate(db: Database.Database): void {
     db.exec("ALTER TABLE agent_configs ADD COLUMN gender TEXT NOT NULL DEFAULT 'male'");
   }
 
-  // Data migration: Update preset agents with avatar URLs (for existing DBs with emoji avatars)
-  const AVATAR_MAP: Record<string, { avatar: string; gender: string }> = {
-    pm:       { avatar: 'https://untitledui.com/images/avatars/koray-okumus', gender: 'male' },
-    architect:{ avatar: 'https://untitledui.com/images/avatars/zahir-mays', gender: 'male' },
-    frontend: { avatar: 'https://untitledui.com/images/avatars/sophia-perez', gender: 'female' },
-    backend:  { avatar: 'https://untitledui.com/images/avatars/drew-cano', gender: 'male' },
-    qa:       { avatar: 'https://untitledui.com/images/avatars/levi-rocha', gender: 'male' },
-    reviewer: { avatar: 'https://untitledui.com/images/avatars/ethan-campbell', gender: 'male' },
-    coder:    { avatar: 'https://untitledui.com/images/avatars/orlando-diggs', gender: 'male' },
-    designer: { avatar: 'https://untitledui.com/images/avatars/amelie-laurent', gender: 'female' },
-    devops:   { avatar: 'https://untitledui.com/images/avatars/joshua-wilson', gender: 'male' },
+  // Data migration: Update preset agents with name, avatar, gender (for existing DBs)
+  const PRESET_MAP: Record<string, { name: string; avatar: string; gender: string }> = {
+    pm:       { name: 'Kerem',    avatar: 'https://untitledui.com/images/avatars/koray-okumus', gender: 'male' },
+    architect:{ name: 'Atlas',    avatar: 'https://untitledui.com/images/avatars/zahir-mays', gender: 'male' },
+    frontend: { name: 'Nova',     avatar: 'https://untitledui.com/images/avatars/sophia-perez', gender: 'female' },
+    backend:  { name: 'Forge',    avatar: 'https://untitledui.com/images/avatars/drew-cano', gender: 'male' },
+    qa:       { name: 'Shield',   avatar: 'https://untitledui.com/images/avatars/levi-rocha', gender: 'male' },
+    reviewer: { name: 'Sentinel', avatar: 'https://untitledui.com/images/avatars/ethan-campbell', gender: 'male' },
+    coder:    { name: 'Pixel',    avatar: 'https://untitledui.com/images/avatars/orlando-diggs', gender: 'male' },
+    designer: { name: 'Iris',     avatar: 'https://untitledui.com/images/avatars/amelie-laurent', gender: 'female' },
+    devops:   { name: 'Vanguard', avatar: 'https://untitledui.com/images/avatars/joshua-wilson', gender: 'male' },
   };
-  const updateConfigAvatar = db.prepare('UPDATE agent_configs SET avatar = ?, gender = ? WHERE role = ? AND is_preset = 1 AND avatar NOT LIKE \'https://%\'');
-  const updateProjectAvatar = db.prepare('UPDATE project_agents SET avatar = ?, gender = ? WHERE source_agent_id IN (SELECT id FROM agent_configs WHERE role = ? AND is_preset = 1) AND avatar NOT LIKE \'https://%\'');
-  for (const [role, data] of Object.entries(AVATAR_MAP)) {
-    updateConfigAvatar.run(data.avatar, data.gender, role);
-    updateProjectAvatar.run(data.avatar, data.gender, role);
+  const updateConfig = db.prepare('UPDATE agent_configs SET name = ?, avatar = ?, gender = ? WHERE role = ? AND is_preset = 1');
+  const updateProjectAgent = db.prepare('UPDATE project_agents SET name = ?, avatar = ?, gender = ? WHERE source_agent_id IN (SELECT id FROM agent_configs WHERE role = ? AND is_preset = 1)');
+  for (const [role, data] of Object.entries(PRESET_MAP)) {
+    updateConfig.run(data.name, data.avatar, data.gender, role);
+    updateProjectAgent.run(data.name, data.avatar, data.gender, role);
   }
 
   // tasks tablosuna error kolonu ekle
