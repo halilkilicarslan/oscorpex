@@ -1891,3 +1891,645 @@ observabilityRoutes.delete('/feedbacks/:id', (c) => {
   db.prepare('DELETE FROM feedbacks WHERE id = ?').run(id);
   return c.json({ success: true });
 });
+
+// ---------------------------------------------------------------------------
+// Triggers
+// ---------------------------------------------------------------------------
+
+interface TriggerRow {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  config: string;
+  action: string;
+  enabled: number;
+  last_fired_at: string | null;
+  fire_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TriggerLogRow {
+  id: string;
+  trigger_id: string;
+  status: string;
+  input: string | null;
+  output: string | null;
+  duration_ms: number | null;
+  fired_at: string;
+}
+
+function initTriggerTables() {
+  const db = getDb();
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS triggers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      type TEXT NOT NULL,
+      config TEXT NOT NULL,
+      action TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_fired_at TEXT,
+      fire_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS trigger_logs (
+      id TEXT PRIMARY KEY,
+      trigger_id TEXT NOT NULL REFERENCES triggers(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      input TEXT,
+      output TEXT,
+      duration_ms INTEGER,
+      fired_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_trigger_logs_trigger ON trigger_logs(trigger_id);
+  `);
+}
+
+function parseTriggerRow(row: TriggerRow) {
+  return {
+    ...row,
+    enabled: row.enabled === 1,
+    config: (() => { try { return JSON.parse(row.config); } catch { return {}; } })(),
+    action: (() => { try { return JSON.parse(row.action); } catch { return {}; } })(),
+  };
+}
+
+function parseTriggerLogRow(row: TriggerLogRow) {
+  return {
+    ...row,
+    input: row.input ? (() => { try { return JSON.parse(row.input!); } catch { return row.input; } })() : null,
+    output: row.output ? (() => { try { return JSON.parse(row.output!); } catch { return row.output; } })() : null,
+  };
+}
+
+// GET /api/observability/triggers/stats — must be registered before /:id
+observabilityRoutes.get('/triggers/stats', (c) => {
+  initTriggerTables();
+  const db = getDb();
+
+  const total = (db.prepare('SELECT COUNT(*) as n FROM triggers').get() as { n: number }).n;
+  const active = (db.prepare('SELECT COUNT(*) as n FROM triggers WHERE enabled = 1').get() as { n: number }).n;
+  const totalFires = (db.prepare('SELECT COALESCE(SUM(fire_count), 0) as n FROM triggers').get() as { n: number }).n;
+
+  const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const recentFires24h = (db.prepare(
+    `SELECT COUNT(*) as n FROM trigger_logs WHERE fired_at >= ?`
+  ).get(recentCutoff) as { n: number }).n;
+
+  const byTypeRows = db.prepare(
+    `SELECT type, COUNT(*) as cnt FROM triggers GROUP BY type`
+  ).all() as Array<{ type: string; cnt: number }>;
+  const byType: Record<string, number> = { webhook: 0, schedule: 0, event: 0, condition: 0 };
+  for (const r of byTypeRows) byType[r.type] = r.cnt;
+
+  return c.json({ total, active, totalFires, recentFires24h, byType });
+});
+
+// GET /api/observability/triggers
+observabilityRoutes.get('/triggers', (c) => {
+  initTriggerTables();
+  const db = getDb();
+  const rows = db.prepare('SELECT * FROM triggers ORDER BY created_at DESC').all() as TriggerRow[];
+  return c.json({ triggers: rows.map(parseTriggerRow) });
+});
+
+// POST /api/observability/triggers
+observabilityRoutes.post('/triggers', async (c) => {
+  initTriggerTables();
+  const db = getDb();
+  const body = await c.req.json() as {
+    name: string;
+    description?: string;
+    type: string;
+    config: Record<string, unknown>;
+    action: Record<string, unknown>;
+    enabled?: boolean;
+  };
+
+  if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+  if (!body.type) return c.json({ error: 'type is required' }, 400);
+  if (!body.config) return c.json({ error: 'config is required' }, 400);
+  if (!body.action) return c.json({ error: 'action is required' }, 400);
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO triggers (id, name, description, type, config, action, enabled, last_fired_at, fire_count, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?)
+  `).run(
+    id,
+    body.name.trim(),
+    body.description?.trim() ?? '',
+    body.type,
+    JSON.stringify(body.config),
+    JSON.stringify(body.action),
+    body.enabled !== false ? 1 : 0,
+    now,
+    now,
+  );
+
+  const row = db.prepare('SELECT * FROM triggers WHERE id = ?').get(id) as TriggerRow;
+  return c.json(parseTriggerRow(row), 201);
+});
+
+// GET /api/observability/triggers/:id
+observabilityRoutes.get('/triggers/:id', (c) => {
+  initTriggerTables();
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM triggers WHERE id = ?').get(c.req.param('id')) as TriggerRow | undefined;
+  if (!row) return c.json({ error: 'Not found' }, 404);
+
+  const recentLogs = db.prepare(
+    'SELECT * FROM trigger_logs WHERE trigger_id = ? ORDER BY fired_at DESC LIMIT 10'
+  ).all(row.id) as TriggerLogRow[];
+
+  return c.json({ ...parseTriggerRow(row), recentLogs: recentLogs.map(parseTriggerLogRow) });
+});
+
+// PUT /api/observability/triggers/:id
+observabilityRoutes.put('/triggers/:id', async (c) => {
+  initTriggerTables();
+  const db = getDb();
+  const id = c.req.param('id');
+  const existing = db.prepare('SELECT id FROM triggers WHERE id = ?').get(id);
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+
+  const body = await c.req.json() as {
+    name?: string;
+    description?: string;
+    type?: string;
+    config?: Record<string, unknown>;
+    action?: Record<string, unknown>;
+    enabled?: boolean;
+  };
+
+  const now = new Date().toISOString();
+  const fields: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (body.name !== undefined) { fields.push('name = ?'); params.push(body.name.trim()); }
+  if (body.description !== undefined) { fields.push('description = ?'); params.push(body.description.trim()); }
+  if (body.type !== undefined) { fields.push('type = ?'); params.push(body.type); }
+  if (body.config !== undefined) { fields.push('config = ?'); params.push(JSON.stringify(body.config)); }
+  if (body.action !== undefined) { fields.push('action = ?'); params.push(JSON.stringify(body.action)); }
+  if (body.enabled !== undefined) { fields.push('enabled = ?'); params.push(body.enabled ? 1 : 0); }
+
+  fields.push('updated_at = ?');
+  params.push(now);
+  params.push(id);
+
+  db.prepare(`UPDATE triggers SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+
+  const row = db.prepare('SELECT * FROM triggers WHERE id = ?').get(id) as TriggerRow;
+  return c.json(parseTriggerRow(row));
+});
+
+// DELETE /api/observability/triggers/:id
+observabilityRoutes.delete('/triggers/:id', (c) => {
+  initTriggerTables();
+  const db = getDb();
+  const id = c.req.param('id');
+  if (!db.prepare('SELECT id FROM triggers WHERE id = ?').get(id)) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  db.prepare('DELETE FROM trigger_logs WHERE trigger_id = ?').run(id);
+  db.prepare('DELETE FROM triggers WHERE id = ?').run(id);
+  return c.json({ success: true });
+});
+
+// PUT /api/observability/triggers/:id/toggle
+observabilityRoutes.put('/triggers/:id/toggle', (c) => {
+  initTriggerTables();
+  const db = getDb();
+  const id = c.req.param('id');
+  const row = db.prepare('SELECT id, enabled FROM triggers WHERE id = ?').get(id) as { id: string; enabled: number } | undefined;
+  if (!row) return c.json({ error: 'Not found' }, 404);
+
+  const newEnabled = row.enabled === 1 ? 0 : 1;
+  const now = new Date().toISOString();
+  db.prepare('UPDATE triggers SET enabled = ?, updated_at = ? WHERE id = ?').run(newEnabled, now, id);
+
+  const updated = db.prepare('SELECT * FROM triggers WHERE id = ?').get(id) as TriggerRow;
+  return c.json(parseTriggerRow(updated));
+});
+
+// POST /api/observability/triggers/:id/test
+observabilityRoutes.post('/triggers/:id/test', (c) => {
+  initTriggerTables();
+  const db = getDb();
+  const id = c.req.param('id');
+  const trigger = db.prepare('SELECT * FROM triggers WHERE id = ?').get(id) as TriggerRow | undefined;
+  if (!trigger) return c.json({ error: 'Not found' }, 404);
+
+  const logId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const durationMs = Math.floor(Math.random() * 50) + 10;
+
+  db.prepare(`
+    INSERT INTO trigger_logs (id, trigger_id, status, input, output, duration_ms, fired_at)
+    VALUES (?, ?, 'success', ?, ?, ?, ?)
+  `).run(
+    logId,
+    id,
+    JSON.stringify({ source: 'manual_test' }),
+    JSON.stringify({ result: 'Test fired successfully' }),
+    durationMs,
+    now,
+  );
+
+  db.prepare('UPDATE triggers SET fire_count = fire_count + 1, last_fired_at = ?, updated_at = ? WHERE id = ?').run(now, now, id);
+
+  const logRow = db.prepare('SELECT * FROM trigger_logs WHERE id = ?').get(logId) as TriggerLogRow;
+  return c.json({ success: true, log: parseTriggerLogRow(logRow) });
+});
+
+// GET /api/observability/triggers/:id/logs
+observabilityRoutes.get('/triggers/:id/logs', (c) => {
+  initTriggerTables();
+  const db = getDb();
+  const id = c.req.param('id');
+  if (!db.prepare('SELECT id FROM triggers WHERE id = ?').get(id)) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 200);
+  const offset = parseInt(c.req.query('offset') ?? '0', 10);
+  const status = c.req.query('status');
+
+  const conditions = ['trigger_id = ?'];
+  const params: (string | number)[] = [id];
+  if (status) { conditions.push('status = ?'); params.push(status); }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
+  const total = (db.prepare(`SELECT COUNT(*) as n FROM trigger_logs ${where}`).get(...params) as { n: number }).n;
+  const rows = db.prepare(
+    `SELECT * FROM trigger_logs ${where} ORDER BY fired_at DESC LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset) as TriggerLogRow[];
+
+  return c.json({ logs: rows.map(parseTriggerLogRow), total, limit, offset });
+});
+
+// ---------------------------------------------------------------------------
+// RAG (Retrieval Augmented Generation) Routes
+// ---------------------------------------------------------------------------
+
+interface RagKnowledgeBase {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  embedding_model: string;
+  chunk_size: number;
+  chunk_overlap: number;
+  status: string;
+  document_count: number;
+  total_chunks: number;
+  last_indexed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RagDocument {
+  id: string;
+  kb_id: string;
+  name: string;
+  source: string;
+  content_preview: string;
+  chunk_count: number;
+  size_bytes: number;
+  status: string;
+  metadata: string;
+  created_at: string;
+}
+
+interface RagQuery {
+  id: string;
+  kb_id: string | null;
+  query: string;
+  results_count: number;
+  latency_ms: number | null;
+  agent_id: string | null;
+  created_at: string;
+}
+
+function initRagTables() {
+  const db = getDb();
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rag_knowledge_bases (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      type TEXT NOT NULL DEFAULT 'text',
+      embedding_model TEXT NOT NULL DEFAULT 'text-embedding-3-small',
+      chunk_size INTEGER NOT NULL DEFAULT 512,
+      chunk_overlap INTEGER NOT NULL DEFAULT 50,
+      status TEXT NOT NULL DEFAULT 'active',
+      document_count INTEGER NOT NULL DEFAULT 0,
+      total_chunks INTEGER NOT NULL DEFAULT 0,
+      last_indexed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS rag_documents (
+      id TEXT PRIMARY KEY,
+      kb_id TEXT NOT NULL REFERENCES rag_knowledge_bases(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      source TEXT DEFAULT '',
+      content_preview TEXT DEFAULT '',
+      chunk_count INTEGER NOT NULL DEFAULT 0,
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending',
+      metadata TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rag_docs_kb ON rag_documents(kb_id);
+
+    CREATE TABLE IF NOT EXISTS rag_queries (
+      id TEXT PRIMARY KEY,
+      kb_id TEXT,
+      query TEXT NOT NULL,
+      results_count INTEGER NOT NULL DEFAULT 0,
+      latency_ms INTEGER,
+      agent_id TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rag_queries_kb ON rag_queries(kb_id);
+  `);
+}
+
+// GET /api/observability/rag/knowledge-bases/stats — MUST be before /:id
+observabilityRoutes.get('/rag/knowledge-bases/stats', (c) => {
+  initRagTables();
+  const db = getDb();
+
+  const totalKBs = (db.prepare('SELECT COUNT(*) as n FROM rag_knowledge_bases').get() as { n: number }).n;
+  const totalDocuments = (db.prepare('SELECT COALESCE(SUM(document_count),0) as n FROM rag_knowledge_bases').get() as { n: number }).n;
+  const totalChunks = (db.prepare('SELECT COALESCE(SUM(total_chunks),0) as n FROM rag_knowledge_bases').get() as { n: number }).n;
+  const totalQueries = (db.prepare('SELECT COUNT(*) as n FROM rag_queries').get() as { n: number }).n;
+
+  const latencyRow = db.prepare('SELECT AVG(latency_ms) as avg FROM rag_queries WHERE latency_ms IS NOT NULL').get() as { avg: number | null };
+  const avgLatency = latencyRow.avg ? Math.round(latencyRow.avg) : 0;
+
+  const typeRows = db.prepare('SELECT type, COUNT(*) as cnt FROM rag_knowledge_bases GROUP BY type').all() as Array<{ type: string; cnt: number }>;
+  const byType: Record<string, number> = { text: 0, pdf: 0, web: 0, code: 0, csv: 0 };
+  for (const row of typeRows) {
+    byType[row.type] = row.cnt;
+  }
+
+  return c.json({ totalKBs, totalDocuments, totalChunks, totalQueries, avgLatency, byType });
+});
+
+// GET /api/observability/rag/knowledge-bases
+observabilityRoutes.get('/rag/knowledge-bases', (c) => {
+  initRagTables();
+  const db = getDb();
+  const rows = db.prepare('SELECT * FROM rag_knowledge_bases ORDER BY created_at DESC').all() as RagKnowledgeBase[];
+  return c.json({ knowledgeBases: rows });
+});
+
+// POST /api/observability/rag/knowledge-bases
+observabilityRoutes.post('/rag/knowledge-bases', async (c) => {
+  initRagTables();
+  const db = getDb();
+  const body = await c.req.json() as {
+    name: string;
+    description?: string;
+    type?: string;
+    embedding_model?: string;
+    chunk_size?: number;
+    chunk_overlap?: number;
+  };
+
+  if (!body.name) return c.json({ error: 'name is required' }, 400);
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO rag_knowledge_bases (id, name, description, type, embedding_model, chunk_size, chunk_overlap, status, document_count, total_chunks, last_indexed_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, 0, NULL, ?, ?)
+  `).run(
+    id,
+    body.name,
+    body.description ?? '',
+    body.type ?? 'text',
+    body.embedding_model ?? 'text-embedding-3-small',
+    body.chunk_size ?? 512,
+    body.chunk_overlap ?? 50,
+    now,
+    now,
+  );
+
+  const kb = db.prepare('SELECT * FROM rag_knowledge_bases WHERE id = ?').get(id) as RagKnowledgeBase;
+  return c.json(kb, 201);
+});
+
+// GET /api/observability/rag/knowledge-bases/:id
+observabilityRoutes.get('/rag/knowledge-bases/:id', (c) => {
+  initRagTables();
+  const db = getDb();
+  const id = c.req.param('id');
+  const kb = db.prepare('SELECT * FROM rag_knowledge_bases WHERE id = ?').get(id) as RagKnowledgeBase | undefined;
+  if (!kb) return c.json({ error: 'Not found' }, 404);
+
+  const documents = db.prepare('SELECT * FROM rag_documents WHERE kb_id = ? ORDER BY created_at DESC').all(id) as RagDocument[];
+  return c.json({ ...kb, documents });
+});
+
+// PUT /api/observability/rag/knowledge-bases/:id
+observabilityRoutes.put('/rag/knowledge-bases/:id', async (c) => {
+  initRagTables();
+  const db = getDb();
+  const id = c.req.param('id');
+  const existing = db.prepare('SELECT * FROM rag_knowledge_bases WHERE id = ?').get(id) as RagKnowledgeBase | undefined;
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+
+  const body = await c.req.json() as Partial<RagKnowledgeBase>;
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    UPDATE rag_knowledge_bases SET
+      name = ?,
+      description = ?,
+      type = ?,
+      embedding_model = ?,
+      chunk_size = ?,
+      chunk_overlap = ?,
+      status = ?,
+      updated_at = ?
+    WHERE id = ?
+  `).run(
+    body.name ?? existing.name,
+    body.description ?? existing.description,
+    body.type ?? existing.type,
+    body.embedding_model ?? existing.embedding_model,
+    body.chunk_size ?? existing.chunk_size,
+    body.chunk_overlap ?? existing.chunk_overlap,
+    body.status ?? existing.status,
+    now,
+    id,
+  );
+
+  const updated = db.prepare('SELECT * FROM rag_knowledge_bases WHERE id = ?').get(id) as RagKnowledgeBase;
+  return c.json(updated);
+});
+
+// DELETE /api/observability/rag/knowledge-bases/:id
+observabilityRoutes.delete('/rag/knowledge-bases/:id', (c) => {
+  initRagTables();
+  const db = getDb();
+  const id = c.req.param('id');
+  if (!db.prepare('SELECT id FROM rag_knowledge_bases WHERE id = ?').get(id)) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  db.prepare('DELETE FROM rag_documents WHERE kb_id = ?').run(id);
+  db.prepare('DELETE FROM rag_knowledge_bases WHERE id = ?').run(id);
+  return c.json({ success: true });
+});
+
+// POST /api/observability/rag/knowledge-bases/:id/documents
+observabilityRoutes.post('/rag/knowledge-bases/:id/documents', async (c) => {
+  initRagTables();
+  const db = getDb();
+  const kbId = c.req.param('id');
+  const kb = db.prepare('SELECT * FROM rag_knowledge_bases WHERE id = ?').get(kbId) as RagKnowledgeBase | undefined;
+  if (!kb) return c.json({ error: 'Knowledge base not found' }, 404);
+
+  const body = await c.req.json() as {
+    name: string;
+    source?: string;
+    content?: string;
+    chunk_count?: number;
+    size_bytes?: number;
+    metadata?: Record<string, unknown>;
+  };
+
+  if (!body.name) return c.json({ error: 'name is required' }, 400);
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const contentPreview = body.content ? body.content.slice(0, 500) : '';
+  const chunkCount = body.chunk_count ?? 0;
+  const sizeBytes = body.size_bytes ?? (body.content ? new TextEncoder().encode(body.content).length : 0);
+
+  db.prepare(`
+    INSERT INTO rag_documents (id, kb_id, name, source, content_preview, chunk_count, size_bytes, status, metadata, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'indexed', ?, ?)
+  `).run(
+    id,
+    kbId,
+    body.name,
+    body.source ?? '',
+    contentPreview,
+    chunkCount,
+    sizeBytes,
+    JSON.stringify(body.metadata ?? {}),
+    now,
+  );
+
+  db.prepare(`
+    UPDATE rag_knowledge_bases SET
+      document_count = document_count + 1,
+      total_chunks = total_chunks + ?,
+      last_indexed_at = ?,
+      updated_at = ?
+    WHERE id = ?
+  `).run(chunkCount, now, now, kbId);
+
+  const doc = db.prepare('SELECT * FROM rag_documents WHERE id = ?').get(id) as RagDocument;
+  return c.json(doc, 201);
+});
+
+// DELETE /api/observability/rag/knowledge-bases/:id/documents/:docId
+observabilityRoutes.delete('/rag/knowledge-bases/:id/documents/:docId', (c) => {
+  initRagTables();
+  const db = getDb();
+  const kbId = c.req.param('id');
+  const docId = c.req.param('docId');
+
+  const doc = db.prepare('SELECT * FROM rag_documents WHERE id = ? AND kb_id = ?').get(docId, kbId) as RagDocument | undefined;
+  if (!doc) return c.json({ error: 'Not found' }, 404);
+
+  db.prepare('DELETE FROM rag_documents WHERE id = ?').run(docId);
+  db.prepare(`
+    UPDATE rag_knowledge_bases SET
+      document_count = MAX(0, document_count - 1),
+      total_chunks = MAX(0, total_chunks - ?),
+      updated_at = ?
+    WHERE id = ?
+  `).run(doc.chunk_count, new Date().toISOString(), kbId);
+
+  return c.json({ success: true });
+});
+
+// GET /api/observability/rag/queries
+observabilityRoutes.get('/rag/queries', (c) => {
+  initRagTables();
+  const db = getDb();
+
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 200);
+  const offset = parseInt(c.req.query('offset') ?? '0', 10);
+  const kbId = c.req.query('kb_id');
+
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (kbId) { conditions.push('q.kb_id = ?'); params.push(kbId); }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const total = (db.prepare(`SELECT COUNT(*) as n FROM rag_queries q ${where}`).get(...params) as { n: number }).n;
+
+  const rows = db.prepare(`
+    SELECT q.*, kb.name as kb_name
+    FROM rag_queries q
+    LEFT JOIN rag_knowledge_bases kb ON kb.id = q.kb_id
+    ${where}
+    ORDER BY q.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset) as Array<RagQuery & { kb_name: string | null }>;
+
+  return c.json({ queries: rows, total, limit, offset });
+});
+
+// POST /api/observability/rag/queries
+observabilityRoutes.post('/rag/queries', async (c) => {
+  initRagTables();
+  const db = getDb();
+  const body = await c.req.json() as {
+    kb_id?: string;
+    query: string;
+    results_count?: number;
+    latency_ms?: number;
+    agent_id?: string;
+  };
+
+  if (!body.query) return c.json({ error: 'query is required' }, 400);
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO rag_queries (id, kb_id, query, results_count, latency_ms, agent_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    body.kb_id ?? null,
+    body.query,
+    body.results_count ?? 0,
+    body.latency_ms ?? null,
+    body.agent_id ?? null,
+    now,
+  );
+
+  const q = db.prepare('SELECT * FROM rag_queries WHERE id = ?').get(id) as RagQuery;
+  return c.json(q, 201);
+});

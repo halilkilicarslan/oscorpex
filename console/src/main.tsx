@@ -6,7 +6,6 @@ import Layout from './components/Layout';
 
 const DashboardWrapper = lazy(() => import('./pages/DashboardWrapper'));
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'));
-const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
 const TracesPage = lazy(() => import('./pages/TracesPage'));
 const MemoryPage = lazy(() => import('./pages/MemoryPage'));
 const StudioHomePage = lazy(() => import('./pages/studio/StudioHomePage'));
@@ -17,6 +16,8 @@ const LogsPage = lazy(() => import('./pages/LogsPage'));
 const PromptsPage = lazy(() => import('./pages/PromptsPage'));
 const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const FeedbacksPage = lazy(() => import('./pages/FeedbacksPage'));
+const TriggersPage = lazy(() => import('./pages/TriggersPage'));
+const RagPage = lazy(() => import('./pages/RagPage'));
 
 function LoadingSpinner() {
   return (
@@ -46,9 +47,9 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/feedbacks" element={<FeedbacksPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/memory" element={<MemoryPage />} />
-            <Route path="/rag" element={<PlaceholderPage title="RAG" description="Retrieval Augmented Generation" />} />
+            <Route path="/rag" element={<RagPage />} />
             <Route path="/prompts" element={<PromptsPage />} />
-            <Route path="/triggers" element={<PlaceholderPage title="Triggers" description="Event triggers and automation" />} />
+            <Route path="/triggers" element={<TriggersPage />} />
             <Route path="/studio" element={<StudioHomePage />} />
             <Route path="/studio/teams" element={<TeamBuilderPage />} />
             <Route path="/studio/providers" element={<ProvidersPage />} />
