@@ -2533,3 +2533,123 @@ observabilityRoutes.post('/rag/queries', async (c) => {
   const q = db.prepare('SELECT * FROM rag_queries WHERE id = ?').get(id) as RagQuery;
   return c.json(q, 201);
 });
+
+// ---------------------------------------------------------------------------
+// RAG — Codebase indexing & search routes
+// ---------------------------------------------------------------------------
+
+// POST /api/observability/rag/knowledge-bases/:id/index-codebase
+observabilityRoutes.post('/rag/knowledge-bases/:id/index-codebase', async (c) => {
+  initRagTables();
+  const db = getDb();
+  const kbId = c.req.param('id');
+
+  const kb = db.prepare('SELECT id FROM rag_knowledge_bases WHERE id = ?').get(kbId);
+  if (!kb) return c.json({ error: 'Knowledge base not found' }, 404);
+
+  const body = await c.req.json() as {
+    projectPath: string;
+    extensions?: string[];
+    excludeDirs?: string[];
+    maxFileSize?: number;
+    chunkSize?: number;
+    chunkOverlap?: number;
+  };
+
+  if (!body.projectPath) return c.json({ error: 'projectPath is required' }, 400);
+
+  const { documentIndexer } = await import('./studio/document-indexer.js');
+
+  try {
+    const result = await documentIndexer.indexCodebase({
+      projectPath: body.projectPath,
+      kbId,
+      extensions: body.extensions,
+      excludeDirs: body.excludeDirs,
+      maxFileSize: body.maxFileSize,
+      chunkSize: body.chunkSize,
+      chunkOverlap: body.chunkOverlap,
+    });
+
+    return c.json(result);
+  } catch (err: any) {
+    return c.json({ error: err?.message ?? 'Indexing failed' }, 500);
+  }
+});
+
+// POST /api/observability/rag/knowledge-bases/:id/reindex
+observabilityRoutes.post('/rag/knowledge-bases/:id/reindex', async (c) => {
+  initRagTables();
+  const db = getDb();
+  const kbId = c.req.param('id');
+
+  const kb = db.prepare('SELECT id FROM rag_knowledge_bases WHERE id = ?').get(kbId);
+  if (!kb) return c.json({ error: 'Knowledge base not found' }, 404);
+
+  const body = await c.req.json() as {
+    projectPath: string;
+    sinceCommit?: string;
+  };
+
+  if (!body.projectPath) return c.json({ error: 'projectPath is required' }, 400);
+
+  const { documentIndexer } = await import('./studio/document-indexer.js');
+
+  try {
+    const result = await documentIndexer.reindexChanged(
+      body.projectPath,
+      kbId,
+      body.sinceCommit,
+    );
+
+    return c.json(result);
+  } catch (err: any) {
+    return c.json({ error: err?.message ?? 'Re-index failed' }, 500);
+  }
+});
+
+// POST /api/observability/rag/search
+observabilityRoutes.post('/rag/search', async (c) => {
+  initRagTables();
+  const db = getDb();
+
+  const body = await c.req.json() as {
+    kbId: string;
+    query: string;
+    topK?: number;
+    model?: string;
+  };
+
+  if (!body.kbId) return c.json({ error: 'kbId is required' }, 400);
+  if (!body.query) return c.json({ error: 'query is required' }, 400);
+
+  const kb = db.prepare('SELECT id FROM rag_knowledge_bases WHERE id = ?').get(body.kbId);
+  if (!kb) return c.json({ error: 'Knowledge base not found' }, 404);
+
+  const { vectorStore } = await import('./studio/vector-store.js');
+
+  const startMs = Date.now();
+  let results: unknown[] = [];
+
+  try {
+    results = await vectorStore.searchSimilar(body.kbId, body.query, body.topK, body.model);
+  } catch (err: any) {
+    return c.json({ error: err?.message ?? 'Search failed' }, 500);
+  }
+
+  const latencyMs = Date.now() - startMs;
+
+  // Log query to rag_queries table
+  try {
+    const queryId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO rag_queries (id, kb_id, query, results_count, latency_ms, agent_id, created_at)
+      VALUES (?, ?, ?, ?, ?, NULL, ?)
+    `).run(queryId, body.kbId, body.query, results.length, latencyMs, now);
+  } catch {
+    // best-effort logging — do not fail the response
+  }
+
+  return c.json({ results, latencyMs });
+});
