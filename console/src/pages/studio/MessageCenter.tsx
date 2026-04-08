@@ -30,6 +30,7 @@ import {
   type AgentMessageType,
   type SendMessageData,
 } from '../../lib/studio-api';
+import AgentAvatarImg from '../../components/AgentAvatar';
 
 // ---- Sabitler -----------------------------------------------------------
 
@@ -129,7 +130,7 @@ function TypeBadge({ type }: { type: AgentMessageType }) {
   );
 }
 
-// Ajan avatarı (emoji + renkli sol kenar)
+// Ajan avatarı (profil fotoğrafı + renkli sol kenar)
 function AgentAvatar({
   agents,
   agentId,
@@ -139,13 +140,16 @@ function AgentAvatar({
   agentId: string;
   size?: 'sm' | 'md';
 }) {
-  const sz = size === 'sm' ? 'w-7 h-7 text-sm' : 'w-9 h-9 text-base';
+  const agent = agents.find((a) => a.id === agentId);
+  const avatar = agent?.avatar ?? '?';
+  const name = agent?.name ?? agentId;
+  const color = agent?.color ?? '#525252';
   return (
     <div
-      className={`${sz} rounded-lg bg-[#1a1a1a] flex items-center justify-center shrink-0 border border-[#262626]`}
-      style={{ borderLeftColor: agentColor(agents, agentId), borderLeftWidth: 2 }}
+      className="rounded-lg shrink-0 border border-[#262626]"
+      style={{ borderLeftColor: color, borderLeftWidth: 2 }}
     >
-      {agentAvatar(agents, agentId)}
+      <AgentAvatarImg avatar={avatar} name={name} size={size === 'sm' ? 'sm' : 'md'} />
     </div>
   );
 }
@@ -444,7 +448,7 @@ function ComposeBar({
               <option value="">Kimden...</option>
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.avatar} {a.name}
+                  {a.name}
                 </option>
               ))}
             </select>
@@ -458,7 +462,7 @@ function ComposeBar({
               <option value="">Kime...</option>
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.avatar} {a.name}
+                  {a.name}
                 </option>
               ))}
             </select>
@@ -815,7 +819,7 @@ export default function MessageCenter({ projectId }: { projectId: string }) {
               >
                 {/* Ajan avatarı ve renk göstergesi */}
                 <div className="relative shrink-0">
-                  <span className="text-sm">{agent.avatar}</span>
+                  <AgentAvatarImg avatar={agent.avatar} name={agent.name} size="xs" />
                   {count > 0 && (
                     <span
                       className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#22c55e] text-[#0a0a0a] text-[8px] font-bold flex items-center justify-center"

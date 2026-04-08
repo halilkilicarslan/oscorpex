@@ -238,6 +238,17 @@ function migrate(db: Database.Database): void {
   if (!existingCols.includes('pipeline_order')) {
     db.exec("ALTER TABLE project_agents ADD COLUMN pipeline_order INTEGER NOT NULL DEFAULT 0");
   }
+  if (!existingCols.includes('gender')) {
+    db.exec("ALTER TABLE project_agents ADD COLUMN gender TEXT NOT NULL DEFAULT 'male'");
+  }
+
+  // agent_configs tablosuna gender kolonu ekle
+  const agentConfigCols = (db.prepare("PRAGMA table_info(agent_configs)").all() as Array<{ name: string }>).map(
+    (c) => c.name,
+  );
+  if (!agentConfigCols.includes('gender')) {
+    db.exec("ALTER TABLE agent_configs ADD COLUMN gender TEXT NOT NULL DEFAULT 'male'");
+  }
 
   // tasks tablosuna error kolonu ekle
   const taskCols = (db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>).map(
@@ -580,9 +591,9 @@ export function createAgentConfig(data: Omit<AgentConfig, 'id'>): AgentConfig {
   const db = getDb();
   const id = randomUUID();
   db.prepare(`
-    INSERT INTO agent_configs (id, name, role, avatar, personality, model, cli_tool, skills, system_prompt, is_preset)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, data.name, data.role, data.avatar, data.personality, data.model, data.cliTool, JSON.stringify(data.skills), data.systemPrompt, data.isPreset ? 1 : 0);
+    INSERT INTO agent_configs (id, name, role, avatar, gender, personality, model, cli_tool, skills, system_prompt, is_preset)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, data.name, data.role, data.avatar, data.gender ?? 'male', data.personality, data.model, data.cliTool, JSON.stringify(data.skills), data.systemPrompt, data.isPreset ? 1 : 0);
   return { id, ...data };
 }
 
@@ -610,6 +621,7 @@ export function updateAgentConfig(id: string, data: Partial<Omit<AgentConfig, 'i
   if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
   if (data.role !== undefined) { fields.push('role = ?'); values.push(data.role); }
   if (data.avatar !== undefined) { fields.push('avatar = ?'); values.push(data.avatar); }
+  if (data.gender !== undefined) { fields.push('gender = ?'); values.push(data.gender); }
   if (data.personality !== undefined) { fields.push('personality = ?'); values.push(data.personality); }
   if (data.model !== undefined) { fields.push('model = ?'); values.push(data.model); }
   if (data.cliTool !== undefined) { fields.push('cli_tool = ?'); values.push(data.cliTool); }
@@ -636,6 +648,7 @@ function rowToAgentConfig(row: any): AgentConfig {
     name: row.name,
     role: row.role as AgentRole,
     avatar: row.avatar,
+    gender: row.gender ?? 'male',
     personality: row.personality,
     model: row.model,
     cliTool: row.cli_tool as CLITool,
@@ -850,7 +863,8 @@ export function seedPresetAgents(): void {
     {
       name: 'Kerem',
       role: 'pm',
-      avatar: '📋',
+      avatar: 'https://untitledui.com/images/avatars/koray-okumus',
+      gender: 'male' as const,
       personality: 'Organized, detail-oriented, communicative',
       model: 'claude-sonnet-4-6',
       cliTool: 'none',
@@ -871,7 +885,8 @@ Identify dependencies between tasks accurately.`,
     {
       name: 'Atlas',
       role: 'architect',
-      avatar: '🏗️',
+      avatar: 'https://untitledui.com/images/avatars/zahir-mays',
+      gender: 'male' as const,
       personality: 'Analytical, systematic, thorough',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
@@ -888,7 +903,8 @@ Your role:
     {
       name: 'Nova',
       role: 'frontend',
-      avatar: '🎨',
+      avatar: 'https://untitledui.com/images/avatars/sophia-perez',
+      gender: 'female' as const,
       personality: 'Creative, detail-oriented, user-focused',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
@@ -905,7 +921,8 @@ Your role:
     {
       name: 'Forge',
       role: 'backend',
-      avatar: '⚙️',
+      avatar: 'https://untitledui.com/images/avatars/drew-cano',
+      gender: 'male' as const,
       personality: 'Pragmatic, security-conscious, performance-oriented',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
@@ -922,7 +939,8 @@ Your role:
     {
       name: 'Shield',
       role: 'qa',
-      avatar: '🛡️',
+      avatar: 'https://untitledui.com/images/avatars/levi-rocha',
+      gender: 'male' as const,
       personality: 'Meticulous, thorough, quality-focused',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
@@ -939,7 +957,8 @@ Your role:
     {
       name: 'Sentinel',
       role: 'reviewer',
-      avatar: '👁️',
+      avatar: 'https://untitledui.com/images/avatars/ethan-campbell',
+      gender: 'male' as const,
       personality: 'Critical, constructive, detail-oriented',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
@@ -957,7 +976,8 @@ Your role:
     {
       name: 'Pixel',
       role: 'coder',
-      avatar: '💻',
+      avatar: 'https://untitledui.com/images/avatars/orlando-diggs',
+      gender: 'male' as const,
       personality: 'Versatile, fast, pragmatic',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
@@ -974,7 +994,8 @@ Your role:
     {
       name: 'Iris',
       role: 'designer',
-      avatar: '🎯',
+      avatar: 'https://untitledui.com/images/avatars/amelie-laurent',
+      gender: 'female' as const,
       personality: 'Creative, empathetic, user-centric, detail-obsessed',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
@@ -992,7 +1013,8 @@ Your role:
     {
       name: 'Vanguard',
       role: 'devops',
-      avatar: '🚀',
+      avatar: 'https://untitledui.com/images/avatars/joshua-wilson',
+      gender: 'male' as const,
       personality: 'Methodical, reliability-focused, automation-driven',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
@@ -1106,6 +1128,7 @@ function rowToProjectAgent(row: any): ProjectAgent {
     name: row.name,
     role: row.role as AgentRole | string,
     avatar: row.avatar,
+    gender: row.gender ?? 'male',
     personality: row.personality,
     model: row.model,
     cliTool: row.cli_tool as CLITool,
@@ -1124,6 +1147,7 @@ export function createProjectAgent(data: {
   name: string;
   role: string;
   avatar: string;
+  gender?: 'male' | 'female';
   personality: string;
   model: string;
   cliTool: string;
@@ -1138,8 +1162,8 @@ export function createProjectAgent(data: {
   const ts = now();
   db.prepare(
     `INSERT INTO project_agents
-      (id, project_id, source_agent_id, name, role, avatar, personality, model, cli_tool, skills, system_prompt, created_at, reports_to, color, pipeline_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, project_id, source_agent_id, name, role, avatar, gender, personality, model, cli_tool, skills, system_prompt, created_at, reports_to, color, pipeline_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     data.projectId,
@@ -1147,6 +1171,7 @@ export function createProjectAgent(data: {
     data.name,
     data.role,
     data.avatar,
+    data.gender ?? 'male',
     data.personality,
     data.model,
     data.cliTool,
@@ -1184,6 +1209,7 @@ export function updateProjectAgent(
   if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
   if (data.role !== undefined) { fields.push('role = ?'); values.push(data.role); }
   if (data.avatar !== undefined) { fields.push('avatar = ?'); values.push(data.avatar); }
+  if (data.gender !== undefined) { fields.push('gender = ?'); values.push(data.gender); }
   if (data.personality !== undefined) { fields.push('personality = ?'); values.push(data.personality); }
   if (data.model !== undefined) { fields.push('model = ?'); values.push(data.model); }
   if (data.cliTool !== undefined) { fields.push('cli_tool = ?'); values.push(data.cliTool); }

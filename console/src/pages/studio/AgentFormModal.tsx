@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
-import { X, Loader2, FileText } from 'lucide-react';
+import { X, Loader2, FileText, ChevronDown } from 'lucide-react';
 import {
   addProjectAgent,
   updateProjectAgent,
   fetchProviders,
   fetchAgentFile,
   writeAgentFile,
+  fetchAvatars,
   type AIProvider,
   type ProjectAgent,
+  type AvatarOption,
+  type Gender,
 } from '../../lib/studio-api';
 import { getModelsFromProviders } from '../../lib/model-options';
+import AgentAvatar from '../../components/AgentAvatar';
 
 const ROLE_OPTIONS = [
   { value: 'pm', label: 'Project Manager' },
@@ -48,6 +52,7 @@ const labelClass = 'text-[12px] text-[#737373] font-medium block mb-1.5';
 export default function AgentFormModal({ mode, agent, projectId, onClose, onSave }: AgentFormModalProps) {
   const [name, setName] = useState(agent?.name ?? '');
   const [avatar, setAvatar] = useState(agent?.avatar ?? '');
+  const [gender, setGender] = useState<Gender>(agent?.gender ?? 'male');
   const [role, setRole] = useState(agent?.role ?? 'custom');
   const [model, setModel] = useState(agent?.model ?? '');
   const [cliTool, setCliTool] = useState(agent?.cliTool ?? 'claude-code');
@@ -57,6 +62,10 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
   const [systemPrompt, setSystemPrompt] = useState(agent?.systemPrompt ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Avatar picker
+  const [avatarOptions, setAvatarOptions] = useState<AvatarOption[]>([]);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
   // Provider-driven model select
   const [providers, setProviders] = useState<AIProvider[]>([]);
@@ -79,6 +88,11 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
         // Providers endpoint may not be ready; fall back to text input
       });
   }, []);
+
+  // Load avatars when gender changes
+  useEffect(() => {
+    fetchAvatars(gender).then(setAvatarOptions).catch(() => {});
+  }, [gender]);
 
   // Suppress unused variable warning — providers is used implicitly via getModelsFromProviders
   void providers;
@@ -176,6 +190,7 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
       const payload = {
         name: name.trim(),
         avatar: avatar.trim() || '🤖',
+        gender,
         role,
         model: model.trim(),
         cliTool,
@@ -221,33 +236,103 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
 
         {/* Body */}
         <div className="overflow-y-auto flex-1 px-6 py-5 flex flex-col gap-4">
-          {/* Name + Avatar row */}
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className={labelClass}>
-                Name <span className="text-[#ef4444]">*</span>
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Senior Frontend Engineer"
-                className={inputClass}
-                autoFocus
-              />
-            </div>
-            <div className="w-24">
+          {/* Avatar + Name + Gender row */}
+          <div className="flex gap-3 items-end">
+            {/* Avatar preview + picker toggle */}
+            <div className="flex flex-col items-center gap-1">
               <label className={labelClass}>Avatar</label>
-              <input
-                type="text"
-                value={avatar}
-                onChange={(e) => setAvatar(e.target.value)}
-                placeholder="🤖"
-                className={inputClass + ' text-center text-lg'}
-                maxLength={4}
-              />
+              <button
+                type="button"
+                onClick={() => setShowAvatarPicker(!showAvatarPicker)}
+                className="relative group"
+              >
+                <AgentAvatar avatar={avatar} name={name || '?'} size="xl" />
+                <span className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[10px] text-white transition-opacity">
+                  Change
+                </span>
+              </button>
+            </div>
+            <div className="flex-1 flex flex-col gap-3">
+              <div>
+                <label className={labelClass}>
+                  Name <span className="text-[#ef4444]">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Agent name"
+                  className={inputClass}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Gender</label>
+                <div className="flex gap-2">
+                  {(['male', 'female'] as Gender[]).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setGender(g)}
+                      className={`flex-1 px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${
+                        gender === g
+                          ? 'bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]'
+                          : 'bg-[#0a0a0a] border-[#262626] text-[#525252] hover:text-[#a3a3a3]'
+                      }`}
+                    >
+                      {g === 'male' ? 'Male' : 'Female'}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* Avatar picker grid */}
+          {showAvatarPicker && (
+            <div className="bg-[#0a0a0a] border border-[#262626] rounded-xl p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] text-[#525252]">
+                  Select avatar ({gender === 'male' ? 'Male' : 'Female'})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAvatarPicker(false)}
+                  className="text-[#525252] hover:text-[#a3a3a3]"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="grid grid-cols-6 gap-2 max-h-[200px] overflow-y-auto">
+                {avatarOptions.map((opt) => (
+                  <button
+                    key={opt.url}
+                    type="button"
+                    onClick={() => {
+                      setAvatar(opt.url);
+                      setShowAvatarPicker(false);
+                    }}
+                    className={`relative group rounded-lg p-1 transition-all ${
+                      avatar === opt.url
+                        ? 'ring-2 ring-[#22c55e] bg-[#22c55e]/10'
+                        : 'hover:bg-[#1f1f1f]'
+                    }`}
+                    title={opt.name}
+                  >
+                    <img
+                      src={opt.url}
+                      alt={opt.name}
+                      className="w-full aspect-square rounded-full object-cover"
+                      loading="lazy"
+                    />
+                    <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center text-[#737373] truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                      {opt.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Role + CLI Tool row */}
           <div className="flex gap-3">

@@ -10,6 +10,7 @@ import { mkdir, readFile, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { initLintConfig } from './lint-runner.js';
 import { checkDocsFreshness } from './docs-generator.js';
+import { AVATARS, FEMALE_AVATARS, MALE_AVATARS } from './avatars.js';
 import {
   isSonarEnabled,
   runSonarScan,
@@ -721,6 +722,14 @@ studio.get('/agents', (c) => {
 
 studio.get('/agents/presets', (c) => {
   return c.json(listPresetAgents());
+});
+
+// Avatar listesi — gender'a göre filtrelenebilir
+studio.get('/avatars', (c) => {
+  const gender = c.req.query('gender');
+  if (gender === 'female') return c.json(FEMALE_AVATARS);
+  if (gender === 'male') return c.json(MALE_AVATARS);
+  return c.json(AVATARS);
 });
 
 studio.post('/agents', async (c) => {

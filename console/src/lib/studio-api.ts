@@ -81,6 +81,14 @@ export interface TeamTemplate {
   createdAt: string;
 }
 
+export type Gender = 'male' | 'female';
+
+export interface AvatarOption {
+  name: string;
+  url: string;
+  gender: Gender;
+}
+
 export interface ProjectAgent {
   id: string;
   projectId: string;
@@ -88,6 +96,7 @@ export interface ProjectAgent {
   name: string;
   role: string;
   avatar: string;
+  gender: Gender;
   personality: string;
   model: string;
   cliTool: string;
@@ -308,6 +317,11 @@ export async function fetchTeamTemplates(): Promise<TeamTemplate[]> {
 
 export async function fetchProjectAgents(projectId: string): Promise<ProjectAgent[]> {
   return json(await fetch(`${BASE}/projects/${projectId}/team`));
+}
+
+export async function fetchAvatars(gender?: Gender): Promise<AvatarOption[]> {
+  const query = gender ? `?gender=${gender}` : '';
+  return json(await fetch(`${BASE}/avatars${query}`));
 }
 
 export async function fetchProjectAgent(projectId: string, agentId: string): Promise<ProjectAgent> {

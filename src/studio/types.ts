@@ -109,6 +109,7 @@ export interface AgentConfig {
   name: string;
   role: AgentRole;
   avatar: string;
+  gender: 'male' | 'female';
   personality: string;
   model: string;
   cliTool: CLITool;
@@ -222,6 +223,7 @@ export interface ProjectAgent {
   name: string;
   role: AgentRole | string;
   avatar: string;
+  gender: 'male' | 'female';
   personality: string;
   model: string;
   cliTool: CLITool;
