@@ -252,7 +252,7 @@ function migrate(db: Database.Database): void {
 
   // Data migration: Update preset agents with name, avatar, gender (for existing DBs)
   const PRESET_MAP: Record<string, { name: string; avatar: string; gender: string }> = {
-    pm:       { name: 'Koray Okumus',    avatar: 'https://untitledui.com/images/avatars/koray-okumus', gender: 'male' },
+    pm:       { name: 'Alec Whitten',    avatar: 'https://untitledui.com/images/avatars/alec-whitten', gender: 'male' },
     architect:{ name: 'Zahir Mays',     avatar: 'https://untitledui.com/images/avatars/zahir-mays', gender: 'male' },
     frontend: { name: 'Sophia Perez',   avatar: 'https://untitledui.com/images/avatars/sophia-perez', gender: 'female' },
     backend:  { name: 'Drew Cano',      avatar: 'https://untitledui.com/images/avatars/drew-cano', gender: 'male' },
@@ -880,15 +880,15 @@ export function seedPresetAgents(): void {
 
   const presets: Omit<AgentConfig, 'id'>[] = [
     {
-      name: 'Koray Okumus',
+      name: 'Alec Whitten',
       role: 'pm',
-      avatar: 'https://untitledui.com/images/avatars/koray-okumus',
+      avatar: 'https://untitledui.com/images/avatars/alec-whitten',
       gender: 'male' as const,
       personality: 'Organized, detail-oriented, communicative',
       model: 'claude-sonnet-4-6',
       cliTool: 'none',
       skills: ['project-management', 'planning', 'communication'],
-      systemPrompt: `You are Koray Okumus, a senior Project Manager for AI Dev Studio.
+      systemPrompt: `You are Alec Whitten, a senior Project Manager for AI Dev Studio.
 Your role:
 1. Understand user's project requirements through conversation
 2. Ask clarifying questions about tech stack, features, scope
