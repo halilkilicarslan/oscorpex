@@ -33,6 +33,7 @@ import { startApp } from './app-runner.js';
 import { isClaudeCliAvailable, executeWithCLI, resolveFilePaths } from './cli-runtime.js';
 import { runLintFix } from './lint-runner.js';
 import { updateDocsAfterTask } from './docs-generator.js';
+import { buildRAGContext, formatRAGContext } from './context-builder.js';
 
 // ---------------------------------------------------------------------------
 // Timeout configuration
@@ -301,7 +302,7 @@ class ExecutionEngine {
     taskEngine.assignTask(task.id, agent.id);
     taskEngine.startTask(task.id);
 
-    const prompt = this.buildTaskPrompt(task, project);
+    const prompt = await this.buildTaskPrompt(task, project);
 
     // Complexity ve proje timeout_multiplier ayarına göre efektif timeout hesapla
     const timeoutMs = resolveTaskTimeoutMs(projectId, task.complexity, agent.taskTimeout);
@@ -831,7 +832,7 @@ class ExecutionEngine {
    * the local AI SDK model). Includes full task context so the agent knows
    * exactly what to implement.
    */
-  buildTaskPrompt(task: Task, project: Project): string {
+  async buildTaskPrompt(task: Task, project: Project): Promise<string> {
     const techStack =
       project.techStack.length > 0 ? project.techStack.join(', ') : 'Not specified';
 
@@ -877,6 +878,17 @@ class ExecutionEngine {
         lines.push(`- ... and ${contextFiles.size - 50} more files`);
       }
       lines.push('');
+    }
+
+    // RAG Context: retrieve relevant code snippets from the project's vector store
+    try {
+      const ragContext = await buildRAGContext(project.id, task.title, task.description);
+      if (ragContext && ragContext.relevantChunks.length > 0) {
+        lines.push(formatRAGContext(ragContext));
+      }
+    } catch (err) {
+      // RAG failure must never block task execution
+      console.warn('[execution-engine] RAG context fetch failed (non-blocking):', err);
     }
 
     // Add completed task summaries for cross-agent awareness
