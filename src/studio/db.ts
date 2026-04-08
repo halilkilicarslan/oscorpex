@@ -1425,27 +1425,37 @@ export function copyAgentsToProject(projectId: string, roles: string[]): Project
   const created: ProjectAgent[] = [];
 
   const colorMap: Record<string, string> = {
-    pm: '#f59e0b',
-    designer: '#f472b6',
-    architect: '#3b82f6',
-    frontend: '#ec4899',
-    backend: '#22c55e',
-    coder: '#06b6d4',
-    qa: '#a855f7',
-    reviewer: '#ef4444',
-    devops: '#0ea5e9',
+    // v2 roles
+    'product-owner': '#f59e0b',
+    'scrum-master': '#06b6d4',
+    'tech-lead': '#3b82f6',
+    'business-analyst': '#8b5cf6',
+    'design-lead': '#f472b6',
+    'frontend-dev': '#ec4899',
+    'backend-dev': '#22c55e',
+    'frontend-qa': '#a855f7',
+    'backend-qa': '#a855f7',
+    'frontend-reviewer': '#ef4444',
+    'backend-reviewer': '#ef4444',
+    'devops': '#0ea5e9',
+    // legacy
+    pm: '#f59e0b', designer: '#f472b6', architect: '#3b82f6',
+    frontend: '#ec4899', backend: '#22c55e', coder: '#06b6d4',
+    qa: '#a855f7', reviewer: '#ef4444',
   };
 
   const pipelineMap: Record<string, number> = {
-    pm: 0,
-    designer: 1,
-    architect: 2,
-    frontend: 3,
-    backend: 3,
-    coder: 3,
-    qa: 4,
-    reviewer: 5,
-    devops: 6,
+    // v2 roles — wave-based order
+    'product-owner': 0, 'scrum-master': 0,
+    'tech-lead': 1, 'business-analyst': 1, 'design-lead': 1,
+    'frontend-dev': 2, 'backend-dev': 2,
+    'frontend-qa': 3, 'backend-qa': 3,
+    'frontend-reviewer': 4, 'backend-reviewer': 4,
+    'devops': 5,
+    // legacy
+    pm: 0, designer: 1, architect: 2,
+    frontend: 3, backend: 3, coder: 3,
+    qa: 4, reviewer: 5,
   };
 
   for (const role of roles) {
@@ -1469,30 +1479,81 @@ export function copyAgentsToProject(projectId: string, roles: string[]): Project
     }
   }
 
-  // Set up professional hierarchy:
-  // - PM is the top-level lead
-  // - Designer, Architect, QA, Reviewer, DevOps report to PM
-  // - Frontend, Backend, Coder report to Architect (technical chain)
-  const pm = created.find((a) => a.role === 'pm');
-  const architect = created.find((a) => a.role === 'architect');
-  const devRoles = new Set(['frontend', 'backend', 'coder']);
+  // Set up hierarchy (v2 + legacy compat)
+  const po = created.find((a) => a.role === 'product-owner') ?? created.find((a) => a.role === 'pm');
+  const techLead = created.find((a) => a.role === 'tech-lead') ?? created.find((a) => a.role === 'architect');
+  const devRoles = new Set(['frontend-dev', 'backend-dev', 'frontend', 'backend', 'coder']);
+  const qaRoles = new Set(['frontend-qa', 'backend-qa', 'qa']);
+  const reviewRoles = new Set(['frontend-reviewer', 'backend-reviewer', 'reviewer']);
 
-  if (pm) {
+  if (po) {
     for (const agent of created) {
-      if (agent.id === pm.id) continue;
-
-      // Devs report to Architect if present, otherwise to PM
-      if (devRoles.has(agent.role) && architect) {
-        updateProjectAgent(agent.id, { reportsTo: architect.id });
-        agent.reportsTo = architect.id;
+      if (agent.id === po.id) continue;
+      if ((devRoles.has(agent.role) || qaRoles.has(agent.role) || reviewRoles.has(agent.role)) && techLead) {
+        updateProjectAgent(agent.id, { reportsTo: techLead.id });
+        agent.reportsTo = techLead.id;
       } else {
-        updateProjectAgent(agent.id, { reportsTo: pm.id });
-        agent.reportsTo = pm.id;
+        updateProjectAgent(agent.id, { reportsTo: po.id });
+        agent.reportsTo = po.id;
       }
     }
   }
 
+  // v2: Seed default agent dependencies for the standard pipeline
+  seedDefaultDependencies(projectId, created);
+
   return created;
+}
+
+/**
+ * Standart Scrum takımı için default dependency'leri oluşturur.
+ * Workflow: PO/SM → TL/BA/DL → FE-Dev/BE-Dev → FE-QA/BE-QA → FE-Reviewer/BE-Reviewer → DevOps
+ * Review: FE-Dev → FE-Reviewer, BE-Dev → BE-Reviewer
+ * Gate: FE-Reviewer + BE-Reviewer → DevOps
+ */
+function seedDefaultDependencies(projectId: string, agents: ProjectAgent[]): void {
+  const byRole = new Map<string, ProjectAgent>();
+  for (const a of agents) byRole.set(a.role, a);
+
+  const deps: { fromAgentId: string; toAgentId: string; type: DependencyType }[] = [];
+
+  function addDep(fromRole: string, toRole: string, type: DependencyType) {
+    const from = byRole.get(fromRole);
+    const to = byRole.get(toRole);
+    if (from && to) deps.push({ fromAgentId: from.id, toAgentId: to.id, type });
+  }
+
+  // Workflow chain
+  addDep('product-owner', 'tech-lead', 'workflow');
+  addDep('product-owner', 'business-analyst', 'workflow');
+  addDep('product-owner', 'design-lead', 'workflow');
+  addDep('tech-lead', 'frontend-dev', 'workflow');
+  addDep('tech-lead', 'backend-dev', 'workflow');
+  addDep('frontend-dev', 'frontend-qa', 'workflow');
+  addDep('backend-dev', 'backend-qa', 'workflow');
+  addDep('frontend-qa', 'frontend-reviewer', 'workflow');
+  addDep('backend-qa', 'backend-reviewer', 'workflow');
+
+  // Review: dev → reviewer
+  addDep('frontend-dev', 'frontend-reviewer', 'review');
+  addDep('backend-dev', 'backend-reviewer', 'review');
+
+  // Gate: both reviewers → devops
+  addDep('frontend-reviewer', 'devops', 'gate');
+  addDep('backend-reviewer', 'devops', 'gate');
+
+  // Hierarchy edges (for visual org chart)
+  addDep('product-owner', 'scrum-master', 'hierarchy');
+  addDep('product-owner', 'tech-lead', 'hierarchy');
+  addDep('product-owner', 'business-analyst', 'hierarchy');
+  addDep('product-owner', 'design-lead', 'hierarchy');
+  addDep('tech-lead', 'frontend-dev', 'hierarchy');
+  addDep('tech-lead', 'backend-dev', 'hierarchy');
+  addDep('tech-lead', 'devops', 'hierarchy');
+
+  if (deps.length > 0) {
+    bulkCreateDependencies(projectId, deps);
+  }
 }
 
 // ---------------------------------------------------------------------------
