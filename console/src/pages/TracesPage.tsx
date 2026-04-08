@@ -538,15 +538,219 @@ function TraceDetailPanel({ traceId }: { traceId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Studio Trace tipler
+// ---------------------------------------------------------------------------
+
+interface StudioTrace {
+  trace_id: string;
+  entity_id: string;
+  entity_type: string;
+  title: string;
+  start_time: string;
+  end_time: string | null;
+  status: TraceStatus;
+  duration_ms: number | null;
+  complexity: string;
+  task_type: string;
+  branch: string;
+  output: string | null;
+  error: string | null;
+  span_count: number;
+  spans: Array<{
+    span_id: string;
+    name: string;
+    status: string;
+    start_time: string | null;
+    end_time: string | null;
+    duration_ms: number | null;
+    exit_code: number | null;
+    output_summary: string | null;
+  }>;
+}
+
+interface StudioTracesResponse {
+  traces: StudioTrace[];
+  total: number;
+  agents: string[];
+}
+
+type TraceSource = 'voltagent' | 'studio';
+
+// ---------------------------------------------------------------------------
+// Studio trace list row
+// ---------------------------------------------------------------------------
+
+function StudioTraceListRow({
+  trace,
+  selected,
+  onClick,
+}: {
+  trace: StudioTrace;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+        selected
+          ? 'bg-[#1a1a1a] border border-[#333]'
+          : 'hover:bg-[#141414] border border-transparent'
+      }`}
+    >
+      <StatusIcon status={trace.status} size={13} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] text-[#fafafa] font-medium truncate">
+            {trace.title}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1f1f1f] text-[#525252] border border-[#2a2a2a] shrink-0">
+            {trace.task_type}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[11px] text-[#a855f7] font-medium">{trace.entity_id}</span>
+          <span className="text-[#3a3a3a]">·</span>
+          <span className="text-[11px] text-[#525252]">{trace.complexity}</span>
+          {trace.branch && (
+            <>
+              <span className="text-[#3a3a3a]">·</span>
+              <span className="text-[11px] text-[#525252] font-mono truncate max-w-[120px]">{trace.branch}</span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-0.5 shrink-0">
+        <span className="text-[12px] text-[#a3a3a3] font-mono">{fmtDuration(trace.duration_ms)}</span>
+        <span className="text-[11px] text-[#525252]">{fmtRelativeTime(trace.start_time)}</span>
+      </div>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Studio trace detail panel
+// ---------------------------------------------------------------------------
+
+function StudioTraceDetailPanel({ traceId }: { traceId: string }) {
+  const [detail, setDetail] = useState<{ trace: ApiTrace & { title?: string }; spans: ApiSpan[] } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!traceId) return;
+    setLoading(true);
+    setError(null);
+    setDetail(null);
+    setSelectedSpanId(null);
+
+    fetch(`${API_BASE}/studio/traces/${traceId}`)
+      .then((r) => r.json())
+      .then((data) => setDetail(data as { trace: ApiTrace & { title?: string }; spans: ApiSpan[] }))
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
+  }, [traceId]);
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 size={20} className="animate-spin text-[#525252]" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <AlertCircle size={24} className="text-[#ef4444]" />
+          <p className="text-[13px] text-[#ef4444]">Failed to load trace</p>
+          <p className="text-[11px] text-[#525252]">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!detail) return null;
+
+  const { trace, spans } = detail;
+  const traceStartMs = new Date(trace.start_time).getTime();
+  const traceDurationMs = trace.duration_ms ?? 0;
+  const treeSpans = buildSpanTree(spans) as Array<ApiSpan & { _depth: number }>;
+  const selectedSpan = selectedSpanId ? spans.find((s) => s.span_id === selectedSpanId) : null;
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-4 py-3 border-b border-[#1f1f1f] bg-[#0d0d0d] flex items-center gap-4">
+        <StatusIcon status={trace.status} size={16} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[14px] font-semibold text-[#fafafa]">
+              {(trace as ApiTrace & { title?: string }).title ?? trace.entity_id ?? 'unknown'}
+            </span>
+            <span className="text-[11px] text-[#525252] font-mono">{shortId(trace.trace_id)}</span>
+          </div>
+          <div className="flex items-center gap-3 mt-0.5">
+            <span className="text-[11px] text-[#a855f7] font-medium">{trace.entity_id}</span>
+            <span className="text-[#3a3a3a]">·</span>
+            <span className="text-[11px] text-[#525252]">{fmtDuration(trace.duration_ms)}</span>
+            <span className="text-[#3a3a3a]">·</span>
+            <span className="text-[11px] text-[#525252]">{trace.span_count} spans</span>
+          </div>
+        </div>
+        <span className="text-[11px] text-[#525252]">{fmtRelativeTime(trace.start_time)}</span>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        <div className="flex items-center gap-2 px-2 py-1.5 border-b border-[#1a1a1a] sticky top-0 bg-[#0d0d0d] z-10">
+          <span className="text-[10px] text-[#525252] font-medium uppercase tracking-wider" style={{ width: 156 }}>Span</span>
+          <span className="flex-1 text-[10px] text-[#525252] font-medium uppercase tracking-wider">Timeline</span>
+          <span className="text-[10px] text-[#525252] font-medium uppercase tracking-wider w-24 text-right">Duration</span>
+        </div>
+        <div className="p-2">
+          {treeSpans.length === 0 ? (
+            <p className="text-[12px] text-[#525252] px-2 py-4 text-center">No spans recorded</p>
+          ) : (
+            treeSpans.map((span) => (
+              <div key={span.span_id}>
+                <WaterfallRow
+                  span={span}
+                  depth={(span as ApiSpan & { _depth: number })._depth}
+                  traceStartMs={traceStartMs}
+                  traceDurationMs={traceDurationMs}
+                  selected={selectedSpanId === span.span_id}
+                  onClick={() => setSelectedSpanId((prev) => (prev === span.span_id ? null : span.span_id))}
+                />
+                {selectedSpanId === span.span_id && selectedSpan && <SpanDetail span={selectedSpan} />}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Ana TracesPage bileşeni
 // ---------------------------------------------------------------------------
 
 export default function TracesPage() {
+  const [source, setSource] = useState<TraceSource>('voltagent');
   const [stats, setStats] = useState<TraceStats | null>(null);
   const [traces, setTraces] = useState<ApiTrace[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Studio traces state
+  const [studioStats, setStudioStats] = useState<TraceStats | null>(null);
+  const [studioTraces, setStudioTraces] = useState<StudioTrace[]>([]);
+  const [studioTotal, setStudioTotal] = useState(0);
+  const [studioAgents, setStudioAgents] = useState<string[]>([]);
+  const [studioLoading, setStudioLoading] = useState(false);
+  const [studioError, setStudioError] = useState<string | null>(null);
 
   // Filtreler
   const [entityFilter, setEntityFilter] = useState('');
@@ -561,10 +765,24 @@ export default function TracesPage() {
   const LIMIT = 50;
 
   // Tüm agent ID listesi (filtre dropdown için)
-  const agentIds = stats?.topAgents.map((a) => a.name) ?? [];
+  const agentIds = source === 'voltagent'
+    ? (stats?.topAgents.map((a) => a.name) ?? [])
+    : studioAgents;
 
   // ---------------------------------------------------------------------------
-  // Stats yükleme
+  // Source değişince state sıfırla
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    setSelectedTraceId(null);
+    setEntityFilter('');
+    setStatusFilter('');
+    setSearch('');
+    setOffset(0);
+  }, [source]);
+
+  // ---------------------------------------------------------------------------
+  // VoltAgent Stats yükleme
   // ---------------------------------------------------------------------------
 
   const loadStats = useCallback(() => {
@@ -575,10 +793,11 @@ export default function TracesPage() {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Trace listesi yükleme
+  // VoltAgent Trace listesi yükleme
   // ---------------------------------------------------------------------------
 
   const loadTraces = useCallback(() => {
+    if (source !== 'voltagent') return;
     setLoading(true);
     setError(null);
 
@@ -597,15 +816,58 @@ export default function TracesPage() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [offset, entityFilter, statusFilter]);
+  }, [offset, entityFilter, statusFilter, source]);
+
+  // ---------------------------------------------------------------------------
+  // Studio Stats yükleme
+  // ---------------------------------------------------------------------------
+
+  const loadStudioStats = useCallback(() => {
+    fetch(`${API_BASE}/studio/traces/stats`)
+      .then((r) => r.json())
+      .then((data) => setStudioStats(data as TraceStats))
+      .catch(console.error);
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Studio Trace listesi yükleme
+  // ---------------------------------------------------------------------------
+
+  const loadStudioTraces = useCallback(() => {
+    if (source !== 'studio') return;
+    setStudioLoading(true);
+    setStudioError(null);
+
+    const params = new URLSearchParams();
+    params.set('limit', String(LIMIT));
+    params.set('offset', String(offset));
+    if (entityFilter) params.set('agent', entityFilter);
+    if (statusFilter) params.set('status', statusFilter);
+
+    fetch(`${API_BASE}/studio/traces?${params.toString()}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const resp = data as StudioTracesResponse;
+        setStudioTraces(resp.traces);
+        setStudioTotal(resp.total);
+        setStudioAgents(resp.agents);
+      })
+      .catch((e) => setStudioError(String(e)))
+      .finally(() => setStudioLoading(false));
+  }, [offset, entityFilter, statusFilter, source]);
 
   useEffect(() => {
     loadStats();
-  }, [loadStats]);
+    loadStudioStats();
+  }, [loadStats, loadStudioStats]);
 
   useEffect(() => {
     loadTraces();
   }, [loadTraces]);
+
+  useEffect(() => {
+    loadStudioTraces();
+  }, [loadStudioTraces]);
 
   // Filtre değişince offset sıfırla
   const prevFilters = useRef({ entityFilter, statusFilter });
@@ -620,7 +882,7 @@ export default function TracesPage() {
   }, [entityFilter, statusFilter]);
 
   // ---------------------------------------------------------------------------
-  // Arama — client-side (attributes DB'de aranmıyor, isim bazlı)
+  // Arama — client-side
   // ---------------------------------------------------------------------------
 
   const filteredTraces = search
@@ -631,41 +893,83 @@ export default function TracesPage() {
       )
     : traces;
 
+  const filteredStudioTraces = search
+    ? studioTraces.filter(
+        (t) =>
+          t.title.toLowerCase().includes(search.toLowerCase()) ||
+          t.entity_id.toLowerCase().includes(search.toLowerCase()) ||
+          t.trace_id.toLowerCase().includes(search.toLowerCase()),
+      )
+    : studioTraces;
+
+  // Active source helpers
+  const activeStats = source === 'voltagent' ? stats : studioStats;
+  const activeLoading = source === 'voltagent' ? loading : studioLoading;
+  const activeError = source === 'voltagent' ? error : studioError;
+  const activeTotal = source === 'voltagent' ? total : studioTotal;
+  const activeLoad = source === 'voltagent' ? loadTraces : loadStudioTraces;
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      {/* Sayfa başlığı */}
+      {/* Sayfa başlığı + tab toggle */}
       <div className="px-6 py-4 border-b border-[#1a1a1a] shrink-0">
         <h1 className="text-[15px] font-semibold text-[#fafafa]">Traces</h1>
         <p className="text-[13px] text-[#525252] mt-0.5">
           Execution traces recorded by VoltAgent observability
         </p>
+        <div className="flex items-center gap-1 mt-3">
+          <button
+            onClick={() => setSource('voltagent')}
+            className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+              source === 'voltagent'
+                ? 'bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/30'
+                : 'text-[#525252] hover:text-[#a3a3a3] border border-transparent'
+            }`}
+          >
+            VoltAgent Traces
+          </button>
+          <button
+            onClick={() => setSource('studio')}
+            className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+              source === 'studio'
+                ? 'bg-[#a855f7]/15 text-[#a855f7] border border-[#a855f7]/30'
+                : 'text-[#525252] hover:text-[#a3a3a3] border border-transparent'
+            }`}
+          >
+            Studio Traces
+          </button>
+        </div>
       </div>
 
       {/* Stats satırı */}
-      {stats && (
+      {activeStats && (
         <div className="grid grid-cols-4 gap-3 px-6 py-3 border-b border-[#1a1a1a] shrink-0">
           <StatCard
             label="Total Traces"
-            value={String(stats.totalTraces)}
-            icon={<Activity size={15} className="text-[#22c55e]" />}
+            value={String(activeStats.totalTraces)}
+            icon={<Activity size={15} className={source === 'voltagent' ? 'text-[#22c55e]' : 'text-[#a855f7]'} />}
           />
           <StatCard
             label="Avg Duration"
-            value={fmtDuration(stats.avgDurationMs)}
+            value={fmtDuration(activeStats.avgDurationMs)}
             icon={<Clock size={15} className="text-[#3b82f6]" />}
           />
           <StatCard
             label="Error Rate"
-            value={`${stats.errorRate}%`}
+            value={`${activeStats.errorRate}%`}
             icon={<BarChart3 size={15} className="text-[#a855f7]" />}
           />
           <StatCard
-            label="Total Tokens"
-            value={stats.totalTokens > 0 ? stats.totalTokens.toLocaleString() : '--'}
+            label={source === 'voltagent' ? 'Total Tokens' : 'Top Agents'}
+            value={
+              source === 'voltagent'
+                ? (activeStats.totalTokens > 0 ? activeStats.totalTokens.toLocaleString() : '--')
+                : String(activeStats.topAgents.length)
+            }
             icon={<Coins size={15} className="text-[#f59e0b]" />}
           />
         </div>
@@ -728,23 +1032,23 @@ export default function TracesPage() {
 
           {/* Trace listesi */}
           <div className="flex-1 overflow-auto">
-            {loading ? (
+            {activeLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 size={18} className="animate-spin text-[#525252]" />
               </div>
-            ) : error ? (
+            ) : activeError ? (
               <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
                 <AlertCircle size={20} className="text-[#ef4444] mb-2" />
                 <p className="text-[13px] text-[#ef4444]">Failed to load traces</p>
-                <p className="text-[11px] text-[#525252] mt-1">{error}</p>
+                <p className="text-[11px] text-[#525252] mt-1">{activeError}</p>
                 <button
-                  onClick={loadTraces}
+                  onClick={activeLoad}
                   className="mt-3 px-3 py-1.5 text-[12px] text-[#a3a3a3] border border-[#262626] rounded-md hover:border-[#333] transition-colors"
                 >
                   Retry
                 </button>
               </div>
-            ) : filteredTraces.length === 0 ? (
+            ) : source === 'voltagent' && filteredTraces.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
                 <div className="w-12 h-12 rounded-xl bg-[#1f1f1f] flex items-center justify-center mb-3">
                   <BarChart3 size={20} className="text-[#333]" />
@@ -754,28 +1058,51 @@ export default function TracesPage() {
                   Traces will appear here when you interact with agents.
                 </p>
               </div>
+            ) : source === 'studio' && filteredStudioTraces.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                <div className="w-12 h-12 rounded-xl bg-[#1f1f1f] flex items-center justify-center mb-3">
+                  <BarChart3 size={20} className="text-[#333]" />
+                </div>
+                <p className="text-[13px] text-[#a3a3a3] font-medium mb-1">No studio traces yet</p>
+                <p className="text-[11px] text-[#525252] max-w-xs">
+                  Studio traces will appear here when AI Dev Studio tasks are executed.
+                </p>
+              </div>
             ) : (
               <div className="p-2 space-y-0.5">
-                {filteredTraces.map((trace) => (
-                  <TraceListRow
-                    key={trace.trace_id}
-                    trace={trace}
-                    selected={selectedTraceId === trace.trace_id}
-                    onClick={() =>
-                      setSelectedTraceId((prev) =>
-                        prev === trace.trace_id ? null : trace.trace_id,
-                      )
-                    }
-                  />
-                ))}
+                {source === 'voltagent'
+                  ? filteredTraces.map((trace) => (
+                      <TraceListRow
+                        key={trace.trace_id}
+                        trace={trace}
+                        selected={selectedTraceId === trace.trace_id}
+                        onClick={() =>
+                          setSelectedTraceId((prev) =>
+                            prev === trace.trace_id ? null : trace.trace_id,
+                          )
+                        }
+                      />
+                    ))
+                  : filteredStudioTraces.map((trace) => (
+                      <StudioTraceListRow
+                        key={trace.trace_id}
+                        trace={trace}
+                        selected={selectedTraceId === trace.trace_id}
+                        onClick={() =>
+                          setSelectedTraceId((prev) =>
+                            prev === trace.trace_id ? null : trace.trace_id,
+                          )
+                        }
+                      />
+                    ))}
               </div>
             )}
 
             {/* Pagination */}
-            {!loading && total > LIMIT && (
+            {!activeLoading && activeTotal > LIMIT && (
               <div className="flex items-center justify-between px-3 py-2 border-t border-[#1a1a1a]">
                 <span className="text-[11px] text-[#525252]">
-                  {offset + 1}–{Math.min(offset + LIMIT, total)} of {total}
+                  {offset + 1}–{Math.min(offset + LIMIT, activeTotal)} of {activeTotal}
                 </span>
                 <div className="flex gap-1">
                   <button
@@ -786,7 +1113,7 @@ export default function TracesPage() {
                     Prev
                   </button>
                   <button
-                    disabled={offset + LIMIT >= total}
+                    disabled={offset + LIMIT >= activeTotal}
                     onClick={() => setOffset((o) => o + LIMIT)}
                     className="px-2 py-1 text-[11px] text-[#525252] border border-[#262626] rounded disabled:opacity-40 hover:border-[#333] transition-colors"
                   >
@@ -801,7 +1128,11 @@ export default function TracesPage() {
         {/* Sağ panel — Trace detay / waterfall */}
         <div className="flex-1 flex flex-col overflow-hidden bg-[#0a0a0a]">
           {selectedTraceId ? (
-            <TraceDetailPanel traceId={selectedTraceId} />
+            source === 'voltagent' ? (
+              <TraceDetailPanel traceId={selectedTraceId} />
+            ) : (
+              <StudioTraceDetailPanel traceId={selectedTraceId} />
+            )
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
               <div className="w-16 h-16 rounded-2xl bg-[#111111] border border-[#262626] flex items-center justify-center mb-4">
