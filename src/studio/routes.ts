@@ -348,12 +348,35 @@ ${teamInfo}`;
         stopWhen: stepCountIs(5),
       });
 
-      for await (const part of result.textStream) {
-        fullResponse += part;
-        await stream.writeSSE({
-          event: 'text-delta',
-          data: JSON.stringify({ text: part }),
-        });
+      // fullStream ile tüm event'leri dinle (error dahil)
+      for await (const part of result.fullStream) {
+        if (part.type === 'text-delta') {
+          fullResponse += part.textDelta;
+          await stream.writeSSE({
+            event: 'text-delta',
+            data: JSON.stringify({ text: part.textDelta }),
+          });
+        } else if (part.type === 'error') {
+          const err = part.error;
+          let errMsg = 'Unknown AI error';
+          if (err instanceof Error) {
+            errMsg = err.message;
+          } else if (typeof err === 'object' && err !== null) {
+            // OpenAI SDK error format: { error: { message, type, code } }
+            const obj = err as Record<string, unknown>;
+            if (obj.error && typeof obj.error === 'object') {
+              const inner = obj.error as Record<string, unknown>;
+              errMsg = (inner.message as string) || JSON.stringify(inner);
+            } else if (obj.message) {
+              errMsg = obj.message as string;
+            } else {
+              errMsg = JSON.stringify(err);
+            }
+          } else {
+            errMsg = String(err);
+          }
+          throw new Error(errMsg);
+        }
       }
 
       // Persist assistant response
@@ -367,6 +390,7 @@ ${teamInfo}`;
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[PM Chat Error]', errorMsg);
       await stream.writeSSE({
         event: 'error',
         data: JSON.stringify({ error: errorMsg }),
@@ -2022,7 +2046,7 @@ studio.get('/projects/:id/sonar/latest', (c) => {
 // App Runner — start / stop / status
 // ---------------------------------------------------------------------------
 
-import { runApp, stopApp, getRunningApp } from './task-runners.js';
+import { startApp, stopApp, getAppStatus, getResolvedConfig } from './app-runner.js';
 
 studio.post('/projects/:id/app/start', async (c) => {
   const projectId = c.req.param('id');
@@ -2030,10 +2054,10 @@ studio.post('/projects/:id/app/start', async (c) => {
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
   try {
-    const output = await runApp(projectId, project.repoPath, (msg) => {
+    const result = await startApp(projectId, project.repoPath, (msg) => {
       eventBus.emit({ projectId, type: 'agent:output', payload: { output: msg } });
     });
-    return c.json({ ok: true, output });
+    return c.json({ ok: true, ...result });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : 'App başlatılamadı' }, 500);
   }
@@ -2053,8 +2077,16 @@ studio.get('/projects/:id/app/status', (c) => {
   const project = getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
 
-  const info = getRunningApp(projectId);
-  return c.json(info ?? { running: false, backendUrl: null, frontendUrl: null });
+  return c.json(getAppStatus(projectId));
+});
+
+studio.get('/projects/:id/app/config', (c) => {
+  const projectId = c.req.param('id');
+  const project = getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const config = getResolvedConfig(project.repoPath);
+  return c.json(config ?? { services: [], preview: '' });
 });
 
 // ---- Worker endpoints (called by agent containers) -------------------------

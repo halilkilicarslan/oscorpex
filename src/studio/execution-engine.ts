@@ -27,7 +27,8 @@ import {
 import { createAgentTools } from './agent-tools.js';
 import { agentRuntime } from './agent-runtime.js';
 import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
-import { runIntegrationTest, runApp } from './task-runners.js';
+import { runIntegrationTest } from './task-runners.js';
+import { startApp } from './app-runner.js';
 import { runLintFix } from './lint-runner.js';
 import { updateDocsAfterTask } from './docs-generator.js';
 
@@ -768,7 +769,12 @@ class ExecutionEngine {
       } else {
         // run-app
         termLog('[execution-engine] Starting application...');
-        output = await runApp(projectId, project.repoPath, termLog);
+        const result = await startApp(projectId, project.repoPath, termLog);
+        output = {
+          filesCreated: [],
+          filesModified: [],
+          logs: [`Started ${result.services.length} service(s). Preview: ${result.previewUrl}`],
+        };
       }
 
       taskEngine.completeTask(task.id, output);

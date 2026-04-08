@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { spawn, ChildProcess } from 'child_process';
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import type { TaskOutput } from './types.js';
 
@@ -14,13 +14,8 @@ import type { TaskOutput } from './types.js';
 
 /** Find the directory containing package.json with a given script */
 function findSubProject(repoPath: string, hint: string): string | null {
-  // Check root
-  if (existsSync(join(repoPath, 'package.json'))) {
-    try {
-      const pkg = JSON.parse(require('fs').readFileSync(join(repoPath, 'package.json'), 'utf-8'));
-      if (pkg.scripts?.start || pkg.scripts?.dev) return repoPath;
-    } catch { /* ignore */ }
-  }
+  // NOTE: Do NOT return repoPath (root) here — that's handled by the
+  // single-app fallback in runApp. This function only looks for *sub*-projects.
 
   // Check common subdirectories
   const candidates = [hint, 'src', 'app', 'server', 'api', 'web', 'client'];
@@ -29,10 +24,12 @@ function findSubProject(repoPath: string, hint: string): string | null {
     if (existsSync(join(fullPath, 'package.json'))) return fullPath;
   }
 
-  // Scan top-level directories
+  // Scan top-level directories (skip hidden dirs and build output)
+  const SKIP_DIRS = new Set(['.next', '.nuxt', '.output', 'dist', 'build', 'node_modules', '.git']);
   try {
     for (const entry of readdirSync(repoPath, { withFileTypes: true })) {
-      if (entry.isDirectory() && existsSync(join(repoPath, entry.name, 'package.json'))) {
+      if (entry.isDirectory() && !entry.name.startsWith('.') && !SKIP_DIRS.has(entry.name)
+          && existsSync(join(repoPath, entry.name, 'package.json'))) {
         return join(repoPath, entry.name);
       }
     }
@@ -273,139 +270,5 @@ export async function runIntegrationTest(
 }
 
 // ---------------------------------------------------------------------------
-// Run App Runner
+// Note: App runner functionality moved to app-runner.ts
 // ---------------------------------------------------------------------------
-
-/** Active app processes, keyed by projectId */
-const runningApps = new Map<string, { backend?: ChildProcess; frontend?: ChildProcess; backendPort: number; frontendPort: number }>();
-
-/**
- * Projenin backend ve frontend'ini başlatır ve URL'leri döndürür.
- * Daha önce başlatılmışsa önce durdurur.
- */
-export async function runApp(
-  projectId: string,
-  repoPath: string,
-  onLog: (msg: string) => void,
-): Promise<TaskOutput> {
-  const logs: string[] = [];
-  const log = (msg: string) => { logs.push(msg); onLog(msg); };
-
-  // Stop existing if running
-  await stopApp(projectId, onLog);
-
-  log('[run-app] Starting application...');
-
-  const backendDir = findSubProject(repoPath, 'backend');
-  const frontendDir = findSubProject(repoPath, 'frontend');
-  const backendPort = 4100 + Math.floor(Math.random() * 100);
-  const frontendPort = 4200 + Math.floor(Math.random() * 100);
-
-  const entry: { backend?: ChildProcess; frontend?: ChildProcess; backendPort: number; frontendPort: number } = {
-    backendPort,
-    frontendPort,
-  };
-
-  const urls: string[] = [];
-
-  if (backendDir) {
-    log(`[run-app] Starting backend on port ${backendPort}...`);
-    try {
-      const { process: backendProc } = await startProcess(
-        backendDir,
-        'npx',
-        ['ts-node', 'src/index.ts'],
-        { PORT: String(backendPort) },
-        /listening|running|started|ready/i,
-        15000,
-      );
-      entry.backend = backendProc;
-      urls.push(`http://localhost:${backendPort}`);
-      log(`[run-app] Backend running at http://localhost:${backendPort}`);
-    } catch (err) {
-      log(`[run-app] Backend start failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  if (frontendDir) {
-    log(`[run-app] Starting frontend on port ${frontendPort}...`);
-    try {
-      const { process: frontendProc } = await startProcess(
-        frontendDir,
-        'npx',
-        ['react-scripts', 'start'],
-        { PORT: String(frontendPort), BROWSER: 'none' },
-        /compiled|webpack|ready|started/i,
-        30000,
-      );
-      entry.frontend = frontendProc;
-      urls.push(`http://localhost:${frontendPort}`);
-      log(`[run-app] Frontend running at http://localhost:${frontendPort}`);
-    } catch (err) {
-      log(`[run-app] Frontend start failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  if (!backendDir && !frontendDir) {
-    // Try root as a single app
-    log('[run-app] No backend/frontend dirs, trying root...');
-    try {
-      const { process: proc } = await startProcess(
-        repoPath,
-        'pnpm',
-        ['start'],
-        { PORT: String(backendPort) },
-        /listening|running|started|ready/i,
-        15000,
-      );
-      entry.backend = proc;
-      urls.push(`http://localhost:${backendPort}`);
-      log(`[run-app] App running at http://localhost:${backendPort}`);
-    } catch (err) {
-      log(`[run-app] App start failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  runningApps.set(projectId, entry);
-
-  if (urls.length === 0) {
-    throw new Error('Failed to start any application');
-  }
-
-  log(`[run-app] Application started! URLs: ${urls.join(', ')}`);
-
-  return {
-    filesCreated: [],
-    filesModified: [],
-    logs,
-  };
-}
-
-/** Stop a running app for a project */
-export async function stopApp(projectId: string, onLog?: (msg: string) => void): Promise<void> {
-  const existing = runningApps.get(projectId);
-  if (!existing) return;
-
-  onLog?.('[run-app] Stopping existing processes...');
-
-  if (existing.backend) try { existing.backend.kill('SIGTERM'); } catch { /* ignore */ }
-  if (existing.frontend) try { existing.frontend.kill('SIGTERM'); } catch { /* ignore */ }
-
-  await new Promise(r => setTimeout(r, 1000));
-
-  if (existing.backend) try { existing.backend.kill('SIGKILL'); } catch { /* ignore */ }
-  if (existing.frontend) try { existing.frontend.kill('SIGKILL'); } catch { /* ignore */ }
-
-  runningApps.delete(projectId);
-}
-
-/** Get running app info */
-export function getRunningApp(projectId: string) {
-  const entry = runningApps.get(projectId);
-  if (!entry) return null;
-  return {
-    backendUrl: entry.backend ? `http://localhost:${entry.backendPort}` : null,
-    frontendUrl: entry.frontend ? `http://localhost:${entry.frontendPort}` : null,
-    running: !!(entry.backend || entry.frontend),
-  };
-}

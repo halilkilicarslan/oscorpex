@@ -17,6 +17,7 @@ import {
   Bell,
   BellOff,
   Terminal,
+  Eye,
 } from 'lucide-react';
 import {
   fetchProject,
@@ -39,6 +40,7 @@ import AgentDashboard from './AgentDashboard';
 import ProjectSettings from './ProjectSettings';
 import DiffViewer from './DiffViewer';
 import AgentLogViewer from './AgentLogViewer';
+import LivePreview from './LivePreview';
 import { useStudioWebSocket } from '../../hooks/useStudioWebSocket';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -46,13 +48,14 @@ import { useNotifications } from '../../hooks/useNotifications';
 type BoardView = 'kanban' | 'pipeline';
 
 // Sekme türü tanımı — settings sekmesi eklendi
-type Tab = 'chat' | 'team' | 'board' | 'files' | 'events' | 'messages' | 'dashboard' | 'logs' | 'diff' | 'settings';
+type Tab = 'chat' | 'team' | 'board' | 'preview' | 'files' | 'events' | 'messages' | 'dashboard' | 'logs' | 'diff' | 'settings';
 
 // Sabit sekme listesi (messages badge'i dinamik olarak eklenir)
 const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat', label: 'PM Chat', icon: <MessageSquare size={16} /> },
   { id: 'team', label: 'Team', icon: <Users size={16} /> },
   { id: 'board', label: 'Board', icon: <Kanban size={16} /> },
+  { id: 'preview', label: 'Preview', icon: <Eye size={16} /> },
   { id: 'files', label: 'Files', icon: <FolderTree size={16} /> },
   { id: 'events', label: 'Events', icon: <Activity size={16} /> },
   { id: 'messages', label: 'Messages', icon: <Inbox size={16} /> },
@@ -75,7 +78,7 @@ export default function ProjectPage() {
   // Polling referansı — bellek sızıntısını önlemek için
   const unreadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // App runner state
-  const [appStatus, setAppStatus] = useState<AppStatus>({ running: false, backendUrl: null, frontendUrl: null });
+  const [appStatus, setAppStatus] = useState<AppStatus>({ running: false, services: [], previewUrl: null, backendUrl: null, frontendUrl: null });
   const [appLoading, setAppLoading] = useState(false);
   // WebSocket + browser notifications
   const { lastEvent } = useStudioWebSocket(projectId ?? '');
@@ -173,7 +176,17 @@ export default function ProjectPage() {
                 <span className="text-[11px] text-[#525252]">{project.techStack.join(', ')}</span>
               </>
             )}
-            {appStatus.running && (
+            {appStatus.running && appStatus.services?.length > 0 && (
+              <>
+                <span className="text-[#262626]">|</span>
+                {appStatus.services.map(s => (
+                  <a key={s.name} href={s.url} target="_blank" rel="noreferrer" className="text-[11px] text-[#22c55e] hover:underline">
+                    {s.name}
+                  </a>
+                ))}
+              </>
+            )}
+            {appStatus.running && (!appStatus.services || appStatus.services.length === 0) && (
               <>
                 <span className="text-[#262626]">|</span>
                 {appStatus.backendUrl && (
@@ -287,6 +300,13 @@ export default function ProjectPage() {
               {boardView === 'pipeline' && <PipelineDashboard projectId={projectId!} />}
             </div>
           </div>
+        )}
+        {activeTab === 'preview' && (
+          <LivePreview
+            projectId={projectId!}
+            appStatus={appStatus}
+            onStatusChange={setAppStatus}
+          />
         )}
         {activeTab === 'files' && <FileExplorer projectId={projectId!} />}
         {activeTab === 'events' && <EventFeed projectId={projectId!} />}
