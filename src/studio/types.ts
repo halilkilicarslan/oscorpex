@@ -57,6 +57,7 @@ export type TaskStatus =
   | 'assigned'
   | 'running'
   | 'review'
+  | 'revision'
   | 'done'
   | 'failed';
 
@@ -87,11 +88,30 @@ export interface Task {
   error?: string;
   startedAt?: string;
   completedAt?: string;
+  // v2: review loop fields
+  reviewStatus?: 'approved' | 'rejected' | null;
+  reviewerAgentId?: string;
+  revisionCount: number;
+  assignedAgentId?: string; // FK to project_agents.id
 }
 
 // ---- Agent Configuration ---------------------------------------------------
 
 export type AgentRole =
+  // v2 roles
+  | 'product-owner'
+  | 'scrum-master'
+  | 'tech-lead'
+  | 'business-analyst'
+  | 'design-lead'
+  | 'frontend-dev'
+  | 'backend-dev'
+  | 'frontend-qa'
+  | 'backend-qa'
+  | 'frontend-reviewer'
+  | 'backend-reviewer'
+  | 'devops'
+  // legacy roles (backward compat)
   | 'pm'
   | 'designer'
   | 'architect'
@@ -99,8 +119,7 @@ export type AgentRole =
   | 'backend'
   | 'coder'
   | 'qa'
-  | 'reviewer'
-  | 'devops';
+  | 'reviewer';
 
 export type CLITool = 'claude-code' | 'codex' | 'aider' | 'none';
 
@@ -424,4 +443,31 @@ export interface GitStatus {
   untracked: string[];
   staged: string[];
   deleted: string[];
+}
+
+// ---- Agent Dependencies (v2 org structure) ---------------------------------
+
+export type DependencyType = 'hierarchy' | 'workflow' | 'review' | 'gate';
+
+export interface AgentDependency {
+  id: string;
+  projectId: string;
+  fromAgentId: string;
+  toAgentId: string;
+  type: DependencyType;
+  createdAt: string;
+}
+
+// ---- Agent Capabilities (file scope restrictions) --------------------------
+
+export type CapabilityScopeType = 'path' | 'filetype' | 'module';
+export type CapabilityPermission = 'read' | 'write' | 'readwrite';
+
+export interface AgentCapability {
+  id: string;
+  agentId: string;
+  projectId: string;
+  scopeType: CapabilityScopeType;
+  pattern: string;
+  permission: CapabilityPermission;
 }

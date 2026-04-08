@@ -68,6 +68,15 @@ import {
   getProjectSettingsMap,
   setProjectSettings,
   recordTokenUsage,
+  createAgentDependency,
+  listAgentDependencies,
+  deleteAgentDependency,
+  deleteAllDependencies,
+  bulkCreateDependencies,
+  createAgentCapability,
+  listAgentCapabilities,
+  deleteAgentCapability,
+  deleteAllCapabilities,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { PM_SYSTEM_PROMPT, pmToolkit } from './pm-agent.js';
@@ -85,7 +94,7 @@ import {
   writeAgentFile,
   deleteAgentFiles,
 } from './agent-files.js';
-import type { ProjectAgent } from './types.js';
+import type { ProjectAgent, DependencyType, CapabilityScopeType, CapabilityPermission } from './types.js';
 import {
   sendMessage,
   getMessage,
@@ -2191,6 +2200,74 @@ studio.post('/worker/status', async (c) => {
 studio.get('/pool/status', async (c) => {
   const status = containerPool.getStatus();
   return c.json(status);
+});
+
+// ---- Agent Dependencies (v2 org structure) --------------------------------
+
+studio.get('/projects/:id/dependencies', (c) => {
+  const projectId = c.req.param('id');
+  const type = c.req.query('type') as DependencyType | undefined;
+  return c.json(listAgentDependencies(projectId, type));
+});
+
+studio.post('/projects/:id/dependencies', async (c) => {
+  const projectId = c.req.param('id');
+  const body = await c.req.json<{ fromAgentId: string; toAgentId: string; type?: DependencyType }>();
+  if (!body.fromAgentId || !body.toAgentId) {
+    return c.json({ error: 'fromAgentId and toAgentId required' }, 400);
+  }
+  const dep = createAgentDependency(projectId, body.fromAgentId, body.toAgentId, body.type ?? 'workflow');
+  return c.json(dep, 201);
+});
+
+studio.put('/projects/:id/dependencies', async (c) => {
+  const projectId = c.req.param('id');
+  const body = await c.req.json<{ dependencies: { fromAgentId: string; toAgentId: string; type: DependencyType }[] }>();
+  deleteAllDependencies(projectId);
+  const deps = bulkCreateDependencies(projectId, body.dependencies ?? []);
+  return c.json(deps);
+});
+
+studio.delete('/projects/:id/dependencies/:depId', (c) => {
+  const depId = c.req.param('depId');
+  deleteAgentDependency(depId);
+  return c.json({ ok: true });
+});
+
+// ---- Agent Capabilities (file scope restrictions) -------------------------
+
+studio.get('/projects/:id/capabilities', (c) => {
+  const projectId = c.req.param('id');
+  const agentId = c.req.query('agentId');
+  return c.json(listAgentCapabilities(projectId, agentId));
+});
+
+studio.post('/projects/:id/capabilities', async (c) => {
+  const projectId = c.req.param('id');
+  const body = await c.req.json<{
+    agentId: string;
+    pattern: string;
+    scopeType?: CapabilityScopeType;
+    permission?: CapabilityPermission;
+  }>();
+  if (!body.agentId || !body.pattern) {
+    return c.json({ error: 'agentId and pattern required' }, 400);
+  }
+  const cap = createAgentCapability(body.agentId, projectId, body.pattern, body.scopeType, body.permission);
+  return c.json(cap, 201);
+});
+
+studio.delete('/projects/:id/capabilities/:capId', (c) => {
+  const capId = c.req.param('capId');
+  deleteAgentCapability(capId);
+  return c.json({ ok: true });
+});
+
+studio.delete('/projects/:id/capabilities', (c) => {
+  const projectId = c.req.param('id');
+  const agentId = c.req.query('agentId');
+  deleteAllCapabilities(projectId, agentId);
+  return c.json({ ok: true });
 });
 
 export { studio as studioRoutes };

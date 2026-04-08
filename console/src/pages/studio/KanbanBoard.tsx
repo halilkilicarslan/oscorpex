@@ -17,6 +17,7 @@ const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
   { key: 'assigned', label: 'Assigned', color: 'border-[#3b82f6]' },
   { key: 'running', label: 'Running', color: 'border-[#f59e0b]' },
   { key: 'review', label: 'Review', color: 'border-[#a855f7]' },
+  { key: 'revision', label: 'Revision', color: 'border-[#f97316]' },
   { key: 'done', label: 'Done', color: 'border-[#22c55e]' },
   { key: 'failed', label: 'Failed', color: 'border-[#ef4444]' },
 ];

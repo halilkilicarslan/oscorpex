@@ -42,7 +42,7 @@ export interface Task {
   title: string;
   description: string;
   assignedAgent: string;
-  status: 'queued' | 'assigned' | 'running' | 'review' | 'done' | 'failed';
+  status: 'queued' | 'assigned' | 'running' | 'review' | 'revision' | 'done' | 'failed';
   complexity: 'S' | 'M' | 'L';
   dependsOn: string[];
   branch: string;
@@ -56,6 +56,10 @@ export interface Task {
   error?: string;
   startedAt?: string;
   completedAt?: string;
+  reviewStatus?: 'approved' | 'rejected' | null;
+  reviewerAgentId?: string;
+  revisionCount?: number;
+  assignedAgentId?: string;
 }
 
 export interface AgentConfig {
@@ -1295,6 +1299,20 @@ export async function fetchPoolStatus(): Promise<PoolStatus> {
 // ---- Helpers ---------------------------------------------------------------
 
 const ROLE_LABELS: Record<string, string> = {
+  // v2 roles
+  'product-owner': 'Product Owner',
+  'scrum-master': 'Scrum Master',
+  'tech-lead': 'Tech Lead',
+  'business-analyst': 'Business Analyst',
+  'design-lead': 'Design Lead',
+  'frontend-dev': 'Frontend Developer',
+  'backend-dev': 'Backend Developer',
+  'frontend-qa': 'Frontend QA Engineer',
+  'backend-qa': 'Backend QA Engineer',
+  'frontend-reviewer': 'Frontend Code Reviewer',
+  'backend-reviewer': 'Backend Code Reviewer',
+  devops: 'DevOps Engineer',
+  // legacy roles
   pm: 'Project Manager',
   architect: 'Software Architect',
   frontend: 'Frontend Developer',
@@ -1303,7 +1321,6 @@ const ROLE_LABELS: Record<string, string> = {
   qa: 'QA Engineer',
   reviewer: 'Code Reviewer',
   designer: 'UI/UX Designer',
-  devops: 'DevOps Engineer',
 };
 
 export function roleLabel(role: string): string {

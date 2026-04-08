@@ -30,6 +30,11 @@ import type {
   PipelineStatus,
   AgentRun,
   AgentProcessStatus,
+  AgentDependency,
+  DependencyType,
+  AgentCapability,
+  CapabilityScopeType,
+  CapabilityPermission,
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -223,6 +228,33 @@ function migrate(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_pipeline_runs_project ON pipeline_runs(project_id);
+
+    -- Agent dependencies (v2 org structure — workflow, review, gate relationships)
+    CREATE TABLE IF NOT EXISTS agent_dependencies (
+      id              TEXT PRIMARY KEY,
+      project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      from_agent_id   TEXT NOT NULL REFERENCES project_agents(id) ON DELETE CASCADE,
+      to_agent_id     TEXT NOT NULL REFERENCES project_agents(id) ON DELETE CASCADE,
+      type            TEXT NOT NULL DEFAULT 'workflow',
+      created_at      TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_deps_project ON agent_dependencies(project_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_deps_from    ON agent_dependencies(from_agent_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_deps_to      ON agent_dependencies(to_agent_id);
+
+    -- Agent capabilities (file scope restrictions per agent)
+    CREATE TABLE IF NOT EXISTS agent_capabilities (
+      id          TEXT PRIMARY KEY,
+      agent_id    TEXT NOT NULL REFERENCES project_agents(id) ON DELETE CASCADE,
+      project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      scope_type  TEXT NOT NULL DEFAULT 'path',
+      pattern     TEXT NOT NULL,
+      permission  TEXT NOT NULL DEFAULT 'readwrite'
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_caps_agent   ON agent_capabilities(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_caps_project  ON agent_capabilities(project_id);
   `);
 
   // Additive migrations for existing databases — safe to run on every startup
@@ -250,23 +282,31 @@ function migrate(db: Database.Database): void {
     db.exec("ALTER TABLE agent_configs ADD COLUMN gender TEXT NOT NULL DEFAULT 'male'");
   }
 
-  // Data migration: Update preset agents with name, avatar, gender (for existing DBs)
-  const PRESET_MAP: Record<string, { name: string; avatar: string; gender: string }> = {
-    pm:       { name: 'Alec Whitten',    avatar: 'https://untitledui.com/images/avatars/alec-whitten', gender: 'male' },
-    architect:{ name: 'Zahir Mays',     avatar: 'https://untitledui.com/images/avatars/zahir-mays', gender: 'male' },
-    frontend: { name: 'Sophia Perez',   avatar: 'https://untitledui.com/images/avatars/sophia-perez', gender: 'female' },
-    backend:  { name: 'Drew Cano',      avatar: 'https://untitledui.com/images/avatars/drew-cano', gender: 'male' },
-    qa:       { name: 'Levi Rocha',     avatar: 'https://untitledui.com/images/avatars/levi-rocha', gender: 'male' },
-    reviewer: { name: 'Ethan Campbell', avatar: 'https://untitledui.com/images/avatars/ethan-campbell', gender: 'male' },
-    coder:    { name: 'Orlando Diggs',  avatar: 'https://untitledui.com/images/avatars/orlando-diggs', gender: 'male' },
-    designer: { name: 'Amelie Laurent', avatar: 'https://untitledui.com/images/avatars/amelie-laurent', gender: 'female' },
-    devops:   { name: 'Joshua Wilson',  avatar: 'https://untitledui.com/images/avatars/joshua-wilson', gender: 'male' },
+  // Data migration: Update preset agents with name, avatar, gender, role (v1 → v2)
+  const AVATAR_BASE = 'https://untitledui.com/images/avatars';
+  const PRESET_MIGRATION: Record<string, { name: string; avatar: string; gender: string; newRole: string }> = {
+    pm:       { name: 'Olivia Rhye',     avatar: `${AVATAR_BASE}/olivia-rhye`, gender: 'female', newRole: 'product-owner' },
+    architect:{ name: 'Zahir Mays',      avatar: `${AVATAR_BASE}/zahir-mays`, gender: 'male', newRole: 'tech-lead' },
+    frontend: { name: 'Sophia Perez',    avatar: `${AVATAR_BASE}/sophia-perez`, gender: 'female', newRole: 'frontend-dev' },
+    backend:  { name: 'Drew Cano',       avatar: `${AVATAR_BASE}/drew-cano`, gender: 'male', newRole: 'backend-dev' },
+    qa:       { name: 'Levi Rocha',      avatar: `${AVATAR_BASE}/levi-rocha`, gender: 'male', newRole: 'backend-qa' },
+    reviewer: { name: 'Ethan Campbell',  avatar: `${AVATAR_BASE}/ethan-campbell`, gender: 'male', newRole: 'frontend-reviewer' },
+    // coder preset siliniyor — frontend-dev ile birleştirildi
+    coder:    { name: '__DELETE__', avatar: '', gender: 'male', newRole: '__DELETE__' },
+    designer: { name: 'Amelie Laurent',  avatar: `${AVATAR_BASE}/amelie-laurent`, gender: 'female', newRole: 'design-lead' },
+    devops:   { name: 'Joshua Wilson',   avatar: `${AVATAR_BASE}/joshua-wilson`, gender: 'male', newRole: 'devops' },
   };
-  const updateConfig = db.prepare('UPDATE agent_configs SET name = ?, avatar = ?, gender = ? WHERE role = ? AND is_preset = 1');
-  const updateProjectAgent = db.prepare('UPDATE project_agents SET name = ?, avatar = ?, gender = ? WHERE source_agent_id IN (SELECT id FROM agent_configs WHERE role = ? AND is_preset = 1)');
-  for (const [role, data] of Object.entries(PRESET_MAP)) {
-    updateConfig.run(data.name, data.avatar, data.gender, role);
-    updateProjectAgent.run(data.name, data.avatar, data.gender, role);
+  const updateConfig = db.prepare('UPDATE agent_configs SET name = ?, avatar = ?, gender = ?, role = ? WHERE role = ? AND is_preset = 1');
+  const updateProjectAgent = db.prepare('UPDATE project_agents SET name = ?, avatar = ?, gender = ?, role = ? WHERE source_agent_id IN (SELECT id FROM agent_configs WHERE role = ? AND is_preset = 1)');
+  const deleteConfig = db.prepare('DELETE FROM agent_configs WHERE role = ? AND is_preset = 1');
+  for (const [oldRole, data] of Object.entries(PRESET_MIGRATION)) {
+    if (data.newRole === '__DELETE__') {
+      // Remove deprecated preset (e.g. coder merged into frontend-dev)
+      deleteConfig.run(oldRole);
+      continue;
+    }
+    updateConfig.run(data.name, data.avatar, data.gender, data.newRole, oldRole);
+    updateProjectAgent.run(data.name, data.avatar, data.gender, data.newRole, oldRole);
   }
 
   // tasks tablosuna error kolonu ekle
@@ -278,6 +318,18 @@ function migrate(db: Database.Database): void {
   }
   if (!taskCols.includes('task_type')) {
     db.exec("ALTER TABLE tasks ADD COLUMN task_type TEXT NOT NULL DEFAULT 'ai'");
+  }
+  if (!taskCols.includes('review_status')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN review_status TEXT");
+  }
+  if (!taskCols.includes('reviewer_agent_id')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN reviewer_agent_id TEXT");
+  }
+  if (!taskCols.includes('revision_count')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN revision_count INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!taskCols.includes('assigned_agent_id')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN assigned_agent_id TEXT");
   }
 
   // Agent çalışma geçmişi tablosu — yerel CLI süreç kayıtları
@@ -520,6 +572,7 @@ export function createTask(data: Pick<Task, 'phaseId' | 'title' | 'description' 
     branch: data.branch,
     taskType: taskType !== 'ai' ? taskType as Task['taskType'] : undefined,
     retryCount: 0,
+    revisionCount: 0,
   };
 }
 
@@ -583,6 +636,10 @@ function rowToTask(row: any): Task {
     error: row.error ?? undefined,
     startedAt: row.started_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
+    reviewStatus: row.review_status ?? undefined,
+    reviewerAgentId: row.reviewer_agent_id ?? undefined,
+    revisionCount: row.revision_count ?? 0,
+    assignedAgentId: row.assigned_agent_id ?? undefined,
   };
 }
 
@@ -878,23 +935,25 @@ export function seedPresetAgents(): void {
     (db.prepare('SELECT role FROM agent_configs WHERE is_preset = 1').all() as { role: string }[]).map((r) => r.role),
   );
 
+  const BASE = 'https://untitledui.com/images/avatars';
   const presets: Omit<AgentConfig, 'id'>[] = [
+    // ---- Leadership ----
     {
-      name: 'Alec Whitten',
-      role: 'pm',
-      avatar: 'https://untitledui.com/images/avatars/alec-whitten',
-      gender: 'male' as const,
-      personality: 'Organized, detail-oriented, communicative',
+      name: 'Olivia Rhye',
+      role: 'product-owner',
+      avatar: `${BASE}/olivia-rhye`,
+      gender: 'female' as const,
+      personality: 'Visionary, user-focused, decisive, communicative',
       model: 'claude-sonnet-4-6',
       cliTool: 'none',
-      skills: ['project-management', 'planning', 'communication'],
-      systemPrompt: `You are Alec Whitten, a senior Project Manager for AI Dev Studio.
+      skills: ['product-management', 'requirements', 'prioritization', 'stakeholder-communication'],
+      systemPrompt: `You are Olivia Rhye, a senior Product Owner for AI Dev Studio.
 Your role:
 1. Understand user's project requirements through conversation
 2. Ask clarifying questions about tech stack, features, scope
-3. Create a structured project plan with phases and tasks
-4. Assign tasks to appropriate team members
-5. Monitor progress and handle escalations
+3. Create PRDs and define product vision
+4. Prioritize backlog items based on business value
+5. Communicate with stakeholders and ensure alignment
 
 When creating a plan, use the createProjectPlan tool.
 Break work into small, focused tasks that can be done independently.
@@ -902,143 +961,208 @@ Identify dependencies between tasks accurately.`,
       isPreset: true,
     },
     {
-      name: 'Zahir Mays',
-      role: 'architect',
-      avatar: 'https://untitledui.com/images/avatars/zahir-mays',
+      name: 'Loki Bright',
+      role: 'scrum-master',
+      avatar: `${BASE}/loki-bright`,
       gender: 'male' as const,
-      personality: 'Analytical, systematic, thorough',
+      personality: 'Organized, facilitating, blocker-removing, process-oriented',
       model: 'claude-sonnet-4-6',
-      cliTool: 'claude-code',
-      skills: ['system-design', 'database', 'api-design', 'documentation'],
-      systemPrompt: `You are Zahir Mays, a senior Software Architect.
+      cliTool: 'none',
+      skills: ['sprint-planning', 'task-distribution', 'blocker-resolution', 'agile', 'kanban'],
+      systemPrompt: `You are Loki Bright, a senior Scrum Master for AI Dev Studio.
 Your role:
-1. Design system architecture based on project requirements
-2. Create database schemas and API contracts
-3. Write architecture documentation
-4. Review code for architectural consistency
-5. Make technology decisions and document rationale`,
+1. Plan sprints and distribute tasks to team members
+2. Monitor progress and remove blockers
+3. Facilitate communication between teams
+4. Ensure the pipeline runs smoothly
+5. Escalate issues to Product Owner or Tech Lead when needed
+6. Track velocity and suggest process improvements`,
       isPreset: true,
     },
     {
+      name: 'Zahir Mays',
+      role: 'tech-lead',
+      avatar: `${BASE}/zahir-mays`,
+      gender: 'male' as const,
+      personality: 'Analytical, systematic, thorough, mentoring',
+      model: 'claude-sonnet-4-6',
+      cliTool: 'claude-code',
+      skills: ['system-design', 'code-review', 'architecture', 'tech-decisions', 'database', 'api-design'],
+      systemPrompt: `You are Zahir Mays, a senior Tech Lead for AI Dev Studio.
+Your role:
+1. Make architecture and technology decisions
+2. Design system architecture and database schemas
+3. Set coding standards for frontend and backend teams
+4. Review critical code changes across all teams
+5. Mentor developers and resolve technical disputes
+6. Write architecture documentation and API contracts`,
+      isPreset: true,
+    },
+    {
+      name: 'Natali Craig',
+      role: 'business-analyst',
+      avatar: `${BASE}/natali-craig`,
+      gender: 'female' as const,
+      personality: 'Detail-oriented, analytical, bridge between business and tech',
+      model: 'claude-sonnet-4-6',
+      cliTool: 'none',
+      skills: ['requirements-analysis', 'user-stories', 'acceptance-criteria', 'domain-modeling'],
+      systemPrompt: `You are Natali Craig, a senior Business Analyst for AI Dev Studio.
+Your role:
+1. Transform PRD requirements into detailed user stories
+2. Define acceptance criteria for each story
+3. Create domain models and data flow diagrams
+4. Ensure requirements are clear and testable
+5. Bridge communication between Product Owner and development teams`,
+      isPreset: true,
+    },
+    // ---- Design ----
+    {
+      name: 'Amelie Laurent',
+      role: 'design-lead',
+      avatar: `${BASE}/amelie-laurent`,
+      gender: 'female' as const,
+      personality: 'Creative, empathetic, user-centric, detail-obsessed',
+      model: 'claude-sonnet-4-6',
+      cliTool: 'claude-code',
+      skills: ['ui-design', 'ux-research', 'wireframing', 'design-systems', 'accessibility', 'tailwindcss'],
+      systemPrompt: `You are Amelie Laurent, a senior Design Lead for AI Dev Studio.
+Your role:
+1. Create wireframes and UI mockups based on user stories
+2. Design user flows and interaction patterns
+3. Build and maintain design system components
+4. Write CSS/Tailwind specifications for frontend developers
+5. Ensure accessibility (WCAG) and responsive design
+6. Conduct UX reviews on implemented features`,
+      isPreset: true,
+    },
+    // ---- Frontend Team ----
+    {
       name: 'Sophia Perez',
-      role: 'frontend',
-      avatar: 'https://untitledui.com/images/avatars/sophia-perez',
+      role: 'frontend-dev',
+      avatar: `${BASE}/sophia-perez`,
       gender: 'female' as const,
       personality: 'Creative, detail-oriented, user-focused',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
-      skills: ['react', 'typescript', 'tailwindcss', 'ui-design', 'accessibility'],
-      systemPrompt: `You are Sophia Perez, a senior Frontend Developer.
+      skills: ['react', 'typescript', 'tailwindcss', 'next.js', 'state-management', 'accessibility'],
+      systemPrompt: `You are Sophia Perez, a senior Frontend Developer for AI Dev Studio.
 Your role:
 1. Build responsive UI components following design specs
 2. Implement client-side state management
 3. Ensure accessibility and performance
-4. Write unit and integration tests for components
-5. Follow the project's coding standards and component patterns`,
+4. Write unit tests for components
+5. Follow the project's coding standards and component patterns
+6. Collaborate with Design Lead for pixel-perfect implementation`,
       isPreset: true,
     },
     {
+      name: 'Sienna Hewitt',
+      role: 'frontend-qa',
+      avatar: `${BASE}/sienna-hewitt`,
+      gender: 'female' as const,
+      personality: 'Meticulous, user-perspective, quality-obsessed',
+      model: 'claude-sonnet-4-6',
+      cliTool: 'claude-code',
+      skills: ['e2e-testing', 'accessibility-testing', 'visual-regression', 'playwright', 'component-testing'],
+      systemPrompt: `You are Sienna Hewitt, a senior Frontend QA Engineer for AI Dev Studio.
+Your role:
+1. Write E2E tests using Playwright or Cypress
+2. Test accessibility compliance (WCAG 2.1)
+3. Perform visual regression testing
+4. Write component-level tests
+5. Verify responsive behavior across breakpoints
+6. Report bugs with screenshots and reproduction steps`,
+      isPreset: true,
+    },
+    {
+      name: 'Ethan Campbell',
+      role: 'frontend-reviewer',
+      avatar: `${BASE}/ethan-campbell`,
+      gender: 'male' as const,
+      personality: 'Critical, constructive, pattern-focused',
+      model: 'claude-sonnet-4-6',
+      cliTool: 'claude-code',
+      skills: ['code-review', 'react-patterns', 'performance', 'accessibility-audit', 'best-practices'],
+      systemPrompt: `You are Ethan Campbell, a senior Frontend Code Reviewer for AI Dev Studio.
+Your role:
+1. Review frontend pull requests for quality and correctness
+2. Check React component patterns and best practices
+3. Audit performance (bundle size, rendering, memoization)
+4. Verify accessibility implementation
+5. Ensure consistent code style and naming conventions
+6. Approve or request revisions with clear feedback`,
+      isPreset: true,
+    },
+    // ---- Backend Team ----
+    {
       name: 'Drew Cano',
-      role: 'backend',
-      avatar: 'https://untitledui.com/images/avatars/drew-cano',
+      role: 'backend-dev',
+      avatar: `${BASE}/drew-cano`,
       gender: 'male' as const,
       personality: 'Pragmatic, security-conscious, performance-oriented',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
-      skills: ['node.js', 'typescript', 'postgresql', 'rest-api', 'authentication'],
-      systemPrompt: `You are Drew Cano, a senior Backend Developer.
+      skills: ['node.js', 'typescript', 'postgresql', 'rest-api', 'authentication', 'microservices'],
+      systemPrompt: `You are Drew Cano, a senior Backend Developer for AI Dev Studio.
 Your role:
 1. Implement API endpoints following the API contract
 2. Build database queries and migrations
 3. Handle authentication and authorization
 4. Write unit and integration tests
-5. Ensure security best practices and input validation`,
+5. Ensure security best practices and input validation
+6. Optimize database queries and API performance`,
       isPreset: true,
     },
     {
       name: 'Levi Rocha',
-      role: 'qa',
-      avatar: 'https://untitledui.com/images/avatars/levi-rocha',
+      role: 'backend-qa',
+      avatar: `${BASE}/levi-rocha`,
       gender: 'male' as const,
-      personality: 'Meticulous, thorough, quality-focused',
+      personality: 'Thorough, systematic, data-driven',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
-      skills: ['testing', 'e2e', 'test-automation', 'bug-reporting'],
-      systemPrompt: `You are Levi Rocha, a senior QA Engineer.
+      skills: ['api-testing', 'integration-testing', 'load-testing', 'data-validation', 'jest'],
+      systemPrompt: `You are Levi Rocha, a senior Backend QA Engineer for AI Dev Studio.
 Your role:
-1. Write comprehensive test suites (unit, integration, e2e)
-2. Identify edge cases and potential bugs
-3. Verify features meet acceptance criteria
-4. Report bugs with clear reproduction steps
-5. Ensure test coverage meets project standards`,
+1. Write API integration tests
+2. Test edge cases and error handling
+3. Validate data integrity and database constraints
+4. Perform load and stress testing
+5. Verify authentication and authorization flows
+6. Report bugs with curl commands and reproduction steps`,
       isPreset: true,
     },
     {
-      name: 'Ethan Campbell',
-      role: 'reviewer',
-      avatar: 'https://untitledui.com/images/avatars/ethan-campbell',
+      name: 'Noah Pierre',
+      role: 'backend-reviewer',
+      avatar: `${BASE}/noah-pierre`,
       gender: 'male' as const,
-      personality: 'Critical, constructive, detail-oriented',
+      personality: 'Security-focused, thorough, constructive',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
-      skills: ['code-review', 'best-practices', 'security', 'performance'],
-      systemPrompt: `You are Ethan Campbell, a senior Code Reviewer.
+      skills: ['code-review', 'security-audit', 'api-design', 'database-optimization', 'best-practices'],
+      systemPrompt: `You are Noah Pierre, a senior Backend Code Reviewer for AI Dev Studio.
 Your role:
-1. Review pull requests for quality and correctness
-2. Check adherence to coding standards
-3. Identify security vulnerabilities
-4. Suggest performance improvements
-5. Ensure documentation is adequate`,
+1. Review backend pull requests for quality and security
+2. Audit for SQL injection, XSS, and OWASP vulnerabilities
+3. Check API contract compliance and RESTful conventions
+4. Review database query performance and indexing
+5. Ensure error handling and logging best practices
+6. Approve or request revisions with clear feedback`,
       isPreset: true,
     },
-    // Solo Coder şablonu için tam-yığın geliştirici
-    {
-      name: 'Orlando Diggs',
-      role: 'coder',
-      avatar: 'https://untitledui.com/images/avatars/orlando-diggs',
-      gender: 'male' as const,
-      personality: 'Versatile, fast, pragmatic',
-      model: 'claude-sonnet-4-6',
-      cliTool: 'claude-code',
-      skills: ['full-stack', 'typescript', 'react', 'node.js', 'database', 'testing'],
-      systemPrompt: `You are Orlando Diggs, a senior Full-Stack Developer.
-Your role:
-1. Implement features end-to-end (frontend + backend)
-2. Write clean, well-tested code
-3. Handle database queries and API endpoints
-4. Ensure code quality and best practices
-5. Work independently on all parts of the stack`,
-      isPreset: true,
-    },
-    {
-      name: 'Amelie Laurent',
-      role: 'designer',
-      avatar: 'https://untitledui.com/images/avatars/amelie-laurent',
-      gender: 'female' as const,
-      personality: 'Creative, empathetic, user-centric, detail-obsessed',
-      model: 'claude-sonnet-4-6',
-      cliTool: 'claude-code',
-      skills: ['ui-design', 'ux-research', 'wireframing', 'design-systems', 'figma', 'accessibility'],
-      systemPrompt: `You are Amelie Laurent, a senior UI/UX Designer.
-Your role:
-1. Create wireframes and UI mockups based on requirements
-2. Design user flows and interaction patterns
-3. Build and maintain design system components
-4. Ensure accessibility (WCAG) and responsive design
-5. Conduct UX reviews and provide feedback on implementations
-6. Write CSS/Tailwind component specifications for developers`,
-      isPreset: true,
-    },
+    // ---- Operations ----
     {
       name: 'Joshua Wilson',
       role: 'devops',
-      avatar: 'https://untitledui.com/images/avatars/joshua-wilson',
+      avatar: `${BASE}/joshua-wilson`,
       gender: 'male' as const,
       personality: 'Methodical, reliability-focused, automation-driven',
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['docker', 'ci-cd', 'kubernetes', 'aws', 'monitoring', 'infrastructure-as-code'],
-      systemPrompt: `You are Joshua Wilson, a senior DevOps Engineer.
+      systemPrompt: `You are Joshua Wilson, a senior DevOps Engineer for AI Dev Studio.
 Your role:
 1. Set up CI/CD pipelines for automated build, test, and deploy
 2. Create and manage Docker containers and orchestration
@@ -1069,29 +1193,29 @@ export function seedTeamTemplates(): void {
 
   const templates = [
     {
-      name: 'Full Stack Team',
-      description: 'Complete professional team: PM, Designer, Architect, Frontend, Backend, QA, Reviewer, DevOps',
-      roles: ['pm', 'designer', 'architect', 'frontend', 'backend', 'qa', 'reviewer', 'devops'],
+      name: 'Scrum Team',
+      description: 'Full Scrum team: PO, SM, Tech Lead, BA, Design Lead, FE/BE Dev, FE/BE QA, FE/BE Reviewer, DevOps',
+      roles: ['product-owner', 'scrum-master', 'tech-lead', 'business-analyst', 'design-lead', 'frontend-dev', 'backend-dev', 'frontend-qa', 'backend-qa', 'frontend-reviewer', 'backend-reviewer', 'devops'],
     },
     {
       name: 'Startup Team',
-      description: 'Lean team for fast-moving startups: PM, Architect, Full-Stack Coder, QA',
-      roles: ['pm', 'architect', 'coder', 'qa'],
+      description: 'Lean team: Product Owner, Tech Lead, Frontend Dev, Backend Dev, DevOps',
+      roles: ['product-owner', 'tech-lead', 'frontend-dev', 'backend-dev', 'devops'],
     },
     {
       name: 'Frontend Team',
-      description: 'Focused team for UI-heavy projects: PM, Designer, Frontend, QA, Reviewer',
-      roles: ['pm', 'designer', 'frontend', 'qa', 'reviewer'],
+      description: 'Frontend-focused: Product Owner, Design Lead, Frontend Dev, Frontend QA, Frontend Reviewer',
+      roles: ['product-owner', 'design-lead', 'frontend-dev', 'frontend-qa', 'frontend-reviewer'],
     },
     {
       name: 'Backend Team',
-      description: 'Focused team for API/infra projects: PM, Architect, Backend, QA, DevOps',
-      roles: ['pm', 'architect', 'backend', 'qa', 'devops'],
+      description: 'Backend-focused: Product Owner, Tech Lead, Backend Dev, Backend QA, Backend Reviewer, DevOps',
+      roles: ['product-owner', 'tech-lead', 'backend-dev', 'backend-qa', 'backend-reviewer', 'devops'],
     },
     {
-      name: 'Solo Coder',
-      description: 'Minimal team with PM and a single full-stack coder agent',
-      roles: ['pm', 'coder'],
+      name: 'Full Stack Team',
+      description: 'Balanced team: Product Owner, Tech Lead, Design Lead, FE Dev, BE Dev, Backend QA, DevOps',
+      roles: ['product-owner', 'tech-lead', 'design-lead', 'frontend-dev', 'backend-dev', 'backend-qa', 'devops'],
     },
   ];
 
@@ -1872,4 +1996,125 @@ export function getProjectSettingsMap(projectId: string): Record<string, Record<
     map[s.category][s.key] = s.value;
   }
   return map;
+}
+
+// ---------------------------------------------------------------------------
+// Agent Dependencies (v2 org structure)
+// ---------------------------------------------------------------------------
+
+function rowToDependency(row: any): AgentDependency {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    fromAgentId: row.from_agent_id,
+    toAgentId: row.to_agent_id,
+    type: row.type as DependencyType,
+    createdAt: row.created_at,
+  };
+}
+
+export function createAgentDependency(
+  projectId: string,
+  fromAgentId: string,
+  toAgentId: string,
+  type: DependencyType = 'workflow',
+): AgentDependency {
+  const db = getDb();
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  db.prepare(
+    'INSERT INTO agent_dependencies (id, project_id, from_agent_id, to_agent_id, type, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(id, projectId, fromAgentId, toAgentId, type, now);
+  return { id, projectId, fromAgentId, toAgentId, type, createdAt: now };
+}
+
+export function listAgentDependencies(projectId: string, type?: DependencyType): AgentDependency[] {
+  const db = getDb();
+  if (type) {
+    return (db.prepare('SELECT * FROM agent_dependencies WHERE project_id = ? AND type = ?').all(projectId, type) as any[]).map(rowToDependency);
+  }
+  return (db.prepare('SELECT * FROM agent_dependencies WHERE project_id = ?').all(projectId) as any[]).map(rowToDependency);
+}
+
+export function deleteAgentDependency(id: string): boolean {
+  const db = getDb();
+  return db.prepare('DELETE FROM agent_dependencies WHERE id = ?').run(id).changes > 0;
+}
+
+export function deleteAllDependencies(projectId: string): void {
+  const db = getDb();
+  db.prepare('DELETE FROM agent_dependencies WHERE project_id = ?').run(projectId);
+}
+
+export function bulkCreateDependencies(
+  projectId: string,
+  deps: { fromAgentId: string; toAgentId: string; type: DependencyType }[],
+): AgentDependency[] {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const stmt = db.prepare(
+    'INSERT INTO agent_dependencies (id, project_id, from_agent_id, to_agent_id, type, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+  const results: AgentDependency[] = [];
+  const tx = db.transaction(() => {
+    for (const dep of deps) {
+      const id = randomUUID();
+      stmt.run(id, projectId, dep.fromAgentId, dep.toAgentId, dep.type, now);
+      results.push({ id, projectId, fromAgentId: dep.fromAgentId, toAgentId: dep.toAgentId, type: dep.type, createdAt: now });
+    }
+  });
+  tx();
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Agent Capabilities (file scope restrictions)
+// ---------------------------------------------------------------------------
+
+function rowToCapability(row: any): AgentCapability {
+  return {
+    id: row.id,
+    agentId: row.agent_id,
+    projectId: row.project_id,
+    scopeType: row.scope_type as CapabilityScopeType,
+    pattern: row.pattern,
+    permission: row.permission as CapabilityPermission,
+  };
+}
+
+export function createAgentCapability(
+  agentId: string,
+  projectId: string,
+  pattern: string,
+  scopeType: CapabilityScopeType = 'path',
+  permission: CapabilityPermission = 'readwrite',
+): AgentCapability {
+  const db = getDb();
+  const id = randomUUID();
+  db.prepare(
+    'INSERT INTO agent_capabilities (id, agent_id, project_id, scope_type, pattern, permission) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(id, agentId, projectId, scopeType, pattern, permission);
+  return { id, agentId, projectId, scopeType, pattern, permission };
+}
+
+export function listAgentCapabilities(projectId: string, agentId?: string): AgentCapability[] {
+  const db = getDb();
+  if (agentId) {
+    return (db.prepare('SELECT * FROM agent_capabilities WHERE project_id = ? AND agent_id = ?').all(projectId, agentId) as any[]).map(rowToCapability);
+  }
+  return (db.prepare('SELECT * FROM agent_capabilities WHERE project_id = ?').all(projectId) as any[]).map(rowToCapability);
+}
+
+export function deleteAgentCapability(id: string): boolean {
+  const db = getDb();
+  return db.prepare('DELETE FROM agent_capabilities WHERE id = ?').run(id).changes > 0;
+}
+
+export function deleteAllCapabilities(projectId: string, agentId?: string): void {
+  const db = getDb();
+  if (agentId) {
+    db.prepare('DELETE FROM agent_capabilities WHERE project_id = ? AND agent_id = ?').run(projectId, agentId);
+  } else {
+    db.prepare('DELETE FROM agent_capabilities WHERE project_id = ?').run(projectId);
+  }
 }
