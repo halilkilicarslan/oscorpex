@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Kanban, Zap, AlertCircle, X, ShieldAlert, Check, XCircle } from 'lucide-react';
+import { Loader2, Kanban, Zap, AlertCircle, X, ShieldAlert, XCircle } from 'lucide-react';
 import {
   fetchTasks,
   retryTask,
@@ -7,7 +7,6 @@ import {
   fetchProjectAgents,
   approveTask,
   rejectTask,
-  roleLabel,
   type Task,
   type AutoStartStatus,
   type ProjectAgent,
@@ -167,97 +166,6 @@ function RejectModal({ taskTitle, onConfirm, onCancel }: RejectModalProps) {
             Reddet
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ---- Onay bekleyen task kartı -----------------------------------------------
-
-interface ApprovalTaskCardProps {
-  task: Task;
-  agents: ProjectAgent[];
-  onApprove: () => Promise<void>;
-  onReject: () => void;
-}
-
-function ApprovalTaskCard({ task, agents, onApprove, onReject }: ApprovalTaskCardProps) {
-  const [approving, setApproving] = useState(false);
-
-  const agent = agents.find(
-    (a) => a.role.toLowerCase() === task.assignedAgent.toLowerCase()
-      || a.name.toLowerCase() === task.assignedAgent.toLowerCase(),
-  );
-
-  const handleApprove = async () => {
-    if (approving) return;
-    setApproving(true);
-    try {
-      await onApprove();
-    } finally {
-      setApproving(false);
-    }
-  };
-
-  return (
-    <div className="bg-[#111111] border-2 border-[#f59e0b]/40 rounded-lg p-3 hover:border-[#f59e0b]/70 transition-colors">
-      {/* Awaiting Approval badge */}
-      <div className="flex items-center gap-1.5 mb-2">
-        <ShieldAlert size={12} className="text-[#f59e0b]" />
-        <span className="text-[10px] font-semibold text-[#f59e0b] uppercase tracking-wide">
-          Awaiting Approval
-        </span>
-        {task.complexity && (
-          <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b]">
-            {task.complexity}
-          </span>
-        )}
-      </div>
-
-      {/* Task baslik */}
-      <p className="text-[12px] font-medium text-[#e5e5e5] mb-1.5 leading-snug">
-        {task.title}
-      </p>
-
-      {/* Aciklama */}
-      {task.description && (
-        <p className="text-[11px] text-[#525252] mb-2 line-clamp-2">
-          {task.description}
-        </p>
-      )}
-
-      {/* Agent bilgisi */}
-      {agent && (
-        <div className="flex items-center gap-1.5 mb-3">
-          <span className="text-[10px] text-[#737373]">{roleLabel(agent.role)}</span>
-          <span className="text-[10px] font-medium text-[#a3a3a3]">{agent.name}</span>
-        </div>
-      )}
-
-      {/* Onay / Red butonları */}
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={handleApprove}
-          disabled={approving}
-          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/20 hover:border-[#22c55e]/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {approving ? (
-            <Loader2 size={11} className="animate-spin" />
-          ) : (
-            <Check size={11} />
-          )}
-          {approving ? 'Onaylaniyor...' : 'Onayla'}
-        </button>
-        <button
-          type="button"
-          onClick={onReject}
-          disabled={approving}
-          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#ef4444] hover:bg-[#ef4444]/20 hover:border-[#ef4444]/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <X size={11} />
-          Reddet
-        </button>
       </div>
     </div>
   );
@@ -424,6 +332,27 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
         {/* Pipeline auto-start durum cubugu */}
         {autoStartStatus && <PipelineAutoStartBadge status={autoStartStatus} />}
 
+        {/* Bekleyen onay bildirimi — waiting_approval task varsa göster */}
+        {(() => {
+          const pendingCount = tasks.filter((t) => t.status === 'waiting_approval').length;
+          if (pendingCount === 0) return null;
+          return (
+            <div className="flex items-center gap-2.5 px-3 py-2 mb-4 rounded-lg bg-[#f59e0b]/5 border border-[#f59e0b]/25 text-[11px]">
+              <ShieldAlert size={13} className="text-[#f59e0b] shrink-0" />
+              <span className="text-[#f59e0b] font-semibold">
+                {pendingCount} task onay bekliyor
+              </span>
+              <span className="text-[#737373]">—</span>
+              <span className="text-[#737373]">
+                Awaiting Approval kolonundaki task'ları inceleyip onaylayın veya reddedin.
+              </span>
+              <span className="ml-auto bg-[#f59e0b]/15 text-[#f59e0b] font-bold text-[10px] px-2 py-0.5 rounded-full border border-[#f59e0b]/30">
+                {pendingCount}
+              </span>
+            </div>
+          );
+        })()}
+
         <div className="flex gap-4 min-w-min flex-1">
           {activeColumns.map((col) => {
             const colTasks = grouped.get(col.key) ?? [];
@@ -447,25 +376,16 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
 
                 {/* Tasks */}
                 <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
-                  {colTasks.map((task) =>
-                    isApprovalCol ? (
-                      // waiting_approval task'lari için özel kart — onay/red butonları ile
-                      <ApprovalTaskCard
-                        key={task.id}
-                        task={task}
-                        agents={agents}
-                        onApprove={() => handleApprove(task.id)}
-                        onReject={() => handleOpenReject(task)}
-                      />
-                    ) : (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        agents={agents}
-                        onRetry={task.status === 'failed' ? () => handleRetry(task.id) : undefined}
-                      />
-                    ),
-                  )}
+                  {colTasks.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      agents={agents}
+                      onRetry={task.status === 'failed' ? () => handleRetry(task.id) : undefined}
+                      onApprove={isApprovalCol ? () => handleApprove(task.id) : undefined}
+                      onReject={isApprovalCol ? () => handleOpenReject(task) : undefined}
+                    />
+                  ))}
                 </div>
               </div>
             );

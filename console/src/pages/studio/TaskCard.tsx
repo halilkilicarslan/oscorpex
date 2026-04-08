@@ -11,6 +11,8 @@ import {
   ChevronUp,
   RotateCcw,
   ShieldAlert,
+  Check,
+  X,
 } from 'lucide-react';
 import { roleLabel, type Task, type ProjectAgent } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
@@ -37,12 +39,17 @@ export default function TaskCard({
   task,
   agents = [],
   onRetry,
+  onApprove,
+  onReject,
 }: {
   task: Task;
   agents?: ProjectAgent[];
   onRetry?: () => Promise<void>;
+  onApprove?: () => Promise<void>;
+  onReject?: () => void;
 }) {
   const [retrying, setRetrying] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [errorExpanded, setErrorExpanded] = useState(false);
 
   const handleRetry = async () => {
@@ -55,11 +62,39 @@ export default function TaskCard({
     }
   };
 
+  const handleApprove = async () => {
+    if (!onApprove || approving) return;
+    setApproving(true);
+    try {
+      await onApprove();
+    } finally {
+      setApproving(false);
+    }
+  };
+
   const isFailed = task.status === 'failed';
+  const isAwaitingApproval = task.status === 'waiting_approval';
   const hasError = isFailed && Boolean(task.error);
 
   return (
-    <div className="bg-[#111111] border border-[#262626] rounded-lg p-3 hover:border-[#333] transition-colors group">
+    <div
+      className={[
+        'bg-[#111111] border rounded-lg p-3 hover:border-[#333] transition-colors group',
+        isAwaitingApproval
+          ? 'border-[#f59e0b]/40 hover:border-[#f59e0b]/70'
+          : 'border-[#262626]',
+      ].join(' ')}
+    >
+      {/* Awaiting Approval badge — sadece waiting_approval durumunda */}
+      {isAwaitingApproval && (
+        <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-[#f59e0b]/15">
+          <ShieldAlert size={11} className="text-[#f59e0b]" />
+          <span className="text-[9px] font-semibold text-[#f59e0b] uppercase tracking-wide">
+            Awaiting Approval
+          </span>
+        </div>
+      )}
+
       {/* Baslik satiri */}
       <div className="flex items-start gap-2 mb-2">
         <div className="mt-0.5">{STATUS_ICON[task.status]}</div>
@@ -158,6 +193,38 @@ export default function TaskCard({
               {task.error}
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Onay / Red butonlari — waiting_approval durumunda ve handler varsa */}
+      {isAwaitingApproval && (onApprove || onReject) && (
+        <div className="flex gap-2 mt-3 pt-2 border-t border-[#f59e0b]/10">
+          {onApprove && (
+            <button
+              type="button"
+              onClick={handleApprove}
+              disabled={approving}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/20 hover:border-[#22c55e]/50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {approving ? (
+                <Loader2 size={10} className="animate-spin" />
+              ) : (
+                <Check size={10} />
+              )}
+              {approving ? 'Onaylaniyor...' : 'Onayla'}
+            </button>
+          )}
+          {onReject && (
+            <button
+              type="button"
+              onClick={onReject}
+              disabled={approving}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#ef4444] hover:bg-[#ef4444]/20 hover:border-[#ef4444]/50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <X size={10} />
+              Reddet
+            </button>
+          )}
         </div>
       )}
 

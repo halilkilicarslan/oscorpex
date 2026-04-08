@@ -1,14 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CheckCircle2,
   XCircle,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Loader2,
   ListChecks,
   GitBranch,
+  DollarSign,
+  Cpu,
+  Users,
 } from 'lucide-react';
-import type { ProjectPlan, Phase, Task } from '../../lib/studio-api';
+import type { ProjectPlan, Phase, Task, PlanCostEstimate } from '../../lib/studio-api';
+import { fetchPlanCostEstimate } from '../../lib/studio-api';
 
 // ---------------------------------------------------------------------------
 // Task row
@@ -81,24 +86,287 @@ function PhaseSection({ phase, index }: { phase: Phase; index: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Cost estimate helpers
+// ---------------------------------------------------------------------------
+
+function getCostColor(cost: number): string {
+  if (cost < 0.5) return '#22c55e';
+  if (cost < 1.0) return '#f59e0b';
+  return '#ef4444';
+}
+
+function getCostBgColor(cost: number): string {
+  if (cost < 0.5) return 'bg-[#22c55e]/10 border-[#22c55e]/20';
+  if (cost < 1.0) return 'bg-[#f59e0b]/10 border-[#f59e0b]/20';
+  return 'bg-[#ef4444]/10 border-[#ef4444]/20';
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+// ---------------------------------------------------------------------------
+// Per-phase cost breakdown (derived from plan + aggregate estimate)
+// ---------------------------------------------------------------------------
+
+interface PhaseCostRow {
+  name: string;
+  taskCount: number;
+  tokens: number;
+  cost: number;
+}
+
+function buildPhaseBreakdown(plan: ProjectPlan, estimate: PlanCostEstimate): PhaseCostRow[] {
+  const tokensPerTask = estimate.avgTokensPerTask;
+  const costPerTask = estimate.taskCount > 0 ? estimate.estimatedCost / estimate.taskCount : 0;
+
+  return plan.phases
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((phase) => ({
+      name: phase.name,
+      taskCount: phase.tasks.length,
+      tokens: phase.tasks.length * tokensPerTask,
+      cost: phase.tasks.length * costPerTask,
+    }));
+}
+
+// ---------------------------------------------------------------------------
+// Per-agent cost breakdown (derived from plan + aggregate estimate)
+// ---------------------------------------------------------------------------
+
+interface AgentCostRow {
+  agent: string;
+  taskCount: number;
+  tokens: number;
+  cost: number;
+}
+
+function buildAgentBreakdown(plan: ProjectPlan, estimate: PlanCostEstimate): AgentCostRow[] {
+  const tokensPerTask = estimate.avgTokensPerTask;
+  const costPerTask = estimate.taskCount > 0 ? estimate.estimatedCost / estimate.taskCount : 0;
+
+  const agentMap = new Map<string, { taskCount: number }>();
+  for (const phase of plan.phases) {
+    for (const task of phase.tasks) {
+      const key = task.assignedAgent || 'unassigned';
+      const existing = agentMap.get(key) ?? { taskCount: 0 };
+      agentMap.set(key, { taskCount: existing.taskCount + 1 });
+    }
+  }
+
+  return Array.from(agentMap.entries())
+    .map(([agent, { taskCount }]) => ({
+      agent,
+      taskCount,
+      tokens: taskCount * tokensPerTask,
+      cost: taskCount * costPerTask,
+    }))
+    .sort((a, b) => b.cost - a.cost);
+}
+
+// ---------------------------------------------------------------------------
+// Cost estimate panel
+// ---------------------------------------------------------------------------
+
+function CostEstimatePanel({ plan, estimate }: { plan: ProjectPlan; estimate: PlanCostEstimate }) {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [activeTab, setActiveTab] = useState<'phase' | 'agent'>('phase');
+
+  const costColor = getCostColor(estimate.estimatedCost);
+  const costBg = getCostBgColor(estimate.estimatedCost);
+  const isHighCost = estimate.estimatedCost >= 1.0;
+
+  const phaseRows = buildPhaseBreakdown(plan, estimate);
+  const agentRows = buildAgentBreakdown(plan, estimate);
+
+  return (
+    <div className={`border rounded-xl overflow-hidden ${costBg}`}>
+      {/* Summary row */}
+      <button
+        onClick={() => setShowBreakdown(!showBreakdown)}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left"
+      >
+        <DollarSign size={14} style={{ color: costColor }} className="shrink-0" />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-[13px] font-semibold" style={{ color: costColor }}>
+              ~${estimate.estimatedCost.toFixed(4)} {estimate.currency}
+            </span>
+            {isHighCost && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#ef4444]/20 text-[#ef4444]">
+                HIGH COST
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] text-[#525252]">
+            {formatTokens(estimate.estimatedTokens)} tokens &middot; {estimate.taskCount} tasks &middot; {estimate.model}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[10px] text-[#525252]">breakdown</span>
+          {showBreakdown ? (
+            <ChevronUp size={13} className="text-[#525252]" />
+          ) : (
+            <ChevronDown size={13} className="text-[#525252]" />
+          )}
+        </div>
+      </button>
+
+      {/* Token input/output mini-bar */}
+      <div className="px-4 pb-3 flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-[#525252]">Input</span>
+          <span className="text-[10px] font-medium text-[#a3a3a3]">
+            {formatTokens(estimate.breakdown.inputTokens)} tok
+          </span>
+          <span className="text-[10px] text-[#525252]">·</span>
+          <span className="text-[10px] text-[#525252]">${estimate.breakdown.inputCost.toFixed(4)}</span>
+        </div>
+        <div className="w-px h-3 bg-[#262626]" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-[#525252]">Output</span>
+          <span className="text-[10px] font-medium text-[#a3a3a3]">
+            {formatTokens(estimate.breakdown.outputTokens)} tok
+          </span>
+          <span className="text-[10px] text-[#525252]">·</span>
+          <span className="text-[10px] text-[#525252]">${estimate.breakdown.outputCost.toFixed(4)}</span>
+        </div>
+      </div>
+
+      {/* Collapsible breakdown */}
+      {showBreakdown && (
+        <div className="border-t border-[#262626]/50 bg-[#0a0a0a]/60">
+          {/* Tab bar */}
+          <div className="flex border-b border-[#262626]/50">
+            <button
+              onClick={() => setActiveTab('phase')}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-medium transition-colors ${
+                activeTab === 'phase'
+                  ? 'text-[#e5e5e5] border-b-2 border-[#525252] -mb-px'
+                  : 'text-[#525252] hover:text-[#a3a3a3]'
+              }`}
+            >
+              <GitBranch size={11} />
+              By Phase
+            </button>
+            <button
+              onClick={() => setActiveTab('agent')}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-medium transition-colors ${
+                activeTab === 'agent'
+                  ? 'text-[#e5e5e5] border-b-2 border-[#525252] -mb-px'
+                  : 'text-[#525252] hover:text-[#a3a3a3]'
+              }`}
+            >
+              <Users size={11} />
+              By Agent
+            </button>
+          </div>
+
+          {/* Phase breakdown table */}
+          {activeTab === 'phase' && (
+            <div className="p-3 flex flex-col gap-1.5">
+              {phaseRows.map((row, i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#141414] border border-[#1f1f1f]">
+                  <span className="text-[10px] font-bold text-[#525252] shrink-0 w-14">
+                    Phase {i + 1}
+                  </span>
+                  <span className="text-[11px] text-[#a3a3a3] flex-1 truncate">{row.name}</span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-[10px] text-[#525252]">{row.taskCount}t</span>
+                    <span className="text-[10px] text-[#525252]">{formatTokens(row.tokens)} tok</span>
+                    <span className="text-[10px] font-semibold" style={{ color: getCostColor(row.cost) }}>
+                      ${row.cost.toFixed(4)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Agent breakdown table */}
+          {activeTab === 'agent' && (
+            <div className="p-3 flex flex-col gap-1.5">
+              {agentRows.map((row, i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#141414] border border-[#1f1f1f]">
+                  <Cpu size={11} className="text-[#525252] shrink-0" />
+                  <span className="text-[11px] text-[#a3a3a3] flex-1 truncate capitalize">{row.agent}</span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-[10px] text-[#525252]">{row.taskCount}t</span>
+                    <span className="text-[10px] text-[#525252]">{formatTokens(row.tokens)} tok</span>
+                    <span className="text-[10px] font-semibold" style={{ color: getCostColor(row.cost) }}>
+                      ${row.cost.toFixed(4)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="px-4 pb-3">
+            <p className="text-[10px] text-[#404040]">
+              Estimates based on ~{formatTokens(estimate.avgTokensPerTask)} avg tokens/task using {estimate.model}.
+              Actual costs may vary.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main preview
 // ---------------------------------------------------------------------------
 
 export default function PlanPreview({
   plan,
+  projectId,
   onApprove,
   onReject,
 }: {
   plan: ProjectPlan;
+  projectId: string;
   onApprove: () => void;
   onReject: (feedback?: string) => void;
 }) {
   const [loading, setLoading] = useState<'approve' | 'reject' | null>(null);
   const [feedback, setFeedback] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
+  const [costEstimate, setCostEstimate] = useState<PlanCostEstimate | null>(null);
+  const [costLoading, setCostLoading] = useState(false);
 
   const totalTasks = plan.phases.reduce((sum, p) => sum + p.tasks.length, 0);
   const isDraft = plan.status === 'draft';
+
+  // Fetch cost estimate when showing a draft plan
+  useEffect(() => {
+    if (!isDraft) {
+      setCostEstimate(null);
+      return;
+    }
+
+    let cancelled = false;
+    setCostLoading(true);
+    fetchPlanCostEstimate(projectId, plan.id)
+      .then((estimate) => {
+        if (!cancelled) setCostEstimate(estimate);
+      })
+      .catch(() => {
+        // Non-critical — silently skip if the estimate fails
+      })
+      .finally(() => {
+        if (!cancelled) setCostLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, plan.id, isDraft]);
 
   const handleApprove = async () => {
     setLoading('approve');
@@ -151,6 +419,21 @@ export default function PlanPreview({
             <PhaseSection key={phase.id} phase={phase} index={i} />
           ))}
       </div>
+
+      {/* Cost estimate — shown only for draft plans, above the action buttons */}
+      {isDraft && (
+        <div className="px-4 pb-4">
+          {costLoading && (
+            <div className="flex items-center gap-2 px-4 py-3 border border-[#262626] rounded-xl bg-[#0a0a0a]">
+              <Loader2 size={12} className="text-[#525252] animate-spin shrink-0" />
+              <span className="text-[11px] text-[#525252]">Calculating cost estimate...</span>
+            </div>
+          )}
+          {!costLoading && costEstimate && (
+            <CostEstimatePanel plan={plan} estimate={costEstimate} />
+          )}
+        </div>
+      )}
 
       {/* Actions */}
       {isDraft && (
