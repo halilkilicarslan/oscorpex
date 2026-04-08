@@ -250,6 +250,25 @@ function migrate(db: Database.Database): void {
     db.exec("ALTER TABLE agent_configs ADD COLUMN gender TEXT NOT NULL DEFAULT 'male'");
   }
 
+  // Data migration: Update preset agents with avatar URLs (for existing DBs with emoji avatars)
+  const AVATAR_MAP: Record<string, { avatar: string; gender: string }> = {
+    pm:       { avatar: 'https://untitledui.com/images/avatars/koray-okumus', gender: 'male' },
+    architect:{ avatar: 'https://untitledui.com/images/avatars/zahir-mays', gender: 'male' },
+    frontend: { avatar: 'https://untitledui.com/images/avatars/sophia-perez', gender: 'female' },
+    backend:  { avatar: 'https://untitledui.com/images/avatars/drew-cano', gender: 'male' },
+    qa:       { avatar: 'https://untitledui.com/images/avatars/levi-rocha', gender: 'male' },
+    reviewer: { avatar: 'https://untitledui.com/images/avatars/ethan-campbell', gender: 'male' },
+    coder:    { avatar: 'https://untitledui.com/images/avatars/orlando-diggs', gender: 'male' },
+    designer: { avatar: 'https://untitledui.com/images/avatars/amelie-laurent', gender: 'female' },
+    devops:   { avatar: 'https://untitledui.com/images/avatars/joshua-wilson', gender: 'male' },
+  };
+  const updateConfigAvatar = db.prepare('UPDATE agent_configs SET avatar = ?, gender = ? WHERE role = ? AND is_preset = 1 AND avatar NOT LIKE \'https://%\'');
+  const updateProjectAvatar = db.prepare('UPDATE project_agents SET avatar = ?, gender = ? WHERE source_agent_id IN (SELECT id FROM agent_configs WHERE role = ? AND is_preset = 1) AND avatar NOT LIKE \'https://%\'');
+  for (const [role, data] of Object.entries(AVATAR_MAP)) {
+    updateConfigAvatar.run(data.avatar, data.gender, role);
+    updateProjectAvatar.run(data.avatar, data.gender, role);
+  }
+
   // tasks tablosuna error kolonu ekle
   const taskCols = (db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>).map(
     (c) => c.name,
