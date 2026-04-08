@@ -29,6 +29,7 @@ import { agentRuntime } from './agent-runtime.js';
 import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
 import { runIntegrationTest } from './task-runners.js';
 import { startApp } from './app-runner.js';
+import { isClaudeCliAvailable, executeWithCLI, resolveFilePaths } from './cli-runtime.js';
 import { runLintFix } from './lint-runner.js';
 import { updateDocsAfterTask } from './docs-generator.js';
 
@@ -251,52 +252,106 @@ class ExecutionEngine {
 
     try {
       let output: TaskOutput | undefined;
-      let executionMode: 'pool' | 'docker' | 'local' = 'local';
+      let executionMode: 'cli' | 'pool' | 'docker' | 'local' = 'local';
 
-      // Execution priority: 1) Container Pool  2) Docker Container  3) Local AI SDK
-      const poolReady = containerPool.isReady();
+      // Execution priority: 1) Claude CLI  2) Container Pool  3) Docker Container  4) Local AI SDK
 
-      if (poolReady && project.repoPath) {
-        // --- Level 1: Container Pool (isolated, pre-warmed) ---
-        try {
-          const poolResult = await containerPool.executeTask(
-            projectId,
-            agent.id,
-            agent.name,
-            agent.role,
-            project.repoPath,
-            {
-              taskId: task.id,
+      // --- Level 1: Claude CLI (full visibility, sandbox) ---
+      if (!output && project.repoPath) {
+        const cliReady = await isClaudeCliAvailable();
+        if (cliReady) {
+          try {
+            const cliResult = await executeWithCLI({
+              projectId,
+              agentId: agent.id,
+              agentName: agent.name,
+              repoPath: project.repoPath,
               prompt,
               systemPrompt: agent.systemPrompt || this.defaultSystemPrompt(agent),
-              timeout: timeoutMs,
-            },
-          );
-          output = {
-            filesCreated: poolResult.filesCreated,
-            filesModified: poolResult.filesModified,
-            logs: [...poolResult.logs, `[pool-output] ${poolResult.output.slice(0, 500)}`],
-          };
-          executionMode = 'pool';
-        } catch (poolErr) {
-          const poolMsg = poolErr instanceof Error ? poolErr.message : String(poolErr);
-          eventBus.emit({
-            projectId,
-            type: 'agent:output',
-            agentId: agent.id,
-            taskId: task.id,
-            payload: { output: `[pool fallback] Pool failed: ${poolMsg.slice(0, 200)}. Trying Docker/local...` },
-          });
-          // Fall through to Docker/local
-          output = undefined as any;
+              timeoutMs,
+              model: 'sonnet',
+              signal: undefined, // timeout handled by CLI --max-budget-usd
+            });
+
+            output = {
+              filesCreated: resolveFilePaths(cliResult.filesCreated, project.repoPath),
+              filesModified: resolveFilePaths(cliResult.filesModified, project.repoPath),
+              logs: cliResult.logs,
+            };
+            executionMode = 'cli';
+
+            // Record token usage from CLI result
+            if (cliResult.inputTokens || cliResult.outputTokens) {
+              const totalTokens = cliResult.inputTokens + cliResult.outputTokens;
+              recordTokenUsage({
+                projectId,
+                taskId: task.id,
+                agentId: agent.id,
+                model: cliResult.model || 'claude-sonnet-4-6',
+                provider: 'anthropic',
+                inputTokens: cliResult.inputTokens,
+                outputTokens: cliResult.outputTokens,
+                totalTokens,
+                costUsd: cliResult.totalCostUsd,
+              });
+            }
+          } catch (cliErr) {
+            const cliMsg = cliErr instanceof Error ? cliErr.message : String(cliErr);
+            eventBus.emit({
+              projectId,
+              type: 'agent:output',
+              agentId: agent.id,
+              taskId: task.id,
+              payload: { output: `[cli fallback] CLI failed: ${cliMsg.slice(0, 200)}. Trying pool/local...` },
+            });
+            output = undefined;
+          }
         }
       }
 
+      // --- Level 2: Container Pool (isolated, pre-warmed) ---
+      if (!output) {
+        const poolReady = containerPool.isReady();
+        if (poolReady && project.repoPath) {
+          try {
+            const poolResult = await containerPool.executeTask(
+              projectId,
+              agent.id,
+              agent.name,
+              agent.role,
+              project.repoPath,
+              {
+                taskId: task.id,
+                prompt,
+                systemPrompt: agent.systemPrompt || this.defaultSystemPrompt(agent),
+                timeout: timeoutMs,
+              },
+            );
+            output = {
+              filesCreated: poolResult.filesCreated,
+              filesModified: poolResult.filesModified,
+              logs: [...poolResult.logs, `[pool-output] ${poolResult.output.slice(0, 500)}`],
+            };
+            executionMode = 'pool';
+          } catch (poolErr) {
+            const poolMsg = poolErr instanceof Error ? poolErr.message : String(poolErr);
+            eventBus.emit({
+              projectId,
+              type: 'agent:output',
+              agentId: agent.id,
+              taskId: task.id,
+              payload: { output: `[pool fallback] Pool failed: ${poolMsg.slice(0, 200)}. Trying Docker/local...` },
+            });
+            output = undefined;
+          }
+        }
+      }
+
+      // --- Level 3: Docker Container / Level 4: Local AI SDK ---
       if (!output) {
         const dockerAvailable = await containerManager.isDockerAvailable();
 
         if (dockerAvailable && agent.cliTool === 'claude-code') {
-          // --- Level 2: Docker Container (claude-code CLI) ---
           try {
             output = await withTimeout(
               (signal) => this.executeInContainer(projectId, agent, project, task, prompt, signal),
@@ -320,7 +375,6 @@ class ExecutionEngine {
             );
           }
         } else {
-          // --- Level 3: Local AI SDK ---
           output = await withTimeout(
             (signal) => this.executeLocally(projectId, agent, task, prompt, signal),
             timeoutMs,

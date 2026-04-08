@@ -331,12 +331,24 @@ export function streamAgentOutput(
   if (!record) return null;
 
   const key = processKey(projectId, agentId);
-  let lastIndex = record.output.length; // Mevcut satırları atla, sadece yenileri gönder
+  let lastIndex = 0; // Mevcut satırları da gönder (replay)
   let cancelled = false;
   let intervalId: ReturnType<typeof setInterval> | null = null;
 
   return new ReadableStream<string>({
     start(controller) {
+      // Mevcut output'u replay et
+      for (let i = 0; i < record.output.length; i++) {
+        try {
+          const payload = JSON.stringify({ line: record.output[i], index: i });
+          controller.enqueue(`data: ${payload}\n\n`);
+        } catch {
+          cancelled = true;
+          return;
+        }
+      }
+      lastIndex = record.output.length;
+
       // Dinleyici tabanlı anlık bildirim
       const listener = (line: string, index: number) => {
         if (cancelled) return;
