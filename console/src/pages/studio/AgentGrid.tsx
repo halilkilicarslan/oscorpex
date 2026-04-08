@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Users, Plus, LayoutGrid, Network, ArrowRight, Workflow } from 'lucide-react';
+import { Loader2, Users, Plus, LayoutGrid, Network, ArrowRight, Workflow, BookTemplate } from 'lucide-react';
 import {
   fetchProjectAgents,
   deleteProjectAgent,
@@ -16,6 +16,7 @@ import AgentDetailModal from './AgentDetailModal';
 import AgentFormModal from './AgentFormModal';
 import OrgChart from './OrgChart';
 import TeamBuilder from './TeamBuilder';
+import TeamTemplatePreview from './TeamTemplatePreview';
 
 type RuntimeStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
 
@@ -78,7 +79,7 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
   const [agents, setAgents] = useState<ProjectAgent[]>([]);
   const [statuses, setStatuses] = useState<Record<string, RuntimeStatus>>({});
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'grid' | 'org' | 'pipeline' | 'builder'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'org' | 'pipeline' | 'builder' | 'templates'>('grid');
 
   // Modal state
   const [detailAgent, setDetailAgent] = useState<ProjectAgent | null>(null);
@@ -271,6 +272,17 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
               <Workflow size={13} className="inline mr-1" />
               Builder
             </button>
+            <button
+              onClick={() => setViewMode('templates')}
+              className={`px-3 py-1 rounded text-[11px] font-medium transition-colors ${
+                viewMode === 'templates'
+                  ? 'bg-[#1f1f1f] text-[#fafafa]'
+                  : 'text-[#525252] hover:text-[#a3a3a3]'
+              }`}
+            >
+              <BookTemplate size={13} className="inline mr-1" />
+              Templates
+            </button>
           </div>
         </div>
 
@@ -295,6 +307,13 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
       {viewMode === 'builder' && (
         <div className="flex-1 min-h-[500px]">
           <TeamBuilder projectId={projectId} />
+        </div>
+      )}
+
+      {/* Team Templates Preview */}
+      {viewMode === 'templates' && (
+        <div className="flex-1 min-h-[500px]">
+          <TeamTemplatePreview />
         </div>
       )}
 
