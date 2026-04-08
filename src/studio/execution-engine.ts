@@ -9,7 +9,7 @@ import { taskEngine } from './task-engine.js';
 import { containerManager } from './container-manager.js';
 import { containerPool, type TaskResult as PoolTaskResult } from './container-pool.js';
 import { eventBus } from './event-bus.js';
-import { getAIModelInfo, calculateCost, getAIModelWithFallback } from './ai-provider-factory.js';
+import { calculateCost, getAIModelWithFallback } from './ai-provider-factory.js';
 import {
   getProject,
   listAgentConfigs,
@@ -66,11 +66,11 @@ const TIMEOUT_WARNING_THRESHOLD = 0.8; // Timeout'un %80'i geçince warning
  * Task complexity ve proje timeout_multiplier ayarına göre efektif timeout hesaplar.
  * Öncelik sırası: agent.taskTimeout > complexity tabanlı değer × multiplier
  */
-function resolveTaskTimeoutMs(
+async function resolveTaskTimeoutMs(
   projectId: string,
   complexity: string | undefined,
   agentTimeout: number | undefined,
-): number {
+): Promise<number> {
   // Agent seviyesinde açıkça belirlenmiş timeout önceliklidir
   if (agentTimeout != null && agentTimeout > 0) return agentTimeout;
 
@@ -78,7 +78,7 @@ function resolveTaskTimeoutMs(
   const baseMs = COMPLEXITY_TIMEOUT_MS[complexity ?? 'S'] ?? DEFAULT_TASK_TIMEOUT_MS;
 
   // Proje ayarlarından kullanıcının belirlediği çarpan (varsayılan 1.0)
-  const multiplierStr = getProjectSetting(projectId, 'execution', 'task_timeout_multiplier');
+  const multiplierStr = await getProjectSetting(projectId, 'execution', 'task_timeout_multiplier');
   const multiplier = multiplierStr ? parseFloat(multiplierStr) : 1.0;
   const safeMultiplier = Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1.0;
 
@@ -145,14 +145,14 @@ class ExecutionEngine {
   constructor() {
     // Register completion callback: when a task completes and a new phase starts,
     // dispatch the newly ready tasks automatically
-    taskEngine.onTaskCompleted((_taskId, projectId) => {
+    taskEngine.onTaskCompleted(async (_taskId, projectId) => {
       // After checkAndAdvancePhase runs, check all phases for ready tasks
-      const plan = getLatestPlan(projectId);
+      const plan = await getLatestPlan(projectId);
       if (!plan) return;
-      const phases = listPhases(plan.id);
+      const phases = await listPhases(plan.id);
       for (const phase of phases) {
         if (phase.status === 'running') {
-          const ready = taskEngine.getReadyTasks(phase.id);
+          const ready = await taskEngine.getReadyTasks(phase.id);
           if (ready.length > 0) {
             Promise.allSettled(
               ready.map((task: any) => this.executeTask(projectId, task)),
@@ -173,14 +173,14 @@ class ExecutionEngine {
    * yeniden başlatır. Bu sayede yarıda kalmış görevler yeniden çalıştırılır.
    */
   async recoverStuckTasks(): Promise<void> {
-    const projects = listProjects();
+    const projects = await listProjects();
     for (const project of projects) {
       if (project.status !== 'running') continue;
 
-      const plan = getLatestPlan(project.id);
+      const plan = await getLatestPlan(project.id);
       if (!plan || plan.status !== 'approved') continue;
 
-      const phases = listPhases(plan.id);
+      const phases = await listPhases(plan.id);
       let hasRecovered = false;
 
       for (const phase of phases) {
@@ -188,13 +188,13 @@ class ExecutionEngine {
         let phaseRecovered = false;
         for (const task of phase.tasks ?? []) {
           if (task.status === 'running' || task.status === 'assigned') {
-            updateTask(task.id, { status: 'queued', startedAt: undefined });
+            await updateTask(task.id, { status: 'queued', startedAt: undefined });
             console.log(`[execution-engine] Recovery: "${task.title}" → queued (was ${task.status})`);
             phaseRecovered = true;
           }
         }
         if (phaseRecovered && phase.status === 'failed') {
-          updatePhaseStatus(phase.id, 'running');
+          await updatePhaseStatus(phase.id, 'running');
           console.log(`[execution-engine] Recovery: phase "${phase.name}" → running (was failed)`);
         }
         hasRecovered = hasRecovered || phaseRecovered;
@@ -221,18 +221,18 @@ class ExecutionEngine {
    * ready tasks after each task completion.
    */
   async startProjectExecution(projectId: string): Promise<void> {
-    const project = getProject(projectId);
+    const project = await getProject(projectId);
     if (!project) throw new Error(`Project ${projectId} not found`);
 
     let readyTasks: Task[] = [];
 
     // First check if there are already running phases with queued tasks
-    const plan = getLatestPlan(projectId);
+    const plan = await getLatestPlan(projectId);
     if (plan) {
-      const phases = listPhases(plan.id);
+      const phases = await listPhases(plan.id);
       for (const phase of phases) {
         if (phase.status === 'running') {
-          readyTasks.push(...taskEngine.getReadyTasks(phase.id));
+          readyTasks.push(...await taskEngine.getReadyTasks(phase.id));
         }
       }
     }
@@ -240,7 +240,7 @@ class ExecutionEngine {
     // If no running phases have ready tasks, start a new phase
     if (readyTasks.length === 0) {
       try {
-        readyTasks = taskEngine.beginExecution(projectId);
+        readyTasks = await taskEngine.beginExecution(projectId);
       } catch {
         // No pending phase or no approved plan — nothing to do
       }
@@ -272,7 +272,7 @@ class ExecutionEngine {
    *  6. Dispatch any newly unblocked tasks
    */
   async executeTask(projectId: string, task: Task): Promise<void> {
-    const project = getProject(projectId);
+    const project = await getProject(projectId);
     if (!project) throw new Error(`Project ${projectId} not found`);
 
     // --- Non-AI task types: integration-test & run-app ---
@@ -283,7 +283,7 @@ class ExecutionEngine {
 
     // Resolve agent config — prefer the task's assignedAgent value, which may
     // be an agent ID or a role name. Try both.
-    const agent = this.resolveAgent(projectId, task.assignedAgent);
+    const agent = await this.resolveAgent(projectId, task.assignedAgent);
     if (!agent) {
       taskEngine.assignTask(task.id, task.assignedAgent);
       taskEngine.startTask(task.id);
@@ -305,7 +305,7 @@ class ExecutionEngine {
     const prompt = await this.buildTaskPrompt(task, project);
 
     // Complexity ve proje timeout_multiplier ayarına göre efektif timeout hesapla
-    const timeoutMs = resolveTaskTimeoutMs(projectId, task.complexity, agent.taskTimeout);
+    const timeoutMs = await resolveTaskTimeoutMs(projectId, task.complexity, agent.taskTimeout);
 
     // Timeout'un %80'ine girildiğinde warning event emit edecek callback
     const onTimeoutWarning = () => {
@@ -359,7 +359,7 @@ class ExecutionEngine {
             // Record token usage from CLI result
             if (cliResult.inputTokens || cliResult.outputTokens) {
               const totalTokens = cliResult.inputTokens + cliResult.outputTokens;
-              recordTokenUsage({
+              await recordTokenUsage({
                 projectId,
                 taskId: task.id,
                 agentId: agent.id,
@@ -547,7 +547,7 @@ class ExecutionEngine {
 
       // --- Self-healing: auto-retry with error context ---
       const MAX_AUTO_RETRIES = 2;
-      const failedTask = getTask(task.id);
+      const failedTask = await getTask(task.id);
       if (!isTimeout && failedTask && failedTask.retryCount < MAX_AUTO_RETRIES) {
         console.log(`[execution-engine] Self-healing: auto-retry #${failedTask.retryCount + 1} for "${task.title}"`);
         eventBus.emit({
@@ -557,7 +557,7 @@ class ExecutionEngine {
           taskId: task.id,
           payload: { output: `[self-heal] Otomatik yeniden deneme #${failedTask.retryCount + 1}: ${errorMsg.slice(0, 200)}` },
         });
-        const retried = taskEngine.retryTask(task.id);
+        const retried = await taskEngine.retryTask(task.id);
         // Re-execute with error context injected into the task
         await this.executeTask(projectId, { ...retried, error: errorMsg });
         return; // skip dispatchReadyTasks — executeTask will handle it
@@ -571,9 +571,9 @@ class ExecutionEngine {
     await this.dispatchReadyTasks(projectId, task.phaseId);
 
     // If the phase was completed and a new phase started, dispatch its tasks too
-    const plan = getLatestPlan(projectId);
+    const plan = await getLatestPlan(projectId);
     if (plan) {
-      const phases = listPhases(plan.id);
+      const phases = await listPhases(plan.id);
       for (const phase of phases) {
         if (phase.status === 'running' && phase.id !== task.phaseId) {
           await this.dispatchReadyTasks(projectId, phase.id);
@@ -650,7 +650,7 @@ class ExecutionEngine {
       throw new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS);
     }
 
-    const project = getProject(projectId);
+    const project = await getProject(projectId);
     const repoPath = project?.repoPath;
 
     if (!repoPath) {
@@ -795,7 +795,7 @@ class ExecutionEngine {
       const outputTokens = usage.outputTokens ?? 0;
       const totalTokens = inputTokens + outputTokens;
       const costUsd = calculateCost(_resolvedModelName, inputTokens, outputTokens);
-      recordTokenUsage({
+      await recordTokenUsage({
         projectId,
         taskId: task.id,
         agentId: agent.id,
@@ -837,7 +837,7 @@ class ExecutionEngine {
       project.techStack.length > 0 ? project.techStack.join(', ') : 'Not specified';
 
     // --- Code Context: gather files from completed tasks in this project ---
-    const completedTasks = listProjectTasks(project.id).filter(
+    const completedTasks = (await listProjectTasks(project.id)).filter(
       (t) => t.status === 'done' && t.output && t.id !== task.id,
     );
 
@@ -1006,9 +1006,9 @@ class ExecutionEngine {
 
     // Dispatch next tasks
     await this.dispatchReadyTasks(projectId, task.phaseId);
-    const plan = getLatestPlan(projectId);
+    const plan = await getLatestPlan(projectId);
     if (plan) {
-      const phases = listPhases(plan.id);
+      const phases = await listPhases(plan.id);
       for (const phase of phases) {
         if (phase.status === 'running' && phase.id !== task.phaseId) {
           await this.dispatchReadyTasks(projectId, phase.id);
@@ -1033,7 +1033,7 @@ class ExecutionEngine {
     output: TaskOutput,
   ): Promise<void> {
     // Find reviewer agent in project team (project-scoped)
-    const agents = listProjectAgents(projectId);
+    const agents = await listProjectAgents(projectId);
     const reviewer = agents.find((a) => a.role === 'reviewer');
     if (!reviewer) return; // No reviewer in team — skip
 
@@ -1105,7 +1105,7 @@ class ExecutionEngine {
           const inputTokens = result.usage.inputTokens ?? 0;
           const outputTokens = result.usage.outputTokens ?? 0;
           const costUsd = calculateCost(modelName, inputTokens, outputTokens);
-          recordTokenUsage({
+          await recordTokenUsage({
             projectId,
             taskId: task.id,
             agentId: reviewer.id,
@@ -1137,7 +1137,7 @@ class ExecutionEngine {
    * dependencies are now satisfied and dispatch them in parallel.
    */
   private async dispatchReadyTasks(projectId: string, phaseId: string): Promise<void> {
-    const ready = taskEngine.getReadyTasks(phaseId);
+    const ready = await taskEngine.getReadyTasks(phaseId);
     if (ready.length === 0) return;
 
     // Execute tasks sequentially to avoid rate-limit issues with AI providers
@@ -1216,11 +1216,11 @@ class ExecutionEngine {
    * For a project, we first look at project-scoped agents; then we look at
    * all agent configs globally.
    */
-  private resolveAgent(projectId: string, assignment: string): AgentConfig | undefined {
+  private async resolveAgent(projectId: string, assignment: string): Promise<AgentConfig | undefined> {
     if (!assignment) return undefined;
 
     // 1. Try project-scoped agents first (by ID, role, or name)
-    const projectAgents = listProjectAgents(projectId);
+    const projectAgents = await listProjectAgents(projectId);
     const pById = projectAgents.find((a) => a.id === assignment);
     if (pById) return pById as unknown as AgentConfig;
 
@@ -1235,10 +1235,10 @@ class ExecutionEngine {
     if (pByName) return pByName as unknown as AgentConfig;
 
     // 2. Fallback to global agent configs
-    const byId = getAgentConfig(assignment);
+    const byId = await getAgentConfig(assignment);
     if (byId) return byId;
 
-    const all = listAgentConfigs();
+    const all = await listAgentConfigs();
     const byRole = all.find(
       (a) => a.role.toLowerCase() === assignment.toLowerCase(),
     );

@@ -13,16 +13,18 @@ import { writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { getProjectSetting } from './db.js';
+import { query, queryOne, execute } from './pg.js';
+import { randomUUID } from 'node:crypto';
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-function getSonarConfig(projectId?: string) {
+async function getSonarConfig(projectId?: string) {
   // Project-level settings take priority over env vars
-  const dbEnabled = projectId ? getProjectSetting(projectId, 'sonarqube', 'enabled') : undefined;
-  const dbHost = projectId ? getProjectSetting(projectId, 'sonarqube', 'hostUrl') : undefined;
-  const dbToken = projectId ? getProjectSetting(projectId, 'sonarqube', 'token') : undefined;
+  const dbEnabled = projectId ? await getProjectSetting(projectId, 'sonarqube', 'enabled') : undefined;
+  const dbHost = projectId ? await getProjectSetting(projectId, 'sonarqube', 'hostUrl') : undefined;
+  const dbToken = projectId ? await getProjectSetting(projectId, 'sonarqube', 'token') : undefined;
 
   return {
     enabled: dbEnabled !== undefined ? dbEnabled === 'true' : process.env.SONAR_ENABLED === 'true',
@@ -31,8 +33,8 @@ function getSonarConfig(projectId?: string) {
   };
 }
 
-export function isSonarEnabled(projectId?: string): boolean {
-  return getSonarConfig(projectId).enabled;
+export async function isSonarEnabled(projectId?: string): Promise<boolean> {
+  return (await getSonarConfig(projectId)).enabled;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +101,7 @@ export async function runSonarScan(
   log?: (msg: string) => void,
   projectId?: string,
 ): Promise<ScanResult> {
-  const config = getSonarConfig(projectId);
+  const config = await getSonarConfig(projectId);
 
   if (!config.enabled) {
     return { success: true, output: 'SonarQube disabled (SONAR_ENABLED != true)' };
@@ -153,7 +155,7 @@ export interface QualityGateCondition {
  * Returns NONE if SonarQube is disabled or unreachable.
  */
 export async function fetchQualityGate(projectKey: string, projectId?: string): Promise<QualityGateResult> {
-  const config = getSonarConfig(projectId);
+  const config = await getSonarConfig(projectId);
 
   if (!config.enabled) {
     return { status: 'NONE', conditions: [] };
@@ -192,22 +194,19 @@ export async function fetchQualityGate(projectKey: string, projectId?: string): 
 // DB integration — store scan results
 // ---------------------------------------------------------------------------
 
-import { getDb } from './db.js';
-import { randomUUID } from 'node:crypto';
-
 // Note: sonar_scans table is created in db.ts migrate(), not here.
 
-export function recordSonarScan(
+export async function recordSonarScan(
   projectId: string,
   gate: QualityGateResult,
   scanOutput: string,
-): string {
-  const db = getDb();
+): Promise<string> {
   const id = randomUUID();
   const ts = new Date().toISOString();
-  db.prepare(
-    'INSERT INTO sonar_scans (id, project_id, quality_gate, conditions, scan_output, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-  ).run(id, projectId, gate.status, JSON.stringify(gate.conditions), scanOutput.slice(0, 5000), ts);
+  await execute(
+    'INSERT INTO sonar_scans (id, project_id, quality_gate, conditions, scan_output, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+    [id, projectId, gate.status, JSON.stringify(gate.conditions), scanOutput.slice(0, 5000), ts],
+  );
   return id;
 }
 
@@ -219,11 +218,11 @@ export interface SonarScanRecord {
   createdAt: string;
 }
 
-export function getLatestSonarScan(projectId: string): SonarScanRecord | null {
-  const db = getDb();
-  const row = db.prepare(
-    'SELECT * FROM sonar_scans WHERE project_id = ? ORDER BY created_at DESC LIMIT 1',
-  ).get(projectId) as any;
+export async function getLatestSonarScan(projectId: string): Promise<SonarScanRecord | null> {
+  const row = await queryOne<any>(
+    'SELECT * FROM sonar_scans WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1',
+    [projectId],
+  );
   if (!row) return null;
   return {
     id: row.id,

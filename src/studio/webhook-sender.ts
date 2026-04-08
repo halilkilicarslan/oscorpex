@@ -247,7 +247,7 @@ class WebhookSender {
 
     let webhooks: Webhook[];
     try {
-      webhooks = listWebhooksForEvent(event.projectId, webhookEventType);
+      webhooks = await listWebhooksForEvent(event.projectId, webhookEventType);
     } catch (err) {
       console.warn('[webhook-sender] Webhook listesi alinamadi:', err instanceof Error ? err.message : err);
       return;
@@ -366,7 +366,7 @@ class WebhookSender {
 
     // Teslimat kaydını logla
     try {
-      insertWebhookDelivery({
+      await insertWebhookDelivery({
         webhookId: webhook.id,
         eventType,
         status: result.success ? 'success' : 'failed',
@@ -434,7 +434,7 @@ export async function sendWebhookNotification(
   let webhooks: Webhook[];
 
   try {
-    webhooks = listWebhooksForEvent(projectId, eventType);
+    webhooks = await listWebhooksForEvent(projectId, eventType);
   } catch (err) {
     // DB hatası — sessizce logla
     console.warn('[webhook-sender] Webhook listesi alinamadi:', err instanceof Error ? err.message : err);

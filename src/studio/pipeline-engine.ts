@@ -51,8 +51,8 @@ function now(): string {
   return new Date().toISOString();
 }
 
-function persistState(state: PipelineState): void {
-  updatePipelineRun(state.projectId, {
+async function persistState(state: PipelineState): Promise<void> {
+  await updatePipelineRun(state.projectId, {
     currentStage: state.currentStage,
     status: state.status,
     stagesJson: JSON.stringify(state.stages),
@@ -61,8 +61,8 @@ function persistState(state: PipelineState): void {
   });
 }
 
-function hydrateState(projectId: string): PipelineState | null {
-  const run = getPipelineRun(projectId);
+async function hydrateState(projectId: string): Promise<PipelineState | null> {
+  const run = await getPipelineRun(projectId);
   if (!run) return null;
   return {
     projectId,
@@ -180,16 +180,16 @@ class PipelineEngine {
    *   4. Her wave bir PipelineStage olur
    *   5. Wave'deki agent'ların task'ları plan phase'lerinden eşleştirilir
    */
-  buildPipeline(projectId: string): PipelineState {
-    const project = getProject(projectId);
+  async buildPipeline(projectId: string): Promise<PipelineState> {
+    const project = await getProject(projectId);
     if (!project) throw new Error(`Proje bulunamadı: ${projectId}`);
 
-    const agents = listProjectAgents(projectId);
-    const plan = getLatestPlan(projectId);
-    const phases: Phase[] = plan ? listPhases(plan.id) : [];
+    const agents = await listProjectAgents(projectId);
+    const plan = await getLatestPlan(projectId);
+    const phases: Phase[] = plan ? await listPhases(plan.id) : [];
 
     // Dependency graph'ı oku
-    const deps = listAgentDependencies(projectId);
+    const deps = await listAgentDependencies(projectId);
     const hasDeps = deps.some((d) => d.type !== 'hierarchy');
 
     let stages: PipelineStage[];
@@ -321,20 +321,20 @@ class PipelineEngine {
   // Pipeline başlatma
   // -------------------------------------------------------------------------
 
-  startPipeline(projectId: string): PipelineState {
-    const project = getProject(projectId);
+  async startPipeline(projectId: string): Promise<PipelineState> {
+    const project = await getProject(projectId);
     if (!project) throw new Error(`Proje bulunamadı: ${projectId}`);
 
-    const state = this.buildPipeline(projectId);
+    const state = await this.buildPipeline(projectId);
     state.status = 'running';
     state.startedAt = now();
 
-    createPipelineRun({
+    await createPipelineRun({
       projectId,
       status: 'running',
       stagesJson: JSON.stringify(state.stages),
     });
-    updatePipelineRun(projectId, {
+    await updatePipelineRun(projectId, {
       currentStage: 0,
       status: 'running',
       startedAt: state.startedAt,
@@ -343,9 +343,9 @@ class PipelineEngine {
     _states.set(projectId, state);
 
     if (state.stages.length > 0) {
-      this.startStage(projectId, 0);
+      await this.startStage(projectId, 0);
     } else {
-      this.markCompleted(projectId);
+      await this.markCompleted(projectId);
     }
 
     return _states.get(projectId)!;
@@ -355,11 +355,11 @@ class PipelineEngine {
   // Aşama yönetimi
   // -------------------------------------------------------------------------
 
-  private startStage(projectId: string, stageIndex: number): void {
+  private async startStage(projectId: string, stageIndex: number): Promise<void> {
     const state = _states.get(projectId);
     if (!state) return;
     if (stageIndex >= state.stages.length) {
-      this.markCompleted(projectId);
+      await this.markCompleted(projectId);
       return;
     }
 
@@ -367,7 +367,7 @@ class PipelineEngine {
     stage.status = 'running';
     state.currentStage = stageIndex;
 
-    persistState(state);
+    await persistState(state);
 
     // Phase başlarken otomatik git branch oluştur — pipeline'ı bloklamaz
     this.createPhaseBranch(projectId, stageIndex, stage).catch((err) =>
@@ -386,7 +386,7 @@ class PipelineEngine {
     });
 
     if (stage.tasks.length === 0) {
-      this.completeStage(projectId, stageIndex);
+      await this.completeStage(projectId, stageIndex);
     }
   }
 
@@ -399,7 +399,7 @@ class PipelineEngine {
     stageIndex: number,
     stage: PipelineStage,
   ): Promise<void> {
-    const project = getProject(projectId);
+    const project = await getProject(projectId);
     if (!project?.repoPath) return;
 
     // Branch adı: phase/0-backend, phase/1-frontend vb.
@@ -429,7 +429,7 @@ class PipelineEngine {
     }
   }
 
-  private completeStage(projectId: string, stageIndex: number): void {
+  private async completeStage(projectId: string, stageIndex: number): Promise<void> {
     const state = _states.get(projectId);
     if (!state) return;
 
@@ -437,7 +437,7 @@ class PipelineEngine {
     if (!stage) return;
 
     stage.status = 'completed';
-    persistState(state);
+    await persistState(state);
 
     // Phase tamamlanınca branch'i main'e merge et — pipeline'ı bloklamaz
     this.mergePhaseBranchToMain(projectId, stageIndex, stage).catch((err) =>
@@ -455,9 +455,9 @@ class PipelineEngine {
 
     const nextIndex = stageIndex + 1;
     if (nextIndex < state.stages.length) {
-      this.startStage(projectId, nextIndex);
+      await this.startStage(projectId, nextIndex);
     } else {
-      this.markCompleted(projectId);
+      await this.markCompleted(projectId);
     }
   }
 
@@ -471,7 +471,7 @@ class PipelineEngine {
     stageIndex: number,
     stage: PipelineStage,
   ): Promise<void> {
-    const project = getProject(projectId);
+    const project = await getProject(projectId);
     if (!project?.repoPath) return;
 
     const roleSlug = stage.agents
@@ -521,13 +521,13 @@ class PipelineEngine {
     }
   }
 
-  private markCompleted(projectId: string): void {
+  private async markCompleted(projectId: string): Promise<void> {
     const state = _states.get(projectId);
     if (!state) return;
 
     state.status = 'completed';
     state.completedAt = now();
-    persistState(state);
+    await persistState(state);
 
     eventBus.emit({
       projectId,
@@ -543,7 +543,7 @@ class PipelineEngine {
     });
   }
 
-  private markFailed(projectId: string, reason: string): void {
+  private async markFailed(projectId: string, reason: string): Promise<void> {
     const state = _states.get(projectId);
     if (!state) return;
 
@@ -552,7 +552,7 @@ class PipelineEngine {
 
     state.status = 'failed';
     state.completedAt = now();
-    persistState(state);
+    await persistState(state);
 
     eventBus.emit({
       projectId,
@@ -573,10 +573,10 @@ class PipelineEngine {
    *   - 'revision' durumundaki task'lar henüz tamamlanmamış sayılır
    *   - Sadece 'done' durumundakiler tamamlanmış sayılır
    */
-  advanceStage(projectId: string): PipelineState {
+  async advanceStage(projectId: string): Promise<PipelineState> {
     let state: PipelineState | null | undefined = _states.get(projectId);
     if (!state) {
-      state = hydrateState(projectId);
+      state = await hydrateState(projectId);
       if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
       _states.set(projectId, state);
     }
@@ -589,32 +589,32 @@ class PipelineEngine {
     const currentStage = state.stages[currentIndex];
     if (!currentStage) return state;
 
-    const freshTaskIds = this.resolveStageTaskIds(projectId, currentIndex, state);
+    const freshTaskIds = await this.resolveStageTaskIds(projectId, currentIndex, state);
 
     if (freshTaskIds.length === 0) {
-      this.completeStage(projectId, currentIndex);
+      await this.completeStage(projectId, currentIndex);
       return _states.get(projectId)!;
     }
 
-    const statuses = freshTaskIds.map((id) => this.getTaskStatus(id));
+    const statuses = await Promise.all(freshTaskIds.map((id) => this.getTaskStatus(id)));
 
     const anyFailed = statuses.some((s) => s === 'failed');
     // v2: review ve revision durumundaki task'lar henüz tamamlanmadı
     const allDone = statuses.every((s) => s === 'done');
 
     if (anyFailed) {
-      this.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
+      await this.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
     } else if (allDone) {
       for (const t of currentStage.tasks) {
         t.status = 'done';
       }
-      this.completeStage(projectId, currentIndex);
+      await this.completeStage(projectId, currentIndex);
     }
 
     return _states.get(projectId)!;
   }
 
-  private resolveStageTaskIds(projectId: string, stageIndex: number, state: PipelineState): string[] {
+  private async resolveStageTaskIds(projectId: string, stageIndex: number, state: PipelineState): Promise<string[]> {
     const stage = state.stages[stageIndex];
     if (!stage) return [];
 
@@ -622,10 +622,10 @@ class PipelineEngine {
       return stage.tasks.map((t) => t.id);
     }
 
-    const plan = getLatestPlan(projectId);
+    const plan = await getLatestPlan(projectId);
     if (!plan) return [];
 
-    const phases = listPhases(plan.id).sort((a, b) => a.order - b.order);
+    const phases = (await listPhases(plan.id)).sort((a, b) => a.order - b.order);
     const matchedPhase = phases[stageIndex];
     if (!matchedPhase) return [];
 
@@ -633,8 +633,8 @@ class PipelineEngine {
     return stage.tasks.map((t) => t.id);
   }
 
-  private getTaskStatus(taskId: string): string {
-    const task = getTask(taskId);
+  private async getTaskStatus(taskId: string): Promise<string> {
+    const task = await getTask(taskId);
     return task?.status ?? 'queued';
   }
 
@@ -642,11 +642,11 @@ class PipelineEngine {
   // Durum sorgulama
   // -------------------------------------------------------------------------
 
-  getPipelineState(projectId: string): PipelineState | null {
+  async getPipelineState(projectId: string): Promise<PipelineState | null> {
     const cached = _states.get(projectId);
     if (cached) return cached;
 
-    const hydrated = hydrateState(projectId);
+    const hydrated = await hydrateState(projectId);
     if (hydrated) {
       _states.set(projectId, hydrated);
       return hydrated;
@@ -655,24 +655,24 @@ class PipelineEngine {
     return null;
   }
 
-  getEnrichedPipelineStatus(projectId: string): {
+  async getEnrichedPipelineStatus(projectId: string): Promise<{
     pipelineState: PipelineState | null;
-    taskProgress: ReturnType<typeof taskEngine.getProgress>;
+    taskProgress: Awaited<ReturnType<typeof taskEngine.getProgress>>;
     derivedStatus: PipelineStatus;
     warning?: string;
-  } {
-    let pipelineState = this.getPipelineState(projectId);
+  }> {
+    let pipelineState = await this.getPipelineState(projectId);
 
     if (pipelineState?.status === 'running') {
       try {
-        this.advanceStage(projectId);
-        pipelineState = this.getPipelineState(projectId);
+        await this.advanceStage(projectId);
+        pipelineState = await this.getPipelineState(projectId);
       } catch {
         // status sorgusu sırasında hata olursa sessizce devam et
       }
     }
 
-    const taskProgress = taskEngine.getProgress(projectId);
+    const taskProgress = await taskEngine.getProgress(projectId);
     const overall = taskProgress.overall;
 
     let derivedStatus: PipelineStatus = pipelineState?.status ?? 'idle';
@@ -699,8 +699,8 @@ class PipelineEngine {
   // Durdurma / Devam ettirme
   // -------------------------------------------------------------------------
 
-  pausePipeline(projectId: string): void {
-    const state = _states.get(projectId) ?? hydrateState(projectId);
+  async pausePipeline(projectId: string): Promise<void> {
+    const state = _states.get(projectId) ?? await hydrateState(projectId);
     if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
 
     if (state.status !== 'running') {
@@ -709,7 +709,7 @@ class PipelineEngine {
 
     state.status = 'paused';
     _states.set(projectId, state);
-    persistState(state);
+    await persistState(state);
 
     eventBus.emit({
       projectId,
@@ -718,8 +718,8 @@ class PipelineEngine {
     });
   }
 
-  resumePipeline(projectId: string): void {
-    const state = _states.get(projectId) ?? hydrateState(projectId);
+  async resumePipeline(projectId: string): Promise<void> {
+    const state = _states.get(projectId) ?? await hydrateState(projectId);
     if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
 
     if (state.status !== 'paused') {
@@ -728,7 +728,7 @@ class PipelineEngine {
 
     state.status = 'running';
     _states.set(projectId, state);
-    persistState(state);
+    await persistState(state);
 
     eventBus.emit({
       projectId,
@@ -736,7 +736,7 @@ class PipelineEngine {
       payload: { resumedAt: now(), currentStage: state.currentStage },
     });
 
-    this.advanceStage(projectId);
+    await this.advanceStage(projectId);
   }
 
   // -------------------------------------------------------------------------
@@ -748,27 +748,27 @@ class PipelineEngine {
    * agent_dependencies tablosunda type='review' olan edge'i arar.
    * fromAgentId = dev agent, toAgentId = reviewer agent
    */
-  findReviewerForAgent(projectId: string, agentId: string): ProjectAgent | null {
-    const deps = listAgentDependencies(projectId, 'review');
+  async findReviewerForAgent(projectId: string, agentId: string): Promise<ProjectAgent | null> {
+    const deps = await listAgentDependencies(projectId, 'review');
     // from → to ilişkisinde: "to" review'ı yapan
     // Ama review dependency mantığı: dev (from) → reviewer (to) şeklinde
     // "dev'in çıktısı reviewer'a gider" anlamında
     const reviewDep = deps.find((d) => d.fromAgentId === agentId);
     if (!reviewDep) return null;
 
-    const agents = listProjectAgents(projectId);
+    const agents = await listProjectAgents(projectId);
     return agents.find((a) => a.id === reviewDep.toAgentId) ?? null;
   }
 
   /**
    * Bir reviewer'ın dev agent'ını bul (review ret durumunda revision için).
    */
-  findDevForReviewer(projectId: string, reviewerAgentId: string): ProjectAgent | null {
-    const deps = listAgentDependencies(projectId, 'review');
+  async findDevForReviewer(projectId: string, reviewerAgentId: string): Promise<ProjectAgent | null> {
+    const deps = await listAgentDependencies(projectId, 'review');
     const reviewDep = deps.find((d) => d.toAgentId === reviewerAgentId);
     if (!reviewDep) return null;
 
-    const agents = listProjectAgents(projectId);
+    const agents = await listProjectAgents(projectId);
     return agents.find((a) => a.id === reviewDep.fromAgentId) ?? null;
   }
 
@@ -778,29 +778,31 @@ class PipelineEngine {
 
   registerTaskHook(): void {
     taskEngine.onTaskCompleted((taskId, projectId) => {
-      const run = getPipelineRun(projectId);
-
-      if (run && run.status === 'running') {
-        try {
-          this.advanceStage(projectId);
-        } catch (err) {
-          console.error(`[pipeline-engine] advanceStage hatası (proje=${projectId}):`, err);
-        }
-        return;
-      }
-
-      if (!run || run.status === 'idle' || run.status === 'failed') {
-        try {
-          const agents = listProjectAgents(projectId);
-          if (agents.length > 0) {
-            console.log(`[pipeline-engine] Task tamamlandı ama pipeline başlatılmamış; otomatik başlatılıyor (proje=${projectId})`);
-            this.startPipeline(projectId);
-            this.advanceStage(projectId);
+      getPipelineRun(projectId).then(async (run) => {
+        if (run && run.status === 'running') {
+          try {
+            await this.advanceStage(projectId);
+          } catch (err) {
+            console.error(`[pipeline-engine] advanceStage hatası (proje=${projectId}):`, err);
           }
-        } catch (err) {
-          console.error(`[pipeline-engine] otomatik pipeline başlatma hatası (proje=${projectId}):`, err);
+          return;
         }
-      }
+
+        if (!run || run.status === 'idle' || run.status === 'failed') {
+          try {
+            const agents = await listProjectAgents(projectId);
+            if (agents.length > 0) {
+              console.log(`[pipeline-engine] Task tamamlandı ama pipeline başlatılmamış; otomatik başlatılıyor (proje=${projectId})`);
+              await this.startPipeline(projectId);
+              await this.advanceStage(projectId);
+            }
+          } catch (err) {
+            console.error(`[pipeline-engine] otomatik pipeline başlatma hatası (proje=${projectId}):`, err);
+          }
+        }
+      }).catch((err) => {
+        console.error(`[pipeline-engine] getPipelineRun hatası (proje=${projectId}):`, err);
+      });
     });
   }
 }

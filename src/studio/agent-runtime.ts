@@ -11,7 +11,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { eventBus } from './event-bus.js';
-import { getDb } from './db.js';
+import { query, queryOne, execute } from './pg.js';
 import type { AgentProcessRecord, AgentProcessStatus, AgentRun } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -117,11 +117,11 @@ function buildCommand(
  * Agent için alt süreç başlatır.
  * Zaten çalışan bir süreç varsa mevcut kaydı döndürür.
  */
-export function startAgent(
+export async function startAgent(
   projectId: string,
   agent: { id: string; name: string; cliTool: string; systemPrompt?: string },
   taskPrompt?: string,
-): AgentProcessRecord {
+): Promise<AgentProcessRecord> {
   const key = processKey(projectId, agent.id);
 
   // Zaten çalışıyor mu? Aynı kaydı döndür
@@ -131,10 +131,10 @@ export function startAgent(
   }
 
   // Proje repoPath'ini veritabanından al
-  const db = getDb();
-  const projectRow = db.prepare('SELECT repo_path FROM projects WHERE id = ?').get(projectId) as
-    | { repo_path: string }
-    | undefined;
+  const projectRow = await queryOne<{ repo_path: string }>(
+    'SELECT repo_path FROM projects WHERE id = $1',
+    [projectId],
+  );
   const cwd = projectRow?.repo_path || process.cwd();
 
   // Kayıt oluştur
@@ -240,7 +240,7 @@ export function startAgent(
     });
   });
 
-  // DB'ye başlangıç kaydını yaz (fire-and-forget benzeri, senkron)
+  // DB'ye başlangıç kaydını yaz (fire-and-forget)
   _createRunInDb(record, taskPrompt);
 
   eventBus.emit({
@@ -439,48 +439,42 @@ process.on('SIGINT', () => {
 // ---------------------------------------------------------------------------
 
 function _createRunInDb(record: AgentProcessRecord, taskPrompt?: string): void {
-  try {
-    const db = getDb();
-    db.prepare(`
-      INSERT INTO agent_runs
-        (id, project_id, agent_id, cli_tool, status, task_prompt, pid, started_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      record.id,
-      record.projectId,
-      record.agentId,
-      record.cliTool,
-      record.status,
-      taskPrompt ?? null,
-      record.pid ?? null,
-      record.startedAt ?? null,
-      new Date().toISOString(),
-    );
-  } catch (err) {
+  execute(`
+    INSERT INTO agent_runs
+      (id, project_id, agent_id, cli_tool, status, task_prompt, pid, started_at, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+  `, [
+    record.id,
+    record.projectId,
+    record.agentId,
+    record.cliTool,
+    record.status,
+    taskPrompt ?? null,
+    record.pid ?? null,
+    record.startedAt ?? null,
+    new Date().toISOString(),
+  ]).catch((err) => {
     // DB hatası agent'ı durdurmasın — sadece logla
     console.error('[agent-runtime] DB kaydı oluşturulamadı:', err);
-  }
+  });
 }
 
 function _syncRunToDb(record: AgentProcessRecord): void {
-  try {
-    const db = getDb();
-    // Son 500 satırı özetle (ilk 2000 karakter)
-    const summary = record.output.slice(-50).join('\n').slice(0, 2000);
-    db.prepare(`
-      UPDATE agent_runs
-      SET status = ?, output_summary = ?, exit_code = ?, stopped_at = ?
-      WHERE id = ?
-    `).run(
-      record.status,
-      summary || null,
-      record.exitCode ?? null,
-      record.stoppedAt ?? null,
-      record.id,
-    );
-  } catch (err) {
+  // Son 500 satırı özetle (ilk 2000 karakter)
+  const summary = record.output.slice(-50).join('\n').slice(0, 2000);
+  execute(`
+    UPDATE agent_runs
+    SET status = $1, output_summary = $2, exit_code = $3, stopped_at = $4
+    WHERE id = $5
+  `, [
+    record.status,
+    summary || null,
+    record.exitCode ?? null,
+    record.stoppedAt ?? null,
+    record.id,
+  ]).catch((err) => {
     console.error('[agent-runtime] DB kaydı güncellenemedi:', err);
-  }
+  });
 }
 
 // ---------------------------------------------------------------------------

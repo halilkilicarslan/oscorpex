@@ -27,8 +27,32 @@ class EventBus {
   }
 
   /** Emit an event — persists to DB and notifies subscribers */
-  emit(data: Omit<StudioEvent, 'id' | 'timestamp'>): StudioEvent {
-    const event = insertEvent(data);
+  emit(data: Omit<StudioEvent, 'id' | 'timestamp'>): void {
+    // Fire-and-forget: persist to DB asynchronously, then notify subscribers
+    insertEvent(data).then((event) => {
+      // Notify project subscribers
+      const projectHandlers = this.handlers.get(`project:${event.projectId}`);
+      if (projectHandlers) {
+        for (const handler of projectHandlers) {
+          try { handler(event); } catch { /* subscriber error — ignore */ }
+        }
+      }
+
+      // Notify type subscribers
+      const typeHandlers = this.handlers.get(`type:${event.type}`);
+      if (typeHandlers) {
+        for (const handler of typeHandlers) {
+          try { handler(event); } catch { /* subscriber error — ignore */ }
+        }
+      }
+    }).catch((err) => {
+      console.warn('[event-bus] insertEvent failed:', err instanceof Error ? err.message : err);
+    });
+  }
+
+  /** Emit an event and wait for DB persistence + subscriber notification */
+  async emitAsync(data: Omit<StudioEvent, 'id' | 'timestamp'>): Promise<StudioEvent> {
+    const event = await insertEvent(data);
 
     // Notify project subscribers
     const projectHandlers = this.handlers.get(`project:${event.projectId}`);

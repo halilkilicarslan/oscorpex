@@ -5,7 +5,6 @@
 // ---------------------------------------------------------------------------
 
 import {
-  getDb,
   getTask,
   updateTask,
   listTasks,
@@ -18,6 +17,7 @@ import {
   getProjectCostSummary,
   getProjectSettingsMap,
 } from './db.js';
+import { queryOne } from './pg.js';
 import { eventBus } from './event-bus.js';
 import type { Task, Phase, TaskOutput, ProjectAgent } from './types.js';
 
@@ -63,14 +63,14 @@ class TaskEngine {
   // Task lifecycle
   // -------------------------------------------------------------------------
 
-  assignTask(taskId: string, agentId: string): Task {
-    const task = this.requireTask(taskId);
+  async assignTask(taskId: string, agentId: string): Promise<Task> {
+    const task = await this.requireTask(taskId);
     if (task.status !== 'queued') {
       throw new Error(`Task ${taskId} is not queued (status: ${task.status})`);
     }
 
-    const updated = updateTask(taskId, { status: 'assigned', assignedAgent: agentId })!;
-    const projectId = this.getProjectIdForTask(task);
+    const updated = (await updateTask(taskId, { status: 'assigned', assignedAgent: agentId }))!;
+    const projectId = await this.getProjectIdForTask(task);
 
     eventBus.emit({
       projectId,
@@ -93,9 +93,9 @@ class TaskEngine {
    * - Budget aşılmamışsa: null döner (devam et)
    * - Budget aşılmışsa: { exceeded: true, level: 'error' | 'warning', message } döner
    */
-  private checkProjectBudget(projectId: string): { exceeded: boolean; level: 'warning' | 'error'; message: string } | null {
+  private async checkProjectBudget(projectId: string): Promise<{ exceeded: boolean; level: 'warning' | 'error'; message: string } | null> {
     try {
-      const settingsMap = getProjectSettingsMap(projectId);
+      const settingsMap = await getProjectSettingsMap(projectId);
       const budgetSettings = settingsMap['budget'];
 
       // Budget özelliği aktif değilse kontrol etme
@@ -109,7 +109,7 @@ class TaskEngine {
       if (maxCost === null || isNaN(maxCost) || maxCost <= 0) return null;
 
       // Mevcut harcamayı al
-      const costSummary = getProjectCostSummary(projectId);
+      const costSummary = await getProjectCostSummary(projectId);
       const currentCost = costSummary.totalCostUsd;
 
       // %100 limit aşımı — execution durdurulacak
@@ -138,24 +138,24 @@ class TaskEngine {
     }
   }
 
-  startTask(taskId: string): Task {
-    const task = this.requireTask(taskId);
+  async startTask(taskId: string): Promise<Task> {
+    const task = await this.requireTask(taskId);
     if (task.status !== 'assigned' && task.status !== 'queued') {
       throw new Error(`Task ${taskId} cannot be started (status: ${task.status})`);
     }
 
-    const projectId = this.getProjectIdForTask(task);
+    const projectId = await this.getProjectIdForTask(task);
 
     // Human-in-the-Loop: Onay kontrolü — budget kontrolünden önce yapılır
     const needsApproval = task.requiresApproval || shouldRequireApproval(task);
     const alreadyApproved = task.approvalStatus === 'approved';
     if (needsApproval && !alreadyApproved) {
       // Task'ı waiting_approval durumuna al ve kullanıcıdan onay iste
-      const waiting = updateTask(taskId, {
+      const waiting = (await updateTask(taskId, {
         status: 'waiting_approval',
         requiresApproval: true,
         approvalStatus: 'pending',
-      })!;
+      }))!;
 
       eventBus.emit({
         projectId,
@@ -176,14 +176,14 @@ class TaskEngine {
 
     // Budget limiti kontrolü — aşıldıysa task'ı blocked yap ve event emit et
     // (projectId yukarıda zaten tanımlandı)
-    const budgetStatus = this.checkProjectBudget(projectId);
+    const budgetStatus = await this.checkProjectBudget(projectId);
 
     if (budgetStatus && budgetStatus.exceeded) {
       // Task'ı 'blocked' statüsüne al (failed yerine ayrı bir durum olarak işaretlenir)
-      const blocked = updateTask(taskId, {
+      const blocked = (await updateTask(taskId, {
         status: 'failed',
         error: budgetStatus.message,
-      })!;
+      }))!;
 
       eventBus.emit({
         projectId,
@@ -225,10 +225,10 @@ class TaskEngine {
       console.warn(`[task-engine] Budget uyarısı: ${budgetStatus.message}`);
     }
 
-    const updated = updateTask(taskId, {
+    const updated = (await updateTask(taskId, {
       status: 'running',
       startedAt: new Date().toISOString(),
-    })!;
+    }))!;
 
     // projectId budget kontrolünde zaten tanımlandı, tekrar tanımlamaya gerek yok
     eventBus.emit({
@@ -249,18 +249,18 @@ class TaskEngine {
    * Bekleyen onay task'ını onaylar.
    * Task 'queued' durumuna döner ve execution engine tarafından çalıştırılabilir.
    */
-  approveTask(taskId: string): Task {
-    const task = this.requireTask(taskId);
+  async approveTask(taskId: string): Promise<Task> {
+    const task = await this.requireTask(taskId);
     if (task.status !== 'waiting_approval') {
       throw new Error(`Task ${taskId} onay beklemiyor (status: ${task.status})`);
     }
 
-    const updated = updateTask(taskId, {
+    const updated = (await updateTask(taskId, {
       status: 'queued',
       approvalStatus: 'approved',
-    })!;
+    }))!;
 
-    const projectId = this.getProjectIdForTask(task);
+    const projectId = await this.getProjectIdForTask(task);
 
     eventBus.emit({
       projectId,
@@ -281,22 +281,22 @@ class TaskEngine {
    * Bekleyen onay task'ını reddeder.
    * Task 'failed' durumuna alınır, execution devam etmez.
    */
-  rejectTask(taskId: string, reason?: string): Task {
-    const task = this.requireTask(taskId);
+  async rejectTask(taskId: string, reason?: string): Promise<Task> {
+    const task = await this.requireTask(taskId);
     if (task.status !== 'waiting_approval') {
       throw new Error(`Task ${taskId} onay beklemiyor (status: ${task.status})`);
     }
 
     const rejectionReason = reason ?? 'Kullanıcı tarafından reddedildi';
 
-    const updated = updateTask(taskId, {
+    const updated = (await updateTask(taskId, {
       status: 'failed',
       approvalStatus: 'rejected',
       approvalRejectionReason: rejectionReason,
       error: `Onay reddedildi: ${rejectionReason}`,
-    })!;
+    }))!;
 
-    const projectId = this.getProjectIdForTask(task);
+    const projectId = await this.getProjectIdForTask(task);
 
     eventBus.emit({
       projectId,
@@ -322,25 +322,25 @@ class TaskEngine {
    *   2. Varsa → task'ı 'review' durumuna al, reviewer bilgisini set et
    *   3. Yoksa → normal 'done' akışı
    */
-  completeTask(taskId: string, output: TaskOutput): Task {
-    const task = this.requireTask(taskId);
+  async completeTask(taskId: string, output: TaskOutput): Promise<Task> {
+    const task = await this.requireTask(taskId);
     if (task.status !== 'running' && task.status !== 'revision') {
       throw new Error(`Task ${taskId} is not running or in revision (status: ${task.status})`);
     }
 
-    const projectId = this.getProjectIdForTask(task);
+    const projectId = await this.getProjectIdForTask(task);
 
     // v2: Review dependency kontrolü
-    const reviewer = this.findReviewerForTask(projectId, task);
+    const reviewer = await this.findReviewerForTask(projectId, task);
 
     if (reviewer) {
       // Review loop: task'ı review durumuna al
-      const updated = updateTask(taskId, {
+      const updated = (await updateTask(taskId, {
         status: 'review',
         output,
         reviewerAgentId: reviewer.id,
         reviewStatus: null,
-      })!;
+      }))!;
 
       eventBus.emit({
         projectId,
@@ -368,13 +368,13 @@ class TaskEngine {
   /**
    * Task'ı doğrudan 'done' olarak işaretler ve pipeline'ı bilgilendirir.
    */
-  private markTaskDone(taskId: string, output: TaskOutput, projectId: string, task: Task): Task {
-    const updated = updateTask(taskId, {
+  private async markTaskDone(taskId: string, output: TaskOutput, projectId: string, task: Task): Promise<Task> {
+    const updated = (await updateTask(taskId, {
       status: 'done',
       output,
       completedAt: new Date().toISOString(),
       reviewStatus: 'approved',
-    })!;
+    }))!;
 
     eventBus.emit({
       projectId,
@@ -388,7 +388,7 @@ class TaskEngine {
       },
     });
 
-    this.checkAndAdvancePhase(task.phaseId, projectId);
+    await this.checkAndAdvancePhase(task.phaseId, projectId);
     this.notifyCompleted(taskId, projectId);
 
     return updated;
@@ -405,21 +405,21 @@ class TaskEngine {
    * Red:  task → 'revision', revisionCount++
    *       Max cycle aşıldıysa → tech-lead'e eskalasyon
    */
-  submitReview(taskId: string, approved: boolean, feedback?: string): Task {
-    const task = this.requireTask(taskId);
+  async submitReview(taskId: string, approved: boolean, feedback?: string): Promise<Task> {
+    const task = await this.requireTask(taskId);
     if (task.status !== 'review') {
       throw new Error(`Task ${taskId} is not in review (status: ${task.status})`);
     }
 
-    const projectId = this.getProjectIdForTask(task);
+    const projectId = await this.getProjectIdForTask(task);
 
     if (approved) {
       // Onay → done
-      const updated = updateTask(taskId, {
+      const updated = (await updateTask(taskId, {
         status: 'done',
         reviewStatus: 'approved',
         completedAt: new Date().toISOString(),
-      })!;
+      }))!;
 
       eventBus.emit({
         projectId,
@@ -434,7 +434,7 @@ class TaskEngine {
 
       console.log(`[task-engine] Task ${taskId} review onaylandı`);
 
-      this.checkAndAdvancePhase(task.phaseId, projectId);
+      await this.checkAndAdvancePhase(task.phaseId, projectId);
       this.notifyCompleted(taskId, projectId);
 
       return updated;
@@ -448,12 +448,12 @@ class TaskEngine {
       return this.escalateTask(taskId, task, projectId, feedback);
     }
 
-    const updated = updateTask(taskId, {
+    const updated = (await updateTask(taskId, {
       status: 'revision',
       reviewStatus: 'rejected',
       revisionCount: newRevisionCount,
       error: feedback ? `Review red: ${feedback}` : 'Review reddedildi',
-    })!;
+    }))!;
 
     eventBus.emit({
       projectId,
@@ -476,20 +476,20 @@ class TaskEngine {
   /**
    * Max revision döngüsü aşıldığında tech-lead'e eskalasyon.
    */
-  private escalateTask(taskId: string, task: Task, projectId: string, feedback?: string): Task {
+  private async escalateTask(taskId: string, task: Task, projectId: string, feedback?: string): Promise<Task> {
     // Tech lead'i bul
-    const agents = listProjectAgents(projectId);
+    const agents = await listProjectAgents(projectId);
     const techLead = agents.find((a) => a.role === 'tech-lead');
 
     const escalationTarget = techLead?.name ?? 'Tech Lead';
     const escalationAgentId = techLead?.id;
 
-    const updated = updateTask(taskId, {
+    const updated = (await updateTask(taskId, {
       status: 'failed',
       reviewStatus: 'rejected',
       error: `Max review döngüsü aşıldı (${MAX_REVISION_CYCLES}x). Eskalasyon: ${escalationTarget}. Son feedback: ${feedback ?? 'N/A'}`,
       assignedAgentId: escalationAgentId,
-    })!;
+    }))!;
 
     eventBus.emit({
       projectId,
@@ -513,19 +513,19 @@ class TaskEngine {
   /**
    * Revision durumundaki task'ı dev agent'a geri gönderir (running durumuna alır).
    */
-  restartRevision(taskId: string): Task {
-    const task = this.requireTask(taskId);
+  async restartRevision(taskId: string): Promise<Task> {
+    const task = await this.requireTask(taskId);
     if (task.status !== 'revision') {
       throw new Error(`Task ${taskId} is not in revision (status: ${task.status})`);
     }
 
-    const updated = updateTask(taskId, {
+    const updated = (await updateTask(taskId, {
       status: 'running',
       startedAt: new Date().toISOString(),
       reviewStatus: null,
-    })!;
+    }))!;
 
-    const projectId = this.getProjectIdForTask(task);
+    const projectId = await this.getProjectIdForTask(task);
 
     eventBus.emit({
       projectId,
@@ -551,9 +551,9 @@ class TaskEngine {
    * Bir task'ın agent'ının review dependency'si var mı kontrol eder.
    * Eşleşme: task.assignedAgent (role/name/id) → project agent → review dep → reviewer agent
    */
-  private findReviewerForTask(projectId: string, task: Task): ProjectAgent | null {
-    const agents = listProjectAgents(projectId);
-    const deps = listAgentDependencies(projectId, 'review');
+  private async findReviewerForTask(projectId: string, task: Task): Promise<ProjectAgent | null> {
+    const agents = await listProjectAgents(projectId);
+    const deps = await listAgentDependencies(projectId, 'review');
 
     if (deps.length === 0) return null;
 
@@ -589,14 +589,14 @@ class TaskEngine {
   // Standard lifecycle (unchanged)
   // -------------------------------------------------------------------------
 
-  failTask(taskId: string, error: string): Task {
-    const task = this.requireTask(taskId);
+  async failTask(taskId: string, error: string): Promise<Task> {
+    const task = await this.requireTask(taskId);
     if (task.status !== 'running') {
       throw new Error(`Task ${taskId} is not running (status: ${task.status})`);
     }
 
-    const updated = updateTask(taskId, { status: 'failed', error })!;
-    const projectId = this.getProjectIdForTask(task);
+    const updated = (await updateTask(taskId, { status: 'failed', error }))!;
+    const projectId = await this.getProjectIdForTask(task);
 
     eventBus.emit({
       projectId,
@@ -608,18 +608,18 @@ class TaskEngine {
     return updated;
   }
 
-  retryTask(taskId: string): Task {
-    const task = this.requireTask(taskId);
+  async retryTask(taskId: string): Promise<Task> {
+    const task = await this.requireTask(taskId);
     if (task.status !== 'failed') {
       throw new Error(`Task ${taskId} is not failed (status: ${task.status})`);
     }
 
-    const updated = updateTask(taskId, {
+    const updated = (await updateTask(taskId, {
       status: 'queued',
       retryCount: task.retryCount + 1,
-    })!;
+    }))!;
 
-    const projectId = this.getProjectIdForTask(task);
+    const projectId = await this.getProjectIdForTask(task);
 
     eventBus.emit({
       projectId,
@@ -635,26 +635,36 @@ class TaskEngine {
   // Dependency resolution
   // -------------------------------------------------------------------------
 
-  getReadyTasks(phaseId: string): Task[] {
-    const tasks = listTasks(phaseId);
-    return tasks.filter((task) => {
-      if (task.status !== 'queued') return false;
-      if (task.dependsOn.length === 0) return true;
-      return task.dependsOn.every((depId) => {
-        const dep = getTask(depId);
-        return dep?.status === 'done';
-      });
-    });
+  async getReadyTasks(phaseId: string): Promise<Task[]> {
+    const tasks = await listTasks(phaseId);
+    const ready: Task[] = [];
+    for (const task of tasks) {
+      if (task.status !== 'queued') continue;
+      if (task.dependsOn.length === 0) {
+        ready.push(task);
+        continue;
+      }
+      let allDepsDone = true;
+      for (const depId of task.dependsOn) {
+        const dep = await getTask(depId);
+        if (dep?.status !== 'done') {
+          allDepsDone = false;
+          break;
+        }
+      }
+      if (allDepsDone) ready.push(task);
+    }
+    return ready;
   }
 
-  isPhaseComplete(phaseId: string): boolean {
-    const tasks = listTasks(phaseId);
+  async isPhaseComplete(phaseId: string): Promise<boolean> {
+    const tasks = await listTasks(phaseId);
     if (tasks.length === 0) return false;
     return tasks.every((t) => t.status === 'done');
   }
 
-  isPhaseFailed(phaseId: string): boolean {
-    const tasks = listTasks(phaseId);
+  async isPhaseFailed(phaseId: string): Promise<boolean> {
+    const tasks = await listTasks(phaseId);
     return tasks.some((t) => t.status === 'failed');
   }
 
@@ -662,8 +672,8 @@ class TaskEngine {
   // Phase progression
   // -------------------------------------------------------------------------
 
-  startPhase(projectId: string, phaseId: string): Task[] {
-    updatePhaseStatus(phaseId, 'running');
+  async startPhase(projectId: string, phaseId: string): Promise<Task[]> {
+    await updatePhaseStatus(phaseId, 'running');
 
     eventBus.emit({
       projectId,
@@ -674,8 +684,8 @@ class TaskEngine {
     return this.getReadyTasks(phaseId);
   }
 
-  getNextPhase(projectId: string): Phase | null {
-    const plan = getLatestPlan(projectId);
+  async getNextPhase(projectId: string): Promise<Phase | null> {
+    const plan = await getLatestPlan(projectId);
     if (!plan || plan.status !== 'approved') return null;
 
     for (const phase of plan.phases) {
@@ -691,8 +701,8 @@ class TaskEngine {
     return null;
   }
 
-  isProjectComplete(projectId: string): boolean {
-    const plan = getLatestPlan(projectId);
+  async isProjectComplete(projectId: string): Promise<boolean> {
+    const plan = await getLatestPlan(projectId);
     if (!plan) return false;
     return plan.phases.every((p) => p.status === 'completed');
   }
@@ -701,10 +711,10 @@ class TaskEngine {
   // Auto-advance
   // -------------------------------------------------------------------------
 
-  private checkAndAdvancePhase(phaseId: string, projectId: string): void {
-    if (!this.isPhaseComplete(phaseId)) return;
+  private async checkAndAdvancePhase(phaseId: string, projectId: string): Promise<void> {
+    if (!(await this.isPhaseComplete(phaseId))) return;
 
-    updatePhaseStatus(phaseId, 'completed');
+    await updatePhaseStatus(phaseId, 'completed');
 
     eventBus.emit({
       projectId,
@@ -712,11 +722,11 @@ class TaskEngine {
       payload: { phaseId },
     });
 
-    const nextPhase = this.getNextPhase(projectId);
+    const nextPhase = await this.getNextPhase(projectId);
     if (nextPhase) {
-      this.startPhase(projectId, nextPhase.id);
-    } else if (this.isProjectComplete(projectId)) {
-      updateProject(projectId, { status: 'completed' });
+      await this.startPhase(projectId, nextPhase.id);
+    } else if (await this.isProjectComplete(projectId)) {
+      await updateProject(projectId, { status: 'completed' });
     }
   }
 
@@ -724,18 +734,18 @@ class TaskEngine {
   // Full execution (after plan approval)
   // -------------------------------------------------------------------------
 
-  beginExecution(projectId: string): Task[] {
-    const project = getProject(projectId);
+  async beginExecution(projectId: string): Promise<Task[]> {
+    const project = await getProject(projectId);
     if (!project) throw new Error(`Project ${projectId} not found`);
 
-    const plan = getLatestPlan(projectId);
+    const plan = await getLatestPlan(projectId);
     if (!plan || plan.status !== 'approved') {
       throw new Error(`Project ${projectId} has no approved plan`);
     }
 
-    updateProject(projectId, { status: 'running' });
+    await updateProject(projectId, { status: 'running' });
 
-    const firstPhase = this.getNextPhase(projectId);
+    const firstPhase = await this.getNextPhase(projectId);
     if (!firstPhase) throw new Error('No phase is ready to start');
 
     return this.startPhase(projectId, firstPhase.id);
@@ -745,8 +755,8 @@ class TaskEngine {
   // Progress summary
   // -------------------------------------------------------------------------
 
-  getProgress(projectId: string) {
-    const plan = getLatestPlan(projectId);
+  async getProgress(projectId: string) {
+    const plan = await getLatestPlan(projectId);
     if (!plan) {
       return { phases: [], overall: { total: 0, done: 0, running: 0, failed: 0, queued: 0, review: 0, revision: 0, waitingApproval: 0 } };
     }
@@ -789,20 +799,19 @@ class TaskEngine {
   // Helpers
   // -------------------------------------------------------------------------
 
-  private requireTask(taskId: string): Task {
-    const task = getTask(taskId);
+  private async requireTask(taskId: string): Promise<Task> {
+    const task = await getTask(taskId);
     if (!task) throw new Error(`Task ${taskId} not found`);
     return task;
   }
 
-  private getProjectIdForTask(task: Task): string {
-    const db = getDb();
-    const row = db.prepare(`
+  private async getProjectIdForTask(task: Task): Promise<string> {
+    const row = await queryOne<{ project_id: string }>(`
       SELECT pp.project_id FROM tasks t
       JOIN phases p ON t.phase_id = p.id
       JOIN project_plans pp ON p.plan_id = pp.id
-      WHERE t.id = ?
-    `).get(task.id) as any;
+      WHERE t.id = $1
+    `, [task.id]);
     return row?.project_id ?? '';
   }
 }

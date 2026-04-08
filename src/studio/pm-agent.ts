@@ -12,10 +12,10 @@ import {
   updatePlanStatus,
   getProject,
   listProjectTasks,
-  getDb,
   getProjectAgentsWithSkills,
   getDefaultProvider,
 } from './db.js';
+import { execute, queryOne } from './pg.js';
 import { eventBus } from './event-bus.js';
 import type { TaskComplexity } from './types.js';
 import { gitManager } from './git-manager.js';
@@ -83,22 +83,21 @@ export interface PlanCostEstimate {
  * Task başına ortalama 2000 input + 1000 output token varsayar.
  * Model fiyatı: default provider'ın model ayarından alınır.
  */
-export function estimatePlanCost(projectId: string, planId: string): PlanCostEstimate {
-  const db = getDb();
-
+export async function estimatePlanCost(projectId: string, planId: string): Promise<PlanCostEstimate> {
   // Plan'a ait task sayısını hesapla
-  const taskCountRow = db.prepare(`
-    SELECT COUNT(*) AS cnt
-    FROM tasks t
-    JOIN phases ph ON ph.id = t.phase_id
-    JOIN project_plans pp ON pp.id = ph.plan_id
-    WHERE pp.id = ? AND pp.project_id = ?
-  `).get(planId, projectId) as { cnt: number } | undefined;
+  const taskCountRow = await queryOne<{ cnt: string }>(
+    `SELECT COUNT(*) AS cnt
+     FROM tasks t
+     JOIN phases ph ON ph.id = t.phase_id
+     JOIN project_plans pp ON pp.id = ph.plan_id
+     WHERE pp.id = $1 AND pp.project_id = $2`,
+    [planId, projectId],
+  );
 
-  const taskCount = taskCountRow?.cnt ?? 0;
+  const taskCount = taskCountRow ? parseInt(taskCountRow.cnt, 10) : 0;
 
   // Default provider'dan model bilgisi al
-  const defaultProvider = getDefaultProvider();
+  const defaultProvider = await getDefaultProvider();
   const model = defaultProvider?.model || 'claude-sonnet-4-6';
   const pricing = getModelPricing(model);
 
@@ -247,21 +246,23 @@ type PhaseInput = z.infer<typeof phaseSchema>;
 // ---------------------------------------------------------------------------
 
 async function buildPlan(projectId: string, phases: PhaseInput[]) {
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) throw new Error(`Project ${projectId} not found`);
 
-  const plan = createPlan(projectId);
+  const plan = await createPlan(projectId);
   const titleToId = new Map<string, string>();
 
-  const createdPhases = phases.map((p) => {
-    const phase = createPhase({
-      planId: plan.id,
-      name: p.name,
-      order: p.order,
-      dependsOn: [],
-    });
-    return { input: p, created: phase };
-  });
+  const createdPhases = await Promise.all(
+    phases.map(async (p) => {
+      const phase = await createPhase({
+        planId: plan.id,
+        name: p.name,
+        order: p.order,
+        dependsOn: [],
+      });
+      return { input: p, created: phase };
+    }),
+  );
 
   for (const { input, created } of createdPhases) {
     for (const t of input.tasks) {
@@ -271,7 +272,7 @@ async function buildPlan(projectId: string, phases: PhaseInput[]) {
       const autoRequiresApproval =
         t.complexity === 'XL' || APPROVAL_KEYWORDS.some((kw) => searchText.includes(kw));
 
-      const task = createTask({
+      const task = await createTask({
         phaseId: created.id,
         title: t.title,
         description: t.description,
@@ -287,7 +288,6 @@ async function buildPlan(projectId: string, phases: PhaseInput[]) {
   }
 
   // Resolve task dependencies
-  const db = getDb();
   for (const { input } of createdPhases) {
     for (const t of input.tasks) {
       const taskId = titleToId.get(t.title);
@@ -296,9 +296,9 @@ async function buildPlan(projectId: string, phases: PhaseInput[]) {
         .map((title: string) => titleToId.get(title))
         .filter((id: string | undefined): id is string => !!id);
       if (depIds.length > 0) {
-        db.prepare('UPDATE tasks SET depends_on = ? WHERE id = ?').run(
-          JSON.stringify(depIds),
-          taskId,
+        await execute(
+          'UPDATE tasks SET depends_on = $1 WHERE id = $2',
+          [JSON.stringify(depIds), taskId],
         );
       }
     }
@@ -360,11 +360,11 @@ export const pmToolkit = {
       projectId: z.string().describe('The project ID to check'),
     }),
     execute: async ({ projectId }) => {
-      const project = getProject(projectId);
+      const project = await getProject(projectId);
       if (!project) throw new Error(`Project ${projectId} not found`);
 
-      const plan = getLatestPlan(projectId);
-      const tasks = listProjectTasks(projectId);
+      const plan = await getLatestPlan(projectId);
+      const tasks = await listProjectTasks(projectId);
 
       return {
         project: {
@@ -396,11 +396,11 @@ export const pmToolkit = {
       phases: z.array(phaseSchema).describe('Updated phases for the new plan version'),
     }),
     execute: async ({ projectId, phases }) => {
-      const oldPlan = getLatestPlan(projectId);
+      const oldPlan = await getLatestPlan(projectId);
       if (oldPlan && oldPlan.status === 'draft') {
-        updatePlanStatus(oldPlan.id, 'rejected');
+        await updatePlanStatus(oldPlan.id, 'rejected');
       }
-      const result = buildPlan(projectId, phases);
+      const result = await buildPlan(projectId, phases);
       return { ...result, message: 'Updated plan created. Waiting for user approval.' };
     },
   }),
@@ -437,7 +437,7 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
     }),
     execute: async ({ projectId, taskTitle, taskDescription, requiredSkills }) => {
       // Proje agentlarını beceri listesiyle birlikte al; yoksa varsayılan rol becerilerini kullan
-      let candidates = getProjectAgentsWithSkills(projectId);
+      let candidates = await getProjectAgentsWithSkills(projectId);
 
       // Proje agentı yoksa varsayılan rol→beceri haritasını kullan
       const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {

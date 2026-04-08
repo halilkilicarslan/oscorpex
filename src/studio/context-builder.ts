@@ -3,7 +3,7 @@
 // Enhances agent task prompts with RAG-retrieved codebase context.
 // ---------------------------------------------------------------------------
 
-import { getDb } from './db.js';
+import { query, queryOne, execute } from './pg.js';
 import { searchSimilar } from './vector-store.js';
 
 // ---------------------------------------------------------------------------
@@ -31,14 +31,12 @@ interface KBRow {
 /**
  * Find the knowledge base associated with a project by searching rag_knowledge_bases
  * for a KB whose name contains the project name. Uses the studio DB (same DB as
- * rag_* tables — see observability-routes.ts initRagTables which calls getDb()).
+ * rag_* tables — see observability-routes.ts initRagTables which calls pg helpers).
  */
-function findProjectKB(projectId: string): { kbId: string; name: string } | null {
+async function findProjectKB(projectId: string): Promise<{ kbId: string; name: string } | null> {
   try {
-    const db = getDb();
-
     // Ensure the table exists (idempotent — mirrors initRagTables guard)
-    db.exec(`
+    await execute(`
       CREATE TABLE IF NOT EXISTS rag_knowledge_bases (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -59,9 +57,10 @@ function findProjectKB(projectId: string): { kbId: string; name: string } | null
     // First try: exact match on project ID stored in description or name
     // Strategy: KB name contains the project id OR the project name.
     // We resolve the project name from the projects table so we can match by name too.
-    const projectRow = db.prepare('SELECT name FROM projects WHERE id = ?').get(projectId) as
-      | { name: string }
-      | undefined;
+    const projectRow = await queryOne<{ name: string }>(
+      'SELECT name FROM projects WHERE id = $1',
+      [projectId],
+    );
 
     if (!projectRow) {
       return null;
@@ -70,9 +69,9 @@ function findProjectKB(projectId: string): { kbId: string; name: string } | null
     const projectName = projectRow.name.toLowerCase();
 
     // Fetch all active KBs and find the best match
-    const kbs = db
-      .prepare(`SELECT id, name FROM rag_knowledge_bases WHERE status = 'active'`)
-      .all() as KBRow[];
+    const kbs = await query<KBRow>(
+      `SELECT id, name FROM rag_knowledge_bases WHERE status = 'active'`,
+    );
 
     if (kbs.length === 0) {
       return null;
@@ -118,17 +117,17 @@ async function buildRAGContext(
   maxTokens = 4000,
 ): Promise<RAGContext | null> {
   // 1. Locate the KB for this project
-  const kb = findProjectKB(projectId);
+  const kb = await findProjectKB(projectId);
   if (!kb) {
     return null;
   }
 
   // 2. Build search query from task metadata
   const descriptionSnippet = (taskDescription ?? '').slice(0, 200);
-  const query = [taskTitle, descriptionSnippet].filter(Boolean).join(' — ');
+  const searchQuery = [taskTitle, descriptionSnippet].filter(Boolean).join(' — ');
 
   // 3. Retrieve candidates from the vector store
-  const candidates = await searchSimilar(kb.kbId, query, maxChunks);
+  const candidates = await searchSimilar(kb.kbId, searchQuery, maxChunks);
 
   // 4. Filter by relevance threshold
   const RELEVANCE_THRESHOLD = 0.3;
