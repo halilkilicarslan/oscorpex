@@ -499,9 +499,11 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
     fetchStatus();
   }, [fetchStatus]);
 
-  // Pipeline çalışırken her 3 saniyede bir otomatik yenile
+  // Pipeline aktifken (running, paused, failed ama task'lar devam ediyorsa) otomatik yenile
   useEffect(() => {
-    if (pipelineState?.status !== 'running') return;
+    if (!pipelineState) return;
+    // Sadece tamamlandığında polling'i durdur
+    if (pipelineState.status === 'completed') return;
     const interval = setInterval(fetchStatus, 3000);
     return () => clearInterval(interval);
   }, [pipelineState?.status, fetchStatus]);

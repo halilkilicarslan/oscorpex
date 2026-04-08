@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal, Loader2, Circle, ChevronDown } from 'lucide-react';
 import { fetchProjectAgents, type ProjectAgent } from '../../lib/studio-api';
 
-const BASE = `http://localhost:${import.meta.env.VITE_API_PORT ?? 3141}/api/studio/api/studio`;
+const BASE = `/api/studio`;
 
 // ---------------------------------------------------------------------------
 // SSE stream hook for agent output
@@ -81,16 +81,43 @@ function stripAnsi(text: string): string {
 function LogLine({ line }: { line: string }) {
   const clean = stripAnsi(line);
   let color = 'text-[#a3a3a3]';
-  if (clean.includes('[error]') || clean.includes('Error') || clean.includes('FAIL'))
-    color = 'text-[#ef4444]';
-  else if (clean.includes('[warn]') || clean.includes('Warning'))
-    color = 'text-[#f59e0b]';
-  else if (clean.includes('[commit]') || clean.includes('APPROVED') || clean.includes('completed'))
-    color = 'text-[#22c55e]';
-  else if (clean.startsWith('['))
-    color = 'text-[#06b6d4]';
+  let icon = '';
 
-  return <div className={`${color} whitespace-pre-wrap break-all`}>{clean}</div>;
+  // Tool call indicators (from CLI runtime)
+  if (clean.includes('>> Write:') || clean.includes('>> Edit:')) {
+    color = 'text-[#a78bfa]'; // purple for file modifications
+    icon = clean.includes('>> Write:') ? '+' : '~';
+  } else if (clean.includes('>> Read:')) {
+    color = 'text-[#60a5fa]'; // blue for file reads
+    icon = 'r';
+  } else if (clean.includes('>> Bash:')) {
+    color = 'text-[#fbbf24]'; // yellow for bash commands
+    icon = '$';
+  } else if (clean.includes('>> Glob:') || clean.includes('>> Grep:')) {
+    color = 'text-[#34d399]'; // green for search
+    icon = '?';
+  } else if (clean.includes('[result]')) {
+    color = 'text-[#525252]'; // dim for tool results
+  } else if (clean.includes('[error]') || clean.includes('Error') || clean.includes('FAIL') || clean.includes('Hata')) {
+    color = 'text-[#ef4444]';
+  } else if (clean.includes('[warn]') || clean.includes('Warning')) {
+    color = 'text-[#f59e0b]';
+  } else if (clean.includes('Tamamlandı') || clean.includes('completed') || clean.includes('APPROVED')) {
+    color = 'text-[#22c55e]';
+  } else if (clean.includes('tokens') || clean.includes('$')) {
+    color = 'text-[#06b6d4]'; // cyan for cost info
+  } else if (clean.startsWith('[')) {
+    color = 'text-[#06b6d4]';
+  }
+
+  return (
+    <div className={`${color} whitespace-pre-wrap break-all flex`}>
+      {icon && (
+        <span className="inline-block w-5 text-center shrink-0 opacity-60">{icon}</span>
+      )}
+      <span>{clean}</span>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
