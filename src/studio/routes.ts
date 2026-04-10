@@ -9,7 +9,7 @@ import { isClaudeCliAvailable, streamWithCLI } from './cli-runtime.js';
 import { mkdir, readFile, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { initLintConfig } from './lint-runner.js';
-import { checkDocsFreshness, generateReadme } from './docs-generator.js';
+import { checkDocsFreshness, generateReadme, updateDocsAfterTask } from './docs-generator.js';
 import { AVATARS, FEMALE_AVATARS, MALE_AVATARS } from './avatars.js';
 import {
   isSonarEnabled,
@@ -2309,6 +2309,30 @@ studio.get('/projects/:id/docs/freshness', async (c) => {
   if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
   const results = await checkDocsFreshness(project.repoPath);
   return c.json(results);
+});
+
+studio.post('/projects/:id/docs/regenerate', async (c) => {
+  const projectId = c.req.param('id');
+  const project = await getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+
+  const tasks = await listProjectTasks(projectId);
+  const doneTasks = tasks.filter((t) => t.status === 'done');
+  let updated = 0;
+
+  for (const task of doneTasks) {
+    const agentId = task.assignedAgent;
+    if (!agentId) continue;
+    const agent = await getAgentConfig(agentId) ?? await getProjectAgent(agentId);
+    if (!agent) continue;
+    try {
+      await updateDocsAfterTask(project, task, agent as any);
+      updated++;
+    } catch { /* skip */ }
+  }
+
+  return c.json({ regenerated: updated, total: doneTasks.length });
 });
 
 // ---------------------------------------------------------------------------
