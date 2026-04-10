@@ -9,7 +9,7 @@ import { isClaudeCliAvailable, streamWithCLI } from './cli-runtime.js';
 import { mkdir, readFile, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { initLintConfig } from './lint-runner.js';
-import { checkDocsFreshness, generateReadme, updateDocsAfterTask } from './docs-generator.js';
+import { checkDocsFreshness, generateReadme, regenerateAllDocs } from './docs-generator.js';
 import { AVATARS, FEMALE_AVATARS, MALE_AVATARS } from './avatars.js';
 import {
   isSonarEnabled,
@@ -2319,19 +2319,16 @@ studio.post('/projects/:id/docs/regenerate', async (c) => {
 
   const tasks = await listProjectTasks(projectId);
   const doneTasks = tasks.filter((t) => t.status === 'done');
-  let updated = 0;
 
+  // Build agent lookup map
+  const agents = new Map<string, any>();
   for (const task of doneTasks) {
-    const agentId = task.assignedAgent;
-    if (!agentId) continue;
-    const agent = await getAgentConfig(agentId) ?? await getProjectAgent(agentId);
-    if (!agent) continue;
-    try {
-      await updateDocsAfterTask(project, task, agent as any);
-      updated++;
-    } catch { /* skip */ }
+    if (!task.assignedAgent || agents.has(task.assignedAgent)) continue;
+    const agent = await getAgentConfig(task.assignedAgent) ?? await getProjectAgent(task.assignedAgent);
+    if (agent) agents.set(task.assignedAgent, agent);
   }
 
+  const updated = await regenerateAllDocs(project, doneTasks, agents);
   return c.json({ regenerated: updated, total: doneTasks.length });
 });
 

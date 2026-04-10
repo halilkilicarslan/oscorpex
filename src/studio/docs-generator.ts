@@ -65,6 +65,69 @@ export async function updateDocsAfterTask(
   }
 }
 
+/**
+ * Regenerate ALL docs for a project regardless of agent roles.
+ * Useful for retroactive docs generation after fixes.
+ */
+export async function regenerateAllDocs(
+  project: Project,
+  doneTasks: Task[],
+  agents: Map<string, AgentConfig>,
+  log?: (msg: string) => void,
+): Promise<number> {
+  if (!project.repoPath) return 0;
+  const docsDir = join(project.repoPath, 'docs');
+  if (!existsSync(docsDir)) return 0;
+
+  let updated = 0;
+
+  // 1) PROJECT.md — always regenerate from plan
+  try {
+    await generateProjectMd(project, docsDir, log);
+    updated++;
+  } catch { /* skip */ }
+
+  // 2) ARCHITECTURE.md — always regenerate from file tree
+  try {
+    await generateArchitectureMd(project, docsDir, log);
+    updated++;
+  } catch { /* skip */ }
+
+  // 3) CODING_STANDARDS.md — always regenerate
+  try {
+    await generateCodingStandardsMd(project, docsDir, log);
+    updated++;
+  } catch { /* skip */ }
+
+  // 4) API_CONTRACT.md — reset to TBD then rebuild from backend tasks
+  const apiPath = join(docsDir, 'API_CONTRACT.md');
+  try { await writeFile(apiPath, '# API Contract\n\nTBD\n', 'utf-8'); } catch { /* skip */ }
+  for (const task of doneTasks) {
+    const agent = agents.get(task.assignedAgent);
+    if (!agent) continue;
+    const role = agent.role.toLowerCase();
+    if (role.startsWith('backend')) {
+      try {
+        await generateApiContractMd(project, task, docsDir, log);
+        updated++;
+      } catch { /* skip */ }
+    }
+  }
+
+  // 5) CHANGELOG — reset then rebuild from done tasks
+  const clPath = join(docsDir, 'CHANGELOG.md');
+  try { await writeFile(clPath, '# Changelog\n\n\nAll notable changes to this project.\n', 'utf-8'); } catch { /* skip */ }
+  for (const task of doneTasks) {
+    const agent = agents.get(task.assignedAgent);
+    if (!agent) continue;
+    try {
+      await appendChangelog(project, task, agent, docsDir, log);
+    } catch { /* skip */ }
+  }
+
+  return updated;
+}
+
 // ---------------------------------------------------------------------------
 // PROJECT.md — AI Planner
 // ---------------------------------------------------------------------------
