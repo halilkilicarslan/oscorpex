@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Standalone WebSocket HTTP Server
+// Orenda — Standalone WebSocket HTTP Server
 //
 // Ana Hono sunucusu ile aynı portu paylaşmak mümkün olmadığından
 // WebSocket bağlantıları için bağımsız bir HTTP sunucusu açılır.

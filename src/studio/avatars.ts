@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Avatar Collection
+// Orenda — Avatar Collection
 // Sourced from https://www.untitledui.com/avatars (free for commercial use)
 // ---------------------------------------------------------------------------
 

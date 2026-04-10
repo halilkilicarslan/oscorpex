@@ -1,7 +1,7 @@
 {
-  "name": "my-voltagent-app",
+  "name": "orenda",
   "version": "0.1.0",
-  "description": "A VoltAgent application",
+  "description": "AI-powered software development platform — describe your idea, let AI agents build it",
   "type": "module",
   "scripts": {
     "dev": "tsx watch ./src",

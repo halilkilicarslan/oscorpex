@@ -38,7 +38,7 @@ export default function TopBar({ onOpenChat, chatOpen }: TopBarProps) {
         </span>
         <span className="text-[#333] select-none">/</span>
         <span className="text-[13px] text-[#fafafa] font-medium">
-          My VoltAgent App
+          Orenda
         </span>
       </div>
 

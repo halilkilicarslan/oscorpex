@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Container Manager
+// Orenda — Container Manager
 // Docker container operations for agent runtimes
 // ---------------------------------------------------------------------------
 

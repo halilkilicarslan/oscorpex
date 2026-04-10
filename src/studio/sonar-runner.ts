@@ -1,5 +1,5 @@
 /**
- * SonarQube / SonarCloud integration for AI Dev Studio.
+ * SonarQube / SonarCloud integration for Orenda.
  *
  * - initSonarConfig(repoPath, projectKey) — scaffolds sonar-project.properties
  * - runSonarScan(repoPath) — runs sonar-scanner CLI

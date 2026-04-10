@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — API Discovery Engine
+// Orenda — API Discovery Engine
 // Express/Fastify/Hono route dosyalarını parse ederek API endpoint'lerini keşfeder.
 // OpenAPI spec varsa onu kullanır, yoksa kaynak kod + probe ile keşif yapar.
 // ---------------------------------------------------------------------------

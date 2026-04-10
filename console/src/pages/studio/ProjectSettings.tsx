@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Project Settings (Integration Widgets)
+// Orenda — Project Settings (Integration Widgets)
 // ---------------------------------------------------------------------------
 
 import { useEffect, useState, useCallback } from 'react';

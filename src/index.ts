@@ -82,7 +82,7 @@ const codeAssistant = createCodeAssistant();
 const translator = createTranslator();
 const summarizer = createSummarizer();
 
-// AI Dev Studio WebSocket sunucusunu başlat (port 3142)
+// Orenda WebSocket sunucusunu başlat (port 3142)
 startWSServer();
 
 // Webhook sender — event bus'a abone ol, tüm event tiplerini dinle

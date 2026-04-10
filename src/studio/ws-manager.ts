@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — WebSocket Manager
+// Orenda — WebSocket Manager
 //
 // Mimari:
 //   - Tek bir WebSocketServer instance'ı (port paylaşımı için `noServer: true`)

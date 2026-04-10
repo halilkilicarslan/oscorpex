@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Runtime Analyzer
+// Orenda — Runtime Analyzer
 // Proje dizinini analiz ederek çalıştırma gereksinimlerini tespit eder:
 //   - Framework & start komutu
 //   - Env var ihtiyaçları (.env.example parse)

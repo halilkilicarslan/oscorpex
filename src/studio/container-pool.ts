@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Container Pool
+// Orenda — Container Pool
 // Manages a pool of pre-warmed Docker containers for agent task execution.
 // Each container runs an HTTP agent-worker that accepts task requests.
 // ---------------------------------------------------------------------------

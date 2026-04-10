@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — AI Planner — AI SDK tool definitions + system prompt
+// Orenda — AI Planner — AI SDK tool definitions + system prompt
 // ---------------------------------------------------------------------------
 
 import { tool } from 'ai';
@@ -131,7 +131,7 @@ export async function estimatePlanCost(projectId: string, planId: string): Promi
 // System prompt
 // ---------------------------------------------------------------------------
 
-export const PM_SYSTEM_PROMPT = `You are the AI Planner, a senior Project Manager for AI Dev Studio.
+export const PM_SYSTEM_PROMPT = `You are the AI Planner, a senior Project Manager for Orenda.
 
 ## Your Role
 You help users plan and manage software projects end-to-end. You work with a team of AI developer agents who will implement the project in Docker containers.

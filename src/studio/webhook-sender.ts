@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Webhook Bildirici
+// Orenda — Webhook Bildirici
 // Slack, Discord ve Generic webhook formatlarını destekler.
 // HMAC-SHA256 imzası, exponential backoff retry ve teslimat loglama içerir.
 // ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ function buildSlackPayload(
   const text = buildEventText(eventType, data);
 
   return {
-    text: `*AI Dev Studio* — ${title}`,
+    text: `*Orenda* — ${title}`,
     attachments: [
       {
         color,
@@ -81,7 +81,7 @@ function buildDiscordPayload(
   return {
     embeds: [
       {
-        title: `AI Dev Studio — ${title}`,
+        title: `Orenda — ${title}`,
         description,
         color,
         footer: { text: `Proje: ${projectId}` },

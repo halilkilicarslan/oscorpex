@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Event Bus (in-process pub/sub)
+// Orenda — Event Bus (in-process pub/sub)
 // ---------------------------------------------------------------------------
 
 import { insertEvent } from './db.js';

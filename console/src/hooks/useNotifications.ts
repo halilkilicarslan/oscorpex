@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Browser Notifications Hook
+// Orenda — Browser Notifications Hook
 //
 // WebSocket event'lerinden task:completed ve task:failed bildirimlerini
 // browser Notification API ile gösterir.

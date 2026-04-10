@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Agent .md file system
+// Orenda — Agent .md file system
 // ---------------------------------------------------------------------------
 
 import { mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';

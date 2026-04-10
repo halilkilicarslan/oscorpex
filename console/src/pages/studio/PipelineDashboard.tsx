@@ -1,4 +1,4 @@
-// Pipeline Dashboard — AI Dev Studio projesinin pipeline görselleştirme ve yönetim bileşeni
+// Pipeline Dashboard — Orenda projesinin pipeline görselleştirme ve yönetim bileşeni
 import { useState, useEffect, useCallback } from 'react';
 import {
   Play,

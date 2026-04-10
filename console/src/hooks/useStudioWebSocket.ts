@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — WebSocket Hook
+// Orenda — WebSocket Hook
 //
 // Kullanım:
 //   const { connectionState, lastEvent, send } = useStudioWebSocket(projectId);

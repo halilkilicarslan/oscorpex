@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Universal App Runner
+// Orenda — Universal App Runner
 // .studio.json, Docker Compose, ve otomatik dil algılama ile proje çalıştırma.
 //
 // Öncelik sırası:
