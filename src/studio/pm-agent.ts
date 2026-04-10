@@ -14,6 +14,8 @@ import {
   listProjectTasks,
   getProjectAgentsWithSkills,
   getDefaultProvider,
+  listProjectAgents,
+  updateTask,
 } from './db.js';
 import { execute, queryOne } from './pg.js';
 import { eventBus } from './event-bus.js';
@@ -277,6 +279,32 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
       return { input: p, created: phase };
     }),
   );
+
+  // --- PM Planning Task: create auto-completed task for product-owner ---
+  const agents = await listProjectAgents(projectId);
+  const pmAgent = agents.find((a) => a.role === 'product-owner' || a.role === 'scrum-master');
+  if (pmAgent && createdPhases.length > 0) {
+    const firstPhase = createdPhases[0].created;
+    const pmTask = await createTask({
+      phaseId: firstPhase.id,
+      title: 'Proje Planlama ve Görev Dağılımı',
+      description: `Proje gereksinimlerinin analizi, ${phases.length} fazlı plan oluşturulması ve takım üyelerine görev dağıtımı yapıldı.`,
+      assignedAgent: pmAgent.id,
+      complexity: 'S' as TaskComplexity,
+      dependsOn: [],
+      branch: 'main',
+    });
+    // Mark as done immediately — planning is already complete
+    await updateTask(pmTask.id, {
+      status: 'done',
+      completedAt: new Date().toISOString(),
+      output: {
+        filesCreated: ['docs/PLAN.md'],
+        filesModified: [],
+        logs: [`Plan oluşturuldu: ${phases.length} faz, ${phases.reduce((s, p) => s + p.tasks.length, 0)} görev`],
+      },
+    });
+  }
 
   for (const { input, created } of createdPhases) {
     for (const t of input.tasks) {
