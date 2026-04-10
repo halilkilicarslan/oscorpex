@@ -218,6 +218,38 @@ class ExecutionEngine {
           console.error(`[execution-engine] Recovery failed for "${project.name}":`, err);
         });
       }
+
+      // Restart revision tasks that were left in 'revision' status
+      for (const phase of phases) {
+        if (phase.status !== 'running' && phase.status !== 'completed') continue;
+        for (const task of phase.tasks ?? []) {
+          if (task.status === 'revision') {
+            console.log(`[execution-engine] Recovery: restarting revision "${task.title}"`);
+            try {
+              await taskEngine.restartRevision(task.id);
+              const fresh = await getTask(task.id);
+              if (fresh) {
+                this.executeTask(project.id, fresh).catch(() => {});
+              }
+            } catch (e) {
+              console.error(`[execution-engine] Revision recovery failed for "${task.title}":`, e);
+            }
+          }
+        }
+      }
+
+      // Dispatch orphaned queued tasks (e.g. review tasks created before restart)
+      // These may sit in running OR completed phases with satisfied dependencies
+      for (const phase of phases) {
+        if (phase.status !== 'running' && phase.status !== 'completed') continue;
+        const ready = await taskEngine.getReadyTasks(phase.id);
+        if (ready.length > 0) {
+          console.log(`[execution-engine] Recovery: ${ready.length} orphaned ready task(s) in phase "${phase.name}" — dispatching`);
+          Promise.allSettled(
+            ready.map((task: any) => this.executeTask(project.id, task)),
+          ).catch(() => {});
+        }
+      }
     }
   }
 
@@ -326,9 +358,9 @@ class ExecutionEngine {
     // be an agent ID or a role name. Try both.
     const agent = await this.resolveAgent(projectId, task.assignedAgent);
     if (!agent) {
-      taskEngine.assignTask(task.id, task.assignedAgent);
-      taskEngine.startTask(task.id);
-      taskEngine.failTask(
+      await taskEngine.assignTask(task.id, task.assignedAgent);
+      await taskEngine.startTask(task.id);
+      await taskEngine.failTask(
         task.id,
         `No agent found for assignment "${task.assignedAgent}" in project ${projectId}`,
       );
@@ -337,8 +369,8 @@ class ExecutionEngine {
     }
 
     // Mark task as assigned then running
-    taskEngine.assignTask(task.id, agent.id);
-    taskEngine.startTask(task.id);
+    await taskEngine.assignTask(task.id, agent.id);
+    await taskEngine.startTask(task.id);
 
     const prompt = await this.buildTaskPrompt(task, project);
 
@@ -459,7 +491,7 @@ class ExecutionEngine {
         persistAgentLog(projectId, agent.id, agentOutputLines).catch(() => {});
       }
 
-      taskEngine.completeTask(task.id, output);
+      await taskEngine.completeTask(task.id, output);
 
       // Review task dispatch: task-engine creates a review task which
       // will be picked up by dispatchReadyTasks below.
@@ -497,7 +529,7 @@ class ExecutionEngine {
         persistAgentLog(projectId, agent.id, failOutputLines).catch(() => {});
       }
 
-      taskEngine.failTask(task.id, errorMsg);
+      await taskEngine.failTask(task.id, errorMsg);
 
       // --- Self-healing: auto-retry with error context ---
       const MAX_AUTO_RETRIES = 2;
@@ -673,8 +705,8 @@ class ExecutionEngine {
   // -------------------------------------------------------------------------
 
   private async executeSpecialTask(projectId: string, project: Project, task: Task): Promise<void> {
-    taskEngine.assignTask(task.id, task.taskType ?? 'system');
-    taskEngine.startTask(task.id);
+    await taskEngine.assignTask(task.id, task.taskType ?? 'system');
+    await taskEngine.startTask(task.id);
 
     const termLog = (msg: string) => {
       eventBus.emitTransient({
@@ -702,7 +734,7 @@ class ExecutionEngine {
         };
       }
 
-      taskEngine.completeTask(task.id, output);
+      await taskEngine.completeTask(task.id, output);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error(`[execution-engine] Special task failed: "${task.title}" — ${errorMsg}`);
@@ -712,7 +744,7 @@ class ExecutionEngine {
         taskId: task.id,
         payload: { error: errorMsg },
       });
-      taskEngine.failTask(task.id, errorMsg);
+      await taskEngine.failTask(task.id, errorMsg);
     }
 
     // Dispatch next tasks
@@ -746,9 +778,9 @@ class ExecutionEngine {
     const originalTask = originalTaskId ? await getTask(originalTaskId) : null;
     if (!originalTask || originalTask.status !== 'review') {
       // Original task no longer in review — auto-complete review task
-      taskEngine.assignTask(reviewTask.id, reviewTask.assignedAgent);
-      taskEngine.startTask(reviewTask.id);
-      taskEngine.completeTask(reviewTask.id, {
+      await taskEngine.assignTask(reviewTask.id, reviewTask.assignedAgent);
+      await taskEngine.startTask(reviewTask.id);
+      await taskEngine.completeTask(reviewTask.id, {
         filesCreated: [], filesModified: [],
         logs: ['Orijinal task artık review durumunda değil — review atlandı'],
       });
@@ -757,21 +789,21 @@ class ExecutionEngine {
 
     const reviewer = await this.resolveAgent(projectId, reviewTask.assignedAgent);
     if (!reviewer) {
-      taskEngine.assignTask(reviewTask.id, reviewTask.assignedAgent);
-      taskEngine.startTask(reviewTask.id);
-      taskEngine.failTask(reviewTask.id, 'Reviewer agent bulunamadı');
+      await taskEngine.assignTask(reviewTask.id, reviewTask.assignedAgent);
+      await taskEngine.startTask(reviewTask.id);
+      await taskEngine.failTask(reviewTask.id, 'Reviewer agent bulunamadı');
       await taskEngine.submitReview(originalTaskId!, true, 'Reviewer bulunamadı — auto-approved');
       return;
     }
 
-    taskEngine.assignTask(reviewTask.id, reviewer.id);
-    taskEngine.startTask(reviewTask.id);
+    await taskEngine.assignTask(reviewTask.id, reviewer.id);
+    await taskEngine.startTask(reviewTask.id);
 
     const allFiles = [...(originalTask.output?.filesCreated ?? []), ...(originalTask.output?.filesModified ?? [])];
 
     if (allFiles.length === 0) {
       // No files to review
-      taskEngine.completeTask(reviewTask.id, {
+      await taskEngine.completeTask(reviewTask.id, {
         filesCreated: [], filesModified: [],
         logs: ['İncelenecek dosya yok — otomatik onaylandı'],
       });
@@ -861,7 +893,7 @@ class ExecutionEngine {
       }
 
       // Complete the review task with feedback as output
-      taskEngine.completeTask(reviewTask.id, {
+      await taskEngine.completeTask(reviewTask.id, {
         filesCreated: [],
         filesModified: cliResult.filesModified ?? [],
         logs: [feedback],
@@ -871,13 +903,28 @@ class ExecutionEngine {
       await taskEngine.submitReview(originalTaskId!, approved, feedback);
       agentRuntime.markVirtualStopped(projectId, reviewer.id);
 
+      // Auto-restart revision: if rejected, restart the original task for the dev agent
+      if (!approved) {
+        const revisedTask = await getTask(originalTaskId!);
+        if (revisedTask?.status === 'revision') {
+          console.log(`[execution-engine] Review rejected — restarting "${revisedTask.title}" for revision`);
+          await taskEngine.restartRevision(originalTaskId!);
+          const freshTask = await getTask(originalTaskId!);
+          if (freshTask) {
+            this.executeTask(projectId, freshTask).catch((e) => {
+              console.error(`[execution-engine] Revision re-execution failed:`, e);
+            });
+          }
+        }
+      }
+
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       termLog(`[review] Hata: ${msg.slice(0, 200)}`);
       agentRuntime.markVirtualStopped(projectId, reviewer.id);
 
       // Fail the review task but auto-approve original so it doesn't get stuck
-      taskEngine.failTask(reviewTask.id, msg);
+      await taskEngine.failTask(reviewTask.id, msg);
       try { await taskEngine.submitReview(originalTaskId!, true, `Review failed: ${msg.slice(0, 200)} — auto-approved`); } catch { /* */ }
     }
   }

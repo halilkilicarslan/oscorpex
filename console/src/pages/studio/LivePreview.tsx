@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Play, Loader2, ExternalLink, RotateCcw, Maximize2, Minimize2, Smartphone, Monitor, Tablet, ChevronDown, Settings2, Braces, Globe } from 'lucide-react';
-import { startApp, stopApp, fetchAppStatus, type AppStatus } from '../../lib/studio-api';
+import { useState, useEffect, useRef } from 'react';
+import { Loader2, ExternalLink, RotateCcw, Maximize2, Minimize2, Smartphone, Monitor, Tablet, Settings2, Braces, Globe, Server } from 'lucide-react';
+import { startApp, stopApp, fetchAppStatus, switchPreviewService, type AppStatus } from '../../lib/studio-api';
 import RuntimePanel from './RuntimePanel';
 import ApiExplorer from './ApiExplorer';
 
@@ -27,10 +27,10 @@ export default function LivePreview({
   const [fullscreen, setFullscreen] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
   const [selectedService, setSelectedService] = useState<string | null>(null);
-  const [serviceMenuOpen, setServiceMenuOpen] = useState(false);
   const [showRuntime, setShowRuntime] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [isApiOnly, setIsApiOnly] = useState(false);
+  const apiDetectedOnce = useRef(false);
 
   // Determine preview URL
   const services = appStatus.services || [];
@@ -38,19 +38,23 @@ export default function LivePreview({
     ? services.find(s => s.name === selectedService)
     : services.find(s => s.isPreview) || services[0];
   const directUrl = activeService?.url || appStatus.previewUrl || appStatus.frontendUrl || appStatus.backendUrl;
-  const previewUrl = directUrl ? `/api/studio/projects/${projectId}/app/proxy/` : null;
+  // Direct URL for iframe — proxy can't handle ES module imports in inline scripts
+  const previewUrl = directUrl || null;
+  // Proxy URL for API-only detection (avoids CORS on cross-origin fetch)
+  const proxyUrl = directUrl ? `/api/studio/projects/${projectId}/app/proxy/` : null;
 
-  // API-only detection: proxy root'u kontrol et
+  // API-only detection: proxy root'u kontrol et (sadece ilk seferde viewMode ayarla)
   useEffect(() => {
-    if (!previewUrl || !appStatus.running) return;
-    fetch(previewUrl).then(res => {
-      // Proxy'den gelen response: API-only ise root 404 → proxy HTML info page döner
-      // ama content-type text/html ise ve "API-Only" içeriyorsa → API-only
+    if (!proxyUrl || !appStatus.running) return;
+    fetch(proxyUrl).then(res => {
       if (res.headers.get('content-type')?.includes('text/html')) {
         res.text().then(body => {
           if (body.includes('API-Only Application')) {
             setIsApiOnly(true);
-            setViewMode('api');
+            if (!apiDetectedOnce.current) {
+              apiDetectedOnce.current = true;
+              setViewMode('api');
+            }
           } else {
             setIsApiOnly(false);
           }
@@ -58,10 +62,42 @@ export default function LivePreview({
       } else {
         // JSON response = API endpoint, not a web app
         setIsApiOnly(true);
-        setViewMode('api');
+        if (!apiDetectedOnce.current) {
+          apiDetectedOnce.current = true;
+          setViewMode('api');
+        }
       }
     }).catch(() => {});
-  }, [previewUrl, appStatus.running, iframeKey]);
+  }, [proxyUrl, appStatus.running]);
+
+  const handleSwitchService = async (serviceName: string) => {
+    setSelectedService(serviceName);
+    // Backend proxy hedefini değiştir
+    await switchPreviewService(projectId, serviceName).catch(() => {});
+    // API-only state'i resetle — yeni service'te tekrar algılansın
+    apiDetectedOnce.current = false;
+    setIsApiOnly(false);
+    setViewMode('preview');
+    setIframeKey(k => k + 1);
+    // Kısa gecikme sonrası yeni hedefi kontrol et
+    const detectUrl = `/api/studio/projects/${projectId}/app/proxy/`;
+    setTimeout(() => {
+      fetch(detectUrl).then(res => {
+        if (res.headers.get('content-type')?.includes('text/html')) {
+          res.text().then(body => {
+            if (body.includes('API-Only Application')) {
+              setIsApiOnly(true);
+              setViewMode('api');
+            }
+          });
+        } else {
+          setIsApiOnly(true);
+          setViewMode('api');
+        }
+        apiDetectedOnce.current = true;
+      }).catch(() => {});
+    }, 500);
+  };
 
   const handleStart = async () => {
     setLoading(true);
@@ -143,46 +179,28 @@ export default function LivePreview({
         </div>
 
         <div className="flex items-center gap-2 text-[11px] text-[#525252]">
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
-            {services.length > 1 ? `${services.length} services` : 'Running'}
-          </span>
-
-          {services.length > 1 ? (
-            <div className="relative">
+          {/* Service badges */}
+          <div className="flex items-center gap-1">
+            {services.map(s => (
               <button
-                onClick={() => setServiceMenuOpen(!serviceMenuOpen)}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#1a1a1a] text-[#a3a3a3] hover:bg-[#262626] transition-colors"
+                key={s.name}
+                onClick={() => handleSwitchService(s.name)}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] transition-colors ${
+                  s.name === activeService?.name
+                    ? 'bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20'
+                    : 'bg-[#1a1a1a] text-[#71717a] hover:text-[#a3a3a3] hover:bg-[#262626]'
+                }`}
+                title={s.url}
               >
-                <span className="truncate max-w-[120px]">{activeService?.name || 'Select'}</span>
-                <ChevronDown size={10} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse shrink-0" />
+                <Server size={9} />
+                <span>{s.name}</span>
+                <span className="text-[#525252]">{s.url.replace('http://localhost:', ':')}</span>
               </button>
-              {serviceMenuOpen && (
-                <div className="absolute top-full mt-1 right-0 bg-[#1a1a1a] border border-[#262626] rounded-lg shadow-xl z-10 py-1 min-w-[160px]">
-                  {services.map(s => (
-                    <button
-                      key={s.name}
-                      onClick={() => {
-                        setSelectedService(s.name);
-                        setServiceMenuOpen(false);
-                        setIframeKey(k => k + 1);
-                      }}
-                      className={`w-full text-left px-3 py-1.5 text-[11px] hover:bg-[#262626] transition-colors flex items-center justify-between ${
-                        s.name === activeService?.name ? 'text-[#22c55e]' : 'text-[#a3a3a3]'
-                      }`}
-                    >
-                      <span>{s.name}</span>
-                      <span className="text-[#525252]">{s.url.replace('http://localhost:', ':')}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              <span className="text-[#262626]">|</span>
-              <span className="truncate max-w-[200px]">{directUrl}</span>
-            </>
+            ))}
+          </div>
+          {isApiOnly && viewMode === 'preview' && (
+            <span className="text-[10px] text-[#f59e0b] px-1.5 py-0.5 rounded bg-[#f59e0b]/10">API-only</span>
           )}
         </div>
 

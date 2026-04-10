@@ -225,23 +225,34 @@ class PipelineEngine {
     const sortedPhases = [...phases].sort((a, b) => a.order - b.order);
     const usedTaskIds = new Set<string>();
 
-    return waves.map((waveAgentIds, index) => {
+    // Collect all tasks and separate review tasks for second pass
+    const allTasks: Task[] = [];
+    const reviewTasks: Task[] = [];
+    for (const phase of sortedPhases) {
+      for (const task of phase.tasks ?? []) {
+        if (task.title.startsWith('Code Review: ') && task.dependsOn.length > 0) {
+          reviewTasks.push(task);
+        } else {
+          allTasks.push(task);
+        }
+      }
+    }
+
+    const stages = waves.map((waveAgentIds, index) => {
       const waveAgents = waveAgentIds.map((id) => agentMap.get(id)!).filter(Boolean);
       const { ids, roles } = this.buildAgentMatchSet(waveAgents);
 
-      // Bu wave'in agent'larına eşleşen task'ları topla
+      // Bu wave'in agent'larına eşleşen task'ları topla (review task'lar hariç)
       const stageTasks: Task[] = [];
       let firstMatchedPhaseId: string | undefined;
 
-      for (const phase of sortedPhases) {
-        for (const task of phase.tasks ?? []) {
-          if (usedTaskIds.has(task.id)) continue;
-          const assigned = task.assignedAgent ?? '';
-          if (ids.has(assigned) || roles.has(assigned.toLowerCase())) {
-            stageTasks.push(task);
-            usedTaskIds.add(task.id);
-            if (!firstMatchedPhaseId) firstMatchedPhaseId = phase.id;
-          }
+      for (const task of allTasks) {
+        if (usedTaskIds.has(task.id)) continue;
+        const assigned = task.assignedAgent ?? '';
+        if (ids.has(assigned) || roles.has(assigned.toLowerCase())) {
+          stageTasks.push(task);
+          usedTaskIds.add(task.id);
+          if (!firstMatchedPhaseId) firstMatchedPhaseId = task.phaseId;
         }
       }
 
@@ -253,6 +264,26 @@ class PipelineEngine {
         phaseId: firstMatchedPhaseId,
       } satisfies PipelineStage;
     });
+
+    // Second pass: place review tasks in the same stage as their dependency
+    for (const reviewTask of reviewTasks) {
+      if (usedTaskIds.has(reviewTask.id)) continue;
+      const depId = reviewTask.dependsOn[0];
+      const targetStage = stages.find((s) => s.tasks.some((t) => t.id === depId));
+      if (targetStage) {
+        targetStage.tasks.push(reviewTask);
+        usedTaskIds.add(reviewTask.id);
+      } else {
+        // Fallback: put in last stage
+        const last = stages[stages.length - 1];
+        if (last) {
+          last.tasks.push(reviewTask);
+          usedTaskIds.add(reviewTask.id);
+        }
+      }
+    }
+
+    return stages;
   }
 
   /**

@@ -9,6 +9,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { execSync } from 'node:child_process';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -337,6 +338,26 @@ function detectPort(dirPath: string, framework: FrameworkType): number {
   return FRAMEWORK_DEFAULT_PORTS[framework] ?? 3000;
 }
 
+/** Synchronous port-in-use check via lsof */
+function isPortInUse(port: number): boolean {
+  try {
+    execSync(`lsof -ti:${port}`, { stdio: 'pipe', timeout: 2000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Find next available port starting from given port */
+function findFreePort(startPort: number, usedPorts: Set<number>): number {
+  let port = startPort;
+  while (usedPorts.has(port) || isPortInUse(port)) {
+    port++;
+    if (port > 65535) break;
+  }
+  return port;
+}
+
 function detectFramework(dirPath: string, dirName: string): FrameworkDetection | null {
   // ---- Node.js ----
   if (existsSync(join(dirPath, 'package.json'))) {
@@ -642,9 +663,10 @@ export function analyzeProject(repoPath: string): RuntimeRequirements {
     }
   }
 
-  // Root dizini kontrol et (monorepo bulunamadıysa)
-  if (services.length === 0) {
-    const rootDetected = detectFramework(repoPath, basename(repoPath));
+  // Root dizini kontrol et — her zaman kontrol et (subdir yanında root backend olabilir)
+  if (!scannedDirs.has('.')) {
+    const rootName = services.length > 0 ? 'server' : basename(repoPath);
+    const rootDetected = detectFramework(repoPath, rootName);
     if (rootDetected) {
       services.push({
         ...rootDetected,
@@ -652,6 +674,16 @@ export function analyzeProject(repoPath: string): RuntimeRequirements {
         port: detectPort(repoPath, rootDetected.framework),
       });
     }
+  }
+
+  // 3.5. Port çakışma kontrolü — aynı port veya kullanımda olan portları çöz
+  const usedPorts = new Set<number>();
+  for (const svc of services) {
+    if (usedPorts.has(svc.port) || isPortInUse(svc.port)) {
+      const oldPort = svc.port;
+      svc.port = findFreePort(oldPort + 1, usedPorts);
+    }
+    usedPorts.add(svc.port);
   }
 
   // 4. Durumları hesapla

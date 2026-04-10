@@ -377,6 +377,11 @@ class TaskEngine {
       });
 
       console.log(`[task-engine] Task ${taskId} review'a gönderildi → reviewer: ${reviewer.name} — review task: ${reviewTask.id}`);
+
+      // Review task dispatch: notify completion so onTaskCompleted callback
+      // triggers dispatchReadyTasks and picks up the newly created review task
+      this.notifyCompleted(taskId, projectId);
+
       return updated;
     }
 

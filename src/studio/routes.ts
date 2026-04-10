@@ -2183,23 +2183,74 @@ studio.get('/projects/:id/pipeline/status', async (c) => {
       }
     }
 
-    // Her stage'deki mevcut task'ları güncelle
-    for (const stage of pipelineState.stages) {
-      if (stage.tasks) {
-        for (let i = 0; i < stage.tasks.length; i++) {
-          const fresh = await getTask(stage.tasks[i].id);
-          if (fresh) {
-            stage.tasks[i] = { ...stage.tasks[i], ...fresh };
+    // Her stage'deki mevcut task'ları güncelle + review task'ları doğru stage'e taşı
+    const reviewTasksToRelocate: { task: any; fromStageIdx: number }[] = [];
+    for (let si = 0; si < pipelineState.stages.length; si++) {
+      const stage = pipelineState.stages[si];
+      if (!stage.tasks) continue;
+      for (let i = 0; i < stage.tasks.length; i++) {
+        const fresh = await getTask(stage.tasks[i].id);
+        if (fresh) {
+          stage.tasks[i] = { ...stage.tasks[i], ...fresh };
+          // Check if this review task is in the wrong stage
+          if (fresh.title.startsWith('Code Review: ') && fresh.dependsOn?.length > 0) {
+            const depId = fresh.dependsOn[0];
+            const depInThisStage = stage.tasks.some((t: any) => t.id === depId);
+            if (!depInThisStage) {
+              reviewTasksToRelocate.push({ task: stage.tasks[i], fromStageIdx: si });
+            }
           }
         }
       }
     }
+    // Build agent lookup for adding reviewer agents to stages
+    const agents = await listProjectAgents(projectId);
+    const agentById = new Map(agents.map((a) => [a.id, a]));
 
-    // Stage'e eklenmemiş task'ları agent eşleşmesiyle doğru stage'e ekle
+    // Move misplaced review tasks to correct stage + add reviewer agent
+    for (const { task, fromStageIdx } of reviewTasksToRelocate) {
+      const depId = task.dependsOn[0];
+      const targetStageIdx = pipelineState.stages.findIndex((s: any) =>
+        (s.tasks ?? []).some((t: any) => t.id === depId),
+      );
+      if (targetStageIdx >= 0 && targetStageIdx !== fromStageIdx) {
+        pipelineState.stages[fromStageIdx].tasks = pipelineState.stages[fromStageIdx].tasks.filter(
+          (t: any) => t.id !== task.id,
+        );
+        const targetStage = pipelineState.stages[targetStageIdx];
+        targetStage.tasks.push(task);
+        // Add reviewer agent to target stage if not already there
+        const reviewerAgent = agentById.get(task.assignedAgent ?? task.assignedAgentId);
+        if (reviewerAgent && !targetStage.agents.some((a: any) => a.id === reviewerAgent.id)) {
+          targetStage.agents.push(reviewerAgent as any);
+        }
+      }
+    }
+
+    // Stage'e eklenmemiş task'ları doğru stage'e ekle
     const existingTaskIds = new Set(pipelineState.stages.flatMap((s) => (s.tasks ?? []).map((t: any) => t.id)));
     for (const task of allTasks) {
       if (existingTaskIds.has(task.id)) continue;
-      // Task'ın atandığı agent'ı bul ve onun stage'ine ekle
+
+      // Review task'ları bağımlı olduğu task'ın stage'ine ekle + reviewer agent ekle
+      const isReviewTask = task.title.startsWith('Code Review: ') && task.dependsOn.length > 0;
+      if (isReviewTask) {
+        const depId = task.dependsOn[0];
+        const targetStage = pipelineState.stages.find((s: any) =>
+          (s.tasks ?? []).some((t: any) => t.id === depId),
+        );
+        if (targetStage) {
+          if (!targetStage.tasks) targetStage.tasks = [];
+          targetStage.tasks.push(task as any);
+          const reviewerAgent = agentById.get(task.assignedAgent ?? task.assignedAgentId);
+          if (reviewerAgent && !targetStage.agents.some((a: any) => a.id === reviewerAgent.id)) {
+            targetStage.agents.push(reviewerAgent as any);
+          }
+          continue;
+        }
+      }
+
+      // Normal task'ları agent eşleşmesiyle stage'e ekle
       const assignedId = task.assignedAgent ?? task.assignedAgentId;
       if (!assignedId) continue;
       for (const stage of pipelineState.stages) {
@@ -2454,7 +2505,7 @@ studio.get('/projects/:id/sonar/latest', async (c) => {
 // App Runner — start / stop / status
 // ---------------------------------------------------------------------------
 
-import { startApp, stopApp, getAppStatus, getResolvedConfig } from './app-runner.js';
+import { startApp, stopApp, getAppStatus, getResolvedConfig, switchPreviewService } from './app-runner.js';
 
 studio.post('/projects/:id/app/start', async (c) => {
   const projectId = c.req.param('id');
@@ -2495,6 +2546,14 @@ studio.get('/projects/:id/app/config', async (c) => {
 
   const config = getResolvedConfig(project.repoPath);
   return c.json(config ?? { services: [], preview: '' });
+});
+
+studio.post('/projects/:id/app/switch-preview', async (c) => {
+  const projectId = c.req.param('id');
+  const { service } = await c.req.json();
+  const ok = switchPreviewService(projectId, service);
+  if (!ok) return c.json({ error: 'Service not found or app not running' }, 400);
+  return c.json({ ok: true });
 });
 
 // ---- App Preview Proxy ----------------------------------------------------
@@ -2573,6 +2632,22 @@ studio.all('/projects/:id/app/proxy/*', async (c) => {
       return new Response(html, {
         status: 200,
         headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    }
+
+    // HTML yanıtlarına <base> tag enjekte et — iframe'de relative path'ler
+    // (/@vite/client, /src/main.tsx, /api/v1/...) doğru hedefe çözümlensin
+    const ct = proxyRes.headers.get('content-type') || '';
+    if (ct.includes('text/html')) {
+      let html = await proxyRes.text();
+      const baseTag = `<base href="${status.previewUrl!.replace(/\/$/, '')}/">`;
+      if (!html.includes('<base ')) {
+        html = html.replace('<head>', `<head>${baseTag}`);
+      }
+      resHeaders.set('content-type', ct);
+      return new Response(html, {
+        status: proxyRes.status,
+        headers: resHeaders,
       });
     }
 
