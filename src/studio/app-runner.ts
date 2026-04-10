@@ -671,10 +671,14 @@ export async function startApp(
 
       runningApps.set(projectId, { services: running, previewService: previewName });
 
-      // Başarılı — .studio.json oluştur (sonraki sefer hızlı başlasın)
+      // Başarılı — .studio.json oluştur (sadece başarılı başlayan servislerle)
       try {
-        generateStudioConfig(repoPath, analysis.services, previewName);
-        onLog('[app-runner] .studio.json oluşturuldu (sonraki çalıştırmalar için)');
+        const runningNames = new Set(running.map(r => r.name));
+        const successfulServices = analysis.services.filter(s => runningNames.has(s.name));
+        if (successfulServices.length > 0) {
+          generateStudioConfig(repoPath, successfulServices, previewName);
+          onLog(`[app-runner] .studio.json oluşturuldu (${successfulServices.length}/${analysis.services.length} servis)`);
+        }
       } catch { /* non-blocking */ }
 
       const previewSvc = running.find(s => s.name === previewName) || running[0];
