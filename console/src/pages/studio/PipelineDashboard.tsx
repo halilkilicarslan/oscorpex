@@ -204,9 +204,19 @@ function StageCard({
 
       {/* Ajanlarin listesi */}
       <div className="flex flex-col gap-1.5 mb-2.5">
-        {stage.agents.map((agent) => (
+        {stage.agents.map((agent) => {
+          const hasRunningTask = stage.tasks.some(
+            (t) => (t.status === 'running' || t.status === 'assigned') &&
+              (t.assignedAgent === agent.id || t.assignedAgentId === agent.id),
+          );
+          return (
           <div key={agent.id} className="flex items-center gap-1.5">
-            <AgentAvatar agent={agent} size="sm" />
+            <div className="relative">
+              <AgentAvatar agent={agent} size="sm" />
+              {hasRunningTask && (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#22c55e] rounded-full animate-pulse" />
+              )}
+            </div>
             <div className="flex flex-col min-w-0">
               <span
                 className="text-[11px] font-medium truncate"
@@ -217,7 +227,8 @@ function StageCard({
               <span className="text-[9px] text-[#525252] truncate">{roleLabel(agent.role)}</span>
             </div>
           </div>
-        ))}
+          );
+        })}
         {stage.agents.length === 0 && (
           <span className="text-[10px] text-[#525252] italic">Ajan yok</span>
         )}
@@ -675,7 +686,10 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
   }
 
   // Seçili aşama nesnesi
-  const stages = pipelineState.stages ?? [];
+  // Task'ı olmayan tamamlanmamış stage'leri gizle (review-only agent stage'leri gibi)
+  const stages = (pipelineState.stages ?? []).filter(
+    (s) => s.tasks.length > 0 || s.status === 'running' || s.status === 'completed',
+  );
   const selectedStage =
     selectedStageIdx !== null ? stages[selectedStageIdx] ?? null : null;
 

@@ -364,6 +364,7 @@ function detectLanguage(dirPath: string, dirName: string): LangDetection | null 
 
 function autoDetect(repoPath: string): StudioConfig | null {
   const detected: LangDetection[] = [];
+  const detectedPaths = new Set<string>();
 
   // 1. Check common monorepo subdirectories
   const subdirs = ['backend', 'server', 'api', 'frontend', 'web', 'client', 'app'];
@@ -371,13 +372,16 @@ function autoDetect(repoPath: string): StudioConfig | null {
     const fullPath = join(repoPath, dir);
     if (existsSync(fullPath)) {
       const lang = detectLanguage(fullPath, dir);
-      if (lang) detected.push(lang);
+      if (lang) {
+        detected.push(lang);
+        detectedPaths.add(fullPath);
+      }
     }
   }
 
-  // 2. If no subdirs found, check root
-  if (detected.length === 0) {
-    const rootLang = detectLanguage(repoPath, 'app');
+  // 2. Always check root too — may have backend alongside client/ subdir
+  if (!detectedPaths.has(repoPath)) {
+    const rootLang = detectLanguage(repoPath, detected.length > 0 ? 'server' : 'app');
     if (rootLang) detected.push(rootLang);
   }
 
@@ -418,6 +422,27 @@ async function postStartHealthCheck(port: number, maxRetries = 5): Promise<boole
     }
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Port conflict resolution
+// ---------------------------------------------------------------------------
+
+function isPortInUse(port: number): boolean {
+  try {
+    execSync(`lsof -ti:${port}`, { stdio: 'pipe', timeout: 2000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolvePort(desiredPort: number, usedPorts: Set<number>): number {
+  let port = desiredPort;
+  while (usedPorts.has(port) || isPortInUse(port)) {
+    port++;
+  }
+  return port;
 }
 
 // ---------------------------------------------------------------------------
@@ -647,6 +672,31 @@ export async function startApp(
       }
     }
 
+    // Port conflict resolution
+    const usedPorts2 = new Set<number>();
+    for (const svc of analysis.services) {
+      const resolved = resolvePort(svc.port, usedPorts2);
+      if (resolved !== svc.port) {
+        onLog(`[app-runner] Port çakışması: ${svc.name} :${svc.port} → :${resolved}`);
+        svc.port = resolved;
+      }
+      usedPorts2.add(svc.port);
+    }
+
+    // Frontend servisine backend URL'ini Vite proxy target olarak enjekte et
+    if (analysis.services.length > 1) {
+      const backendSvc = analysis.services.find(s => s.type === 'backend');
+      const frontendSvc = analysis.services.find(s => s.type === 'frontend' || s.type === 'fullstack');
+      if (backendSvc && frontendSvc) {
+        const backendUrl = `http://localhost:${backendSvc.port}`;
+        (frontendSvc as any).env = {
+          ...((frontendSvc as any).env || {}),
+          API_TARGET: backendUrl,
+        };
+        onLog(`[app-runner] Frontend env: API_TARGET=${backendUrl}`);
+      }
+    }
+
     // Direct start — each service
     const running: RunningService[] = [];
     for (const svc of analysis.services) {
@@ -657,6 +707,7 @@ export async function startApp(
           command: svc.startCommand,
           port: svc.port,
           readyPattern: svc.readyPattern,
+          env: (svc as any).env,
         };
         const started = await startService(repoPath, svcConfig, onLog);
         running.push(started);
@@ -714,6 +765,32 @@ async function startFromConfig(
   onLog: (msg: string) => void,
 ): Promise<{ services: { name: string; url: string }[]; previewUrl: string | null }> {
   onLog(`[app-runner] ${config.services.length} servis, preview: ${config.preview}`);
+
+  // Port conflict resolution — çakışan portları otomatik değiştir
+  const usedPorts = new Set<number>();
+  for (const svc of config.services) {
+    const resolved = resolvePort(svc.port, usedPorts);
+    if (resolved !== svc.port) {
+      onLog(`[app-runner] Port çakışması: ${svc.name} :${svc.port} → :${resolved}`);
+      svc.port = resolved;
+    }
+    usedPorts.add(svc.port);
+  }
+
+  // Frontend servisine backend URL'ini Vite proxy target olarak enjekte et
+  // (port çakışma çözümü sonrası gerçek portları kullan)
+  if (config.services.length > 1) {
+    const backendSvc = config.services.find(s => s.name !== config.preview);
+    const frontendSvc = config.services.find(s => s.name === config.preview);
+    if (backendSvc && frontendSvc) {
+      const backendUrl = `http://localhost:${backendSvc.port}`;
+      frontendSvc.env = {
+        ...frontendSvc.env,
+        API_TARGET: backendUrl,
+      };
+      onLog(`[app-runner] Frontend env: API_TARGET=${backendUrl}`);
+    }
+  }
 
   const running: RunningService[] = [];
   const isDocker = config.services.some(s => s.command.startsWith('docker compose'));
@@ -822,6 +899,18 @@ export function getAppStatus(projectId: string): AppRunnerStatus {
     backendUrl: backendSvc?.url || null,
     frontendUrl: frontendSvc?.url || previewSvc?.url || null,
   };
+}
+
+/**
+ * Switch the active preview service (proxy target).
+ */
+export function switchPreviewService(projectId: string, serviceName: string): boolean {
+  const entry = runningApps.get(projectId);
+  if (!entry) return false;
+  const svc = entry.services.find(s => s.name === serviceName);
+  if (!svc) return false;
+  entry.previewService = serviceName;
+  return true;
 }
 
 /**

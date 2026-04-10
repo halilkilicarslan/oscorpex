@@ -325,8 +325,25 @@ export default function TaskDetailModal({ task, agents = [], projectId, onClose,
             </Section>
           )}
 
-          {/* Error */}
-          {task.error && (
+          {/* Review Feedback — revision/review durumunda review geri bildirimi */}
+          {task.error && (task.status === 'revision' || task.status === 'review') && (
+            <Section title="Review Geri Bildirimi">
+              <div className="bg-[#f97316]/5 border border-[#f97316]/20 rounded-lg p-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Eye size={11} className="text-[#f97316]" />
+                  <span className="text-[10px] font-semibold text-[#f97316]">
+                    Reviewer düzeltme istedi
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#f97316]/80 font-mono leading-relaxed whitespace-pre-wrap break-words">
+                  {task.error.replace(/^Review red:\s*/i, '')}
+                </p>
+              </div>
+            </Section>
+          )}
+
+          {/* Error — sadece gerçek hatalar için (failed status) */}
+          {task.error && task.status !== 'revision' && task.status !== 'review' && (
             <Section title="Hata">
               <div className="bg-[#ef4444]/5 border border-[#ef4444]/20 rounded-lg p-3">
                 <p className="text-[11px] text-[#ef4444]/90 font-mono leading-relaxed whitespace-pre-wrap break-words">

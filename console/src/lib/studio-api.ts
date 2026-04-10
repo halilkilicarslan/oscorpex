@@ -1356,6 +1356,14 @@ export async function fetchAppStatus(projectId: string): Promise<AppStatus> {
   return json(await fetch(`${BASE}/projects/${projectId}/app/status`));
 }
 
+export async function switchPreviewService(projectId: string, service: string): Promise<{ ok: boolean }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/app/switch-preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ service }),
+  }));
+}
+
 export async function fetchAppConfig(projectId: string): Promise<AppConfig> {
   return json(await fetch(`${BASE}/projects/${projectId}/app/config`));
 }
