@@ -1,34 +1,32 @@
 # AI Dev Studio — Status
 
-## Current: v2.1 — Runtime System + Preview Proxy
+## Current: v2.4 — Preview System Fixes + Port Conflict Resolution
 
-### This Session (2026-04-10)
-- **Preview proxy**: Reverse proxy endpoint strips helmet X-Frame-Options/CSP for iframe embedding
-- **API-only app handling**: Root 404 → styled HTML info page with API Running badge
-- **Port detection fix**: 3-tier: .env → source code parse (.listen(3000)) → framework defaults (Express=3000, Vite=5173, etc.)
-- **DB port conflict auto-resolve**: `isPortInUse()` + `findAvailablePort()` auto-increments (5432→5433→5434)
-- **Post-start health check**: `postStartHealthCheck()` verifies process actually serves HTTP after "ready" signal
-- **Agent log persistence**: File-based at `.voltagent/logs/{projectId}/{agentId}.log`
-- **Pipeline status 500 fix**: Missing `listPhases`, `listTasks` imports in routes.ts
+### Session 2026-04-10 — Preview System + Port Conflicts
+
+**Preview iframe fix:**
+- iframe uses direct URL (not proxy) — proxy breaks ES module imports in inline scripts
+- API-only detection uses proxy with one-time viewMode setting (apiDetectedOnce ref)
+- Service switching: inline badges, backend switchPreviewService() changes proxy target
+
+**Port conflict resolution:**
+- `isPortInUse()` via `lsof` + `resolvePort()` in app-runner and runtime-analyzer
+- Fixed autoDetect/analyzeProject to always scan root directory
+- Port conflict resolution in both startFromConfig (Strategy 1) and startApp (Strategy 2)
+
+**Cross-service API routing:**
+- Frontend receives `API_TARGET` env var pointing to backend after port resolution
+- IMPORTANT: Only API_TARGET (Vite proxy target), NOT VITE_API_URL (causes CORS)
 
 ### Files Modified
-- `src/studio/routes.ts` — preview proxy, runtime API endpoints, pipeline fix
-- `src/studio/app-runner.ts` — 3-strategy startup, post-start health check
-- `src/studio/runtime-analyzer.ts` — detectPort(), FRAMEWORK_DEFAULT_PORTS
-- `src/studio/db-provisioner.ts` — findAvailablePort(), buildEnvVars(), auto-retry
-- `src/studio/execution-engine.ts` — agent log persistence on task complete
-- `src/studio/agent-log-store.ts` — NEW: file-based log persistence
-- `console/src/pages/studio/LivePreview.tsx` — proxy URL, RuntimePanel integration
-- `console/src/pages/studio/RuntimePanel.tsx` — NEW: runtime config UI
-- `console/src/lib/studio-api.ts` — runtime API types and client functions
+- `src/studio/app-runner.ts` — port conflict, API_TARGET env, switchPreviewService, root detection
+- `src/studio/runtime-analyzer.ts` — port conflict, root detection fix
+- `src/studio/routes.ts` — base tag injection, switch-preview endpoint
+- `console/src/pages/studio/LivePreview.tsx` — direct URL iframe, service badges
+- `console/src/lib/studio-api.ts` — switchPreviewService API client
 
-### v2.0 Deliverables (completed earlier)
-- 12-agent Scrum team, DAG pipeline, review loop
-- Drag-drop pipeline builder, dynamic dependency seeding
-- CLI-only execution (Docker/API removed)
-
-## Roadmap
-- v2.0: ✅ TAMAMLANDI — 12-agent Scrum, DAG pipeline
-- v2.1: ✅ TAMAMLANDI — Runtime system, preview proxy, crash detection
-- **Next**: API Explorer (Swagger-benzeri UI for API-only apps in preview)
-- **Backlog**: Auth, migration wizard, monorepo support improvements
+### Previous Versions
+- **v2.0**: ✅ 12-agent Scrum, DAG pipeline, review loop, drag-drop builder
+- **v2.1**: ✅ Runtime system, preview proxy, crash detection, port auto-detect
+- **v2.2**: ✅ API Explorer, auto-migration, monorepo workspaces, TS fix, 42 new tests
+- **v2.3**: ✅ Review loop fixes — await race conditions, review task stage placement, revision auto-restart
