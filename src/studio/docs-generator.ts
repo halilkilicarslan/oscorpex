@@ -31,33 +31,11 @@ export async function updateDocsAfterTask(
   if (!existsSync(docsDir)) return;
 
   try {
-    // Normalize role: "backend-dev" → "backend", "product-owner" → "pm", etc.
-    const role = agent.role.toLowerCase();
-    const roleCategory =
-      role.startsWith('backend') ? 'backend'
-      : role.startsWith('frontend') ? 'frontend'
-      : role === 'product-owner' || role === 'scrum-master' || role === 'pm' ? 'pm'
-      : role === 'tech-lead' || role === 'architect' ? 'architect'
-      : role.includes('review') ? 'reviewer'
-      : role.includes('qa') ? 'qa'
-      : role;
-
-    switch (roleCategory) {
-      case 'pm':
-        await generateProjectMd(project, docsDir, log);
-        break;
-      case 'architect':
-        await generateArchitectureMd(project, docsDir, log);
-        break;
-      case 'backend':
-        await generateApiContractMd(project, task, docsDir, log);
-        break;
-      case 'reviewer':
-        await generateCodingStandardsMd(project, docsDir, log);
-        break;
-    }
-
-    // Always append to CHANGELOG after any completed task
+    // Always regenerate all docs on every task completion
+    await generateProjectMd(project, docsDir, log).catch(() => {});
+    await generateArchitectureMd(project, docsDir, log).catch(() => {});
+    await generateCodingStandardsMd(project, docsDir, log).catch(() => {});
+    await generateApiContractMd(project, task, docsDir, log).catch(() => {});
     await appendChangelog(project, task, agent, docsDir, log);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
