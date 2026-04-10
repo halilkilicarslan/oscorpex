@@ -1293,7 +1293,7 @@ studio.get('/projects/:id/messages', async (c) => {
   const agentId = c.req.query('agentId');
   const status = c.req.query('status') as any;
 
-  return c.json(listProjectMessages(projectId, agentId, status));
+  return c.json(await listProjectMessages(projectId, agentId, status));
 });
 
 // Takıma toplu yayın mesajı gönder
