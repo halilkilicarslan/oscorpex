@@ -1,4 +1,4 @@
-# AI Dev Studio — Status
+# Orenda — Status
 
 ## Current: v2.4 — Preview System Fixes + Port Conflict Resolution
 

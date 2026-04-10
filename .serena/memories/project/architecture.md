@@ -1,4 +1,4 @@
-# AI Dev Studio — Architecture
+# Orenda — Architecture
 
 ## Stack
 - Runtime: Node.js + tsx

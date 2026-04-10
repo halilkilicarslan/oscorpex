@@ -1,4 +1,4 @@
-# Patterns & Gotchas
+# Orenda — Patterns & Gotchas
 
 ## Hono
 - Routes at /api/studio, mounted via `app.route('/api/studio', studioRoutes)`
