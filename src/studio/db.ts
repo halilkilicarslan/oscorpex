@@ -1282,44 +1282,100 @@ export async function copyAgentsToProject(projectId: string, roles: string[]): P
  * Gate: FE-Reviewer + BE-Reviewer → DevOps
  */
 async function seedDefaultDependencies(projectId: string, agents: ProjectAgent[]): Promise<void> {
-  const byRole = new Map<string, ProjectAgent>();
-  for (const a of agents) byRole.set(a.role, a);
+  if (agents.length < 2) return;
 
   const deps: { fromAgentId: string; toAgentId: string; type: DependencyType }[] = [];
+  const added = new Set<string>();
 
-  function addDep(fromRole: string, toRole: string, type: DependencyType) {
-    const from = byRole.get(fromRole);
-    const to = byRole.get(toRole);
-    if (from && to) deps.push({ fromAgentId: from.id, toAgentId: to.id, type });
+  function addDep(fromId: string, toId: string, type: DependencyType) {
+    const key = `${fromId}→${toId}:${type}`;
+    if (fromId === toId || added.has(key)) return;
+    added.add(key);
+    deps.push({ fromAgentId: fromId, toAgentId: toId, type });
   }
 
-  // Workflow chain
-  addDep('product-owner', 'tech-lead', 'workflow');
-  addDep('product-owner', 'business-analyst', 'workflow');
-  addDep('product-owner', 'design-lead', 'workflow');
-  addDep('tech-lead', 'frontend-dev', 'workflow');
-  addDep('tech-lead', 'backend-dev', 'workflow');
-  addDep('frontend-dev', 'frontend-qa', 'workflow');
-  addDep('backend-dev', 'backend-qa', 'workflow');
-  addDep('frontend-qa', 'frontend-reviewer', 'workflow');
-  addDep('backend-qa', 'backend-reviewer', 'workflow');
+  // Sort by pipelineOrder to build workflow chain
+  const sorted = [...agents].sort((a, b) => (a.pipelineOrder ?? 99) - (b.pipelineOrder ?? 99));
 
-  // Review: dev → reviewer
-  addDep('frontend-dev', 'frontend-reviewer', 'review');
-  addDep('backend-dev', 'backend-reviewer', 'review');
+  // Classify agents dynamically by role patterns
+  const classify = (role: string) => {
+    const r = role.toLowerCase();
+    if (r.includes('review')) return 'reviewer';
+    if (r.includes('owner') || r.includes('scrum') || r === 'pm') return 'pm';
+    if (r.includes('lead') || r.includes('architect')) return 'lead';
+    if (r.includes('qa') || r.includes('test')) return 'qa';
+    if (r.includes('dev') || r.includes('coder') || r.includes('engineer')) return 'dev';
+    if (r.includes('devops') || r.includes('ops') || r.includes('infra')) return 'devops';
+    if (r.includes('design')) return 'design';
+    if (r.includes('analyst')) return 'analyst';
+    return 'other';
+  };
 
-  // Gate: both reviewers → devops
-  addDep('frontend-reviewer', 'devops', 'gate');
-  addDep('backend-reviewer', 'devops', 'gate');
+  const byCategory = new Map<string, ProjectAgent[]>();
+  for (const a of agents) {
+    const cat = classify(a.role);
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat)!.push(a);
+  }
 
-  // Hierarchy edges (for visual org chart)
-  addDep('product-owner', 'scrum-master', 'hierarchy');
-  addDep('product-owner', 'tech-lead', 'hierarchy');
-  addDep('product-owner', 'business-analyst', 'hierarchy');
-  addDep('product-owner', 'design-lead', 'hierarchy');
-  addDep('tech-lead', 'frontend-dev', 'hierarchy');
-  addDep('tech-lead', 'backend-dev', 'hierarchy');
-  addDep('tech-lead', 'devops', 'hierarchy');
+  const pms = byCategory.get('pm') ?? [];
+  const leads = byCategory.get('lead') ?? [];
+  const devs = byCategory.get('dev') ?? [];
+  const qas = byCategory.get('qa') ?? [];
+  const reviewers = byCategory.get('reviewer') ?? [];
+  const devopsAgents = byCategory.get('devops') ?? [];
+  const designers = byCategory.get('design') ?? [];
+  const analysts = byCategory.get('analyst') ?? [];
+
+  // Workflow: PM → leads/designers/analysts
+  for (const pm of pms) {
+    for (const lead of leads) addDep(pm.id, lead.id, 'workflow');
+    for (const d of designers) addDep(pm.id, d.id, 'workflow');
+    for (const a of analysts) addDep(pm.id, a.id, 'workflow');
+  }
+
+  // Workflow: leads → devs
+  for (const lead of leads) {
+    for (const dev of devs) addDep(lead.id, dev.id, 'workflow');
+  }
+
+  // Workflow: devs → QAs
+  for (const dev of devs) {
+    // Match by prefix: backend-dev → backend-qa, frontend-dev → frontend-qa
+    const prefix = dev.role.split('-')[0];
+    const matchedQA = qas.find((q) => q.role.startsWith(prefix)) ?? qas[0];
+    if (matchedQA) addDep(dev.id, matchedQA.id, 'workflow');
+  }
+
+  // Workflow: QAs → reviewers
+  for (const qa of qas) {
+    const prefix = qa.role.split('-')[0];
+    const matchedReviewer = reviewers.find((r) => r.role.startsWith(prefix)) ?? reviewers[0];
+    if (matchedReviewer) addDep(qa.id, matchedReviewer.id, 'workflow');
+  }
+
+  // Review: devs → matching reviewers
+  for (const dev of devs) {
+    const prefix = dev.role.split('-')[0];
+    const matchedReviewer = reviewers.find((r) => r.role.startsWith(prefix)) ?? reviewers[0];
+    if (matchedReviewer) addDep(dev.id, matchedReviewer.id, 'review');
+  }
+
+  // Gate: reviewers → devops
+  for (const reviewer of reviewers) {
+    for (const dops of devopsAgents) addDep(reviewer.id, dops.id, 'gate');
+  }
+
+  // Hierarchy: PM → leads, leads → devs, leads → devops
+  for (const pm of pms) {
+    for (const lead of leads) addDep(pm.id, lead.id, 'hierarchy');
+    for (const d of designers) addDep(pm.id, d.id, 'hierarchy');
+    for (const a of analysts) addDep(pm.id, a.id, 'hierarchy');
+  }
+  for (const lead of leads) {
+    for (const dev of devs) addDep(lead.id, dev.id, 'hierarchy');
+    for (const dops of devopsAgents) addDep(lead.id, dops.id, 'hierarchy');
+  }
 
   if (deps.length > 0) {
     await bulkCreateDependencies(projectId, deps);

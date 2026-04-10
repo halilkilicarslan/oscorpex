@@ -165,23 +165,22 @@ In addition to normal AI coding tasks (taskType: "ai"), you can use these specia
 
 ## Task Assignment Rules
 **You MUST use the exact role names from the [Your Team] section below.**
-Do NOT use generic roles like "frontend", "backend", "architect" — use the actual team member roles.
+Do NOT use generic roles — use the actual team member roles as listed.
 
-For example, if the team has:
-- Drew Cano (backend-dev) → assignedRole: "backend-dev"
-- Zahir Mays (tech-lead) → assignedRole: "tech-lead"
-- Noah Pierre (backend-reviewer) → assignedRole should NOT be used (reviews are automatic)
-- Levi Rocha (backend-qa) → assignedRole: "backend-qa"
+The team section marks each agent with a tag:
+- **[ASSIGNABLE]** — You MUST assign at least one task to this agent. Use their exact role for assignedRole.
+- **[PM — planning only]** — Do NOT assign coding tasks. This agent handles planning only.
+- **[AUTO-REVIEW — do not assign tasks]** — Do NOT assign tasks. Reviews happen automatically when coding tasks complete.
 
-**Role responsibilities:**
-- **tech-lead / architect**: Project setup, architecture decisions, folder structure, config files, dependency selection
-- **backend-dev / frontend-dev / coder**: Feature implementation, API endpoints, UI components
-- **backend-qa / frontend-qa / qa**: Write test files, test plans, test utilities
-- **devops**: CI/CD setup, deployment config, Docker setup
-- **product-owner / scrum-master**: Planning only (do NOT assign coding tasks to PM roles)
-- **reviewer roles**: Do NOT assign tasks — reviews happen automatically via the review pipeline
+**Assign tasks based on agent skills and role name.** For example:
+- Agents with "lead", "architect", or "tech" in their role → setup, architecture, config tasks
+- Agents with "dev" or "coder" in their role → implementation, feature tasks
+- Agents with "qa" or "test" in their role → testing tasks
+- Agents with "devops", "ops", or "infra" in their role → deployment, CI/CD tasks
+- Agents with "design" in their role → UI/UX, design system tasks
+- Agents with "analyst" in their role → requirements, documentation tasks
 
-**Every non-PM, non-reviewer agent MUST get at least one task.** If a tech-lead exists, assign architecture/setup tasks. If QA exists, assign testing tasks. Distribute work across the entire team.
+**Every [ASSIGNABLE] agent MUST get at least one task.** Distribute work across the entire team.
 
 ## Communication Style
 - Be friendly and professional
@@ -280,9 +279,11 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
     }),
   );
 
-  // --- PM Planning Task: create auto-completed task for product-owner ---
+  // --- PM Planning Task: create auto-completed task for the PM agent ---
+  // PM is the agent with the lowest pipelineOrder (typically 0)
   const agents = await listProjectAgents(projectId);
-  const pmAgent = agents.find((a) => a.role === 'product-owner' || a.role === 'scrum-master');
+  const minOrder = Math.min(...agents.map((a) => a.pipelineOrder ?? 99));
+  const pmAgent = agents.find((a) => (a.pipelineOrder ?? 99) === minOrder);
   if (pmAgent && createdPhases.length > 0) {
     const firstPhase = createdPhases[0].created;
     const pmTask = await createTask({
