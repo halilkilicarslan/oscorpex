@@ -7,6 +7,7 @@
 import {
   getTask,
   updateTask,
+  createTask,
   listTasks,
   updatePhaseStatus,
   getLatestPlan,
@@ -330,8 +331,11 @@ class TaskEngine {
 
     const projectId = await this.getProjectIdForTask(task);
 
+    // Review task'ları için tekrar review araması yapma (sonsuz döngü önleme)
+    const isReviewTask = task.title.startsWith('Code Review: ');
+
     // v2: Review dependency kontrolü
-    const reviewer = await this.findReviewerForTask(projectId, task);
+    const reviewer = isReviewTask ? null : await this.findReviewerForTask(projectId, task);
 
     if (reviewer) {
       // Review loop: task'ı review durumuna al
@@ -342,9 +346,23 @@ class TaskEngine {
         reviewStatus: null,
       }))!;
 
+      // Create a real review task for the reviewer agent (visible in pipeline/board)
+      const reviewTask = await createTask({
+        phaseId: task.phaseId,
+        title: `Code Review: ${task.title}`,
+        description: `${reviewer.name} tarafından "${task.title}" task'ının kod incelemesi. Dosyalar: ${[...output.filesCreated, ...output.filesModified].slice(0, 5).join(', ') || 'N/A'}`,
+        assignedAgent: reviewer.id,
+        complexity: 'S' as any,
+        dependsOn: [taskId],
+        branch: task.branch || 'main',
+      });
+
+      // Link the review task to the original task
+      await updateTask(taskId, { reviewTaskId: reviewTask.id } as any);
+
       eventBus.emit({
         projectId,
-        type: 'task:completed' as any, // review'a gönderildi ama output kaydedildi
+        type: 'task:completed' as any,
         taskId,
         payload: {
           title: task.title,
@@ -354,10 +372,11 @@ class TaskEngine {
           reviewRequired: true,
           reviewerAgentId: reviewer.id,
           reviewerName: reviewer.name,
+          reviewTaskId: reviewTask.id,
         },
       });
 
-      console.log(`[task-engine] Task ${taskId} review'a gönderildi → reviewer: ${reviewer.name} (${reviewer.role})`);
+      console.log(`[task-engine] Task ${taskId} review'a gönderildi → reviewer: ${reviewer.name} — review task: ${reviewTask.id}`);
       return updated;
     }
 
@@ -644,10 +663,15 @@ class TaskEngine {
         ready.push(task);
         continue;
       }
+
+      const isReviewTask = task.title.startsWith('Code Review: ');
+
       let allDepsDone = true;
       for (const depId of task.dependsOn) {
         const dep = await getTask(depId);
-        if (dep?.status !== 'done') {
+        // Review tasks can start when original task is in 'review' status
+        const depSatisfied = dep?.status === 'done' || (isReviewTask && dep?.status === 'review');
+        if (!depSatisfied) {
           allDepsDone = false;
           break;
         }

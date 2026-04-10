@@ -313,6 +313,12 @@ class ExecutionEngine {
       return;
     }
 
+    // --- Review task: "Code Review: X" — run review CLI and submit result ---
+    if (task.title.startsWith('Code Review: ')) {
+      await this.executeReviewTask(projectId, project, task);
+      return;
+    }
+
     // Resolve agent config — prefer the task's assignedAgent value, which may
     // be an agent ID or a role name. Try both.
     const agent = await this.resolveAgent(projectId, task.assignedAgent);
@@ -446,25 +452,8 @@ class ExecutionEngine {
 
       taskEngine.completeTask(task.id, output);
 
-      // --- Review loop: runs if task-engine placed task in 'review' status ---
-      // (task-engine uses agent_dependencies to find reviewers dynamically)
-      const freshAfterComplete = await getTask(task.id);
-      if (freshAfterComplete?.status === 'review' && freshAfterComplete.reviewerAgentId) {
-        const reviewerAgent = agents?.find((a: any) => a.id === freshAfterComplete.reviewerAgentId)
-          ?? (await listProjectAgents(projectId)).find((a) => a.id === freshAfterComplete.reviewerAgentId);
-        if (reviewerAgent && output.filesCreated.length + output.filesModified.length > 0) {
-          try {
-            await this.runReviewWithAgent(projectId, project, task, agent, reviewerAgent, output);
-          } catch (reviewErr) {
-            console.warn('[execution-engine] Review loop failed (non-blocking):', reviewErr);
-            // Auto-approve on review failure so task doesn't get stuck
-            try { await taskEngine.submitReview(task.id, true, 'Review failed — auto-approved'); } catch { /* already done */ }
-          }
-        } else {
-          // No files to review — auto-approve
-          try { await taskEngine.submitReview(task.id, true, 'No files to review'); } catch { /* already done */ }
-        }
-      }
+      // Review task dispatch: task-engine creates a review task which
+      // will be picked up by dispatchReadyTasks below.
     } catch (err) {
       const isTimeout = err instanceof TaskTimeoutError;
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -732,17 +721,46 @@ class ExecutionEngine {
   // Review Loop: reviewer agent auto-reviews coding task output
   // -------------------------------------------------------------------------
 
-  private async runReviewWithAgent(
+  private async executeReviewTask(
     projectId: string,
     project: Project,
-    task: Task,
-    coderAgent: AgentConfig,
-    reviewer: AgentConfig,
-    output: TaskOutput,
+    reviewTask: Task,
   ): Promise<void> {
-    const allFiles = [...output.filesCreated, ...output.filesModified];
+    // Find the original task (review task depends on it)
+    const originalTaskId = reviewTask.dependsOn?.[0];
+    const originalTask = originalTaskId ? await getTask(originalTaskId) : null;
+    if (!originalTask || originalTask.status !== 'review') {
+      // Original task no longer in review — auto-complete review task
+      taskEngine.assignTask(reviewTask.id, reviewTask.assignedAgent);
+      taskEngine.startTask(reviewTask.id);
+      taskEngine.completeTask(reviewTask.id, {
+        filesCreated: [], filesModified: [],
+        logs: ['Orijinal task artık review durumunda değil — review atlandı'],
+      });
+      return;
+    }
+
+    const reviewer = await this.resolveAgent(projectId, reviewTask.assignedAgent);
+    if (!reviewer) {
+      taskEngine.assignTask(reviewTask.id, reviewTask.assignedAgent);
+      taskEngine.startTask(reviewTask.id);
+      taskEngine.failTask(reviewTask.id, 'Reviewer agent bulunamadı');
+      await taskEngine.submitReview(originalTaskId!, true, 'Reviewer bulunamadı — auto-approved');
+      return;
+    }
+
+    taskEngine.assignTask(reviewTask.id, reviewer.id);
+    taskEngine.startTask(reviewTask.id);
+
+    const allFiles = [...(originalTask.output?.filesCreated ?? []), ...(originalTask.output?.filesModified ?? [])];
+
     if (allFiles.length === 0) {
-      await taskEngine.submitReview(task.id, true, 'No files to review');
+      // No files to review
+      taskEngine.completeTask(reviewTask.id, {
+        filesCreated: [], filesModified: [],
+        logs: ['İncelenecek dosya yok — otomatik onaylandı'],
+      });
+      await taskEngine.submitReview(originalTaskId!, true, 'No files to review');
       return;
     }
 
@@ -753,25 +771,26 @@ class ExecutionEngine {
         projectId,
         type: 'agent:output',
         agentId: reviewer.id,
-        taskId: task.id,
+        taskId: reviewTask.id,
         payload: { output: msg },
       });
     };
 
-    termLog(`[review] ${coderAgent.name} tarafindan yazilan "${task.title}" inceleniyor...`);
+    termLog(`[review] "${originalTask.title}" inceleniyor — ${allFiles.length} dosya...`);
 
     const reviewPrompt = [
-      `# Code Review: ${task.title}`,
+      `# Code Review: ${originalTask.title}`,
       '',
       `## Context`,
-      `- Original task by: ${coderAgent.name} (${coderAgent.role})`,
       `- Project: ${project.name}`,
+      `- Original task: ${originalTask.title}`,
+      `- Description: ${originalTask.description}`,
       '',
       `## Files to Review`,
       ...allFiles.map((f) => `- \`${f}\``),
       '',
       `## Instructions`,
-      'Review the code written by the other agent. For each file:',
+      'Review the code for each file:',
       '1. Use readFile to read the file contents',
       '2. Check for bugs, security issues, code style problems, and missing edge cases',
       '3. If you find issues, use writeFile to fix them directly',
@@ -803,7 +822,7 @@ class ExecutionEngine {
         const totalTokens = cliResult.inputTokens + cliResult.outputTokens;
         await recordTokenUsage({
           projectId,
-          taskId: task.id,
+          taskId: reviewTask.id,
           agentId: reviewer.id,
           model: cliResult.model || 'claude-sonnet-4-6',
           provider: 'anthropic',
@@ -816,18 +835,29 @@ class ExecutionEngine {
       }
 
       const approved = cliResult.text.toUpperCase().includes('APPROVED');
-      const feedback = cliResult.text.slice(0, 1000);
-      termLog(`[review] Sonuc: ${approved ? 'APPROVED' : 'FIXED'}`);
+      const feedback = cliResult.text.slice(0, 2000);
 
-      // Submit review result to task-engine (transitions task from 'review' to 'done' or 'revision')
-      await taskEngine.submitReview(task.id, approved, feedback);
+      termLog(`[review] Sonuç: ${approved ? 'APPROVED' : 'NEEDS FIXES'}`);
+
+      // Complete the review task with feedback as output
+      taskEngine.completeTask(reviewTask.id, {
+        filesCreated: [],
+        filesModified: cliResult.filesModified ?? [],
+        logs: [feedback],
+      });
+
+      // Submit review result on the original task
+      await taskEngine.submitReview(originalTaskId!, approved, feedback);
       agentRuntime.markVirtualStopped(projectId, reviewer.id);
+
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       termLog(`[review] Hata: ${msg.slice(0, 200)}`);
       agentRuntime.markVirtualStopped(projectId, reviewer.id);
-      // Auto-approve on error so task doesn't get stuck in review
-      await taskEngine.submitReview(task.id, true, `Review failed: ${msg.slice(0, 200)} — auto-approved`);
+
+      // Fail the review task but auto-approve original so it doesn't get stuck
+      taskEngine.failTask(reviewTask.id, msg);
+      try { await taskEngine.submitReview(originalTaskId!, true, `Review failed: ${msg.slice(0, 200)} — auto-approved`); } catch { /* */ }
     }
   }
 
