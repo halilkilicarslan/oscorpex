@@ -51,8 +51,12 @@ Review loop: Reviewer → assigned dev → Reviewer (iterative)
 3. **Smart App Runner**: 3-strategy fallback (.studio.json → runtime analysis → Docker Compose), post-start health check
 
 ## Preview System
-- Reverse proxy at `/projects/:id/app/proxy/*` — strips X-Frame-Options/CSP headers for iframe
+- iframe loads direct URL (e.g. http://localhost:5182) — NOT through proxy (proxy breaks ES module imports)
+- Reverse proxy at `/projects/:id/app/proxy/*` — used only for API-only detection + `<base>` tag injection
 - API-only apps: auto-detect (root 404) → show info page with health endpoint link
+- Service switching: `switchPreviewService()` changes proxy target, inline badges in toolbar
+- Port conflict resolution: `isPortInUse()` via lsof, `resolvePort()` auto-increment
+- Cross-service routing: `API_TARGET` env var injected for frontend Vite proxy target
 - Vite proxy: `/api/studio` → localhost:3141
 
 ## Frontend Pages (console/src/pages/studio/)
@@ -60,4 +64,12 @@ StudioHomePage, ProjectPage (11 tabs), PMChat, PlanPreview, AgentGrid,
 AgentCard, AgentDetailModal, AgentFormModal, OrgChart, AgentTerminal,
 KanbanBoard, PipelineDashboard, TaskCard, TaskDetailModal,
 FileExplorer, EventFeed, MessageCenter, ProvidersPage,
-LivePreview, RuntimePanel, ProjectSettings, TerminalSheet
+LivePreview, RuntimePanel, ProjectSettings, TerminalSheet, ApiExplorer
+
+## Key Execution Flow
+1. Plan approval → `startProjectExecution()` → `beginExecution()` → first phase tasks
+2. `executeTask()` → `assignTask()` → `startTask()` → `executeWithCLI()` → `completeTask()`
+3. `completeTask()` checks reviewer → creates review task → `notifyCompleted()` → dispatch
+4. `onTaskCompleted` callback → scans all running/completed phases → dispatches ready tasks
+5. Review rejection → `submitReview(false)` → revision → auto `restartRevision()` + re-execute
+6. Startup: `recoverStuckTasks()` resets running→queued, restarts revisions, dispatches orphans
