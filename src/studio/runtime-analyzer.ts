@@ -7,7 +7,7 @@
 //   - Bağımlılık kurulum komutu
 // ---------------------------------------------------------------------------
 
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
 // ---------------------------------------------------------------------------
@@ -567,10 +567,11 @@ export function analyzeProject(repoPath: string): RuntimeRequirements {
 
   // 3. Servisleri algıla
   const services: DetectedService[] = [];
+  const scannedDirs = new Set<string>();
 
   // Monorepo subdirectory'leri kontrol et
-  const subdirs = ['backend', 'server', 'api', 'frontend', 'web', 'client', 'app', 'packages'];
-  for (const dir of subdirs) {
+  const knownDirs = ['backend', 'server', 'api', 'frontend', 'web', 'client', 'app'];
+  for (const dir of knownDirs) {
     const fullPath = join(repoPath, dir);
     if (existsSync(fullPath)) {
       const detected = detectFramework(fullPath, dir);
@@ -580,7 +581,64 @@ export function analyzeProject(repoPath: string): RuntimeRequirements {
           path: dir,
           port: detectPort(fullPath, detected.framework),
         });
+        scannedDirs.add(dir);
       }
+    }
+  }
+
+  // Monorepo workspace dizinleri: packages/*, apps/* + package.json workspaces
+  const workspaceDirs = new Set<string>();
+
+  // Turborepo/Lerna convention: apps/, packages/
+  for (const container of ['packages', 'apps']) {
+    const containerPath = join(repoPath, container);
+    if (existsSync(containerPath) && statSync(containerPath).isDirectory()) {
+      try {
+        for (const entry of readdirSync(containerPath)) {
+          const entryPath = join(containerPath, entry);
+          if (statSync(entryPath).isDirectory() && existsSync(join(entryPath, 'package.json'))) {
+            workspaceDirs.add(`${container}/${entry}`);
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  // package.json workspaces field
+  try {
+    const rootPkg = JSON.parse(readFileSync(join(repoPath, 'package.json'), 'utf-8'));
+    const wsPatterns: string[] = Array.isArray(rootPkg.workspaces)
+      ? rootPkg.workspaces
+      : rootPkg.workspaces?.packages || [];
+    for (const pattern of wsPatterns) {
+      // Basit glob: "packages/*", "apps/*" etc.
+      const clean = pattern.replace(/\/?\*\*?$/, '');
+      if (clean && existsSync(join(repoPath, clean)) && statSync(join(repoPath, clean)).isDirectory()) {
+        try {
+          for (const entry of readdirSync(join(repoPath, clean))) {
+            const entryPath = join(repoPath, clean, entry);
+            if (statSync(entryPath).isDirectory() && existsSync(join(entryPath, 'package.json'))) {
+              workspaceDirs.add(`${clean}/${entry}`);
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  } catch { /* no root package.json or parse error */ }
+
+  // Workspace alt paketlerini tara
+  for (const wsDir of workspaceDirs) {
+    if (scannedDirs.has(wsDir)) continue;
+    const fullPath = join(repoPath, wsDir);
+    const dirName = wsDir.split('/').pop() || wsDir;
+    const detected = detectFramework(fullPath, dirName);
+    if (detected) {
+      services.push({
+        ...detected,
+        path: wsDir,
+        port: detectPort(fullPath, detected.framework),
+      });
+      scannedDirs.add(wsDir);
     }
   }
 

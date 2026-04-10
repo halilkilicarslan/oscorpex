@@ -63,6 +63,7 @@ export default function ApiExplorer({ projectId }: { projectId: string }) {
   const [collectionOpen, setCollectionOpen] = useState(true);
   const [searchFilter, setSearchFilter] = useState('');
   const [methodOpen, setMethodOpen] = useState(false);
+  const [responseTab, setResponseTab] = useState<'body' | 'headers'>('body');
 
   // --- Load discovery + collection ---
   useEffect(() => {
@@ -370,10 +371,23 @@ export default function ApiExplorer({ projectId }: { projectId: string }) {
                   <Clock size={10} />
                   {response.duration}ms
                 </span>
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-1">
+                  {(['body', 'headers'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setResponseTab(tab)}
+                      className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
+                        responseTab === tab
+                          ? 'bg-[#262626] text-[#e5e5e5]'
+                          : 'text-[#525252] hover:text-[#a3a3a3]'
+                      }`}
+                    >
+                      {tab === 'body' ? 'Body' : `Headers (${Object.keys(response.headers).length})`}
+                    </button>
+                  ))}
                   <button
                     onClick={copyResponse}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1a1a1a] transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1a1a1a] transition-colors ml-1"
                   >
                     {copied ? <Check size={10} className="text-[#22c55e]" /> : <Copy size={10} />}
                     {copied ? 'Kopyalandi' : 'Kopyala'}
@@ -381,11 +395,22 @@ export default function ApiExplorer({ projectId }: { projectId: string }) {
                 </div>
               </div>
 
-              {/* Response body */}
+              {/* Response content */}
               <div className="flex-1 overflow-auto p-3">
-                <pre className="text-[11px] text-[#e5e5e5] font-mono whitespace-pre-wrap break-words leading-relaxed">
-                  {formatBody(response.body)}
-                </pre>
+                {responseTab === 'body' ? (
+                  <pre className="text-[11px] text-[#e5e5e5] font-mono whitespace-pre-wrap break-words leading-relaxed">
+                    {formatBody(response.body)}
+                  </pre>
+                ) : (
+                  <div className="space-y-0.5">
+                    {Object.entries(response.headers).map(([key, val]) => (
+                      <div key={key} className="flex gap-2 text-[11px] font-mono py-0.5">
+                        <span className="text-[#3b82f6] shrink-0">{key}:</span>
+                        <span className="text-[#a3a3a3] break-all">{val}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           ) : (
