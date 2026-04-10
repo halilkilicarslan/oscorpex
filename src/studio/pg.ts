@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — PostgreSQL Connection Pool
+// Orenda — PostgreSQL Connection Pool
 // Wraps the `pg` library with SQLite-compatible helper functions to ease
 // the migration from better-sqlite3 to PostgreSQL.
 //

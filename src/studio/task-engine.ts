@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Task Engine v2
+// Orenda — Task Engine v2
 // Manages task lifecycle, dependency resolution, phase progression
 // v2: Review loop, escalation, revision support
 // ---------------------------------------------------------------------------

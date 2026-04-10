@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Document Indexer
+// Orenda — Document Indexer
 // Indexes documents and project codebases into the vector store for RAG.
 // ---------------------------------------------------------------------------
 

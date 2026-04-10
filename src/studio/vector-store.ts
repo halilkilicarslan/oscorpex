@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Vector Store with Embedding Engine
+// Orenda — Vector Store with Embedding Engine
 // PostgreSQL + pgvector tabanlı embedding depolama ve native cosine similarity arama.
 // text-embedding-3-small → 1536 boyutlu vektörler, pgvector <=> operatörü ile aranır.
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Shared model option lists
+// Orenda — Shared model option lists
 // ---------------------------------------------------------------------------
 
 export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom';

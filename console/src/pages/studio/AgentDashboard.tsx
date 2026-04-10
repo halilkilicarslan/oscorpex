@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Agent Dashboard (Metrikler ve Analizler)
+// Orenda — Agent Dashboard (Metrikler ve Analizler)
 // ---------------------------------------------------------------------------
 
 import { useEffect, useState, useCallback } from 'react';

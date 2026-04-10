@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — AI Model Factory
+// Orenda — AI Model Factory
 // Yapılandırılmış provider tablosuna göre doğru AI SDK modelini döndürür.
 // ---------------------------------------------------------------------------
 

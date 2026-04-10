@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Agent Runtime (Yerel Süreç Yöneticisi)
+// Orenda — Agent Runtime (Yerel Süreç Yöneticisi)
 // Docker yerine yerel CLI araçlarını alt süreç olarak çalıştırır:
 //   claude-code → `claude`
 //   codex       → `codex`

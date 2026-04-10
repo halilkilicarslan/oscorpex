@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Context Builder
+// Orenda — Context Builder
 // Enhances agent task prompts with RAG-retrieved codebase context.
 // ---------------------------------------------------------------------------
 

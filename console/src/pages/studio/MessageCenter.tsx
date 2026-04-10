@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Mesaj Merkezi (Message Center) Bileşeni
+// Orenda — Mesaj Merkezi (Message Center) Bileşeni
 // Ajanlararası mesajlaşmayı yönetir: gelen kutusu, thread, mesaj gönderme
 // ---------------------------------------------------------------------------
 

@@ -68,16 +68,16 @@ const sections: NavSection[] = [
     ],
   },
   {
-    title: 'AI DEV STUDIO',
+    title: 'ORENDA',
     items: [
-      { to: '/studio', label: 'Studio Home', icon: <Code2 size={18} />, badge: 'New' },
+      { to: '/studio', label: 'Projects', icon: <Code2 size={18} />, badge: 'New' },
       { to: '/studio/teams', label: 'Team Builder', icon: <Users size={18} /> },
       { to: '/studio/providers', label: 'Providers', icon: <Settings size={18} /> },
     ],
   },
 ];
 
-const SIDEBAR_STORAGE_KEY = 'voltops-sidebar-collapsed';
+const SIDEBAR_STORAGE_KEY = 'orenda-sidebar-collapsed';
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
@@ -111,7 +111,7 @@ export default function Sidebar() {
           </div>
           {!collapsed && (
             <span className="text-[#fafafa] font-semibold text-sm tracking-tight select-none">
-              voltops
+              Orenda
             </span>
           )}
         </div>

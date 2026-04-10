@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Agent Log Viewer
+// Orenda — Agent Log Viewer
 // Real-time log streaming from agent containers / virtual processes
 // ---------------------------------------------------------------------------
 

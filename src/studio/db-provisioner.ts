@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Database Provisioner
+// Orenda — Database Provisioner
 // Docker container ile veritabanı servislerini yönetir.
 // PostgreSQL, MySQL, MongoDB, Redis destekler.
 // ---------------------------------------------------------------------------

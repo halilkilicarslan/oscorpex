@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Agent Log Store (Dosya Tabanlı)
+// Orenda — Agent Log Store (Dosya Tabanlı)
 // Agent terminal çıktılarını .voltagent/logs/{projectId}/{agentId}.log
 // dosyalarına persist eder. DB'ye yük binmez.
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AI Dev Studio — Execution Engine
+// Orenda — Execution Engine
 // Orchestrates task execution: dispatches tasks to agents running in Docker
 // containers (or falls back to local AI SDK execution when Docker unavailable).
 // ---------------------------------------------------------------------------
@@ -1074,7 +1074,7 @@ class ExecutionEngine {
   // -------------------------------------------------------------------------
 
   private defaultSystemPrompt(agent: { name: string; role: string; skills: string[] }): string {
-    return `You are ${agent.name}, a ${agent.role} agent in an AI Dev Studio.
+    return `You are ${agent.name}, a ${agent.role} agent in an Orenda.
 Your skills include: ${agent.skills.join(', ') || 'general software development'}.
 Complete the task described in the user message. Be precise and produce working code.`;
   }
