@@ -384,19 +384,23 @@ studio.post('/projects/:id/chat', async (c) => {
 
   // Projeye özel takım bilgisini al (project_agents tablosundan)
   const agents = await listProjectAgents(projectId);
-  const reviewerRoles = new Set(['reviewer', 'backend-reviewer', 'frontend-reviewer']);
-  const pmRoles = new Set(['product-owner', 'scrum-master']);
+  // Determine reviewer and PM agents dynamically from dependencies and pipelineOrder
+  const deps = await listAgentDependencies(projectId);
+  const reviewTargetIds = new Set(deps.filter((d) => d.type === 'review').map((d) => d.toAgentId));
+  const pmOrder = Math.min(...agents.map((a) => a.pipelineOrder ?? 99));
+  const pmAgentIds = new Set(agents.filter((a) => (a.pipelineOrder ?? 99) === pmOrder).map((a) => a.id));
+
   const teamInfo = agents
     .map((a) => {
-      const isReviewer = reviewerRoles.has(a.role) || a.role.includes('review');
-      const isPM = pmRoles.has(a.role);
+      const isReviewer = reviewTargetIds.has(a.id);
+      const isPM = pmAgentIds.has(a.id);
       const tag = isReviewer ? ' [AUTO-REVIEW — do not assign tasks]' : isPM ? ' [PM — planning only]' : ' [ASSIGNABLE]';
       return `- **${a.name}** (role: "${a.role}")${tag} — ${a.personality}. Skills: ${a.skills.join(', ')}`;
     })
     .join('\n');
 
   const assignableRoles = agents
-    .filter((a) => !reviewerRoles.has(a.role) && !a.role.includes('review') && !pmRoles.has(a.role))
+    .filter((a) => !reviewTargetIds.has(a.id) && !pmAgentIds.has(a.id))
     .map((a) => `"${a.role}"`)
     .join(', ');
 
