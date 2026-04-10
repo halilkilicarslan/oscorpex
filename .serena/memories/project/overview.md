@@ -2,27 +2,31 @@
 
 ## Key Facts
 - Language: Turkish responses, pnpm (never npm), don't push unless asked
-- Backend: port 3141, Hono + better-sqlite3 (WAL), 14 DB tables
+- Don't edit AI-generated code: `.voltagent/repos/` altındaki agent kodlarına müdahale etme
+- Backend: port 3141, Hono + better-sqlite3 (WAL), 16 DB tables
 - Frontend: port 5173, React + Vite + Tailwind
-- AI SDK v6: inputSchema, stopWhen: stepCountIs(N), maxRetries: 8
+- Execution: CLI-only (Claude CLI) — no AI SDK generateText/streamText in execution path
 - DB path: STUDIO_DB_PATH env var
-- Teams: project-scoped via project_agents table
-- SonarQube: Docker, config from project_settings DB (fallback env vars)
+- Teams: project-scoped via project_agents table (not global agent_configs)
+- Tests: Backend 119 + Frontend 213 = 332 total (Vitest)
 
 ## Key Files
-- src/studio/execution-engine.ts — task orchestrator (Docker/local + lint hook + docs hook)
-- src/studio/task-runners.ts — integration test + app runner
-- src/studio/lint-runner.ts — ESLint/Prettier auto-fix after task
-- src/studio/docs-generator.ts — auto-docs by agent role + freshness check
-- src/studio/sonar-runner.ts — SonarQube scan/quality gate (DB-backed config)
-- src/studio/pm-agent.ts — PM prompt + tools + taskType support
-- src/studio/routes.ts — 98 API endpoints
-- src/studio/db.ts — 14 tables, CRUD, migrations, project_settings
-- console/src/pages/studio/ProjectPage.tsx — 8-tab workspace
-- console/src/pages/studio/ProjectSettings.tsx — 6 widget cards for integrations
-- console/src/pages/studio/AgentDashboard.tsx — analytics + cost + docs + sonar widgets
+- src/studio/execution-engine.ts — task orchestrator + agent log persistence
+- src/studio/pipeline-engine.ts — DAG-based pipeline with review loop
+- src/studio/task-engine.ts — task lifecycle + onTaskCompleted hook
+- src/studio/app-runner.ts — 3-strategy app launch + post-start health check
+- src/studio/runtime-analyzer.ts — framework/DB/env/port detection
+- src/studio/db-provisioner.ts — Docker DB provisioning + auto port conflict
+- src/studio/agent-log-store.ts — file-based agent output persistence
+- src/studio/agent-runtime.ts — CLI process spawn, SSE streaming
+- src/studio/routes.ts — 100+ API endpoints + preview proxy
+- src/studio/db.ts — 16 tables, CRUD, migrations
+- console/src/pages/studio/LivePreview.tsx — iframe preview + proxy + RuntimePanel
+- console/src/pages/studio/RuntimePanel.tsx — runtime/env/DB config UI
+- console/src/lib/studio-api.ts — all API types and client functions
 
 ## Known Issues
-- Token cost: only recorded for new tasks, old projects show $0
+- Pre-existing TS errors: pipeline-engine.ts(521), routes.ts textDelta
 - Backend restart needed when new routes added (old process returns 404)
-- AgentDashboard test: every new API import needs mock in test file
+- `.studio.json` auto-generated after first start — may need manual correction if first attempt fails
+- Express app default port 3000, not 4100 (fixed in runtime-analyzer)

@@ -34,10 +34,12 @@ function buildSlackPayload(
   data: Record<string, unknown>,
 ): Record<string, unknown> {
   // Renk: hata kırmızı, tamamlanma yeşil, diğerleri mavi
-  const color = eventType.includes('error') || eventType.includes('failed')
+  const color = eventType.includes('error') || eventType.includes('failed') || eventType.includes('rejected')
     ? '#ef4444'
-    : eventType.includes('completed') || eventType.includes('finished')
+    : eventType.includes('completed') || eventType.includes('approved')
     ? '#22c55e'
+    : eventType.includes('approval_required') || eventType.includes('warning')
+    ? '#f59e0b'
     : '#3b82f6';
 
   const title = formatEventTitle(eventType);
@@ -65,10 +67,12 @@ function buildDiscordPayload(
   data: Record<string, unknown>,
 ): Record<string, unknown> {
   // Discord renk kodu: ondalık integer
-  const color = eventType.includes('error') || eventType.includes('failed')
+  const color = eventType.includes('error') || eventType.includes('failed') || eventType.includes('rejected')
     ? 0xef4444  // kırmızı
-    : eventType.includes('completed') || eventType.includes('finished')
+    : eventType.includes('completed') || eventType.includes('approved')
     ? 0x22c55e  // yeşil
+    : eventType.includes('approval_required') || eventType.includes('warning')
+    ? 0xf59e0b  // sarı
     : 0x3b82f6; // mavi
 
   const title = formatEventTitle(eventType);
@@ -109,15 +113,18 @@ function buildGenericPayload(
 /** Event tipini okunabilir başlığa çevir */
 function formatEventTitle(eventType: string): string {
   const titles: Record<string, string> = {
-    task_completed:    'Gorev Tamamlandi',
-    pipeline_finished: 'Pipeline Bitti',
-    execution_error:   'Calisma Hatasi',
-    budget_warning:    'Butce Uyarisi',
-    plan_approved:     'Plan Onaylandi',
-    task_failed:       'Gorev Basarisiz',
-    agent_started:     'Agent Basladi',
-    agent_stopped:     'Agent Durdu',
-    test:              'Test Bildirimi',
+    task_completed:         'Gorev Tamamlandi',
+    task_failed:            'Gorev Basarisiz',
+    task_approval_required: 'Onay Bekliyor',
+    task_approved:          'Gorev Onaylandi',
+    task_rejected:          'Gorev Reddedildi',
+    pipeline_completed:     'Pipeline Bitti',
+    execution_error:        'Calisma Hatasi',
+    budget_warning:         'Butce Uyarisi',
+    plan_approved:          'Plan Onaylandi',
+    agent_started:          'Agent Basladi',
+    agent_stopped:          'Agent Durdu',
+    test:                   'Test Bildirimi',
   };
   return titles[eventType] ?? eventType.replace(/_/g, ' ');
 }
@@ -127,7 +134,7 @@ function buildEventText(eventType: string, data: Record<string, unknown>): strin
   if (eventType === 'task_completed' && data.taskTitle) {
     return `"${data.taskTitle}" gorevi basariyla tamamlandi.`;
   }
-  if (eventType === 'pipeline_finished') {
+  if (eventType === 'pipeline_completed') {
     return 'Proje pipeline\'i tum asama ve gorevleri tamamladi.';
   }
   if (eventType === 'execution_error' && data.error) {
@@ -135,6 +142,15 @@ function buildEventText(eventType: string, data: Record<string, unknown>): strin
   }
   if (eventType === 'budget_warning' && data.currentCost) {
     return `Mevcut maliyet: $${data.currentCost} — Butce limitine yaklasiliyor!`;
+  }
+  if (eventType === 'task_approval_required' && data.taskTitle) {
+    return `"${data.taskTitle}" gorevi onay bekliyor. Lutfen inceleyin.`;
+  }
+  if (eventType === 'task_approved' && data.taskTitle) {
+    return `"${data.taskTitle}" gorevi onaylandi.`;
+  }
+  if (eventType === 'task_rejected' && data.taskTitle) {
+    return `"${data.taskTitle}" gorevi reddedildi.${data.reason ? ` Sebep: ${data.reason}` : ''}`;
   }
   return JSON.stringify(data, null, 2).slice(0, 500);
 }
@@ -423,7 +439,7 @@ export const webhookSender = new WebhookSender();
  * Proje için belirli bir event'te kayıtlı tüm aktif webhook'lara bildirim gönder.
  *
  * @param projectId  Proje ID'si
- * @param eventType  Event tipi: 'task_completed' | 'pipeline_finished' | 'execution_error' | 'budget_warning' | ...
+ * @param eventType  Event tipi: 'task_completed' | 'pipeline_completed' | 'execution_error' | 'budget_warning' | ...
  * @param payload    Event'e özgü veri (başlık, hata mesajı vb.)
  */
 export async function sendWebhookNotification(

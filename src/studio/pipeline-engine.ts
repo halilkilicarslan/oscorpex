@@ -629,8 +629,9 @@ class PipelineEngine {
     const statuses = await Promise.all(freshTaskIds.map((id) => this.getTaskStatus(id)));
 
     const anyFailed = statuses.some((s) => s === 'failed');
-    // v2: review ve revision durumundaki task'lar henüz tamamlanmadı
-    const allDone = statuses.every((s) => s === 'done');
+    // v2: review durumundaki task'lar stage ilerlemesini bloklamaz —
+    // review task ayrı stage'de çalışır, orijinal task review bitince done olur
+    const allDone = statuses.every((s) => s === 'done' || s === 'review');
 
     if (anyFailed) {
       await this.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
