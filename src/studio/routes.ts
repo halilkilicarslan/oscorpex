@@ -384,9 +384,21 @@ studio.post('/projects/:id/chat', async (c) => {
 
   // Projeye özel takım bilgisini al (project_agents tablosundan)
   const agents = await listProjectAgents(projectId);
+  const reviewerRoles = new Set(['reviewer', 'backend-reviewer', 'frontend-reviewer']);
+  const pmRoles = new Set(['product-owner', 'scrum-master']);
   const teamInfo = agents
-    .map((a) => `- ${a.avatar} **${a.name}** (${a.role}) — ${a.personality}. Skills: ${a.skills.join(', ')}`)
+    .map((a) => {
+      const isReviewer = reviewerRoles.has(a.role) || a.role.includes('review');
+      const isPM = pmRoles.has(a.role);
+      const tag = isReviewer ? ' [AUTO-REVIEW — do not assign tasks]' : isPM ? ' [PM — planning only]' : ' [ASSIGNABLE]';
+      return `- **${a.name}** (role: "${a.role}")${tag} — ${a.personality}. Skills: ${a.skills.join(', ')}`;
+    })
     .join('\n');
+
+  const assignableRoles = agents
+    .filter((a) => !reviewerRoles.has(a.role) && !a.role.includes('review') && !pmRoles.has(a.role))
+    .map((a) => `"${a.role}"`)
+    .join(', ');
 
   // Build system prompt with project context + team info
   const systemPrompt = `${PM_SYSTEM_PROMPT}
@@ -399,7 +411,11 @@ Tech Stack: ${project.techStack.join(', ') || 'Not decided yet'}
 Description: ${project.description || 'No description yet'}
 
 [Your Team — ${agents.length} agents]
-${teamInfo}`;
+${teamInfo}
+
+[Assignable Roles for Tasks]
+Use ONLY these exact values for assignedRole: ${assignableRoles}
+Every assignable agent MUST get at least one task.`;
 
   // Build prompt with conversation history
   const conversationContext = history
