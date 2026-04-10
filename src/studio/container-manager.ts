@@ -178,7 +178,7 @@ class ContainerManager {
     }
 
     // Emit output event
-    eventBus.emit({
+    eventBus.emitTransient({
       projectId,
       type: 'agent:output',
       agentId,

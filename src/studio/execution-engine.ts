@@ -4,12 +4,8 @@
 // containers (or falls back to local AI SDK execution when Docker unavailable).
 // ---------------------------------------------------------------------------
 
-import { generateText, stepCountIs } from 'ai';
 import { taskEngine } from './task-engine.js';
-import { containerManager } from './container-manager.js';
-import { containerPool, type TaskResult as PoolTaskResult } from './container-pool.js';
 import { eventBus } from './event-bus.js';
-import { calculateCost, getAIModelWithFallback } from './ai-provider-factory.js';
 import {
   getProject,
   listAgentConfigs,
@@ -25,7 +21,6 @@ import {
   listProjectAgents,
   getProjectSetting,
 } from './db.js';
-import { createAgentTools } from './agent-tools.js';
 import { agentRuntime } from './agent-runtime.js';
 import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
 import { runIntegrationTest } from './task-runners.js';
@@ -47,9 +42,9 @@ import { buildRAGContext, formatRAGContext } from './context-builder.js';
  *   XL → 60 dakika
  */
 const COMPLEXITY_TIMEOUT_MS: Record<string, number> = {
-  S: 5 * 60 * 1000,
-  M: 15 * 60 * 1000,
-  L: 30 * 60 * 1000,
+  S: 30 * 60 * 1000,
+  M: 30 * 60 * 1000,
+  L: 45 * 60 * 1000,
   XL: 60 * 60 * 1000,
 };
 
@@ -96,33 +91,44 @@ async function resolveTaskTimeoutMs(
  * @returns The resolved value of the operation promise.
  */
 function withTimeout<T>(
-  operation: (signal: AbortSignal) => Promise<T>,
+  operation: (signal: AbortSignal, extendTimeout: (ms: number) => void) => Promise<T>,
   timeoutMs: number,
   onWarning?: () => void,
 ): Promise<T> {
   const controller = new AbortController();
+  let remainingMs = timeoutMs;
+  let timer: ReturnType<typeof setTimeout>;
+  let warningTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    // Timeout'un %80'inde warning tetikle (son %20'ye girildiğinde)
-    const warningMs = Math.round(timeoutMs * TIMEOUT_WARNING_THRESHOLD);
-    const warningTimer = onWarning
-      ? setTimeout(() => { onWarning(); }, warningMs)
-      : null;
+  const resetTimers = () => {
+    clearTimeout(timer);
+    if (warningTimer) clearTimeout(warningTimer);
 
-    const timer = setTimeout(() => {
+    const warningMs = Math.round(remainingMs * TIMEOUT_WARNING_THRESHOLD);
+    warningTimer = onWarning ? setTimeout(() => { onWarning(); }, warningMs) : null;
+
+    timer = setTimeout(() => {
       if (warningTimer) clearTimeout(warningTimer);
       controller.abort();
-      reject(new TaskTimeoutError(timeoutMs));
-    }, timeoutMs);
+    }, remainingMs);
+  };
 
-    // İşlem erken biterse timer'ları temizle
+  const extendTimeout = (ms: number) => {
+    remainingMs += ms;
+    resetTimers();
+  };
+
+  resetTimers();
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
     controller.signal.addEventListener('abort', () => {
       clearTimeout(timer);
       if (warningTimer) clearTimeout(warningTimer);
+      reject(new TaskTimeoutError(timeoutMs));
     });
   });
 
-  return Promise.race([operation(controller.signal), timeoutPromise]);
+  return Promise.race([operation(controller.signal, extendTimeout), timeoutPromise]);
 }
 
 /** Thrown when a task exceeds its configured timeout */
@@ -142,6 +148,9 @@ class TaskTimeoutError extends Error {
 // ---------------------------------------------------------------------------
 
 class ExecutionEngine {
+  /** Guard: prevents the same task from being dispatched concurrently */
+  private _dispatchingTasks = new Set<string>();
+
   constructor() {
     // Register completion callback: when a task completes and a new phase starts,
     // dispatch the newly ready tasks automatically
@@ -272,6 +281,29 @@ class ExecutionEngine {
    *  6. Dispatch any newly unblocked tasks
    */
   async executeTask(projectId: string, task: Task): Promise<void> {
+    // Guard: skip if this task is already being dispatched by another caller
+    if (this._dispatchingTasks.has(task.id)) {
+      console.log(`[execution-engine] Task "${task.title}" zaten dispatch ediliyor, skip.`);
+      return;
+    }
+
+    // Re-fetch task to get current status — another caller may have already started it
+    const freshTask = await getTask(task.id);
+    if (!freshTask || freshTask.status !== 'queued') {
+      console.log(`[execution-engine] Task "${task.title}" artık queued değil (${freshTask?.status}), skip.`);
+      return;
+    }
+
+    this._dispatchingTasks.add(task.id);
+
+    try {
+      await this._executeTaskInner(projectId, freshTask);
+    } finally {
+      this._dispatchingTasks.delete(task.id);
+    }
+  }
+
+  private async _executeTaskInner(projectId: string, task: Task): Promise<void> {
     const project = await getProject(projectId);
     if (!project) throw new Error(`Project ${projectId} not found`);
 
@@ -294,9 +326,6 @@ class ExecutionEngine {
       await this.dispatchReadyTasks(projectId, task.phaseId);
       return;
     }
-
-    // Track which task this agent is working on
-    containerManager.setCurrentTask(projectId, agent.id, task.id);
 
     // Mark task as assigned then running
     taskEngine.assignTask(task.id, agent.id);
@@ -327,147 +356,58 @@ class ExecutionEngine {
     };
 
     try {
-      let output: TaskOutput | undefined;
-      let executionMode: 'cli' | 'pool' | 'docker' | 'local' = 'local';
-
-      // Execution priority: 1) Claude CLI  2) Container Pool  3) Docker Container  4) Local AI SDK
-
-      // --- Level 1: Claude CLI (full visibility, sandbox) ---
-      if (!output && project.repoPath) {
-        const cliReady = await isClaudeCliAvailable();
-        if (cliReady) {
-          try {
-            const cliResult = await executeWithCLI({
-              projectId,
-              agentId: agent.id,
-              agentName: agent.name,
-              repoPath: project.repoPath,
-              prompt,
-              systemPrompt: agent.systemPrompt || this.defaultSystemPrompt(agent),
-              timeoutMs,
-              model: 'sonnet',
-              signal: undefined, // timeout CLI'nın kendi mekanizmasıyla yönetiliyor
-            });
-
-            output = {
-              filesCreated: resolveFilePaths(cliResult.filesCreated, project.repoPath),
-              filesModified: resolveFilePaths(cliResult.filesModified, project.repoPath),
-              logs: cliResult.logs,
-            };
-            executionMode = 'cli';
-
-            // Record token usage from CLI result
-            if (cliResult.inputTokens || cliResult.outputTokens) {
-              const totalTokens = cliResult.inputTokens + cliResult.outputTokens;
-              await recordTokenUsage({
-                projectId,
-                taskId: task.id,
-                agentId: agent.id,
-                model: cliResult.model || 'claude-sonnet-4-6',
-                provider: 'anthropic',
-                inputTokens: cliResult.inputTokens,
-                outputTokens: cliResult.outputTokens,
-                totalTokens,
-                costUsd: cliResult.totalCostUsd,
-              });
-            }
-          } catch (cliErr) {
-            const cliMsg = cliErr instanceof Error ? cliErr.message : String(cliErr);
-            eventBus.emit({
-              projectId,
-              type: 'agent:output',
-              agentId: agent.id,
-              taskId: task.id,
-              payload: { output: `[cli fallback] CLI failed: ${cliMsg.slice(0, 200)}. Trying pool/local...` },
-            });
-            output = undefined;
-          }
-        }
+      // CLI-only execution — no API fallback
+      if (!project.repoPath) {
+        throw new Error(`Project ${projectId} has no repoPath configured`);
       }
 
-      // --- Level 2: Container Pool (isolated, pre-warmed) ---
-      if (!output) {
-        const poolReady = containerPool.isReady();
-        if (poolReady && project.repoPath) {
-          try {
-            const poolResult = await containerPool.executeTask(
-              projectId,
-              agent.id,
-              agent.name,
-              agent.role,
-              project.repoPath,
-              {
-                taskId: task.id,
-                prompt,
-                systemPrompt: agent.systemPrompt || this.defaultSystemPrompt(agent),
-                timeout: timeoutMs,
-              },
-            );
-            output = {
-              filesCreated: poolResult.filesCreated,
-              filesModified: poolResult.filesModified,
-              logs: [...poolResult.logs, `[pool-output] ${poolResult.output.slice(0, 500)}`],
-            };
-            executionMode = 'pool';
-          } catch (poolErr) {
-            const poolMsg = poolErr instanceof Error ? poolErr.message : String(poolErr);
-            eventBus.emit({
-              projectId,
-              type: 'agent:output',
-              agentId: agent.id,
-              taskId: task.id,
-              payload: { output: `[pool fallback] Pool failed: ${poolMsg.slice(0, 200)}. Trying Docker/local...` },
-            });
-            output = undefined;
-          }
-        }
+      const cliReady = await isClaudeCliAvailable();
+      console.log(`[execution] CLI check: repoPath=${!!project.repoPath}, cliReady=${cliReady}`);
+
+      if (!cliReady) {
+        throw new Error('Claude CLI is not available. Install Claude Code CLI to run tasks.');
       }
 
-      // --- Level 3: Docker Container / Level 4: Local AI SDK ---
-      if (!output) {
-        const dockerAvailable = await containerManager.isDockerAvailable();
+      const cliResult = await executeWithCLI({
+        projectId,
+        agentId: agent.id,
+        agentName: agent.name,
+        repoPath: project.repoPath,
+        prompt,
+        systemPrompt: agent.systemPrompt || this.defaultSystemPrompt(agent),
+        timeoutMs,
+        model: 'sonnet',
+        signal: undefined,
+      });
 
-        if (dockerAvailable && agent.cliTool === 'claude-code') {
-          try {
-            output = await withTimeout(
-              (signal) => this.executeInContainer(projectId, agent, project, task, prompt, signal),
-              timeoutMs,
-              onTimeoutWarning,
-            );
-            executionMode = 'docker';
-          } catch (dockerErr) {
-            if (dockerErr instanceof TaskTimeoutError) throw dockerErr;
+      const output: TaskOutput = {
+        filesCreated: resolveFilePaths(cliResult.filesCreated, project.repoPath),
+        filesModified: resolveFilePaths(cliResult.filesModified, project.repoPath),
+        logs: cliResult.logs,
+      };
 
-            const dockerMsg = dockerErr instanceof Error ? dockerErr.message : String(dockerErr);
-            eventBus.emit({
-              projectId,
-              type: 'agent:output',
-              agentId: agent.id,
-              taskId: task.id,
-              payload: { output: `[docker fallback] Container failed: ${dockerMsg.slice(0, 200)}. Falling back to local execution.` },
-            });
-            output = await withTimeout(
-              (signal) => this.executeLocally(projectId, agent, task, prompt, signal),
-              timeoutMs,
-              onTimeoutWarning,
-            );
-          }
-        } else {
-          output = await withTimeout(
-            (signal) => this.executeLocally(projectId, agent, task, prompt, signal),
-            timeoutMs,
-            onTimeoutWarning,
-          );
-        }
+      // Record token usage from CLI result
+      if (cliResult.inputTokens || cliResult.outputTokens) {
+        const totalTokens = cliResult.inputTokens + cliResult.outputTokens;
+        await recordTokenUsage({
+          projectId,
+          taskId: task.id,
+          agentId: agent.id,
+          model: cliResult.model || 'claude-sonnet-4-6',
+          provider: 'anthropic',
+          inputTokens: cliResult.inputTokens,
+          outputTokens: cliResult.outputTokens,
+          totalTokens,
+          costUsd: cliResult.totalCostUsd,
+        });
       }
 
-      // Log execution mode for telemetry
-      eventBus.emit({
+      eventBus.emitTransient({
         projectId,
         type: 'agent:output',
         agentId: agent.id,
         taskId: task.id,
-        payload: { output: `[execution] Mode: ${executionMode}` },
+        payload: { output: `[execution] Mode: cli` },
       });
 
       // --- ESLint/Prettier enforcement: auto-fix generated files ---
@@ -480,7 +420,7 @@ class ExecutionEngine {
           };
           const lintResult = await runLintFix(project.repoPath, allFiles, termLog);
           if (lintResult.eslint.errors.length > 0 || lintResult.prettier.errors.length > 0) {
-            eventBus.emit({
+            eventBus.emitTransient({
               projectId,
               type: 'agent:output',
               agentId: agent.id,
@@ -550,7 +490,7 @@ class ExecutionEngine {
       const failedTask = await getTask(task.id);
       if (!isTimeout && failedTask && failedTask.retryCount < MAX_AUTO_RETRIES) {
         console.log(`[execution-engine] Self-healing: auto-retry #${failedTask.retryCount + 1} for "${task.title}"`);
-        eventBus.emit({
+        eventBus.emitTransient({
           projectId,
           type: 'agent:output',
           agentId: agent.id,
@@ -558,12 +498,10 @@ class ExecutionEngine {
           payload: { output: `[self-heal] Otomatik yeniden deneme #${failedTask.retryCount + 1}: ${errorMsg.slice(0, 200)}` },
         });
         const retried = await taskEngine.retryTask(task.id);
-        // Re-execute with error context injected into the task
-        await this.executeTask(projectId, { ...retried, error: errorMsg });
+        // Re-execute with error context — bypass guard since we're retrying within the same dispatch
+        await this._executeTaskInner(projectId, { ...retried, error: errorMsg });
         return; // skip dispatchReadyTasks — executeTask will handle it
       }
-    } finally {
-      containerManager.setCurrentTask(projectId, agent.id, undefined);
     }
 
     // After this task is settled (done or failed), check if new tasks are ready
@@ -580,247 +518,6 @@ class ExecutionEngine {
         }
       }
     }
-  }
-
-  // -------------------------------------------------------------------------
-  // Docker container execution
-  // -------------------------------------------------------------------------
-
-  private async executeInContainer(
-    projectId: string,
-    agent: AgentConfig,
-    project: Project,
-    task: Task,
-    prompt: string,
-    signal: AbortSignal,
-  ): Promise<TaskOutput> {
-    // Abort early if the timeout already fired before we even started
-    if (signal.aborted) {
-      throw new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS);
-    }
-
-    // Ensure a container is alive for this agent; create one if needed
-    const existing = containerManager.getRuntime(projectId, agent.id);
-    if (!existing?.containerId) {
-      await containerManager.createContainer(agent, project);
-    }
-
-    const claudeCodePromise = containerManager.runClaudeCode(projectId, agent.id, prompt);
-
-    // Race the container execution against the abort signal
-    const { exitCode, output } = await new Promise<{ exitCode: number; output: string }>(
-      (resolve, reject) => {
-        const onAbort = () => reject(new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS));
-        signal.addEventListener('abort', onAbort, { once: true });
-        claudeCodePromise
-          .then((result) => {
-            signal.removeEventListener('abort', onAbort);
-            resolve(result);
-          })
-          .catch((err) => {
-            signal.removeEventListener('abort', onAbort);
-            reject(err);
-          });
-      },
-    );
-
-    const taskOutput = this.parseTaskOutput(output);
-
-    if (exitCode !== 0) {
-      // Non-zero exit is still captured as output; mark it in logs
-      taskOutput.logs.push(`Process exited with code ${exitCode}`);
-    }
-
-    return taskOutput;
-  }
-
-  // -------------------------------------------------------------------------
-  // Local (no-Docker) execution via AI SDK generateText
-  // -------------------------------------------------------------------------
-
-  private async executeLocally(
-    projectId: string,
-    agent: AgentConfig,
-    task: Task,
-    prompt: string,
-    signal: AbortSignal,
-  ): Promise<TaskOutput> {
-    // Abort early if the timeout already fired before we even started
-    if (signal.aborted) {
-      throw new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS);
-    }
-
-    const project = await getProject(projectId);
-    const repoPath = project?.repoPath;
-
-    if (!repoPath) {
-      throw new Error(`Project ${projectId} has no repoPath configured`);
-    }
-
-    // Terminal için sanal süreç kaydı oluştur — SSE stream bu buffer'dan okur
-    agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
-
-    const termLog = (msg: string) => {
-      agentRuntime.appendVirtualOutput(projectId, agent.id, msg);
-      eventBus.emit({
-        projectId,
-        type: 'agent:output',
-        agentId: agent.id,
-        taskId: task.id,
-        payload: { output: msg },
-      });
-    };
-
-    termLog(`[${agent.name}] Task başlatılıyor: ${task.title}`);
-
-    const tracker = { filesCreated: [] as string[], filesModified: [] as string[], logs: [] as string[] };
-    const tools = createAgentTools(
-      { projectId, agentId: agent.id, taskId: task.id, repoPath },
-      tracker,
-    );
-
-    // Maliyet takibi için model bilgilerini dışarı taşıyacak değişkenler.
-    // getAIModelWithFallback başarıyla seçtiği provider'ın bilgilerini buraya yazar.
-    let _resolvedModelName = 'unknown';
-    let _resolvedProviderType = 'unknown';
-
-    /**
-     * generateText çağrısını fallback zinciri + exponential backoff ile yeniden dener.
-     * Birincil provider başarısız olursa sıradaki aktif provider'a geçilir.
-     * AbortError veya TaskTimeoutError alınırsa retry/fallback yapılmaz.
-     * Maksimum 2 retry (aynı provider): 1. denemede 1sn, 2. denemede 3sn beklenir.
-     */
-    const MAX_GENERATE_RETRIES = 2;
-    const RETRY_DELAYS_MS = [1_000, 3_000];
-
-    const callGenerateText = async (): Promise<Awaited<ReturnType<typeof generateText>>> => {
-      // Fallback zinciri: birincil provider başarısız olursa sıradakine geç
-      return getAIModelWithFallback(async (model, { modelName, providerType }) => {
-        // Başarıyla seçilen model bilgilerini maliyet takibi için kaydet
-        _resolvedModelName = modelName;
-        _resolvedProviderType = providerType;
-
-        let lastError: unknown;
-
-        for (let attempt = 0; attempt <= MAX_GENERATE_RETRIES; attempt++) {
-          // Sinyal zaten iptal edildiyse hemen TaskTimeoutError fırlat
-          if (signal.aborted) {
-            throw new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS);
-          }
-
-          try {
-            // generateText'e AbortSignal'ı ilet; SDK iptali destekliyor
-            const generatePromise = generateText({
-              model,
-              stopWhen: stepCountIs(20),
-              system: agent.systemPrompt || this.defaultSystemPrompt(agent),
-              prompt,
-              tools,
-              abortSignal: signal,
-              maxRetries: 0, // Retry'ı kendimiz yönetiyoruz
-            });
-
-            // SDK'nın sinyal yayılımı yetersiz kaldığı durumlarda da abort race yapalım
-            const abortTimeoutMs = agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS;
-            const abortPromise = new Promise<never>((_, reject) => {
-              const onAbort = () => reject(new TaskTimeoutError(abortTimeoutMs));
-              signal.addEventListener('abort', onAbort, { once: true });
-              // generatePromise sonuçlanınca listener'ı temizle (memory leak önlemi)
-              generatePromise.finally(() => signal.removeEventListener('abort', onAbort)).catch(() => {});
-            });
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const result = await Promise.race([generatePromise, abortPromise]) as any;
-            return result;
-          } catch (err) {
-            // Timeout veya iptal hatalarını anında yukarı ilet — retry yok
-            if (err instanceof TaskTimeoutError) throw err;
-            if (
-              err instanceof Error &&
-              (err.name === 'AbortError' || err.message.toLowerCase().includes('abort'))
-            ) {
-              throw new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS);
-            }
-
-            lastError = err;
-            const errMsg = err instanceof Error ? err.message : String(err);
-
-            if (attempt < MAX_GENERATE_RETRIES) {
-              const delayMs = RETRY_DELAYS_MS[attempt] ?? 3_000;
-              termLog(
-                `[${agent.name}] Provider hatası (deneme ${attempt + 1}/${MAX_GENERATE_RETRIES + 1}): ${errMsg.slice(0, 200)}. ${delayMs / 1000}sn sonra yeniden denenecek...`,
-              );
-              console.warn(
-                `[execution-engine] generateText hatası (attempt ${attempt + 1}), ${delayMs}ms sonra retry:`,
-                errMsg,
-              );
-              // Bekleme sırasında sinyal iptal edilirse erken çık
-              await new Promise<void>((resolve, reject) => {
-                const timer = setTimeout(resolve, delayMs);
-                const onAbort = () => { clearTimeout(timer); reject(new TaskTimeoutError(agent.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS)); };
-                signal.addEventListener('abort', onAbort, { once: true });
-              });
-            } else {
-              // Tüm denemeler tükendi — fallback zinciri bu hatayı yakalayıp sıradaki provider'ı dener
-              eventBus.emit({
-                projectId,
-                type: 'execution:error',
-                agentId: agent.id,
-                taskId: task.id,
-                payload: {
-                  error: errMsg,
-                  attempts: attempt + 1,
-                  taskTitle: task.title,
-                },
-              });
-              throw lastError;
-            }
-          }
-        }
-
-        // TypeScript için — buraya asla ulaşılmamalı
-        throw lastError ?? new Error('generateText başarısız oldu');
-      });
-    };
-
-    const { text, usage } = await callGenerateText();
-
-    termLog(text.slice(0, 2000));
-    termLog(`[${agent.name}] Task tamamlandı: ${task.title}`);
-    agentRuntime.markVirtualStopped(projectId, agent.id);
-
-    // Maliyet takibi — fallback zinciri tarafından seçilen model bilgilerini kullan
-    if (usage) {
-      const inputTokens = usage.inputTokens ?? 0;
-      const outputTokens = usage.outputTokens ?? 0;
-      const totalTokens = inputTokens + outputTokens;
-      const costUsd = calculateCost(_resolvedModelName, inputTokens, outputTokens);
-      await recordTokenUsage({
-        projectId,
-        taskId: task.id,
-        agentId: agent.id,
-        model: _resolvedModelName,
-        provider: _resolvedProviderType,
-        inputTokens,
-        outputTokens,
-        totalTokens,
-        costUsd,
-      });
-      termLog(`[cost] ${_resolvedModelName}: ${totalTokens} tokens ($${costUsd.toFixed(4)})`);
-    }
-
-    // Merge tool-tracked files with any mentioned in the AI's final text
-    const parsed = this.parseTaskOutput(text);
-    const filesCreated = [...new Set([...tracker.filesCreated, ...parsed.filesCreated])];
-    const filesModified = [...new Set([...tracker.filesModified, ...parsed.filesModified])];
-    const logs = [...tracker.logs, ...parsed.logs].slice(-100);
-
-    return {
-      filesCreated,
-      filesModified,
-      testResults: parsed.testResults,
-      logs,
-    };
   }
 
   // -------------------------------------------------------------------------
@@ -966,7 +663,7 @@ class ExecutionEngine {
     taskEngine.startTask(task.id);
 
     const termLog = (msg: string) => {
-      eventBus.emit({
+      eventBus.emitTransient({
         projectId,
         type: 'agent:output',
         taskId: task.id,
@@ -1043,7 +740,7 @@ class ExecutionEngine {
     const termLog = (msg: string) => {
       agentRuntime.ensureVirtualProcess(projectId, reviewer.id, reviewer.name);
       agentRuntime.appendVirtualOutput(projectId, reviewer.id, msg);
-      eventBus.emit({
+      eventBus.emitTransient({
         projectId,
         type: 'agent:output',
         agentId: reviewer.id,
@@ -1079,50 +776,37 @@ class ExecutionEngine {
       'Then list what you found and any changes you made.',
     ].join('\n');
 
-    // Kod inceleme için araçlar
-    const tracker = { filesCreated: [] as string[], filesModified: [] as string[], logs: [] as string[] };
-    const tools = createAgentTools(
-      { projectId, agentId: reviewer.id, taskId: task.id, repoPath: project.repoPath },
-      tracker,
-    );
-
     try {
-      // Fallback zinciriyle model seç; birincil model başarısız olursa sıradakine geç
-      const { text, usage } = await getAIModelWithFallback(async (model, { modelName, providerType }) => {
-        const result = await generateText({
-          model,
-          stopWhen: stepCountIs(15),
-          system: reviewer.systemPrompt || this.defaultSystemPrompt(reviewer),
-          prompt: reviewPrompt,
-          tools,
-          maxRetries: 4,
-        });
-
-        termLog(result.text.slice(0, 1500));
-
-        // Maliyet takibi — fallback zinciri tarafından seçilen model
-        if (result.usage) {
-          const inputTokens = result.usage.inputTokens ?? 0;
-          const outputTokens = result.usage.outputTokens ?? 0;
-          const costUsd = calculateCost(modelName, inputTokens, outputTokens);
-          await recordTokenUsage({
-            projectId,
-            taskId: task.id,
-            agentId: reviewer.id,
-            model: modelName,
-            provider: providerType,
-            inputTokens,
-            outputTokens,
-            totalTokens: inputTokens + outputTokens,
-            costUsd,
-          });
-          termLog(`[review-cost] ${modelName}: ${inputTokens + outputTokens} tokens ($${costUsd.toFixed(4)})`);
-        }
-
-        return result;
+      const cliResult = await executeWithCLI({
+        projectId,
+        agentId: reviewer.id,
+        agentName: reviewer.name,
+        repoPath: project.repoPath,
+        prompt: reviewPrompt,
+        systemPrompt: reviewer.systemPrompt || this.defaultSystemPrompt(reviewer),
+        timeoutMs: reviewer.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS,
+        model: 'sonnet',
+        allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep'],
       });
 
-      const status = text.toUpperCase().includes('APPROVED') ? 'APPROVED' : 'FIXED';
+      // Record token usage
+      if (cliResult.inputTokens || cliResult.outputTokens) {
+        const totalTokens = cliResult.inputTokens + cliResult.outputTokens;
+        await recordTokenUsage({
+          projectId,
+          taskId: task.id,
+          agentId: reviewer.id,
+          model: cliResult.model || 'claude-sonnet-4-6',
+          provider: 'anthropic',
+          inputTokens: cliResult.inputTokens,
+          outputTokens: cliResult.outputTokens,
+          totalTokens,
+          costUsd: cliResult.totalCostUsd,
+        });
+        termLog(`[review-cost] ${cliResult.model}: ${totalTokens} tokens ($${cliResult.totalCostUsd.toFixed(4)})`);
+      }
+
+      const status = cliResult.text.toUpperCase().includes('APPROVED') ? 'APPROVED' : 'FIXED';
       termLog(`[review] Sonuc: ${status}`);
       agentRuntime.markVirtualStopped(projectId, reviewer.id);
     } catch (err) {
@@ -1234,6 +918,28 @@ class ExecutionEngine {
     );
     if (pByName) return pByName as unknown as AgentConfig;
 
+    // 1b. Category match (öncelikli): "backend"→"backend-dev", "frontend"→"frontend-dev"
+    const aLower = assignment.toLowerCase();
+    const categoryMap: Record<string, string[]> = {
+      backend: ['backend-dev', 'backend-developer'],
+      frontend: ['frontend-dev', 'frontend-developer'],
+      qa: ['backend-qa', 'frontend-qa', 'qa-engineer'],
+      design: ['design-lead', 'ui-designer'],
+    };
+    const candidates = categoryMap[aLower];
+    if (candidates) {
+      const pByCategory = projectAgents.find((a) =>
+        candidates.includes(a.role.toLowerCase()),
+      );
+      if (pByCategory) return pByCategory as unknown as AgentConfig;
+    }
+
+    // 1c. Fuzzy role match: "backend" matches "backend-dev", "qa" matches "backend-qa"/"frontend-qa"
+    const pByPartialRole = projectAgents.find(
+      (a) => a.role.toLowerCase().startsWith(aLower + '-') || a.role.toLowerCase().endsWith('-' + aLower),
+    );
+    if (pByPartialRole) return pByPartialRole as unknown as AgentConfig;
+
     // 2. Fallback to global agent configs
     const byId = await getAgentConfig(assignment);
     if (byId) return byId;
@@ -1269,19 +975,11 @@ Complete the task described in the user message. Be precise and produce working 
    * project. Used by the GET /projects/:id/execution/status endpoint.
    */
   getExecutionStatus(projectId: string) {
-    const runtimes = containerManager.getAllRuntimes(projectId);
     const progress = taskEngine.getProgress(projectId);
 
     return {
       projectId,
-      runtimes: runtimes.map((r) => ({
-        agentId: r.agentId,
-        status: r.status,
-        currentTaskId: r.currentTaskId,
-        containerId: r.containerId?.slice(0, 12),
-        branch: r.branch,
-        startedAt: r.startedAt,
-      })),
+      runtimes: [],
       progress,
     };
   }

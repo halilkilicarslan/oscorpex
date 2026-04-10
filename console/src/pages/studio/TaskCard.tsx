@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Check,
   X,
+  Terminal,
 } from 'lucide-react';
 import { roleLabel, type Task, type ProjectAgent } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
@@ -41,12 +42,14 @@ export default function TaskCard({
   onRetry,
   onApprove,
   onReject,
+  onTerminal,
 }: {
   task: Task;
   agents?: ProjectAgent[];
   onRetry?: () => Promise<void>;
   onApprove?: () => Promise<void>;
   onReject?: () => void;
+  onTerminal?: () => void;
 }) {
   const [retrying, setRetrying] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -118,8 +121,14 @@ export default function TaskCard({
       {/* Alt bilgi satiri — atanan agent */}
       <div className="flex items-center justify-between pl-5">
         {(() => {
+          const assigned = task.assignedAgent;
+          const aLower = assigned.toLowerCase();
           const agent = agents.find(
-            (a) => a.role.toLowerCase() === task.assignedAgent.toLowerCase() || a.name.toLowerCase() === task.assignedAgent.toLowerCase(),
+            (a) => a.id === assigned
+              || a.role.toLowerCase() === aLower
+              || a.name.toLowerCase() === aLower
+              || a.role.toLowerCase().startsWith(aLower + '-')
+              || a.role.toLowerCase().endsWith('-' + aLower),
           );
           return agent ? (
             <div className="flex items-center gap-1.5">
@@ -133,6 +142,27 @@ export default function TaskCard({
         })()}
 
         <div className="flex items-center gap-2">
+          {/* Terminal butonu — running, done, failed task'larda */}
+          {onTerminal && ['running', 'done', 'failed'].includes(task.status) && (
+            <button
+              type="button"
+              onClick={onTerminal}
+              className={[
+                'flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded',
+                'border border-[#22c55e]/30 bg-[#22c55e]/5',
+                'text-[#22c55e] hover:bg-[#22c55e]/10 hover:border-[#22c55e]/50',
+                'transition-all',
+                task.status === 'running' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+              ].join(' ')}
+              title="Terminal ciktisini gor"
+            >
+              <Terminal size={10} />
+              {task.status === 'running' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+              )}
+            </button>
+          )}
+
           {/* Retry count rozeti */}
           {isFailed && task.retryCount > 0 && (
             <span className="text-[9px] text-[#737373] bg-[#1a1a1a] border border-[#262626] px-1.5 py-0.5 rounded-full">

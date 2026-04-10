@@ -12,6 +12,7 @@ import {
   type ProjectAgent,
 } from '../../lib/studio-api';
 import TaskCard from './TaskCard';
+import TerminalSheet from './TerminalSheet';
 
 const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
   { key: 'queued', label: 'Queued', color: 'border-[#525252]' },
@@ -181,6 +182,8 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   // Red modal için seçili task
   const [rejectingTask, setRejectingTask] = useState<Task | null>(null);
+  // Terminal sheet için seçili task
+  const [terminalTask, setTerminalTask] = useState<Task | null>(null);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -327,6 +330,29 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
         />
       )}
 
+      {/* Terminal sheet */}
+      {terminalTask && (() => {
+        const assigned = terminalTask.assignedAgent ?? terminalTask.assignedAgentId;
+        const aLower = (assigned ?? '').toLowerCase();
+        const agent = agents.find(
+          (a) => a.id === assigned
+            || a.role.toLowerCase() === aLower
+            || a.name.toLowerCase() === aLower
+            || a.role.toLowerCase().startsWith(aLower + '-')
+            || a.role.toLowerCase().endsWith('-' + aLower),
+        ) ?? null;
+        return (
+          <TerminalSheet
+            projectId={projectId}
+            taskId={terminalTask.id}
+            taskTitle={terminalTask.title}
+            agent={agent}
+            isRunning={terminalTask.status === 'running'}
+            onClose={() => setTerminalTask(null)}
+          />
+        );
+      })()}
+
       <ErrorToast toasts={toasts} onDismiss={dismissToast} />
       <div className="p-6 h-full overflow-x-auto flex flex-col">
         {/* Pipeline auto-start durum cubugu */}
@@ -384,6 +410,7 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
                       onRetry={task.status === 'failed' ? () => handleRetry(task.id) : undefined}
                       onApprove={isApprovalCol ? () => handleApprove(task.id) : undefined}
                       onReject={isApprovalCol ? () => handleOpenReject(task) : undefined}
+                      onTerminal={() => setTerminalTask(task)}
                     />
                   ))}
                 </div>

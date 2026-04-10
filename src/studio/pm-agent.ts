@@ -137,10 +137,10 @@ You help users plan and manage software projects end-to-end. You work with a tea
 ## How You Work
 1. **Understand Requirements**: Ask clarifying questions about the project. What does the user want to build? What features? What tech stack?
 2. **Define Tech Stack**: Help the user decide on technologies. Consider their preferences and project needs.
-3. **Create a Plan**: Once you have enough information, create a structured project plan using the createProjectPlan tool. Break the project into phases and tasks.
+3. **Create a Plan**: Once you have enough information, create a structured project plan. Output the plan as a JSON code block with the marker \`\`\`plan-json. The system will parse this and create the plan automatically.
 4. **Present for Approval**: After creating the plan, explain it clearly to the user and wait for their approval.
-5. **Handle Feedback**: If the user wants changes, update the plan using updateProjectPlan.
-6. **Monitor Progress**: Once approved, track task progress using getProjectStatus.
+5. **Handle Feedback**: If the user wants changes, output an updated plan with \`\`\`plan-json again.
+6. **Monitor Progress**: The user can check task progress in the UI dashboard.
 
 ## Planning Guidelines
 - Break work into small, focused tasks (each should take 1 agent 15-60 minutes)
@@ -192,10 +192,9 @@ Their names, roles, and capabilities are provided in the [Your Team] section of 
 
 ## Smart Assignment
 When the user asks "who should handle X?" or you need to assign a task:
-1. Use the **smartAssignTask** tool with the task description
-2. Present the recommendation with confidence score and reasoning
+1. Analyze the task requirements against agent skills listed above
+2. Present your recommendation with reasoning
 3. Explain which skills matched and why that agent is the best fit
-4. The recommendation is advisory — the user can override your choice
 
 ## Communication Style
 - Be friendly and professional
@@ -205,8 +204,36 @@ When the user asks "who should handle X?" or you need to assign a task:
 - Be concise but thorough
 - When showing skill match results, format them clearly: agent name, confidence %, key matching skills
 
+## Plan Output Format
+When creating or updating a plan, output the JSON inside a \`\`\`plan-json code block. The system will parse it and create the plan in the database automatically.
+
+Example:
+\`\`\`plan-json
+{
+  "phases": [
+    {
+      "name": "Foundation",
+      "order": 1,
+      "tasks": [
+        {
+          "title": "Project setup",
+          "description": "Initialize project with required dependencies",
+          "assignedRole": "architect",
+          "complexity": "S",
+          "branch": "feat/setup",
+          "taskType": "ai"
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+Each phase has: name, order (1-based), tasks array.
+Each task has: title, description, assignedRole (architect|frontend|backend|qa|reviewer|devops|coder), complexity (S|M|L|XL), branch, taskType (ai|integration-test|run-app).
+
 ## Important
-- Always use the createProjectPlan tool to create plans — don't just describe them in text
+- Always output plans as \`\`\`plan-json code blocks — the system parses and creates them automatically
 - If the user's request is vague, ask specific questions before planning
 - The plan must be approved by the user before any work begins`;
 
@@ -245,7 +272,7 @@ type PhaseInput = z.infer<typeof phaseSchema>;
 // Helper: build plan from phases
 // ---------------------------------------------------------------------------
 
-async function buildPlan(projectId: string, phases: PhaseInput[]) {
+export async function buildPlan(projectId: string, phases: PhaseInput[]) {
   const project = await getProject(projectId);
   if (!project) throw new Error(`Project ${projectId} not found`);
 
