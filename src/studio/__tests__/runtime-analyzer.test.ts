@@ -70,6 +70,99 @@ describe('runtime-analyzer', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Monorepo support
+  // ---------------------------------------------------------------------------
+  describe('analyzeProject — monorepo', () => {
+    it('should detect services in apps/* (Turborepo)', () => {
+      // Root package.json with workspaces
+      writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({
+        name: 'my-monorepo',
+        private: true,
+        workspaces: ['apps/*'],
+      }));
+
+      // apps/web — Vite frontend
+      mkdirSync(join(tmpDir, 'apps', 'web', 'node_modules'), { recursive: true });
+      writeFileSync(join(tmpDir, 'apps', 'web', 'package.json'), JSON.stringify({
+        name: 'web',
+        dependencies: { react: '^18.0.0' },
+        devDependencies: { vite: '^5.0.0' },
+        scripts: { dev: 'vite' },
+      }));
+
+      // apps/api — Express backend
+      mkdirSync(join(tmpDir, 'apps', 'api', 'node_modules'), { recursive: true });
+      writeFileSync(join(tmpDir, 'apps', 'api', 'package.json'), JSON.stringify({
+        name: 'api',
+        dependencies: { express: '^4.18.0' },
+        scripts: { dev: 'nodemon index.js' },
+      }));
+
+      const result = analyzeProject(tmpDir);
+      expect(result.services.length).toBeGreaterThanOrEqual(2);
+
+      const web = result.services.find(s => s.name === 'web');
+      const api = result.services.find(s => s.name === 'api');
+      expect(web).toBeDefined();
+      expect(web!.framework).toBe('vite');
+      expect(web!.path).toBe('apps/web');
+      expect(api).toBeDefined();
+      expect(api!.framework).toBe('express');
+      expect(api!.path).toBe('apps/api');
+    });
+
+    it('should detect services in packages/* (Lerna)', () => {
+      writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({
+        name: 'my-lerna-repo',
+        private: true,
+      }));
+
+      // packages/server
+      mkdirSync(join(tmpDir, 'packages', 'server', 'node_modules'), { recursive: true });
+      writeFileSync(join(tmpDir, 'packages', 'server', 'package.json'), JSON.stringify({
+        name: '@myapp/server',
+        dependencies: { fastify: '^4.0.0' },
+        scripts: { dev: 'tsx watch src/index.ts' },
+      }));
+
+      const result = analyzeProject(tmpDir);
+      const server = result.services.find(s => s.path === 'packages/server');
+      expect(server).toBeDefined();
+      expect(server!.framework).toBe('fastify');
+    });
+
+    it('should combine known dirs and workspace packages', () => {
+      writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({
+        name: 'hybrid',
+        private: true,
+        workspaces: ['packages/*'],
+      }));
+
+      // backend/ — known dir
+      mkdirSync(join(tmpDir, 'backend', 'node_modules'), { recursive: true });
+      writeFileSync(join(tmpDir, 'backend', 'package.json'), JSON.stringify({
+        name: 'backend',
+        dependencies: { express: '^4.0.0' },
+        scripts: { dev: 'node index.js' },
+      }));
+
+      // packages/dashboard — workspace
+      mkdirSync(join(tmpDir, 'packages', 'dashboard', 'node_modules'), { recursive: true });
+      writeFileSync(join(tmpDir, 'packages', 'dashboard', 'package.json'), JSON.stringify({
+        name: '@myapp/dashboard',
+        dependencies: { react: '^18.0.0' },
+        devDependencies: { vite: '^5.0.0' },
+        scripts: { dev: 'vite' },
+      }));
+
+      const result = analyzeProject(tmpDir);
+      expect(result.services.length).toBeGreaterThanOrEqual(2);
+      expect(result.services.find(s => s.path === 'backend')).toBeDefined();
+      expect(result.services.find(s => s.path === 'packages/dashboard')).toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Port detection (indirect via analyzeProject)
   // ---------------------------------------------------------------------------
   describe('analyzeProject — port detection', () => {
