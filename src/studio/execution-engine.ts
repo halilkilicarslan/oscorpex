@@ -29,6 +29,7 @@ import { isClaudeCliAvailable, executeWithCLI, resolveFilePaths } from './cli-ru
 import { runLintFix } from './lint-runner.js';
 import { updateDocsAfterTask } from './docs-generator.js';
 import { buildRAGContext, formatRAGContext } from './context-builder.js';
+import { persistAgentLog } from './agent-log-store.js';
 
 // ---------------------------------------------------------------------------
 // Timeout configuration
@@ -160,7 +161,9 @@ class ExecutionEngine {
       if (!plan) return;
       const phases = await listPhases(plan.id);
       for (const phase of phases) {
-        if (phase.status === 'running') {
+        // Review task'ları completed phase'lerde de çalışabilir —
+        // pipeline stage advance olmuş olsa bile review devam etmeli
+        if (phase.status === 'running' || phase.status === 'completed') {
           const ready = await taskEngine.getReadyTasks(phase.id);
           if (ready.length > 0) {
             Promise.allSettled(
@@ -450,6 +453,12 @@ class ExecutionEngine {
         console.warn('[execution-engine] Docs update failed (non-blocking):', docErr);
       }
 
+      // Agent output buffer'ını log dosyasına persist et (restart sonrası terminal'de görünsün)
+      const agentOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
+      if (agentOutputLines.length > 0) {
+        persistAgentLog(projectId, agent.id, agentOutputLines).catch(() => {});
+      }
+
       taskEngine.completeTask(task.id, output);
 
       // Review task dispatch: task-engine creates a review task which
@@ -481,6 +490,12 @@ class ExecutionEngine {
         taskId: task.id,
         payload: { error: errorMsg },
       });
+
+      // Agent output buffer'ını log dosyasına persist et
+      const failOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
+      if (failOutputLines.length > 0) {
+        persistAgentLog(projectId, agent.id, failOutputLines).catch(() => {});
+      }
 
       taskEngine.failTask(task.id, errorMsg);
 
@@ -838,6 +853,12 @@ class ExecutionEngine {
       const feedback = cliResult.text.slice(0, 2000);
 
       termLog(`[review] Sonuç: ${approved ? 'APPROVED' : 'NEEDS FIXES'}`);
+
+      // Review agent output buffer'ını log dosyasına persist et
+      const reviewOutputLines = agentRuntime.getAgentOutput(projectId, reviewer.id);
+      if (reviewOutputLines.length > 0) {
+        persistAgentLog(projectId, reviewer.id, reviewOutputLines).catch(() => {});
+      }
 
       // Complete the review task with feedback as output
       taskEngine.completeTask(reviewTask.id, {

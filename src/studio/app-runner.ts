@@ -12,6 +12,9 @@
 import { spawn, ChildProcess, execSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { analyzeProject, generateStudioConfig, writeEnvFile } from './runtime-analyzer.js';
+import { provisionDatabase, getDbConnectionInfo } from './db-provisioner.js';
+import type { DetectedService, RuntimeRequirements } from './runtime-analyzer.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -401,6 +404,23 @@ function autoDetect(repoPath: string): StudioConfig | null {
 }
 
 // ---------------------------------------------------------------------------
+// Post-start health check
+// ---------------------------------------------------------------------------
+
+async function postStartHealthCheck(port: number, maxRetries = 5): Promise<boolean> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(2000) });
+      // Herhangi bir HTTP response (404 dahil) = process çalışıyor
+      return true;
+    } catch {
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Process management
 // ---------------------------------------------------------------------------
 
@@ -431,9 +451,21 @@ function startService(
     const output: string[] = [];
     const timeout = 45000; // 45 seconds max
 
-    const timer = setTimeout(() => {
-      // Timeout — resolve anyway (process might be running but no pattern match)
-      onLog(`[app-runner] ${config.name}: timeout waiting for ready pattern, assuming started`);
+    const timer = setTimeout(async () => {
+      // Process çöktüyse direkt reject
+      if (proc.killed || proc.exitCode !== null) {
+        reject(new Error(`${config.name}: process başlatıldı ama kapandı (exit: ${proc.exitCode})`));
+        return;
+      }
+      // HTTP health check — process gerçekten dinliyor mu?
+      onLog(`[app-runner] ${config.name}: ready pattern bulunamadı, health check yapılıyor...`);
+      const alive = await postStartHealthCheck(config.port);
+      if (alive) {
+        onLog(`[app-runner] ${config.name}: health check başarılı — http://localhost:${config.port}`);
+      } else {
+        onLog(`[app-runner] ${config.name}: health check başarısız — port ${config.port} yanıt vermiyor`);
+      }
+      // Her durumda resolve et — process hala çalışıyor olabilir (slow start)
       resolve({
         name: config.name,
         process: proc,
@@ -442,18 +474,29 @@ function startService(
       });
     }, timeout);
 
+    let resolved = false;
     const onData = (data: Buffer) => {
       const line = data.toString();
       output.push(line);
-      if (readyPattern.test(line)) {
+      if (!resolved && readyPattern.test(line)) {
+        resolved = true;
         clearTimeout(timer);
         onLog(`[app-runner] ${config.name} ready at http://localhost:${config.port}`);
-        resolve({
-          name: config.name,
-          process: proc,
-          port: config.port,
-          url: `http://localhost:${config.port}`,
-        });
+        // Kısa bir gecikme + health check — process "ready" deyip crash olabilir
+        setTimeout(async () => {
+          const alive = await postStartHealthCheck(config.port, 3);
+          if (!alive && (proc.killed || proc.exitCode !== null)) {
+            onLog(`[app-runner] ${config.name}: ready mesajı geldi ama process crash oldu`);
+            reject(new Error(`${config.name}: process crash — ${output.join('').slice(-300)}`));
+            return;
+          }
+          resolve({
+            name: config.name,
+            process: proc,
+            port: config.port,
+            url: `http://localhost:${config.port}`,
+          });
+        }, 2000);
       }
     };
 
@@ -509,6 +552,10 @@ export function resolveConfig(
 
 /**
  * Start all services for a project.
+ * Akıllı fallback zinciri:
+ *   1. .studio.json varsa → onu kullan
+ *   2. runtime-analyzer ile analiz → dependency install → direct start
+ *   3. Hepsi fail → Docker Compose dene (son çare)
  */
 export async function startApp(
   projectId: string,
@@ -519,19 +566,156 @@ export async function startApp(
   // Stop existing
   await stopApp(projectId, onLog);
 
-  const config = resolveConfig(repoPath, settingsOverride);
-  if (!config || config.services.length === 0) {
-    throw new Error('No runnable services detected. Add a .studio.json or docker-compose.yml to configure.');
+  // --- Strateji 1: .studio.json veya settings override ---
+  if (settingsOverride?.services?.length) {
+    onLog('[app-runner] Settings override ile başlatılıyor...');
+    return startFromConfig(projectId, repoPath, settingsOverride, onLog);
+  }
+  const studioConfig = loadStudioConfig(repoPath);
+  if (studioConfig) {
+    onLog('[app-runner] .studio.json ile başlatılıyor...');
+    return startFromConfig(projectId, repoPath, studioConfig, onLog);
   }
 
-  onLog(`[app-runner] Resolved ${config.services.length} service(s), preview: ${config.preview}`);
+  // --- Strateji 2: Runtime analizi + direct start ---
+  onLog('[app-runner] Proje analiz ediliyor...');
+  const analysis = analyzeProject(repoPath);
+
+  if (analysis.services.length > 0) {
+    // DB provisioning (Docker container)
+    if (analysis.databases.length > 0) {
+      onLog(`[app-runner] ${analysis.databases.length} veritabanı algılandı, hazırlanıyor...`);
+      const dbEnvVars: Record<string, string> = {};
+      for (const db of analysis.databases) {
+        try {
+          const result = await provisionDatabase(projectId, db, onLog);
+          Object.assign(dbEnvVars, result.envVars);
+        } catch (err) {
+          onLog(`[app-runner] DB provisioning atlandı (${db.type}): ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      // DB env var'larını .env'ye yaz (eksik olanları)
+      if (Object.keys(dbEnvVars).length > 0) {
+        try {
+          writeEnvFile(repoPath, dbEnvVars);
+          onLog(`[app-runner] DB env var'ları .env'ye yazıldı`);
+        } catch { /* non-blocking */ }
+      }
+
+      // Migration çalıştır (package.json'da migrate script varsa)
+      try {
+        const pkgPath = join(repoPath, 'package.json');
+        if (existsSync(pkgPath)) {
+          const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+          const migrateScript = pkg.scripts?.migrate || pkg.scripts?.['db:migrate'] || pkg.scripts?.['db:setup'];
+          if (migrateScript) {
+            const scriptName = pkg.scripts?.migrate ? 'migrate' : pkg.scripts?.['db:migrate'] ? 'db:migrate' : 'db:setup';
+            onLog(`[app-runner] Migration çalıştırılıyor: npm run ${scriptName}`);
+            const pmCmd = existsSync(join(repoPath, 'pnpm-lock.yaml')) ? 'pnpm' :
+                          existsSync(join(repoPath, 'yarn.lock')) ? 'yarn' : 'npm';
+            execSync(`${pmCmd} run ${scriptName}`, {
+              cwd: repoPath,
+              encoding: 'utf-8',
+              timeout: 30000,
+              stdio: 'pipe',
+              env: { ...process.env, ...dbEnvVars },
+            });
+            onLog(`[app-runner] Migration başarılı`);
+          }
+        }
+      } catch (err) {
+        onLog(`[app-runner] Migration atlandı: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`);
+      }
+    }
+
+    // Dependency installation
+    for (const svc of analysis.services) {
+      if (!svc.depsInstalled && svc.installCommand) {
+        const svcPath = svc.path === '.' ? repoPath : join(repoPath, svc.path);
+        onLog(`[app-runner] Bağımlılıklar kuruluyor: ${svc.installCommand} (${svc.name})`);
+        try {
+          execSync(svc.installCommand, {
+            cwd: svcPath,
+            encoding: 'utf-8',
+            timeout: 120000,
+            stdio: 'pipe',
+          });
+          onLog(`[app-runner] Bağımlılıklar kuruldu: ${svc.name}`);
+        } catch (err) {
+          onLog(`[app-runner] Bağımlılık kurulumu başarısız (${svc.name}): ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`);
+        }
+      }
+    }
+
+    // Direct start — each service
+    const running: RunningService[] = [];
+    for (const svc of analysis.services) {
+      try {
+        const svcConfig: ServiceConfig = {
+          name: svc.name,
+          path: svc.path,
+          command: svc.startCommand,
+          port: svc.port,
+          readyPattern: svc.readyPattern,
+        };
+        const started = await startService(repoPath, svcConfig, onLog);
+        running.push(started);
+      } catch (err) {
+        onLog(`[app-runner] ${svc.name} başlatılamadı: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`);
+      }
+    }
+
+    if (running.length > 0) {
+      const previewName = analysis.services.find(s => s.type === 'frontend' || s.type === 'fullstack')?.name
+        || analysis.services[0]?.name || 'app';
+
+      runningApps.set(projectId, { services: running, previewService: previewName });
+
+      // Başarılı — .studio.json oluştur (sonraki sefer hızlı başlasın)
+      try {
+        generateStudioConfig(repoPath, analysis.services, previewName);
+        onLog('[app-runner] .studio.json oluşturuldu (sonraki çalıştırmalar için)');
+      } catch { /* non-blocking */ }
+
+      const previewSvc = running.find(s => s.name === previewName) || running[0];
+      return {
+        services: running.map(s => ({ name: s.name, url: s.url })),
+        previewUrl: previewSvc?.url || null,
+      };
+    }
+
+    onLog('[app-runner] Direct start başarısız — Docker Compose deneniyor...');
+  }
+
+  // --- Strateji 3: Docker Compose (son çare) ---
+  const dockerConfig = detectDockerCompose(repoPath);
+  if (dockerConfig) {
+    onLog('[app-runner] Docker Compose ile başlatılıyor...');
+    return startFromConfig(projectId, repoPath, dockerConfig, onLog);
+  }
+
+  throw new Error(
+    'Çalıştırılabilir servis bulunamadı. ' +
+    'Lütfen Runtime panelinden yapılandırma yapın veya .studio.json ekleyin.',
+  );
+}
+
+/**
+ * StudioConfig'dan başlat (ortak mantık).
+ */
+async function startFromConfig(
+  projectId: string,
+  repoPath: string,
+  config: StudioConfig,
+  onLog: (msg: string) => void,
+): Promise<{ services: { name: string; url: string }[]; previewUrl: string | null }> {
+  onLog(`[app-runner] ${config.services.length} servis, preview: ${config.preview}`);
 
   const running: RunningService[] = [];
-
-  // Docker Compose — special handling: single `docker compose up`
   const isDocker = config.services.some(s => s.command.startsWith('docker compose'));
+
   if (isDocker) {
-    onLog('[app-runner] Starting via Docker Compose...');
+    onLog('[app-runner] Docker Compose başlatılıyor...');
     try {
       const svc = await startService(repoPath, {
         name: 'docker-compose',
@@ -541,41 +725,33 @@ export async function startApp(
         readyPattern: config.services[0]?.readyPattern || 'started|ready',
       }, onLog);
       running.push(svc);
-      // Add all declared ports as virtual services
       for (const s of config.services) {
         if (s.name !== 'docker-compose') {
           running.push({
-            name: s.name,
-            process: svc.process, // shared process
-            port: s.port,
-            url: `http://localhost:${s.port}`,
+            name: s.name, process: svc.process,
+            port: s.port, url: `http://localhost:${s.port}`,
           });
         }
       }
     } catch (err) {
-      onLog(`[app-runner] Docker Compose failed: ${err instanceof Error ? err.message : String(err)}`);
+      onLog(`[app-runner] Docker Compose başarısız: ${err instanceof Error ? err.message : String(err)}`);
     }
   } else {
-    // Start each service individually
     for (const svcConfig of config.services) {
       try {
         const svc = await startService(repoPath, svcConfig, onLog);
         running.push(svc);
       } catch (err) {
-        onLog(`[app-runner] ${svcConfig.name} failed: ${err instanceof Error ? err.message : String(err)}`);
+        onLog(`[app-runner] ${svcConfig.name} başarısız: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   }
 
   if (running.length === 0) {
-    throw new Error('Failed to start any service');
+    throw new Error('Hiçbir servis başlatılamadı');
   }
 
-  runningApps.set(projectId, {
-    services: running,
-    previewService: config.preview,
-  });
-
+  runningApps.set(projectId, { services: running, previewService: config.preview });
   const previewSvc = running.find(s => s.name === config.preview) || running[0];
 
   return {

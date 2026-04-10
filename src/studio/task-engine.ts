@@ -684,7 +684,9 @@ class TaskEngine {
   async isPhaseComplete(phaseId: string): Promise<boolean> {
     const tasks = await listTasks(phaseId);
     if (tasks.length === 0) return false;
-    return tasks.every((t) => t.status === 'done');
+    // review durumundaki task'lar phase ilerlemesini bloklamaz —
+    // review task ayrı çalışır, bitince orijinal task done olur
+    return tasks.every((t) => t.status === 'done' || t.status === 'review');
   }
 
   async isPhaseFailed(phaseId: string): Promise<boolean> {

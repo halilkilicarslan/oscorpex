@@ -14,8 +14,13 @@ import {
   GitBranch,
   SkipForward,
   Terminal,
+  ShieldAlert,
+  RotateCw,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
-import AgentTerminal from './AgentTerminal';
+import TerminalSheet from './TerminalSheet';
+import TaskDetailModal from './TaskDetailModal';
 import AgentAvatarImg from '../../components/AgentAvatar';
 import {
   startPipeline,
@@ -24,6 +29,8 @@ import {
   resumePipeline,
   advancePipeline,
   retryTask,
+  approveTask,
+  rejectTask,
   type PipelineState,
   type PipelineStage,
   type ProjectAgent,
@@ -78,6 +85,8 @@ const TASK_STATUS_ICONS: Record<Task['status'], React.ReactNode> = {
   assigned: <AlertCircle size={11} className="text-[#3b82f6]" />,
   running: <Loader2 size={11} className="text-[#f59e0b] animate-spin" />,
   review: <Eye size={11} className="text-[#a855f7]" />,
+  revision: <RotateCw size={11} className="text-[#f97316]" />,
+  waiting_approval: <ShieldAlert size={11} className="text-[#f59e0b]" />,
   done: <CheckCircle2 size={11} className="text-[#22c55e]" />,
   failed: <XCircle size={11} className="text-[#ef4444]" />,
 };
@@ -198,12 +207,15 @@ function StageCard({
         {stage.agents.map((agent) => (
           <div key={agent.id} className="flex items-center gap-1.5">
             <AgentAvatar agent={agent} size="sm" />
-            <span
-              className="text-[11px] font-medium truncate"
-              style={{ color: getAgentColor(agent) }}
-            >
-              {agent.name}
-            </span>
+            <div className="flex flex-col min-w-0">
+              <span
+                className="text-[11px] font-medium truncate"
+                style={{ color: getAgentColor(agent) }}
+              >
+                {agent.name}
+              </span>
+              <span className="text-[9px] text-[#525252] truncate">{roleLabel(agent.role)}</span>
+            </div>
           </div>
         ))}
         {stage.agents.length === 0 && (
@@ -240,17 +252,65 @@ function StageCard({
 }
 
 // Tek bir görev satırı — ağaç dalı sembolü, durum, retry butonu ile
+const TASK_STATUS_BADGE: Record<string, string> = {
+  done: 'bg-[#22c55e]/10 text-[#22c55e]',
+  running: 'bg-[#f59e0b]/10 text-[#f59e0b]',
+  failed: 'bg-[#ef4444]/10 text-[#ef4444]',
+  review: 'bg-[#a855f7]/10 text-[#a855f7]',
+  revision: 'bg-[#f97316]/10 text-[#f97316]',
+  waiting_approval: 'bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30',
+};
+
+const TASK_STATUS_LABEL: Record<string, string> = {
+  queued: 'Sırada',
+  assigned: 'Atandı',
+  running: 'Çalışıyor',
+  review: 'İnceleme',
+  revision: 'Revizyon',
+  waiting_approval: 'Onay Bekliyor',
+  done: 'Tamamlandı',
+  failed: 'Hata',
+};
+
 function TaskRow({
   task,
   isLast,
   retryingTaskId,
   onRetryTask,
+  projectId,
+  onRefresh,
+  onClickTask,
 }: {
   task: Task;
   isLast: boolean;
   retryingTaskId: string | null;
   onRetryTask: (taskId: string) => void;
+  projectId: string;
+  onRefresh: () => void;
+  onClickTask: (task: Task) => void;
 }) {
+  const [approving, setApproving] = useState(false);
+
+  const handleApprove = async () => {
+    setApproving(true);
+    try {
+      await approveTask(projectId, task.id);
+      onRefresh();
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleReject = async () => {
+    setApproving(true);
+    try {
+      await rejectTask(projectId, task.id, 'Pipeline üzerinden reddedildi');
+      onRefresh();
+    } finally {
+      setApproving(false);
+    }
+  };
+
   return (
     <div className="flex flex-col">
       <div className="flex items-start gap-2 text-[11px] text-[#a3a3a3]">
@@ -259,7 +319,12 @@ function TaskRow({
         </span>
         <div className="flex items-start gap-1.5 flex-1 min-w-0">
           <div className="mt-0.5 shrink-0">{TASK_STATUS_ICONS[task.status]}</div>
-          <span className="truncate flex-1">{task.title}</span>
+          <span
+            className="truncate flex-1 cursor-pointer hover:text-[#e5e5e5] transition-colors"
+            onClick={() => onClickTask(task)}
+          >
+            {task.title}
+          </span>
           {task.status === 'failed' && (
             <button
               onClick={() => onRetryTask(task.id)}
@@ -271,6 +336,28 @@ function TaskRow({
               Retry
             </button>
           )}
+          {task.status === 'waiting_approval' && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={handleApprove}
+                disabled={approving}
+                className="flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 transition-colors disabled:opacity-50"
+                title="Onayla"
+              >
+                <ThumbsUp size={9} />
+                Onayla
+              </button>
+              <button
+                onClick={handleReject}
+                disabled={approving}
+                className="flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors disabled:opacity-50"
+                title="Reddet"
+              >
+                <ThumbsDown size={9} />
+                Reddet
+              </button>
+            </div>
+          )}
           <span
             className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${
               COMPLEXITY_COLORS[task.complexity] ?? ''
@@ -280,18 +367,10 @@ function TaskRow({
           </span>
           <span
             className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 font-medium ${
-              task.status === 'done'
-                ? 'bg-[#22c55e]/10 text-[#22c55e]'
-                : task.status === 'running'
-                ? 'bg-[#f59e0b]/10 text-[#f59e0b]'
-                : task.status === 'failed'
-                ? 'bg-[#ef4444]/10 text-[#ef4444]'
-                : task.status === 'review'
-                ? 'bg-[#a855f7]/10 text-[#a855f7]'
-                : 'bg-[#262626] text-[#525252]'
+              TASK_STATUS_BADGE[task.status] ?? 'bg-[#262626] text-[#525252]'
             }`}
           >
-            {task.status}
+            {TASK_STATUS_LABEL[task.status] ?? task.status}
           </span>
         </div>
       </div>
@@ -310,15 +389,18 @@ function StageDetailPanel({
   projectId,
   retryingTaskId,
   onRetryTask,
+  onRefresh,
+  onClickTask,
+  onOpenTerminal,
 }: {
   stage: PipelineStage;
   projectId: string;
   retryingTaskId: string | null;
   onRetryTask: (taskId: string) => void;
+  onRefresh: () => void;
+  onClickTask: (task: Task) => void;
+  onOpenTerminal: (agent: ProjectAgent) => void;
 }) {
-  // Terminali açık olan ajanın ID'si (aynı anda sadece bir terminal)
-  const [terminalAgentId, setTerminalAgentId] = useState<string | null>(null);
-
   return (
     <div className="border border-[#262626] rounded-xl bg-[#111111] p-4">
       {/* Panel başlığı */}
@@ -362,15 +444,11 @@ function StageDetailPanel({
                     </span>
                     <span className="text-[10px] text-[#525252] ml-1.5">{roleLabel(agent.role)}</span>
                   </div>
-                  {/* Terminal aç/kapat butonu */}
+                  {/* Terminal aç butonu */}
                   <button
-                    onClick={() => setTerminalAgentId(terminalAgentId === agent.id ? null : agent.id)}
-                    className={`flex items-center gap-1 ml-auto px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
-                      terminalAgentId === agent.id
-                        ? 'bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30'
-                        : 'text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] border border-transparent'
-                    }`}
-                    title={terminalAgentId === agent.id ? 'Terminali kapat' : 'Terminal aç'}
+                    onClick={() => onOpenTerminal(agent)}
+                    className="flex items-center gap-1 ml-auto px-2 py-1 rounded-md text-[10px] font-medium transition-colors text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] border border-transparent"
+                    title="Terminal aç"
                   >
                     <Terminal size={11} />
                     Terminal
@@ -381,23 +459,11 @@ function StageDetailPanel({
                 {agentTasks.length > 0 ? (
                   <div className="ml-10 flex flex-col gap-1.5">
                     {agentTasks.map((task, idx) => (
-                      <TaskRow key={task.id} task={task} isLast={idx === agentTasks.length - 1} retryingTaskId={retryingTaskId} onRetryTask={onRetryTask} />
+                      <TaskRow key={task.id} task={task} isLast={idx === agentTasks.length - 1} retryingTaskId={retryingTaskId} onRetryTask={onRetryTask} projectId={projectId} onRefresh={onRefresh} onClickTask={onClickTask} />
                     ))}
                   </div>
                 ) : (
                   <p className="ml-10 text-[10px] text-[#525252] italic">Atanmış görev yok</p>
-                )}
-
-                {/* Gömülü terminal */}
-                {terminalAgentId === agent.id && (
-                  <div className="ml-10 h-[260px] rounded-lg overflow-hidden border border-[#262626]">
-                    <AgentTerminal
-                      projectId={projectId}
-                      agentId={agent.id}
-                      agentName={agent.name}
-                      agentAvatar={agent.avatar}
-                    />
-                  </div>
                 )}
               </div>
             );
@@ -428,7 +494,7 @@ function StageDetailPanel({
                 <span className="text-[10px] text-[#525252] font-medium">Diğer Görevler</span>
                 <div className="ml-2 flex flex-col gap-1.5">
                   {unmatched.map((task, idx) => (
-                    <TaskRow key={task.id} task={task} isLast={idx === unmatched.length - 1} retryingTaskId={retryingTaskId} onRetryTask={onRetryTask} />
+                    <TaskRow key={task.id} task={task} isLast={idx === unmatched.length - 1} retryingTaskId={retryingTaskId} onRetryTask={onRetryTask} projectId={projectId} onRefresh={onRefresh} onClickTask={onClickTask} />
                   ))}
                 </div>
               </div>
@@ -455,6 +521,10 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
   const [selectedStageIdx, setSelectedStageIdx] = useState<number | null>(null);
   // Retry edilmekte olan task ID'si
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
+  // Detay modal için seçili task
+  const [detailTask, setDetailTask] = useState<Task | null>(null);
+  // Terminal sheet için seçili agent
+  const [terminalAgent, setTerminalAgent] = useState<ProjectAgent | null>(null);
 
   // Başarısız görevi yeniden dene
   const handleRetryTask = async (taskId: string) => {
@@ -741,7 +811,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
 
         {/* ---- Seçili aşama detay paneli ----------------------------------- */}
         {selectedStage && (
-          <StageDetailPanel stage={selectedStage} projectId={projectId} retryingTaskId={retryingTaskId} onRetryTask={handleRetryTask} />
+          <StageDetailPanel stage={selectedStage} projectId={projectId} retryingTaskId={retryingTaskId} onRetryTask={handleRetryTask} onRefresh={fetchStatus} onClickTask={setDetailTask} onOpenTerminal={setTerminalAgent} />
         )}
 
         {/* ---- Tamamlanma mesajı ------------------------------------------- */}
@@ -772,6 +842,29 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
           </div>
         )}
       </div>
+
+      {/* Task Detay Modal */}
+      {detailTask && (
+        <TaskDetailModal
+          task={detailTask}
+          agents={pipelineState?.stages.flatMap((s) => s.agents) ?? []}
+          projectId={projectId}
+          onClose={() => setDetailTask(null)}
+          onRefresh={fetchStatus}
+        />
+      )}
+
+      {/* Terminal Sheet */}
+      {terminalAgent && (
+        <TerminalSheet
+          projectId={projectId}
+          taskId=""
+          taskTitle={terminalAgent.name}
+          agent={terminalAgent}
+          isRunning={pipelineState?.status === 'running'}
+          onClose={() => setTerminalAgent(null)}
+        />
+      )}
     </div>
   );
 }

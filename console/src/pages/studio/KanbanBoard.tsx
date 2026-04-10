@@ -12,6 +12,7 @@ import {
   type ProjectAgent,
 } from '../../lib/studio-api';
 import TaskCard from './TaskCard';
+import TaskDetailModal from './TaskDetailModal';
 import TerminalSheet from './TerminalSheet';
 
 const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
@@ -184,6 +185,8 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
   const [rejectingTask, setRejectingTask] = useState<Task | null>(null);
   // Terminal sheet için seçili task
   const [terminalTask, setTerminalTask] = useState<Task | null>(null);
+  // Detay modal için seçili task
+  const [detailTask, setDetailTask] = useState<Task | null>(null);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -411,6 +414,7 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
                       onApprove={isApprovalCol ? () => handleApprove(task.id) : undefined}
                       onReject={isApprovalCol ? () => handleOpenReject(task) : undefined}
                       onTerminal={() => setTerminalTask(task)}
+                      onClick={() => setDetailTask(task)}
                     />
                   ))}
                 </div>
@@ -419,6 +423,17 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
           })}
         </div>
       </div>
+
+      {/* Task Detay Modal */}
+      {detailTask && (
+        <TaskDetailModal
+          task={detailTask}
+          agents={agents}
+          projectId={projectId}
+          onClose={() => setDetailTask(null)}
+          onRefresh={load}
+        />
+      )}
     </>
   );
 }

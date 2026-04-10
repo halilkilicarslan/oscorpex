@@ -7,6 +7,7 @@ import { streamSSE } from 'hono/streaming';
 import { isAnyProviderConfigured } from './ai-provider-factory.js';
 import { isClaudeCliAvailable, streamWithCLI } from './cli-runtime.js';
 import { mkdir, readFile, access } from 'node:fs/promises';
+import { execSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { initLintConfig } from './lint-runner.js';
 import { checkDocsFreshness, generateReadme, regenerateAllDocs } from './docs-generator.js';
@@ -91,8 +92,11 @@ import {
   deleteWebhook,
   type Webhook,
   listPendingApprovals,
+  listPhases,
+  listTasks,
 } from './db.js';
 import { sendWebhookNotification } from './webhook-sender.js';
+import { loadAgentLog } from './agent-log-store.js';
 import { eventBus } from './event-bus.js';
 import { PM_SYSTEM_PROMPT, buildPlan, estimatePlanCost } from './pm-agent.js';
 import { taskEngine } from './task-engine.js';
@@ -109,7 +113,7 @@ import {
   writeAgentFile,
   deleteAgentFiles,
 } from './agent-files.js';
-import type { ProjectAgent, DependencyType, CapabilityScopeType, CapabilityPermission } from './types.js';
+import type { ProjectAgent, DependencyType, CapabilityScopeType, CapabilityPermission, Task } from './types.js';
 import {
   sendMessage,
   getMessage,
@@ -154,9 +158,9 @@ eventBus.on('task:failed', (event) => {
 });
 
 eventBus.on('pipeline:completed', (event) => {
-  sendWebhookNotification(event.projectId, 'pipeline_finished', {
+  sendWebhookNotification(event.projectId, 'pipeline_completed', {
     ...(event.payload as Record<string, unknown>),
-  }).catch((err) => console.warn('[webhook] pipeline_finished gonderilemedi:', err));
+  }).catch((err) => console.warn('[webhook] pipeline_completed gonderilemedi:', err));
 });
 
 eventBus.on('budget:warning', (event) => {
@@ -1535,13 +1539,32 @@ studio.get('/projects/:id/agents/:agentId/status', async (c) => {
  * Agent çıktı tamponu — son N satırı döndürür.
  * Sorgu parametresi: ?since=<satır_indeksi>
  */
-studio.get('/projects/:id/agents/:agentId/output', (c) => {
+studio.get('/projects/:id/agents/:agentId/output', async (c) => {
   const projectId = c.req.param('id');
   const agentId = c.req.param('agentId');
   const sinceParam = c.req.query('since');
   const since = sinceParam !== undefined ? parseInt(sinceParam, 10) : undefined;
 
-  const lines = agentRuntime.getAgentOutput(projectId, agentId, since);
+  let lines = agentRuntime.getAgentOutput(projectId, agentId, since);
+
+  // Bellekte output yoksa önce .log dosyasından, yoksa DB task loglarından oku
+  if (lines.length === 0 && (since === undefined || since === 0)) {
+    lines = await loadAgentLog(projectId, agentId);
+    // Log dosyası da boşsa DB'deki task output.logs'tan çek (eski task'lar için)
+    if (lines.length === 0) {
+      try {
+        const tasks = await listProjectTasks(projectId);
+        const agentTasks = tasks.filter((t) => t.assignedAgent === agentId || t.assignedAgentId === agentId);
+        for (const t of agentTasks) {
+          if (t.output?.logs && t.output.logs.length > 0) {
+            lines.push(`--- ${t.title} ---`);
+            lines.push(...t.output.logs);
+          }
+        }
+      } catch { /* sessizce devam */ }
+    }
+  }
+
   return c.json({ projectId, agentId, lines, total: lines.length });
 });
 
@@ -2146,10 +2169,21 @@ studio.get('/projects/:id/pipeline/status', async (c) => {
   }
 
   // Pipeline stage'lerindeki task status'larını DB'den güncel haliyle eşleştir
-  // Pipeline in-memory state oluşturulduğunda task'lar kopyalanıyor ama
-  // execution sırasında DB'deki status güncellenirken pipeline kopyası stale kalıyor.
+  // Ayrıca sonradan oluşturulan task'ları (review task gibi) ilgili agent'ın stage'ine ekle
   const pipelineState = enriched.pipelineState;
   if (pipelineState?.stages) {
+    // Tüm proje task'larını DB'den çek
+    const plan = await getLatestPlan(projectId);
+    const allTasks: Task[] = [];
+    if (plan) {
+      const phases = await listPhases(plan.id);
+      for (const phase of phases) {
+        const phaseTasks = await listTasks(phase.id);
+        allTasks.push(...phaseTasks);
+      }
+    }
+
+    // Her stage'deki mevcut task'ları güncelle
     for (const stage of pipelineState.stages) {
       if (stage.tasks) {
         for (let i = 0; i < stage.tasks.length; i++) {
@@ -2157,6 +2191,27 @@ studio.get('/projects/:id/pipeline/status', async (c) => {
           if (fresh) {
             stage.tasks[i] = { ...stage.tasks[i], ...fresh };
           }
+        }
+      }
+    }
+
+    // Stage'e eklenmemiş task'ları agent eşleşmesiyle doğru stage'e ekle
+    const existingTaskIds = new Set(pipelineState.stages.flatMap((s) => (s.tasks ?? []).map((t: any) => t.id)));
+    for (const task of allTasks) {
+      if (existingTaskIds.has(task.id)) continue;
+      // Task'ın atandığı agent'ı bul ve onun stage'ine ekle
+      const assignedId = task.assignedAgent ?? task.assignedAgentId;
+      if (!assignedId) continue;
+      for (const stage of pipelineState.stages) {
+        const match = stage.agents.some(
+          (a: any) => a.id === assignedId || a.sourceAgentId === assignedId
+            || a.name.toLowerCase() === assignedId.toLowerCase()
+            || a.role.toLowerCase() === assignedId.toLowerCase(),
+        );
+        if (match) {
+          if (!stage.tasks) stage.tasks = [];
+          stage.tasks.push(task as any);
+          break;
         }
       }
     }
@@ -2442,7 +2497,282 @@ studio.get('/projects/:id/app/config', async (c) => {
   return c.json(config ?? { services: [], preview: '' });
 });
 
-// (Worker/container endpoints removed — all execution is now CLI-only)
+// ---- App Preview Proxy ----------------------------------------------------
+// Hedef uygulamanın helmet/X-Frame-Options header'ı iframe'i engelliyor.
+// Bu endpoint reverse-proxy yaparak güvenlik header'larını kaldırır.
+
+studio.all('/projects/:id/app/proxy/*', async (c) => {
+  const projectId = c.req.param('id');
+  const status = getAppStatus(projectId);
+  if (!status.running || !status.previewUrl) {
+    return c.json({ error: 'App is not running' }, 502);
+  }
+
+  try {
+    const targetBase = new URL(status.previewUrl);
+    // Path'i raw URL'den çıkar — Hono wildcard mount prefix ile sorun çıkarabiliyor
+    const proxyMarker = `/app/proxy`;
+    const rawUrl = c.req.url;
+    const markerIdx = rawUrl.indexOf(proxyMarker);
+    const subPath = markerIdx >= 0
+      ? rawUrl.slice(markerIdx + proxyMarker.length).split('?')[0] || '/'
+      : '/';
+    const qs = rawUrl.includes('?') ? rawUrl.slice(rawUrl.indexOf('?')) : '';
+    const targetUrl = `http://${targetBase.hostname}:${targetBase.port || 80}${subPath}${qs}`;
+
+    // fetch ile proxy — daha basit ve güvenilir
+    const reqHeaders: Record<string, string> = {};
+    c.req.raw.headers.forEach((val, key) => {
+      // hop-by-hop header'ları atla
+      if (['host', 'connection', 'transfer-encoding'].includes(key.toLowerCase())) return;
+      reqHeaders[key] = val;
+    });
+    reqHeaders['host'] = `${targetBase.hostname}:${targetBase.port || 80}`;
+
+    const proxyRes = await fetch(targetUrl, {
+      method: c.req.method,
+      headers: reqHeaders,
+      body: c.req.method !== 'GET' && c.req.method !== 'HEAD'
+        ? await c.req.raw.arrayBuffer()
+        : undefined,
+    });
+
+    // Response header'larını kopyala, iframe-blocking olanları kaldır
+    const resHeaders = new Headers();
+    const blockedHeaders = new Set([
+      'x-frame-options', 'content-security-policy',
+      'cross-origin-opener-policy', 'cross-origin-resource-policy',
+    ]);
+    proxyRes.headers.forEach((val, key) => {
+      if (!blockedHeaders.has(key.toLowerCase())) {
+        resHeaders.set(key, val);
+      }
+    });
+
+    // API-only uygulamalar: root / için 404 dönüyorsa bilgi sayfası göster
+    if (subPath === '/' && proxyRes.status === 404) {
+      const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#0a0a0a;color:#e5e5e5;display:flex;align-items:center;justify-content:center;height:100vh}
+  .c{text-align:center;max-width:420px}
+  h2{color:#22c55e;margin-bottom:8px;font-size:20px}
+  p{color:#737373;font-size:13px;line-height:1.6}
+  .badge{display:inline-block;background:#22c55e20;color:#22c55e;padding:4px 12px;border-radius:999px;font-size:12px;margin-bottom:16px}
+  a{color:#3b82f6;text-decoration:none}
+  code{background:#1a1a1a;padding:2px 6px;border-radius:4px;font-size:12px}
+</style></head><body><div class="c">
+  <div class="badge">API Running</div>
+  <h2>API-Only Application</h2>
+  <p>Bu uygulama bir API servisi — HTML arayüzü yok.<br/>
+  API endpoint'lerine doğrudan erişebilirsiniz:</p>
+  <p><code>GET <a href="${targetUrl.replace(/\/$/, '')}/api/v1/health" target="_blank">${status.previewUrl}/api/v1/health</a></code></p>
+  <p style="margin-top:20px;font-size:11px;color:#525252">
+    Yeni sekmede açmak için toolbar'daki ↗ butonunu kullanın
+  </p>
+</div></body></html>`;
+      return new Response(html, {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    }
+
+    return new Response(proxyRes.body, {
+      status: proxyRes.status,
+      headers: resHeaders,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Proxy error: ${msg}` }, 502);
+  }
+});
+
+// ---- API Discovery & Collection -------------------------------------------
+
+import { discoverApi, loadCollection, saveCollection } from './api-discovery.js';
+import type { HttpMethod, SavedRequest } from './api-discovery.js';
+
+/** API route'larını keşfet (OpenAPI → source parse → probe) */
+studio.get('/projects/:id/api/discover', async (c) => {
+  const projectId = c.req.param('id');
+  const project = await getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const status = getAppStatus(projectId);
+  const appUrl = status.running ? status.previewUrl || undefined : undefined;
+  const result = await discoverApi(project.repoPath, appUrl);
+  return c.json(result);
+});
+
+/** Kaydedilmiş request koleksiyonunu yükle */
+studio.get('/projects/:id/api/collection', async (c) => {
+  const projectId = c.req.param('id');
+  const collection = await loadCollection(projectId);
+  return c.json(collection);
+});
+
+/** Koleksiyona request ekle/güncelle */
+studio.post('/projects/:id/api/collection', async (c) => {
+  const projectId = c.req.param('id');
+  const body = await c.req.json<{ request: SavedRequest }>();
+  const collection = await loadCollection(projectId);
+
+  const idx = collection.requests.findIndex(r => r.id === body.request.id);
+  if (idx >= 0) {
+    collection.requests[idx] = body.request;
+  } else {
+    collection.requests.push(body.request);
+  }
+  await saveCollection(collection);
+  return c.json({ ok: true });
+});
+
+/** Koleksiyondan request sil */
+studio.delete('/projects/:id/api/collection/:requestId', async (c) => {
+  const projectId = c.req.param('id');
+  const requestId = c.req.param('requestId');
+  const collection = await loadCollection(projectId);
+  collection.requests = collection.requests.filter(r => r.id !== requestId);
+  await saveCollection(collection);
+  return c.json({ ok: true });
+});
+
+// ---- Runtime & Environment ------------------------------------------------
+
+import { analyzeProject, writeEnvFile } from './runtime-analyzer.js';
+import { provisionDatabase, stopDatabase, stopAllDatabases, getDbStatus, parseCloudUrl } from './db-provisioner.js';
+import type { DatabaseType, DbProvisionMethod } from './runtime-analyzer.js';
+
+/** Proje runtime gereksinimlerini analiz et */
+studio.get('/projects/:id/runtime/analyze', async (c) => {
+  const projectId = c.req.param('id');
+  const project = await getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const analysis = analyzeProject(project.repoPath);
+  const dbStatuses = getDbStatus(projectId);
+
+  return c.json({ ...analysis, dbStatuses });
+});
+
+/** Env var'ları .env dosyasına kaydet */
+studio.post('/projects/:id/runtime/env', async (c) => {
+  const projectId = c.req.param('id');
+  const project = await getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const body = await c.req.json<{ values: Record<string, string> }>();
+  if (!body.values || typeof body.values !== 'object') {
+    return c.json({ error: 'values objesi gerekli' }, 400);
+  }
+
+  try {
+    writeEnvFile(project.repoPath, body.values);
+    return c.json({ ok: true, message: '.env dosyası güncellendi' });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : '.env yazılamadı' }, 500);
+  }
+});
+
+/** DB provision — Docker container başlat veya cloud URL kaydet */
+studio.post('/projects/:id/runtime/db/provision', async (c) => {
+  const projectId = c.req.param('id');
+  const project = await getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const body = await c.req.json<{
+    type: DatabaseType;
+    method: DbProvisionMethod;
+    cloudUrl?: string;
+    port?: number;
+  }>();
+
+  const onLog = (msg: string) => {
+    eventBus.emitTransient({ projectId, type: 'agent:output', payload: { output: msg } });
+  };
+
+  try {
+    if (body.method === 'cloud' && body.cloudUrl) {
+      // Cloud URL — parse edip env var'lara yaz
+      const envVars = parseCloudUrl(body.type, body.cloudUrl);
+      writeEnvFile(project.repoPath, envVars);
+      return c.json({ ok: true, envVars, message: `${body.type} cloud URL env'ye yazıldı` });
+    }
+
+    if (body.method === 'docker') {
+      const result = await provisionDatabase(projectId, {
+        type: body.type,
+        image: body.type === 'postgresql' ? 'postgres:16-alpine'
+          : body.type === 'mysql' ? 'mysql:8'
+          : body.type === 'mongodb' ? 'mongo:7'
+          : 'redis:7-alpine',
+        port: body.port || (body.type === 'postgresql' ? 5432 : body.type === 'mysql' ? 3306 : body.type === 'mongodb' ? 27017 : 6379),
+        envVars: [],
+        fromCompose: false,
+      }, onLog);
+
+      // DB env var'larını .env'ye yaz
+      writeEnvFile(project.repoPath, result.envVars);
+
+      return c.json({ ok: true, status: result.status, envVars: result.envVars });
+    }
+
+    // method === 'local' — sadece bilgilendirme
+    return c.json({ ok: true, message: 'Local DB kullanılıyor, env var\'ları manuel ayarlayın' });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'DB başlatılamadı' }, 500);
+  }
+});
+
+/** DB durdur */
+studio.post('/projects/:id/runtime/db/stop', async (c) => {
+  const projectId = c.req.param('id');
+  const body = await c.req.json<{ type?: DatabaseType }>();
+
+  if (body.type) {
+    await stopDatabase(projectId, body.type);
+  } else {
+    await stopAllDatabases(projectId);
+  }
+
+  return c.json({ ok: true });
+});
+
+/** DB durumları */
+studio.get('/projects/:id/runtime/db/status', async (c) => {
+  const projectId = c.req.param('id');
+  return c.json(getDbStatus(projectId));
+});
+
+/** Bağımlılık kur */
+studio.post('/projects/:id/runtime/install', async (c) => {
+  const projectId = c.req.param('id');
+  const project = await getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  const body = await c.req.json<{ serviceName?: string }>();
+  const analysis = analyzeProject(project.repoPath);
+  const services = body.serviceName
+    ? analysis.services.filter(s => s.name === body.serviceName)
+    : analysis.services;
+
+  const results: { name: string; success: boolean; error?: string }[] = [];
+
+  for (const svc of services) {
+    if (!svc.installCommand) {
+      results.push({ name: svc.name, success: true });
+      continue;
+    }
+    const svcPath = svc.path === '.' ? project.repoPath : join(project.repoPath, svc.path);
+    try {
+      execSync(svc.installCommand, { cwd: svcPath, encoding: 'utf-8', timeout: 120000, stdio: 'pipe' });
+      results.push({ name: svc.name, success: true });
+    } catch (err) {
+      results.push({ name: svc.name, success: false, error: err instanceof Error ? err.message.slice(0, 200) : String(err) });
+    }
+  }
+
+  return c.json({ ok: true, results });
+});
 
 // ---- Agent Dependencies (v2 org structure) --------------------------------
 

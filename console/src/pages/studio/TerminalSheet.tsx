@@ -3,10 +3,14 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Terminal, Loader2, Circle } from 'lucide-react';
-import { streamAgentOutputWS, type ProjectAgent } from '../../lib/studio-api';
+import { X, Terminal, Loader2, Circle, Eraser } from 'lucide-react';
+import {
+  getAgentOutput,
+  streamAgentOutput,
+  type ProjectAgent,
+  roleLabel,
+} from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
-import { roleLabel } from '../../lib/studio-api';
 
 interface TerminalSheetProps {
   projectId: string;
@@ -27,9 +31,13 @@ export default function TerminalSheet({
 }: TerminalSheetProps) {
   const [lines, setLines] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
+  const [loadingBuffer, setLoadingBuffer] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const nextIndexRef = useRef<number>(0);
+  const abortStreamRef = useRef<(() => void) | null>(null);
+  const unmountedRef = useRef(false);
 
   // Auto-scroll: kullanıcı yukarı scroll ettiyse durdur
   const handleScroll = useCallback(() => {
@@ -44,28 +52,65 @@ export default function TerminalSheet({
     }
   }, [lines, autoScroll]);
 
-  // WebSocket agent output stream — agent varsa agentId ile, yoksa taskId ile filtrele
+  // Mevcut tampon yükle + SSE akışına bağlan
   useEffect(() => {
-    if (!agent && !taskId) return;
+    unmountedRef.current = false;
+    if (!agent) {
+      setLoadingBuffer(false);
+      return;
+    }
 
-    setConnected(true);
-    const stop = streamAgentOutputWS(
-      projectId,
-      agent?.id,
-      (line) => {
-        setLines((prev) => [...prev, line]);
-      },
-      () => {
-        setConnected(false);
-      },
-      agent ? undefined : taskId,
-    );
+    const agentId = agent.id;
+
+    // SSE akışını başlat
+    const connectStream = () => {
+      if (unmountedRef.current) return;
+      abortStreamRef.current?.();
+
+      const abort = streamAgentOutput(
+        projectId,
+        agentId,
+        (line, index) => {
+          if (unmountedRef.current) return;
+          if (index < nextIndexRef.current) return;
+          nextIndexRef.current = index + 1;
+          setLines((prev) => [...prev, line]);
+        },
+        () => {
+          if (unmountedRef.current) return;
+          setConnected(false);
+          // 2 saniye sonra yeniden bağlan
+          setTimeout(() => {
+            if (!unmountedRef.current) connectStream();
+          }, 2000);
+        },
+      );
+
+      abortStreamRef.current = abort;
+      setConnected(true);
+    };
+
+    // Önce mevcut tamponu yükle
+    getAgentOutput(projectId, agentId)
+      .then(({ lines: buffered, total }) => {
+        if (unmountedRef.current) return;
+        setLines(buffered);
+        nextIndexRef.current = total;
+        setLoadingBuffer(false);
+        connectStream();
+      })
+      .catch(() => {
+        if (unmountedRef.current) return;
+        setLoadingBuffer(false);
+        connectStream();
+      });
 
     return () => {
-      stop();
-      setConnected(false);
+      unmountedRef.current = true;
+      abortStreamRef.current?.();
+      abortStreamRef.current = null;
     };
-  }, [projectId, agent, taskId]);
+  }, [projectId, agent]);
 
   // ESC tuşu ile kapat
   useEffect(() => {
@@ -75,6 +120,8 @@ export default function TerminalSheet({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  const handleClear = () => setLines([]);
 
   return (
     <>
@@ -117,20 +164,30 @@ export default function TerminalSheet({
             {isRunning ? (
               <>
                 <Circle size={6} className="text-[#22c55e] fill-[#22c55e] animate-pulse" />
-                <span className="text-[9px] text-[#22c55e]">Canli</span>
+                <span className="text-[9px] text-[#22c55e]">Canlı</span>
               </>
             ) : connected ? (
               <>
                 <Circle size={6} className="text-[#525252] fill-[#525252]" />
-                <span className="text-[9px] text-[#525252]">Bagli</span>
+                <span className="text-[9px] text-[#525252]">Bağlı</span>
               </>
             ) : (
               <>
                 <Circle size={6} className="text-[#525252]" />
-                <span className="text-[9px] text-[#525252]">Baglaniyor</span>
+                <span className="text-[9px] text-[#525252]">Bağlanıyor</span>
               </>
             )}
           </div>
+
+          {/* Temizle butonu */}
+          <button
+            type="button"
+            onClick={handleClear}
+            className="p-1 rounded hover:bg-[#1a1a1a] text-[#525252] hover:text-[#a3a3a3] transition-colors"
+            title="Terminali temizle"
+          >
+            <Eraser size={12} />
+          </button>
 
           <button
             type="button"
@@ -147,17 +204,22 @@ export default function TerminalSheet({
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-relaxed"
         >
-          {lines.length === 0 ? (
+          {loadingBuffer ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-[#525252]">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-[11px]">Log tamponu yükleniyor...</span>
+            </div>
+          ) : lines.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-[#525252]">
               {isRunning ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  <span className="text-[11px]">Agent ciktisi bekleniyor...</span>
+                  <span className="text-[11px]">Agent çıktısı bekleniyor...</span>
                 </>
               ) : (
                 <>
                   <Terminal size={16} />
-                  <span className="text-[11px]">Henuz terminal ciktisi yok</span>
+                  <span className="text-[11px]">Henüz terminal çıktısı yok</span>
                 </>
               )}
             </div>
@@ -179,7 +241,7 @@ export default function TerminalSheet({
 
         {/* Footer */}
         <div className="flex items-center justify-between px-4 py-2 border-t border-[#262626] text-[9px] text-[#525252] shrink-0">
-          <span>{lines.length} satir</span>
+          <span>{lines.length} satır</span>
           {!autoScroll && lines.length > 0 && (
             <button
               type="button"

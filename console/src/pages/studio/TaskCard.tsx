@@ -43,6 +43,7 @@ export default function TaskCard({
   onApprove,
   onReject,
   onTerminal,
+  onClick,
 }: {
   task: Task;
   agents?: ProjectAgent[];
@@ -50,6 +51,7 @@ export default function TaskCard({
   onApprove?: () => Promise<void>;
   onReject?: () => void;
   onTerminal?: () => void;
+  onClick?: () => void;
 }) {
   const [retrying, setRetrying] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -86,7 +88,9 @@ export default function TaskCard({
         isAwaitingApproval
           ? 'border-[#f59e0b]/40 hover:border-[#f59e0b]/70'
           : 'border-[#262626]',
+        onClick ? 'cursor-pointer' : '',
       ].join(' ')}
+      onClick={onClick}
     >
       {/* Awaiting Approval badge — sadece waiting_approval durumunda */}
       {isAwaitingApproval && (
@@ -141,7 +145,7 @@ export default function TaskCard({
           );
         })()}
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           {/* Terminal butonu — running, done, failed task'larda */}
           {onTerminal && ['running', 'done', 'failed'].includes(task.status) && (
             <button
@@ -228,7 +232,7 @@ export default function TaskCard({
 
       {/* Onay / Red butonlari — waiting_approval durumunda ve handler varsa */}
       {isAwaitingApproval && (onApprove || onReject) && (
-        <div className="flex gap-2 mt-3 pt-2 border-t border-[#f59e0b]/10">
+        <div className="flex gap-2 mt-3 pt-2 border-t border-[#f59e0b]/10" onClick={(e) => e.stopPropagation()}>
           {onApprove && (
             <button
               type="button"

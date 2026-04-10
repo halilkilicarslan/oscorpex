@@ -1360,6 +1360,126 @@ export async function fetchAppConfig(projectId: string): Promise<AppConfig> {
   return json(await fetch(`${BASE}/projects/${projectId}/app/config`));
 }
 
+// ---- Runtime & Environment ---------------------------------------------------
+
+export type DatabaseType = 'postgresql' | 'mysql' | 'mongodb' | 'redis' | 'sqlite';
+export type DbProvisionMethod = 'docker' | 'local' | 'cloud';
+export type FrameworkType =
+  | 'express' | 'hono' | 'fastify' | 'koa' | 'nestjs'
+  | 'nextjs' | 'nuxt' | 'vite' | 'cra' | 'angular'
+  | 'django' | 'fastapi' | 'flask'
+  | 'spring-boot' | 'quarkus'
+  | 'go' | 'gin' | 'fiber'
+  | 'rails'
+  | 'rust-actix' | 'rust-axum'
+  | 'generic-node' | 'generic-python' | 'unknown';
+
+export interface DetectedService {
+  name: string;
+  framework: FrameworkType;
+  language: string;
+  startCommand: string;
+  installCommand: string | null;
+  port: number;
+  readyPattern: string;
+  type: 'backend' | 'frontend' | 'fullstack';
+  path: string;
+  depsInstalled: boolean;
+}
+
+export interface DetectedDatabase {
+  type: DatabaseType;
+  image: string;
+  port: number;
+  envVars: string[];
+  fromCompose: boolean;
+}
+
+export interface EnvVarRequirement {
+  key: string;
+  required: boolean;
+  defaultValue?: string;
+  description?: string;
+  sensitive: boolean;
+  category: 'database' | 'auth' | 'api' | 'app' | 'other';
+}
+
+export interface DbStatus {
+  type: DatabaseType;
+  method: DbProvisionMethod;
+  running: boolean;
+  port: number;
+  containerName?: string;
+  connectionUrl?: string;
+}
+
+export interface RuntimeAnalysis {
+  services: DetectedService[];
+  databases: DetectedDatabase[];
+  envVars: EnvVarRequirement[];
+  allDepsInstalled: boolean;
+  allEnvVarsSet: boolean;
+  dbReady: boolean;
+  hasStudioConfig: boolean;
+  hasDockerCompose: boolean;
+  dbStatuses: DbStatus[];
+}
+
+/** Proje runtime gereksinimlerini analiz et */
+export async function analyzeRuntime(projectId: string): Promise<RuntimeAnalysis> {
+  return json(await fetch(`${BASE}/projects/${projectId}/runtime/analyze`));
+}
+
+/** Env var'ları .env dosyasına kaydet */
+export async function saveEnvVars(projectId: string, values: Record<string, string>): Promise<{ ok: boolean }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/runtime/env`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values }),
+  }));
+}
+
+/** DB provision (Docker / Cloud) */
+export async function provisionDb(
+  projectId: string,
+  type: DatabaseType,
+  method: DbProvisionMethod,
+  cloudUrl?: string,
+  port?: number,
+): Promise<{ ok: boolean; status?: DbStatus; envVars?: Record<string, string> }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/runtime/db/provision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, method, cloudUrl, port }),
+  }));
+}
+
+/** DB durdur */
+export async function stopDb(projectId: string, type?: DatabaseType): Promise<{ ok: boolean }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/runtime/db/stop`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type }),
+  }));
+}
+
+/** DB durumları */
+export async function fetchDbStatus(projectId: string): Promise<DbStatus[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/runtime/db/status`));
+}
+
+/** Bağımlılık kur */
+export async function installDeps(
+  projectId: string,
+  serviceName?: string,
+): Promise<{ ok: boolean; results: { name: string; success: boolean; error?: string }[] }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/runtime/install`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serviceName }),
+  }));
+}
+
 // ---- Webhooks ----------------------------------------------------------------
 // Proje bazlı Slack/Discord/Generic webhook yönetimi
 
@@ -1369,11 +1489,14 @@ export type WebhookType = 'slack' | 'discord' | 'generic';
 /** Webhook desteklenen event tipleri */
 export type WebhookEventType =
   | 'task_completed'
-  | 'pipeline_finished'
+  | 'task_failed'
+  | 'task_approval_required'
+  | 'task_approved'
+  | 'task_rejected'
+  | 'pipeline_completed'
   | 'execution_error'
   | 'budget_warning'
   | 'plan_approved'
-  | 'task_failed'
   | 'agent_started'
   | 'agent_stopped'
   | 'test';
@@ -1676,4 +1799,83 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+// ---- API Discovery -----------------------------------------------------------
+
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+export interface DiscoveredRoute {
+  method: HttpMethod;
+  path: string;
+  source?: string;
+  description?: string;
+  params?: string[];
+}
+
+export interface ApiDiscoveryResult {
+  discoveryMethod: 'openapi' | 'source-parse' | 'probe' | 'none';
+  basePath: string;
+  routes: DiscoveredRoute[];
+  openApiUrl?: string;
+}
+
+export interface SavedRequest {
+  id: string;
+  method: HttpMethod;
+  path: string;
+  headers?: Record<string, string>;
+  body?: string;
+  lastStatus?: number;
+  lastResponse?: string;
+  lastDuration?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiCollection {
+  projectId: string;
+  requests: SavedRequest[];
+}
+
+export async function discoverApiRoutes(projectId: string): Promise<ApiDiscoveryResult> {
+  return json(await fetch(`${BASE}/projects/${projectId}/api/discover`));
+}
+
+export async function loadApiCollection(projectId: string): Promise<ApiCollection> {
+  return json(await fetch(`${BASE}/projects/${projectId}/api/collection`));
+}
+
+export async function saveApiRequest(projectId: string, request: SavedRequest): Promise<void> {
+  await fetch(`${BASE}/projects/${projectId}/api/collection`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request }),
+  });
+}
+
+export async function deleteApiRequest(projectId: string, requestId: string): Promise<void> {
+  await fetch(`${BASE}/projects/${projectId}/api/collection/${requestId}`, { method: 'DELETE' });
+}
+
+/** Proxy üzerinden API çağrısı yap */
+export async function sendProxyRequest(
+  projectId: string,
+  method: HttpMethod,
+  path: string,
+  headers?: Record<string, string>,
+  body?: string,
+): Promise<{ status: number; headers: Record<string, string>; body: string; duration: number }> {
+  const proxyPath = `/api/studio/projects/${projectId}/app/proxy${path.startsWith('/') ? path : '/' + path}`;
+  const start = performance.now();
+  const res = await fetch(proxyPath, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: method !== 'GET' && method !== 'DELETE' ? body : undefined,
+  });
+  const duration = Math.round(performance.now() - start);
+  const resBody = await res.text();
+  const resHeaders: Record<string, string> = {};
+  res.headers.forEach((v, k) => { resHeaders[k] = v; });
+  return { status: res.status, headers: resHeaders, body: resBody, duration };
 }

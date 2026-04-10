@@ -377,14 +377,17 @@ function WidgetCard({
 // ---------------------------------------------------------------------------
 
 const WEBHOOK_EVENTS: { value: WebhookEventType; label: string }[] = [
-  { value: 'task_completed',    label: 'Gorev Tamamlandi' },
-  { value: 'task_failed',       label: 'Gorev Basarisiz' },
-  { value: 'pipeline_finished', label: 'Pipeline Bitti' },
-  { value: 'execution_error',   label: 'Calisma Hatasi' },
-  { value: 'budget_warning',    label: 'Butce Uyarisi' },
-  { value: 'plan_approved',     label: 'Plan Onaylandi' },
-  { value: 'agent_started',     label: 'Agent Basladi' },
-  { value: 'agent_stopped',     label: 'Agent Durdu' },
+  { value: 'task_completed',         label: 'Görev Tamamlandı' },
+  { value: 'task_failed',            label: 'Görev Başarısız' },
+  { value: 'task_approval_required', label: 'Onay Bekliyor' },
+  { value: 'task_approved',          label: 'Görev Onaylandı' },
+  { value: 'task_rejected',          label: 'Görev Reddedildi' },
+  { value: 'pipeline_completed',     label: 'Pipeline Bitti' },
+  { value: 'execution_error',        label: 'Çalışma Hatası' },
+  { value: 'budget_warning',         label: 'Bütçe Uyarısı' },
+  { value: 'plan_approved',          label: 'Plan Onaylandı' },
+  { value: 'agent_started',          label: 'Agent Başladı' },
+  { value: 'agent_stopped',          label: 'Agent Durdu' },
 ];
 
 const WEBHOOK_TYPE_LABELS: Record<WebhookType, { label: string; color: string }> = {
