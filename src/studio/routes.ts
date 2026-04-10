@@ -2640,7 +2640,8 @@ studio.delete('/projects/:id/api/collection/:requestId', async (c) => {
 
 import { analyzeProject, writeEnvFile } from './runtime-analyzer.js';
 import { provisionDatabase, stopDatabase, stopAllDatabases, getDbStatus, parseCloudUrl } from './db-provisioner.js';
-import type { DatabaseType, DbProvisionMethod } from './runtime-analyzer.js';
+import type { DatabaseType } from './runtime-analyzer.js';
+import type { DbProvisionMethod } from './db-provisioner.js';
 
 /** Proje runtime gereksinimlerini analiz et */
 studio.get('/projects/:id/runtime/analyze', async (c) => {
