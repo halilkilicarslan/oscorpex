@@ -50,6 +50,34 @@ class EventBus {
     });
   }
 
+  /**
+   * Emit a transient event — notifies subscribers immediately WITHOUT DB persistence.
+   * Ideal for high-frequency ephemeral events like agent:output terminal lines.
+   */
+  emitTransient(data: Omit<StudioEvent, 'id' | 'timestamp'>): void {
+    const event: StudioEvent = {
+      id: '',
+      ...data,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Notify project subscribers
+    const projectHandlers = this.handlers.get(`project:${event.projectId}`);
+    if (projectHandlers) {
+      for (const handler of projectHandlers) {
+        try { handler(event); } catch { /* subscriber error — ignore */ }
+      }
+    }
+
+    // Notify type subscribers
+    const typeHandlers = this.handlers.get(`type:${event.type}`);
+    if (typeHandlers) {
+      for (const handler of typeHandlers) {
+        try { handler(event); } catch { /* subscriber error — ignore */ }
+      }
+    }
+  }
+
   /** Emit an event and wait for DB persistence + subscriber notification */
   async emitAsync(data: Omit<StudioEvent, 'id' | 'timestamp'>): Promise<StudioEvent> {
     const event = await insertEvent(data);

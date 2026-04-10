@@ -31,7 +31,18 @@ export async function updateDocsAfterTask(
   if (!existsSync(docsDir)) return;
 
   try {
-    switch (agent.role) {
+    // Normalize role: "backend-dev" → "backend", "product-owner" → "pm", etc.
+    const role = agent.role.toLowerCase();
+    const roleCategory =
+      role.startsWith('backend') ? 'backend'
+      : role.startsWith('frontend') ? 'frontend'
+      : role === 'product-owner' || role === 'scrum-master' || role === 'pm' ? 'pm'
+      : role === 'tech-lead' || role === 'architect' ? 'architect'
+      : role.includes('review') ? 'reviewer'
+      : role.includes('qa') ? 'qa'
+      : role;
+
+    switch (roleCategory) {
       case 'pm':
         await generateProjectMd(project, docsDir, log);
         break;
@@ -206,8 +217,6 @@ async function generateApiContractMd(
   const routeFiles = allFiles.filter(
     (f) => f.includes('route') || f.includes('controller') || f.includes('api') || f.includes('handler'),
   );
-
-  if (routeFiles.length === 0 && isTBD) return;
 
   const taskEntry = [
     '',

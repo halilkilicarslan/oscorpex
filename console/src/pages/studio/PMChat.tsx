@@ -237,9 +237,6 @@ export default function PMChat({ projectId }: { projectId: string }) {
       const result = await approvePlan(projectId);
       const updated = await fetchPlan(projectId);
       setPlan(updated);
-      // Onaylanan plan draft değil, maliyet tahmini artık gösterilmez
-      setCostEstimate(null);
-
       // Pipeline auto-start bildirimini goster
       if (result.pipeline.started) {
         setPipelineToast({

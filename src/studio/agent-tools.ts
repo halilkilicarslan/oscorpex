@@ -28,7 +28,7 @@ export function createAgentTools(ctx: ToolContext, tracker: ToolTracker) {
 
   const emitLog = (message: string) => {
     tracker.logs.push(message);
-    eventBus.emit({
+    eventBus.emitTransient({
       projectId,
       type: 'agent:output',
       agentId,

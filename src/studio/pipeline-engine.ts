@@ -23,6 +23,7 @@ import {
   getLatestPlan,
   listPhases,
   listAgentDependencies,
+  updateTask,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { taskEngine } from './task-engine.js';
@@ -308,11 +309,40 @@ class PipelineEngine {
   } {
     const ids = new Set<string>();
     const roles = new Set<string>();
+
+    // Reverse category map: "backend-dev" → also match "backend"
+    const reverseCategoryMap: Record<string, string[]> = {
+      'backend-dev': ['backend', 'backend-developer', 'coder'],
+      'backend-developer': ['backend', 'backend-dev', 'coder'],
+      'frontend-dev': ['frontend', 'frontend-developer'],
+      'frontend-developer': ['frontend', 'frontend-dev'],
+      'backend-qa': ['qa'],
+      'frontend-qa': ['qa'],
+      'qa-engineer': ['qa'],
+      'design-lead': ['design', 'designer', 'ui-designer'],
+      'tech-lead': ['architect', 'tech-lead'],
+      'scrum-master': ['pm'],
+      'product-owner': ['pm'],
+      'business-analyst': ['analyst'],
+    };
+
     for (const a of stageAgents) {
       ids.add(a.id);
       if (a.sourceAgentId) ids.add(a.sourceAgentId);
-      roles.add(a.role.toLowerCase());
+      const roleLower = a.role.toLowerCase();
+      roles.add(roleLower);
       roles.add(a.name.toLowerCase());
+
+      // Add reverse category aliases so "backend" tasks match "backend-dev" agents
+      const aliases = reverseCategoryMap[roleLower];
+      if (aliases) {
+        for (const alias of aliases) roles.add(alias);
+      }
+      // Also match partial: "backend-dev" → add "backend" prefix
+      const dashIdx = roleLower.indexOf('-');
+      if (dashIdx > 0) {
+        roles.add(roleLower.slice(0, dashIdx)); // "backend-dev" → "backend"
+      }
     }
     return { ids, roles };
   }
@@ -734,6 +764,45 @@ class PipelineEngine {
       projectId,
       type: 'pipeline:resumed' as any,
       payload: { resumedAt: now(), currentStage: state.currentStage },
+    });
+
+    await this.advanceStage(projectId);
+  }
+
+  /**
+   * Failed pipeline'ı kurtarır: failed task'ları queued'e çevirir,
+   * pipeline stage'i running'e döndürür ve advanceStage ile devam eder.
+   */
+  async retryFailedPipeline(projectId: string): Promise<void> {
+    let state = _states.get(projectId) ?? await hydrateState(projectId);
+    if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
+
+    if (state.status !== 'failed') {
+      throw new Error(`Pipeline retry edilemiyor — mevcut durum: ${state.status}`);
+    }
+
+    // Failed stage'i running'e çevir
+    const currentStage = state.stages[state.currentStage];
+    if (currentStage) currentStage.status = 'running';
+
+    state.status = 'running';
+    state.completedAt = undefined;
+    _states.set(projectId, state);
+    await persistState(state);
+
+    // Failed task'ları queued'e çevir
+    const taskIds = await this.resolveStageTaskIds(projectId, state.currentStage, state);
+    for (const taskId of taskIds) {
+      const status = await this.getTaskStatus(taskId);
+      if (status === 'failed') {
+        await updateTask(taskId, { status: 'queued', error: null, retryCount: 0 } as any);
+      }
+    }
+
+    eventBus.emit({
+      projectId,
+      type: 'pipeline:resumed' as any,
+      payload: { resumedAt: now(), currentStage: state.currentStage, reason: 'retry_failed' },
     });
 
     await this.advanceStage(projectId);

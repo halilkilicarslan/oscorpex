@@ -95,6 +95,8 @@ export interface CLIExecutionResult {
 // ---------------------------------------------------------------------------
 
 let cliAvailable: boolean | null = null;
+let cliCheckedAt = 0;
+const CLI_CACHE_TTL_MS = 60_000; // 1 dakika sonra tekrar kontrol et
 
 /**
  * Resolve the claude binary path.
@@ -118,12 +120,28 @@ function resolveClaudeBinary(): string {
 const CLAUDE_BIN = resolveClaudeBinary();
 
 export async function isClaudeCliAvailable(): Promise<boolean> {
-  if (cliAvailable !== null) return cliAvailable;
+  // Cache TTL: false sonucu 1dk sonra expire olsun, true sonucu kalsın
+  if (cliAvailable !== null) {
+    if (cliAvailable) return true;
+    if (Date.now() - cliCheckedAt < CLI_CACHE_TTL_MS) return false;
+  }
+
+  console.log(`[cli-runtime] Checking CLI availability: ${CLAUDE_BIN}`);
 
   return new Promise((resolveResult) => {
+    let resolved = false;
+    const done = (result: boolean, reason: string) => {
+      if (resolved) return;
+      resolved = true;
+      cliAvailable = result;
+      cliCheckedAt = Date.now();
+      console.log(`[cli-runtime] CLI check: ${reason}, available=${result}`);
+      resolveResult(result);
+    };
+
     const proc = spawn(CLAUDE_BIN, ['--version'], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: false,
+      shell: true,
       env: { ...process.env, PATH: process.env.PATH },
     });
 
@@ -131,19 +149,17 @@ export async function isClaudeCliAvailable(): Promise<boolean> {
     proc.stdout?.on('data', (d) => { output += d.toString(); });
 
     proc.on('close', (code) => {
-      cliAvailable = code === 0 && output.includes('Claude Code');
-      resolveResult(cliAvailable);
+      const ok = code === 0 && output.includes('Claude Code');
+      done(ok, `code=${code}, output="${output.trim().slice(0, 60)}"`);
     });
 
-    proc.on('error', () => {
-      cliAvailable = false;
-      resolveResult(false);
+    proc.on('error', (err) => {
+      done(false, `spawn error: ${err.message}`);
     });
 
     setTimeout(() => {
       proc.kill();
-      cliAvailable = false;
-      resolveResult(false);
+      done(false, 'timed out (5s)');
     }, 5000);
   });
 }
@@ -183,7 +199,8 @@ export function executeWithCLI(opts: {
 
     const termLog = (msg: string) => {
       agentRuntime.appendVirtualOutput(projectId, agentId, msg);
-      eventBus.emit({
+      // Use emitTransient — no DB write, instant broadcast to WS subscribers
+      eventBus.emitTransient({
         projectId,
         type: 'agent:output',
         agentId,
@@ -450,6 +467,162 @@ function processStreamEvent(
 // ---------------------------------------------------------------------------
 // Helper: resolve relative paths from CLI output to absolute paths
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Stream CLI output — spawns Claude CLI and streams text deltas via callbacks.
+// Used by PM Chat to replace AI SDK streamText().
+// ---------------------------------------------------------------------------
+
+export interface StreamCLICallbacks {
+  onTextDelta: (text: string) => void;
+  onDone: (fullText: string, inputTokens: number, outputTokens: number, costUsd: number) => void;
+  onError: (error: Error) => void;
+}
+
+export function streamWithCLI(opts: {
+  repoPath: string;
+  prompt: string;
+  systemPrompt: string;
+  model?: string;
+  timeoutMs?: number;
+}, callbacks: StreamCLICallbacks): () => void {
+  const {
+    repoPath,
+    prompt,
+    systemPrompt,
+    model = 'sonnet',
+    timeoutMs = 120_000,
+  } = opts;
+
+  const args = [
+    '-p',
+    '--output-format', 'stream-json',
+    '--verbose',
+    '--permission-mode', 'bypassPermissions',
+    '--model', model,
+    '--system-prompt', systemPrompt,
+    '--disable-slash-commands',
+    '--no-session-persistence',
+    '--max-budget-usd', '2',
+  ];
+
+  const proc = spawn(CLAUDE_BIN, args, {
+    cwd: repoPath,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    shell: false,
+    env: { ...process.env, PATH: process.env.PATH },
+  });
+
+  proc.stdin?.write(prompt);
+  proc.stdin?.end();
+
+  let fullText = '';
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let costUsd = 0;
+  let buffer = '';
+  let settled = false;
+
+  const timer = setTimeout(() => {
+    if (!settled) {
+      settled = true;
+      proc.kill();
+      callbacks.onError(new Error(`PM Chat CLI timed out after ${timeoutMs}ms`));
+    }
+  }, timeoutMs);
+
+  proc.stdout!.on('data', (chunk: Buffer) => {
+    buffer += chunk.toString();
+    const lines = buffer.split('\n');
+    buffer = lines.pop()!;
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line) as CLIStreamEvent;
+
+        if (event.type === 'assistant') {
+          const msg = (event as CLIAssistantEvent).message;
+          if (!msg?.content) continue;
+
+          if (msg.usage) {
+            inputTokens += msg.usage.input_tokens ?? 0;
+            outputTokens += msg.usage.output_tokens ?? 0;
+          }
+
+          for (const block of msg.content) {
+            if (block.type === 'text' && block.text) {
+              fullText += block.text;
+              callbacks.onTextDelta(block.text);
+            }
+          }
+        } else if (event.type === 'result') {
+          const res = event as CLIResultEvent;
+          costUsd = res.total_cost_usd ?? 0;
+          if (res.modelUsage) {
+            for (const usage of Object.values(res.modelUsage)) {
+              inputTokens = usage.inputTokens ?? inputTokens;
+              outputTokens = usage.outputTokens ?? outputTokens;
+              costUsd = usage.costUSD ?? costUsd;
+            }
+          }
+        }
+      } catch {
+        // Non-JSON line — ignore
+      }
+    }
+  });
+
+  proc.stderr!.on('data', () => {
+    // Ignore stderr for chat — it's mainly progress info
+  });
+
+  proc.on('close', () => {
+    clearTimeout(timer);
+    if (settled) return;
+    settled = true;
+
+    // Process remaining buffer
+    if (buffer.trim()) {
+      try {
+        const event = JSON.parse(buffer) as CLIStreamEvent;
+        if (event.type === 'assistant') {
+          const msg = (event as CLIAssistantEvent).message;
+          if (msg?.content) {
+            for (const block of msg.content) {
+              if (block.type === 'text' && block.text) {
+                fullText += block.text;
+                callbacks.onTextDelta(block.text);
+              }
+            }
+          }
+        } else if (event.type === 'result') {
+          const res = event as CLIResultEvent;
+          costUsd = res.total_cost_usd ?? costUsd;
+        }
+      } catch { /* ignore */ }
+    }
+
+    callbacks.onDone(fullText, inputTokens, outputTokens, costUsd);
+  });
+
+  proc.on('error', (err) => {
+    clearTimeout(timer);
+    if (!settled) {
+      settled = true;
+      callbacks.onError(err);
+    }
+  });
+
+  // Return cancel function
+  return () => {
+    if (!settled) {
+      settled = true;
+      clearTimeout(timer);
+      proc.kill();
+    }
+  };
+}
 
 export function resolveFilePaths(files: string[], repoPath: string): string[] {
   return files

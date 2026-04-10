@@ -809,14 +809,16 @@ const WS_RECONNECT_MAX_MS  = 15_000;
 
 export function streamAgentOutputWS(
   projectId: string,
-  agentId: string,
+  agentId: string | undefined,
   onLine: (line: string, index: number) => void,
   onError?: (err: Error) => void,
+  taskId?: string,
 ): () => void {
   let stopped = false;
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let attempt = 0;
+  let lineCounter = 0;
 
   function connect() {
     if (stopped) return;
@@ -848,18 +850,21 @@ export function streamAgentOutputWS(
       const event = msg.payload as {
         type: string;
         agentId?: string;
-        payload?: { line?: string; index?: number };
+        taskId?: string;
+        payload?: { line?: string; index?: number; output?: string };
       };
 
-      // Yalnızca bu agent'ın output event'lerini filtrele
+      // Filter by agentId or taskId
       if (
         event.type === 'agent:output' &&
-        event.agentId === agentId &&
-        event.payload
+        event.payload &&
+        (agentId ? event.agentId === agentId : taskId ? event.taskId === taskId : false)
       ) {
-        const { line, index } = event.payload;
+        const { line, index, output } = event.payload;
         if (typeof line === 'string' && typeof index === 'number') {
           onLine(line, index);
+        } else if (typeof output === 'string') {
+          onLine(output, lineCounter++);
         }
       }
     };
@@ -1244,6 +1249,7 @@ export interface AgentAnalytics {
   agentId: string;
   agentName: string;
   role: string;
+  avatar: string;
   color: string;
   tasksAssigned: number;
   tasksCompleted: number;
@@ -1289,6 +1295,8 @@ export interface ProjectCostSummary {
 export interface CostBreakdownEntry {
   agentId: string;
   agentName?: string;
+  agentAvatar?: string;
+  agentRole?: string;
   model: string;
   taskCount: number;
   inputTokens: number;

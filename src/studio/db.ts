@@ -1552,7 +1552,7 @@ export async function getProjectAnalytics(projectId: string) {
 }
 
 export async function getAgentAnalytics(projectId: string) {
-  const allAgents = await query<any>('SELECT id, name, role, color, source_agent_id FROM project_agents WHERE project_id = $1', [projectId]);
+  const allAgents = await query<any>('SELECT id, name, role, avatar, color, source_agent_id FROM project_agents WHERE project_id = $1', [projectId]);
   // Deduplicate agents by source_agent_id (keep first occurrence)
   const seen = new Set<string>();
   const agents = allAgents.filter((a: any) => {
@@ -1591,7 +1591,7 @@ export async function getAgentAnalytics(projectId: string) {
     const msgReceived = parseInt(msgReceivedRow?.cnt ?? '0', 10);
 
     return {
-      agentId: a.id, agentName: a.name, role: a.role, color: a.color,
+      agentId: a.id, agentName: a.name, role: a.role, avatar: a.avatar ?? '', color: a.color,
       tasksAssigned: parseInt(taskStats?.assigned ?? '0', 10),
       tasksCompleted: parseInt(taskStats?.completed ?? '0', 10),
       tasksFailed: parseInt(taskStats?.failed ?? '0', 10),
@@ -1702,6 +1702,8 @@ export async function getProjectCostBreakdown(projectId: string): Promise<CostBr
     SELECT
       tu.agent_id,
       pa.name AS agent_name,
+      pa.avatar AS agent_avatar,
+      pa.role AS agent_role,
       tu.model,
       COUNT(*) AS task_count,
       SUM(tu.input_tokens) AS input_tokens,
@@ -1711,13 +1713,15 @@ export async function getProjectCostBreakdown(projectId: string): Promise<CostBr
     FROM token_usage tu
     LEFT JOIN project_agents pa ON pa.id = tu.agent_id
     WHERE tu.project_id = $1
-    GROUP BY tu.agent_id, tu.model, pa.name
+    GROUP BY tu.agent_id, tu.model, pa.name, pa.avatar, pa.role
     ORDER BY cost_usd DESC
   `, [projectId]);
 
   return rows.map((r: any) => ({
     agentId: r.agent_id,
     agentName: r.agent_name ?? undefined,
+    agentAvatar: r.agent_avatar ?? '',
+    agentRole: r.agent_role ?? '',
     model: r.model,
     taskCount: parseInt(r.task_count, 10),
     inputTokens: parseInt(r.input_tokens, 10),

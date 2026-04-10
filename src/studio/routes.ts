@@ -4,8 +4,8 @@
 
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { streamText, stepCountIs } from 'ai';
-import { getAIModel, isAnyProviderConfigured } from './ai-provider-factory.js';
+import { isAnyProviderConfigured } from './ai-provider-factory.js';
+import { isClaudeCliAvailable, streamWithCLI } from './cli-runtime.js';
 import { mkdir, readFile, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { initLintConfig } from './lint-runner.js';
@@ -94,7 +94,7 @@ import {
 } from './db.js';
 import { sendWebhookNotification } from './webhook-sender.js';
 import { eventBus } from './event-bus.js';
-import { PM_SYSTEM_PROMPT, pmToolkit, estimatePlanCost } from './pm-agent.js';
+import { PM_SYSTEM_PROMPT, buildPlan, estimatePlanCost } from './pm-agent.js';
 import { taskEngine } from './task-engine.js';
 import { containerManager } from './container-manager.js';
 import { agentRuntime } from './agent-runtime.js';
@@ -356,10 +356,11 @@ studio.delete('/projects/:id', async (c) => {
 // ---- Planner Chat (SSE streaming) -----------------------------------------
 
 studio.post('/projects/:id/chat', async (c) => {
-  // Veritabanında varsayılan provider yoksa ve OPENAI_API_KEY de ayarlanmamışsa hata döndür
-  if (!isAnyProviderConfigured()) {
+  // Claude CLI gerekli
+  const cliReady = await isClaudeCliAvailable();
+  if (!cliReady) {
     return c.json(
-      { error: 'No AI provider configured. Add a provider in Settings or set OPENAI_API_KEY in your .env file.' },
+      { error: 'Claude CLI is not available. Install Claude Code CLI to use the Planner.' },
       503,
     );
   }
@@ -367,6 +368,10 @@ studio.post('/projects/:id/chat', async (c) => {
   const projectId = c.req.param('id');
   const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  if (!project.repoPath) {
+    return c.json({ error: 'Project has no repoPath configured.' }, 400);
+  }
 
   const body = (await c.req.json()) as { message: string };
   const userMessage = body.message;
@@ -396,65 +401,79 @@ Description: ${project.description || 'No description yet'}
 [Your Team — ${agents.length} agents]
 ${teamInfo}`;
 
-  // Prepare messages for AI SDK
-  const messages = history.map((m) => ({
-    role: m.role as 'user' | 'assistant',
-    content: m.content,
-  }));
+  // Build prompt with conversation history
+  const conversationContext = history
+    .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+    .join('\n\n');
 
-  // Stream response via SSE
+  const prompt = conversationContext
+    ? `Previous conversation:\n${conversationContext}\n\nUser: ${userMessage}`
+    : userMessage;
+
+  // Stream response via SSE using Claude CLI
   return streamSSE(c, async (stream) => {
-    let fullResponse = '';
-
     try {
-      const result = streamText({
-        // Veritabanındaki varsayılan provider'ı kullan; yoksa gpt-4o-mini'ye geri dön
-        model: await getAIModel(),
-        system: systemPrompt,
-        messages,
-        tools: pmToolkit,
-        stopWhen: stepCountIs(5),
-      });
+      await new Promise<void>((resolveStream, rejectStream) => {
+        const cancel = streamWithCLI(
+          {
+            repoPath: project.repoPath!,
+            prompt,
+            systemPrompt,
+            model: 'sonnet',
+            timeoutMs: 120_000,
+          },
+          {
+            onTextDelta: (text) => {
+              stream.writeSSE({
+                event: 'text-delta',
+                data: JSON.stringify({ text }),
+              }).catch(() => { /* stream closed */ });
+            },
+            onDone: async (fullText) => {
+              try {
+                // Parse plan-json blocks from response and create plans
+                const planMatch = fullText.match(/```plan-json\s*\n([\s\S]*?)\n```/);
+                if (planMatch) {
+                  try {
+                    const planData = JSON.parse(planMatch[1]);
+                    if (planData.phases && Array.isArray(planData.phases)) {
+                      // Reject old draft if exists
+                      const oldPlan = await getLatestPlan(projectId);
+                      if (oldPlan && oldPlan.status === 'draft') {
+                        await updatePlanStatus(oldPlan.id, 'rejected');
+                      }
+                      await buildPlan(projectId, planData.phases);
+                      console.log(`[Planner] Plan created for project ${projectId} (${planData.phases.length} phases)`);
+                    }
+                  } catch (parseErr) {
+                    console.error('[Planner] Failed to parse plan-json:', parseErr);
+                  }
+                }
 
-      // fullStream ile tüm event'leri dinle (error dahil)
-      for await (const part of result.fullStream) {
-        if (part.type === 'text-delta') {
-          fullResponse += part.text;
-          await stream.writeSSE({
-            event: 'text-delta',
-            data: JSON.stringify({ text: part.text }),
-          });
-        } else if (part.type === 'error') {
-          const err = part.error;
-          let errMsg = 'Unknown AI error';
-          if (err instanceof Error) {
-            errMsg = err.message;
-          } else if (typeof err === 'object' && err !== null) {
-            // OpenAI SDK error format: { error: { message, type, code } }
-            const obj = err as Record<string, unknown>;
-            if (obj.error && typeof obj.error === 'object') {
-              const inner = obj.error as Record<string, unknown>;
-              errMsg = (inner.message as string) || JSON.stringify(inner);
-            } else if (obj.message) {
-              errMsg = obj.message as string;
-            } else {
-              errMsg = JSON.stringify(err);
-            }
-          } else {
-            errMsg = String(err);
-          }
-          throw new Error(errMsg);
-        }
-      }
+                // Persist assistant response (without the plan-json block for clean display)
+                if (fullText) {
+                  await insertChatMessage({ projectId, role: 'assistant', content: fullText });
+                }
 
-      // Persist assistant response
-      if (fullResponse) {
-        await insertChatMessage({ projectId, role: 'assistant', content: fullResponse });
-      }
+                await stream.writeSSE({
+                  event: 'done',
+                  data: JSON.stringify({ message: 'Stream completed' }),
+                });
+                resolveStream();
+              } catch (err) {
+                rejectStream(err);
+              }
+            },
+            onError: (error) => {
+              rejectStream(error);
+            },
+          },
+        );
 
-      await stream.writeSSE({
-        event: 'done',
-        data: JSON.stringify({ message: 'Stream completed' }),
+        // Clean up on stream abort
+        stream.onAbort(() => {
+          cancel();
+        });
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -2166,6 +2185,21 @@ studio.post('/projects/:id/pipeline/resume', async (c) => {
   }
 });
 
+// POST /projects/:id/pipeline/retry — failed pipeline'ı yeniden başlatır
+studio.post('/projects/:id/pipeline/retry', async (c) => {
+  const projectId = c.req.param('id');
+  const project = await getProject(projectId);
+  if (!project) return c.json({ error: 'Project not found' }, 404);
+
+  try {
+    await pipelineEngine.retryFailedPipeline(projectId);
+    return c.json({ success: true, message: 'Failed pipeline yeniden başlatıldı' });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Pipeline retry başarısız';
+    return c.json({ error: msg }, 400);
+  }
+});
+
 // POST /projects/:id/pipeline/advance — manuel olarak bir sonraki aşamaya geçer (test amaçlı)
 studio.post('/projects/:id/pipeline/advance', async (c) => {
   const projectId = c.req.param('id');
@@ -2333,7 +2367,7 @@ studio.post('/projects/:id/app/start', async (c) => {
 
   try {
     const result = await startApp(projectId, project.repoPath, (msg) => {
-      eventBus.emit({ projectId, type: 'agent:output', payload: { output: msg } });
+      eventBus.emitTransient({ projectId, type: 'agent:output', payload: { output: msg } });
     });
     return c.json({ ok: true, ...result });
   } catch (err) {
@@ -2367,83 +2401,7 @@ studio.get('/projects/:id/app/config', async (c) => {
   return c.json(config ?? { services: [], preview: '' });
 });
 
-// ---- Worker endpoints (called by agent containers) -------------------------
-
-import { generateText as workerGenerateText, stepCountIs as workerStepCountIs } from 'ai';
-import { getAIModel as workerGetAIModel, getAIModelInfo as workerGetAIModelInfo, calculateCost as workerCalculateCost } from './ai-provider-factory.js';
-import { containerPool } from './container-pool.js';
-
-// POST /worker/generate — AI text generation for containerized agents
-studio.post('/worker/generate', async (c) => {
-  const body = (await c.req.json()) as {
-    projectId: string;
-    agentId: string;
-    taskId: string;
-    prompt: string;
-    systemPrompt?: string;
-    isFollowUp?: boolean;
-  };
-
-  try {
-    const { model, modelName, providerType } = await workerGetAIModelInfo();
-    const { text, usage } = await workerGenerateText({
-      model,
-      system: body.systemPrompt || 'You are a software development agent. Complete the task precisely.',
-      prompt: body.prompt,
-      maxRetries: 3,
-    });
-
-    // Record token usage
-    if (usage) {
-      const inputTokens = usage.inputTokens ?? 0;
-      const outputTokens = usage.outputTokens ?? 0;
-      const costUsd = workerCalculateCost(modelName, inputTokens, outputTokens);
-      await recordTokenUsage({
-        projectId: body.projectId,
-        taskId: body.taskId,
-        agentId: body.agentId,
-        model: modelName,
-        provider: providerType,
-        inputTokens,
-        outputTokens,
-        totalTokens: inputTokens + outputTokens,
-        costUsd,
-      });
-    }
-
-    return c.json({ text });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'AI generation failed';
-    return c.json({ error: msg }, 500);
-  }
-});
-
-// POST /worker/status — agent container status reports
-studio.post('/worker/status', async (c) => {
-  const body = (await c.req.json()) as {
-    projectId: string;
-    agentId: string;
-    taskId?: string;
-    status: string;
-  };
-
-  eventBus.emit({
-    projectId: body.projectId,
-    type: 'agent:output',
-    agentId: body.agentId,
-    taskId: body.taskId,
-    payload: { output: `[container] Status: ${body.status}` },
-  });
-
-  return c.json({ ok: true });
-});
-
-// ---- Container Pool status ------------------------------------------------
-
-studio.get('/pool/status', async (c) => {
-  const status = containerPool.getStatus();
-  return c.json(status);
-});
+// (Worker/container endpoints removed — all execution is now CLI-only)
 
 // ---- Agent Dependencies (v2 org structure) --------------------------------
 

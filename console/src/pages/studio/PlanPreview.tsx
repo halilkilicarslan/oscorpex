@@ -175,6 +175,8 @@ function CostEstimatePanel({ plan, estimate }: { plan: ProjectPlan; estimate: Pl
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [activeTab, setActiveTab] = useState<'phase' | 'agent'>('phase');
 
+  if (!estimate || estimate.estimatedCost == null) return null;
+
   const costColor = getCostColor(estimate.estimatedCost);
   const costBg = getCostBgColor(estimate.estimatedCost);
   const isHighCost = estimate.estimatedCost >= 1.0;
@@ -225,7 +227,7 @@ function CostEstimatePanel({ plan, estimate }: { plan: ProjectPlan; estimate: Pl
             {formatTokens(estimate.breakdown.inputTokens)} tok
           </span>
           <span className="text-[10px] text-[#525252]">·</span>
-          <span className="text-[10px] text-[#525252]">${estimate.breakdown.inputCost.toFixed(4)}</span>
+          <span className="text-[10px] text-[#525252]">${(estimate.breakdown?.inputCost ?? 0).toFixed(4)}</span>
         </div>
         <div className="w-px h-3 bg-[#262626]" />
         <div className="flex items-center gap-1.5">
@@ -234,7 +236,7 @@ function CostEstimatePanel({ plan, estimate }: { plan: ProjectPlan; estimate: Pl
             {formatTokens(estimate.breakdown.outputTokens)} tok
           </span>
           <span className="text-[10px] text-[#525252]">·</span>
-          <span className="text-[10px] text-[#525252]">${estimate.breakdown.outputCost.toFixed(4)}</span>
+          <span className="text-[10px] text-[#525252]">${(estimate.breakdown?.outputCost ?? 0).toFixed(4)}</span>
         </div>
       </div>
 
@@ -280,7 +282,7 @@ function CostEstimatePanel({ plan, estimate }: { plan: ProjectPlan; estimate: Pl
                     <span className="text-[10px] text-[#525252]">{row.taskCount}t</span>
                     <span className="text-[10px] text-[#525252]">{formatTokens(row.tokens)} tok</span>
                     <span className="text-[10px] font-semibold" style={{ color: getCostColor(row.cost) }}>
-                      ${row.cost.toFixed(4)}
+                      ${(row.cost ?? 0).toFixed(4)}
                     </span>
                   </div>
                 </div>
@@ -299,7 +301,7 @@ function CostEstimatePanel({ plan, estimate }: { plan: ProjectPlan; estimate: Pl
                     <span className="text-[10px] text-[#525252]">{row.taskCount}t</span>
                     <span className="text-[10px] text-[#525252]">{formatTokens(row.tokens)} tok</span>
                     <span className="text-[10px] font-semibold" style={{ color: getCostColor(row.cost) }}>
-                      ${row.cost.toFixed(4)}
+                      ${(row.cost ?? 0).toFixed(4)}
                     </span>
                   </div>
                 </div>

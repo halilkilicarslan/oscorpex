@@ -62,7 +62,7 @@ function appendLine(record: AgentProcessRecord, line: string): void {
   }
 
   // Proje event bus'ına da yayımla (mevcut task log akışıyla uyum için)
-  eventBus.emit({
+  eventBus.emitTransient({
     projectId: record.projectId,
     type: 'agent:output',
     agentId: record.agentId,

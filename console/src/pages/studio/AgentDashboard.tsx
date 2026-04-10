@@ -38,6 +38,7 @@ import {
   type PoolStatus,
   roleLabel,
 } from '../../lib/studio-api';
+import AgentAvatarImg from '../../components/AgentAvatar';
 
 // ---------------------------------------------------------------------------
 // Yardımcı fonksiyonlar
@@ -93,8 +94,16 @@ function StatCard({ label, value, sub, icon, accent = '#22c55e' }: StatCardProps
 // Bar Chart (CSS tabanlı)
 // ---------------------------------------------------------------------------
 
+interface BarChartItem {
+  label: string;
+  value: number;
+  color: string;
+  avatar?: string;
+  role?: string;
+}
+
 interface BarChartProps {
-  items: { label: string; value: number; color: string }[];
+  items: BarChartItem[];
   maxValue: number;
 }
 
@@ -108,12 +117,20 @@ function BarChart({ items, maxValue }: BarChartProps) {
   }
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-3">
       {items.map((item) => {
         const pct = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
         return (
           <div key={item.label} className="flex items-center gap-3">
-            <span className="text-[11px] text-[#737373] w-20 truncate shrink-0">{item.label}</span>
+            <div className="flex items-center gap-2 w-36 shrink-0">
+              <AgentAvatarImg avatar={item.avatar ?? ''} name={item.label} size="xs" />
+              <div className="min-w-0">
+                <p className="text-[11px] text-[#a3a3a3] font-medium truncate">{item.label}</p>
+                {item.role && (
+                  <p className="text-[9px] text-[#525252] truncate">{roleLabel(item.role)}</p>
+                )}
+              </div>
+            </div>
             <div className="flex-1 bg-[#1a1a1a] rounded-full h-2 overflow-hidden">
               <div
                 className="h-2 rounded-full transition-all duration-500"
@@ -187,15 +204,12 @@ function AgentRow({ agent }: AgentRowProps) {
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1a1a1a] last:border-0 hover:bg-[#0f0f0f] transition-colors">
-      {/* Renk noktası + ajan adı */}
-      <div className="flex items-center gap-2 w-36 shrink-0">
-        <div
-          className="w-2.5 h-2.5 rounded-full shrink-0"
-          style={{ backgroundColor: agent.color }}
-        />
+      {/* Avatar + ajan adı + rol */}
+      <div className="flex items-center gap-2.5 w-44 shrink-0">
+        <AgentAvatarImg avatar={agent.avatar} name={agent.agentName} size="sm" />
         <div className="min-w-0">
           <p className="text-[12px] font-medium text-[#fafafa] truncate">{agent.agentName}</p>
-          <p className="text-[10px] text-[#525252]">{roleLabel(agent.role)}</p>
+          <p className="text-[10px] text-[#525252] truncate">{roleLabel(agent.role)}</p>
         </div>
       </div>
 
@@ -358,11 +372,16 @@ export default function AgentDashboard({ projectId }: Props) {
   }
 
   // Bar chart icin ajan gorev verileri
-  const barItems = (overview?.tasksPerAgent ?? []).map((a) => ({
-    label: a.agentName,
-    value: a.total,
-    color: agents.find((ag) => ag.agentId === a.agentId)?.color ?? '#22c55e',
-  }));
+  const barItems = (overview?.tasksPerAgent ?? []).map((a) => {
+    const ag = agents.find((ag) => ag.agentId === a.agentId);
+    return {
+      label: a.agentName,
+      value: a.total,
+      color: ag?.color ?? '#22c55e',
+      avatar: ag?.avatar,
+      role: ag?.role,
+    };
+  });
   const maxBarVal = Math.max(1, ...barItems.map((b) => b.value));
 
   const completionRate =
@@ -507,8 +526,8 @@ export default function AgentDashboard({ projectId }: Props) {
             </span>
           </div>
           <div className="flex items-center gap-3 px-4 py-2 bg-[#0d0d0d]">
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-32 shrink-0">Ajan</span>
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-32 shrink-0">Model</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-48 shrink-0">Ajan</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-28 shrink-0">Model</span>
             <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Gorev</span>
             <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Input</span>
             <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Output</span>
@@ -520,10 +539,18 @@ export default function AgentDashboard({ projectId }: Props) {
               key={`${entry.agentId}-${entry.model}-${i}`}
               className="flex items-center gap-3 px-4 py-2.5 border-t border-[#1a1a1a] hover:bg-[#141414] transition-colors"
             >
-              <span className="text-[11px] text-[#a3a3a3] w-32 truncate shrink-0">
-                {entry.agentName ?? entry.agentId.slice(0, 8)}
-              </span>
-              <span className="text-[11px] text-[#525252] w-32 truncate shrink-0 font-mono">{entry.model}</span>
+              <div className="flex items-center gap-2 w-48 shrink-0">
+                <AgentAvatarImg avatar={entry.agentAvatar ?? ''} name={entry.agentName ?? '?'} size="xs" />
+                <div className="min-w-0">
+                  <p className="text-[11px] text-[#a3a3a3] font-medium truncate">
+                    {entry.agentName ?? entry.agentId.slice(0, 8)}
+                  </p>
+                  {entry.agentRole && (
+                    <p className="text-[9px] text-[#525252] truncate">{roleLabel(entry.agentRole)}</p>
+                  )}
+                </div>
+              </div>
+              <span className="text-[11px] text-[#525252] w-28 truncate shrink-0 font-mono">{entry.model}</span>
               <span className="text-[11px] text-[#a3a3a3] w-14 text-center">{entry.taskCount}</span>
               <span className="text-[11px] text-[#525252] w-20 text-right font-mono">
                 {(entry.inputTokens / 1000).toFixed(1)}K
@@ -712,7 +739,7 @@ export default function AgentDashboard({ projectId }: Props) {
           <div>
             {/* Tablo baslik satiri */}
             <div className="flex items-center gap-3 px-4 py-2 bg-[#0d0d0d]">
-              <span className="text-[10px] text-[#525252] uppercase tracking-wider w-36 shrink-0">Ajan</span>
+              <span className="text-[10px] text-[#525252] uppercase tracking-wider w-44 shrink-0">Ajan</span>
               <div className="flex gap-4">
                 <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Atanan</span>
                 <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Biten</span>

@@ -5,6 +5,13 @@ import AgentDashboard from '../pages/studio/AgentDashboard';
 import * as studioApi from '../lib/studio-api';
 import type { ProjectAnalytics, AgentAnalytics, ActivityTimeline } from '../lib/studio-api';
 
+// AgentAvatar bileşenini mockla
+vi.mock('../components/AgentAvatar', () => ({
+  default: ({ name }: { avatar: string; name: string; size?: string }) => (
+    <span data-testid="agent-avatar">{name}</span>
+  ),
+}));
+
 // studio-api modulunu mockla
 vi.mock('../lib/studio-api', () => ({
   fetchProjectAnalytics: vi.fn(),
@@ -41,6 +48,7 @@ const ORNEK_AJAN_ANALIZLERI: AgentAnalytics[] = [
     agentId: 'agent-1',
     agentName: 'Frontend Ajan',
     role: 'frontend',
+    avatar: '',
     color: '#22c55e',
     tasksAssigned: 10,
     tasksCompleted: 8,
@@ -55,6 +63,7 @@ const ORNEK_AJAN_ANALIZLERI: AgentAnalytics[] = [
     agentId: 'agent-2',
     agentName: 'Backend Ajan',
     role: 'backend',
+    avatar: '',
     color: '#3b82f6',
     tasksAssigned: 14,
     tasksCompleted: 10,
@@ -249,8 +258,8 @@ describe('AgentDashboard — ajan performans tablosu', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Frontend')).toBeInTheDocument();
-      expect(screen.getByText('Backend')).toBeInTheDocument();
+      expect(screen.getAllByText('Frontend').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Backend').length).toBeGreaterThanOrEqual(1);
     });
   });
 
