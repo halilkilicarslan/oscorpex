@@ -3,7 +3,7 @@
 ## Stack
 - Runtime: Node.js + tsx
 - Backend: Hono (via VoltAgent server-hono), port 3141
-- Database: better-sqlite3 (WAL, FK), 16 tables
+- Database: PostgreSQL (pg) (WAL, FK), 16 tables
 - AI Execution: CLI-only (Claude CLI `executeWithCLI` / `streamWithCLI`) — no AI SDK in execution path
 - Frontend: React 18 + Vite (port 5173) + Tailwind CSS
 - Terminal: @xterm/xterm v6 + addon-fit
