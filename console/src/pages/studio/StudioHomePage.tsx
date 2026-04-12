@@ -711,7 +711,7 @@ export default function StudioHomePage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-[#fafafa]">Orenda</h1>
+          <h1 className="text-xl font-semibold text-[#fafafa]">Oscorpex</h1>
           <p className="text-sm text-[#737373] mt-1">
             Describe your idea, let AI agents build it
           </p>

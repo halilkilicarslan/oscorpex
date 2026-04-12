@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Mesaj Merkezi (Message Center) Bileşeni
+// Oscorpex — Mesaj Merkezi (Message Center) Bileşeni
 // Ajanlararası mesajlaşmayı yönetir: gelen kutusu, thread, mesaj gönderme
 // ---------------------------------------------------------------------------
 

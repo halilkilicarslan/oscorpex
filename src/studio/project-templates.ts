@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Project Templates
+// Oscorpex — Project Templates
 // Pre-defined project scaffolding templates (Next.js, Express API, etc.)
 // Creates initial file structure + package.json + config files in repo.
 // ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "My App",
-  description: "Built with Orenda",
+  description: "Built with Oscorpex",
 };
 
 export default function RootLayout({
@@ -108,7 +108,7 @@ export default function RootLayout({
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24">
       <h1 className="text-4xl font-bold">Welcome to My App</h1>
-      <p className="mt-4 text-lg text-gray-600">Built with Orenda</p>
+      <p className="mt-4 text-lg text-gray-600">Built with Oscorpex</p>
     </main>
   );
 }
@@ -321,7 +321,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
         <h1 className="text-4xl font-bold text-gray-900">My React App</h1>
-        <p className="mt-4 text-lg text-gray-600">Built with Orenda</p>
+        <p className="mt-4 text-lg text-gray-600">Built with Oscorpex</p>
       </div>
     </div>
   );

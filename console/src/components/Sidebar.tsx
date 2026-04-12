@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  Zap,
+  Orbit,
   LayoutGrid,
   BarChart3,
   Activity,
@@ -68,7 +68,7 @@ const sections: NavSection[] = [
     ],
   },
   {
-    title: 'ORENDA',
+    title: 'OSCORPEX',
     items: [
       { to: '/studio', label: 'Projects', icon: <Code2 size={18} />, badge: 'New' },
       { to: '/studio/teams', label: 'Team Builder', icon: <Users size={18} /> },
@@ -77,7 +77,7 @@ const sections: NavSection[] = [
   },
 ];
 
-const SIDEBAR_STORAGE_KEY = 'orenda-sidebar-collapsed';
+const SIDEBAR_STORAGE_KEY = 'oscorpex-sidebar-collapsed';
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
@@ -107,11 +107,11 @@ export default function Sidebar() {
       <div className="flex items-center justify-between px-3 py-4 border-b border-[#262626]">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-[#22c55e]/10 flex items-center justify-center shrink-0">
-            <Zap size={18} className="text-[#22c55e]" />
+            <Orbit size={18} className="text-[#22c55e]" />
           </div>
           {!collapsed && (
             <span className="text-[#fafafa] font-semibold text-sm tracking-tight select-none">
-              Orenda
+              Oscorpex
             </span>
           )}
         </div>

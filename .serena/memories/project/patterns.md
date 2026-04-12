@@ -1,4 +1,4 @@
-# Orenda — Patterns & Gotchas
+# Oscorpex — Patterns & Gotchas
 
 ## Hono
 - Routes at /api/studio, mounted via `app.route('/api/studio', studioRoutes)`

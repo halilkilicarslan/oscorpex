@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Hono API Routes
+// Oscorpex — Hono API Routes
 // ---------------------------------------------------------------------------
 
 import { Hono } from 'hono';
@@ -3064,7 +3064,7 @@ studio.post('/projects/:id/webhooks/:webhookId/test', async (c) => {
   // Test payload — gerçek event'leri simüle eder
   try {
     await sendWebhookNotification(projectId, 'test', {
-      message: 'Bu bir test bildirimidir — Orenda',
+      message: 'Bu bir test bildirimidir — Oscorpex',
       projectName: project.name,
       webhookName: webhook.name,
       webhookType: webhook.type,

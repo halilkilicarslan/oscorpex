@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Agent Log Viewer
+// Oscorpex — Agent Log Viewer
 // Real-time log streaming from agent containers / virtual processes
 // ---------------------------------------------------------------------------
 

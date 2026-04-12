@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Agent Dashboard (Metrikler ve Analizler)
+// Oscorpex — Agent Dashboard (Metrikler ve Analizler)
 // ---------------------------------------------------------------------------
 
 import { useEffect, useState, useCallback } from 'react';

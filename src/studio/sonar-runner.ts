@@ -1,5 +1,5 @@
 /**
- * SonarQube / SonarCloud integration for Orenda.
+ * SonarQube / SonarCloud integration for Oscorpex.
  *
  * - initSonarConfig(repoPath, projectKey) — scaffolds sonar-project.properties
  * - runSonarScan(repoPath) — runs sonar-scanner CLI

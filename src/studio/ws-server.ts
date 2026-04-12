@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Standalone WebSocket HTTP Server
+// Oscorpex — Standalone WebSocket HTTP Server
 //
 // Ana Hono sunucusu ile aynı portu paylaşmak mümkün olmadığından
 // WebSocket bağlantıları için bağımsız bir HTTP sunucusu açılır.

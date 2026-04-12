@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Container Manager
+// Oscorpex — Container Manager
 // Docker container operations for agent runtimes
 // ---------------------------------------------------------------------------
 

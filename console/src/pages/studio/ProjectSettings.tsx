@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Project Settings (Integration Widgets)
+// Oscorpex — Project Settings (Integration Widgets)
 // ---------------------------------------------------------------------------
 
 import { useEffect, useState, useCallback } from 'react';

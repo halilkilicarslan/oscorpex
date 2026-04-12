@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Shared model option lists
+// Oscorpex — Shared model option lists
 // ---------------------------------------------------------------------------
 
 export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom';

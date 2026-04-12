@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Event Bus (in-process pub/sub)
+// Oscorpex — Event Bus (in-process pub/sub)
 // ---------------------------------------------------------------------------
 
 import { insertEvent } from './db.js';

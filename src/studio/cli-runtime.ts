@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Claude CLI Runtime
+// Oscorpex — Claude CLI Runtime
 // Runs agents as Claude CLI subprocesses with stream-json output.
 // Provides full visibility: tool calls, file edits, bash commands, thinking.
 // ---------------------------------------------------------------------------

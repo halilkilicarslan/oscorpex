@@ -1,4 +1,4 @@
-# Orenda — Architecture
+# Oscorpex — Architecture
 
 ## Stack
 - Runtime: Node.js + tsx

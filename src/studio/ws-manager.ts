@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — WebSocket Manager
+// Oscorpex — WebSocket Manager
 //
 // Mimari:
 //   - Tek bir WebSocketServer instance'ı (port paylaşımı için `noServer: true`)
