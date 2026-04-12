@@ -218,18 +218,24 @@ CREATE TABLE IF NOT EXISTS agent_runs (
 );
 
 CREATE TABLE IF NOT EXISTS token_usage (
-  id              TEXT PRIMARY KEY,
-  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  task_id         TEXT NOT NULL,
-  agent_id        TEXT NOT NULL,
-  model           TEXT NOT NULL,
-  provider        TEXT NOT NULL DEFAULT '',
-  input_tokens    INTEGER NOT NULL DEFAULT 0,
-  output_tokens   INTEGER NOT NULL DEFAULT 0,
-  total_tokens    INTEGER NOT NULL DEFAULT 0,
-  cost_usd        REAL NOT NULL DEFAULT 0,
-  created_at      TEXT NOT NULL
+  id                     TEXT PRIMARY KEY,
+  project_id             TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  task_id                TEXT NOT NULL,
+  agent_id               TEXT NOT NULL,
+  model                  TEXT NOT NULL,
+  provider               TEXT NOT NULL DEFAULT '',
+  input_tokens           INTEGER NOT NULL DEFAULT 0,
+  output_tokens          INTEGER NOT NULL DEFAULT 0,
+  total_tokens           INTEGER NOT NULL DEFAULT 0,
+  cost_usd               REAL NOT NULL DEFAULT 0,
+  cache_creation_tokens  INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens      INTEGER NOT NULL DEFAULT 0,
+  created_at             TEXT NOT NULL
 );
+
+-- Migration: add cache token columns to existing token_usage tables
+ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS cache_creation_tokens INTEGER DEFAULT 0;
+ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS cache_read_tokens INTEGER DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS sonar_scans (
   id              TEXT PRIMARY KEY,

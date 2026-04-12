@@ -85,6 +85,8 @@ export interface CLIExecutionResult {
   logs: string[];
   inputTokens: number;
   outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
   totalCostUsd: number;
   durationMs: number;
   model: string;
@@ -248,6 +250,8 @@ export function executeWithCLI(opts: {
       logs: [],
       inputTokens: 0,
       outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
       totalCostUsd: 0,
       durationMs: 0,
       model: '',
@@ -377,6 +381,8 @@ function processStreamEvent(
       if (msg.usage) {
         result.inputTokens += msg.usage.input_tokens ?? 0;
         result.outputTokens += msg.usage.output_tokens ?? 0;
+        result.cacheCreationTokens += msg.usage.cache_creation_input_tokens ?? 0;
+        result.cacheReadTokens += msg.usage.cache_read_input_tokens ?? 0;
       }
 
       for (const block of msg.content) {
@@ -448,6 +454,8 @@ function processStreamEvent(
           result.model = modelName;
           result.inputTokens = usage.inputTokens ?? 0;
           result.outputTokens = usage.outputTokens ?? 0;
+          result.cacheCreationTokens = usage.cacheCreationInputTokens ?? 0;
+          result.cacheReadTokens = usage.cacheReadInputTokens ?? 0;
           result.totalCostUsd = usage.costUSD ?? result.totalCostUsd;
         }
       }

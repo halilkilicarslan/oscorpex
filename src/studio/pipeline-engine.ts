@@ -24,11 +24,14 @@ import {
   listPhases,
   listAgentDependencies,
   updateTask,
+  getProjectSetting,
 } from './db.js';
 import { eventBus } from './event-bus.js';
 import { taskEngine } from './task-engine.js';
 import { gitManager } from './git-manager.js';
 import { generateReadme } from './docs-generator.js';
+import { GitHubIntegration } from './github-integration.js';
+import { decrypt, isEncrypted } from './secret-vault.js';
 import type {
   PipelineStage,
   PipelineState,
@@ -601,6 +604,51 @@ class PipelineEngine {
       console.log(`[pipeline-engine] ${msg}`);
     }).catch((err) => {
       console.error('[pipeline-engine] README oluşturma hatası:', err);
+    });
+
+    // Auto PR: GitHub yapılandırılmışsa ve auto_pr aktifse PR oluştur — fire-and-forget
+    this.tryCreatePR(projectId).catch((err) => {
+      console.warn('[pipeline-engine] Auto PR oluşturulamadı:', err);
+    });
+  }
+
+  /**
+   * Pipeline tamamlandığında otomatik PR oluşturma.
+   * GitHub token ve auto_pr ayarı kontrol edilir.
+   */
+  private async tryCreatePR(projectId: string): Promise<void> {
+    const autoPR = await getProjectSetting(projectId, 'github', 'auto_pr');
+    if (autoPR !== 'true') return;
+
+    const tokenEncrypted = await getProjectSetting(projectId, 'github', 'token');
+    if (!tokenEncrypted) return;
+
+    const project = await getProject(projectId);
+    if (!project?.repoPath) return;
+
+    const repoInfo = GitHubIntegration.getRepoInfo(project.repoPath);
+    if (!repoInfo) return;
+
+    const token = isEncrypted(tokenEncrypted) ? decrypt(tokenEncrypted) : tokenEncrypted;
+    const currentBranch = await gitManager.getCurrentBranch(project.repoPath);
+    if (!currentBranch || currentBranch === 'main' || currentBranch === 'master') return;
+
+    const gh = new GitHubIntegration(token);
+    const pr = await gh.createPR({
+      owner: repoInfo.owner,
+      repo: repoInfo.repo,
+      head: currentBranch,
+      base: 'main',
+      title: `[Oscorpex] ${project.name} — Pipeline Completed`,
+      body: `Automated PR from Oscorpex pipeline.\n\nProject: ${project.name}\nBranch: ${currentBranch}`,
+    });
+
+    console.log(`[pipeline-engine] PR oluşturuldu: ${pr.url}`);
+
+    eventBus.emit({
+      projectId,
+      type: 'git:pr-created' as any,
+      payload: { prNumber: pr.number, prUrl: pr.url, branch: currentBranch },
     });
   }
 

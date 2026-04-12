@@ -8,6 +8,7 @@
 
 import { query, queryOne, execute, getPool, closePool } from './pg.js';
 import { randomUUID } from 'node:crypto';
+import { encrypt, decrypt, isEncrypted } from './secret-vault.js';
 import type {
   Project,
   ProjectStatus,
@@ -508,6 +509,8 @@ export async function createProvider(
   const existingCount = parseInt(countRow?.c ?? '0', 10);
   const isDefault = existingCount === 0 ? 1 : 0;
 
+  const encryptedKey = data.apiKey ? encrypt(data.apiKey) : '';
+
   await execute(`
     INSERT INTO ai_providers (id, name, type, api_key, base_url, model, is_default, is_active, created_at, updated_at)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -515,7 +518,7 @@ export async function createProvider(
     id,
     data.name,
     data.type,
-    data.apiKey,
+    encryptedKey,
     data.baseUrl,
     data.model,
     isDefault,
@@ -547,7 +550,7 @@ export async function updateProvider(
 
   if (data.name !== undefined) { fields.push(`name = $${idx++}`); values.push(data.name); }
   if (data.type !== undefined) { fields.push(`type = $${idx++}`); values.push(data.type); }
-  if (data.apiKey !== undefined) { fields.push(`api_key = $${idx++}`); values.push(data.apiKey); }
+  if (data.apiKey !== undefined) { const encryptedKey = encrypt(data.apiKey); fields.push(`api_key = $${idx++}`); values.push(encryptedKey); }
   if (data.baseUrl !== undefined) { fields.push(`base_url = $${idx++}`); values.push(data.baseUrl); }
   if (data.model !== undefined) { fields.push(`model = $${idx++}`); values.push(data.model); }
   if (data.isActive !== undefined) { fields.push(`is_active = $${idx++}`); values.push(data.isActive ? 1 : 0); }
@@ -602,7 +605,10 @@ export async function getDefaultProvider(): Promise<AIProvider | undefined> {
 /** Returns the raw (unmasked) API key for a provider — for internal backend use only. */
 export async function getRawProviderApiKey(id: string): Promise<string> {
   const row = await queryOne<any>('SELECT api_key FROM ai_providers WHERE id = $1', [id]);
-  return row?.api_key ?? '';
+  const raw = row?.api_key ?? '';
+  if (!raw) return '';
+  // Geriye dönük uyumluluk: eski plaintext key'leri olduğu gibi döndür
+  return isEncrypted(raw) ? decrypt(raw) : raw;
 }
 
 // ---------------------------------------------------------------------------
@@ -889,6 +895,52 @@ Your role:
 4. Set up monitoring, logging, and alerting systems
 5. Manage environment configurations (dev, staging, production)
 6. Ensure security best practices in infrastructure`,
+      isPreset: true,
+    },
+    // ---- Security (v2.5) ----
+    {
+      name: 'Guardian Shield',
+      role: 'security-reviewer',
+      avatar: `${BASE}/guardian-shield`,
+      gender: 'male' as const,
+      personality: 'Vigilant, thorough, zero-trust mindset',
+      model: 'claude-sonnet-4-6',
+      cliTool: 'claude-code',
+      skills: ['security-audit', 'owasp', 'dependency-scanning', 'code-review', 'penetration-testing'],
+      systemPrompt: `You are Guardian Shield, a senior Security Reviewer for Oscorpex.
+Your role:
+1. Review code for OWASP Top 10 vulnerabilities (SQL injection, XSS, CSRF, etc.)
+2. Audit authentication and authorization implementations
+3. Check for hardcoded secrets and sensitive data exposure
+4. Review dependency security (known CVEs)
+5. Validate input sanitization and output encoding
+6. Ensure secure communication (TLS, CORS, CSP headers)
+7. Report findings with severity levels and remediation steps
+
+You have READ-ONLY access. Do not modify files — only report security findings.`,
+      isPreset: true,
+    },
+    // ---- Documentation (v2.5) ----
+    {
+      name: 'DocBot Writer',
+      role: 'docs-writer',
+      avatar: `${BASE}/docbot-writer`,
+      gender: 'male' as const,
+      personality: 'Clear, concise, developer-empathetic',
+      model: 'claude-sonnet-4-6',
+      cliTool: 'claude-code',
+      skills: ['technical-writing', 'api-documentation', 'readme', 'jsdoc', 'markdown'],
+      systemPrompt: `You are DocBot Writer, a senior Documentation Agent for Oscorpex.
+Your role:
+1. Generate and update README.md files
+2. Write API documentation with request/response examples
+3. Create JSDoc comments for public functions and classes
+4. Write setup guides and onboarding documentation
+5. Document architecture decisions (ADRs)
+6. Keep CHANGELOG.md up to date
+7. Ensure documentation matches the actual code behavior
+
+Read the code first, then write accurate documentation.`,
       isPreset: true,
     },
   ];
@@ -1709,13 +1761,17 @@ export async function recordTokenUsage(data: {
   outputTokens: number;
   totalTokens: number;
   costUsd: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
 }): Promise<TokenUsage> {
   const id = randomUUID();
   const createdAt = new Date().toISOString();
+  const cacheCreationTokens = data.cacheCreationTokens ?? 0;
+  const cacheReadTokens = data.cacheReadTokens ?? 0;
   await execute(`
-    INSERT INTO token_usage (id, project_id, task_id, agent_id, model, provider, input_tokens, output_tokens, total_tokens, cost_usd, created_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-  `, [id, data.projectId, data.taskId, data.agentId, data.model, data.provider, data.inputTokens, data.outputTokens, data.totalTokens, data.costUsd, createdAt]);
+    INSERT INTO token_usage (id, project_id, task_id, agent_id, model, provider, input_tokens, output_tokens, total_tokens, cost_usd, cache_creation_tokens, cache_read_tokens, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+  `, [id, data.projectId, data.taskId, data.agentId, data.model, data.provider, data.inputTokens, data.outputTokens, data.totalTokens, data.costUsd, cacheCreationTokens, cacheReadTokens, createdAt]);
 
   return {
     id,
@@ -1728,6 +1784,8 @@ export async function recordTokenUsage(data: {
     outputTokens: data.outputTokens,
     totalTokens: data.totalTokens,
     costUsd: data.costUsd,
+    cacheCreationTokens,
+    cacheReadTokens,
     createdAt,
   };
 }
@@ -1739,7 +1797,9 @@ export async function getProjectCostSummary(projectId: string): Promise<ProjectC
       COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
       COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
       COALESCE(SUM(total_tokens), 0) AS total_tokens,
-      COUNT(*) AS task_count
+      COUNT(*) AS task_count,
+      COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens,
+      COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens
     FROM token_usage
     WHERE project_id = $1
   `, [projectId]);
@@ -1750,6 +1810,33 @@ export async function getProjectCostSummary(projectId: string): Promise<ProjectC
     totalOutputTokens: parseInt(row.total_output_tokens, 10),
     totalTokens: parseInt(row.total_tokens, 10),
     taskCount: parseInt(row.task_count, 10),
+    totalCacheCreationTokens: parseInt(row.total_cache_creation_tokens, 10),
+    totalCacheReadTokens: parseInt(row.total_cache_read_tokens, 10),
+  };
+}
+
+export async function getAgentCostSummary(projectId: string, agentId: string): Promise<ProjectCostSummary> {
+  const row = await queryOne<any>(`
+    SELECT
+      COALESCE(SUM(cost_usd), 0) AS total_cost_usd,
+      COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
+      COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+      COALESCE(SUM(total_tokens), 0) AS total_tokens,
+      COUNT(*) AS task_count,
+      COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens,
+      COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens
+    FROM token_usage
+    WHERE project_id = $1 AND agent_id = $2
+  `, [projectId, agentId]);
+
+  return {
+    totalCostUsd: parseFloat(row.total_cost_usd),
+    totalInputTokens: parseInt(row.total_input_tokens, 10),
+    totalOutputTokens: parseInt(row.total_output_tokens, 10),
+    totalTokens: parseInt(row.total_tokens, 10),
+    taskCount: parseInt(row.task_count, 10),
+    totalCacheCreationTokens: parseInt(row.total_cache_creation_tokens, 10),
+    totalCacheReadTokens: parseInt(row.total_cache_read_tokens, 10),
   };
 }
 
@@ -1800,6 +1887,8 @@ export async function listTokenUsage(projectId: string): Promise<TokenUsage[]> {
     outputTokens: parseInt(r.output_tokens, 10),
     totalTokens: parseInt(r.total_tokens, 10),
     costUsd: parseFloat(r.cost_usd),
+    cacheCreationTokens: parseInt(r.cache_creation_tokens ?? 0, 10),
+    cacheReadTokens: parseInt(r.cache_read_tokens ?? 0, 10),
     createdAt: r.created_at,
   }));
 }
