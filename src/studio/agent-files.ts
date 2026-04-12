@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Agent .md file system
+// Oscorpex — Agent .md file system
 // ---------------------------------------------------------------------------
 
 import { mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';

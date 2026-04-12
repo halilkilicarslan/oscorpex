@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Webhook Bildirici
+// Oscorpex — Webhook Bildirici
 // Slack, Discord ve Generic webhook formatlarını destekler.
 // HMAC-SHA256 imzası, exponential backoff retry ve teslimat loglama içerir.
 // ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ function buildSlackPayload(
   const text = buildEventText(eventType, data);
 
   return {
-    text: `*Orenda* — ${title}`,
+    text: `*Oscorpex* — ${title}`,
     attachments: [
       {
         color,
@@ -81,7 +81,7 @@ function buildDiscordPayload(
   return {
     embeds: [
       {
-        title: `Orenda — ${title}`,
+        title: `Oscorpex — ${title}`,
         description,
         color,
         footer: { text: `Proje: ${projectId}` },

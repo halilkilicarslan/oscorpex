@@ -1065,7 +1065,7 @@ export default function TracesPage() {
                 </div>
                 <p className="text-[13px] text-[#a3a3a3] font-medium mb-1">No studio traces yet</p>
                 <p className="text-[11px] text-[#525252] max-w-xs">
-                  Studio traces will appear here when Orenda tasks are executed.
+                  Studio traces will appear here when Oscorpex tasks are executed.
                 </p>
               </div>
             ) : (

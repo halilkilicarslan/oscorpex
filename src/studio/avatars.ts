@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Avatar Collection
+// Oscorpex — Avatar Collection
 // Sourced from https://www.untitledui.com/avatars (free for commercial use)
 // ---------------------------------------------------------------------------
 

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Browser Notifications Hook
+// Oscorpex — Browser Notifications Hook
 //
 // WebSocket event'lerinden task:completed ve task:failed bildirimlerini
 // browser Notification API ile gösterir.

@@ -82,7 +82,7 @@ const codeAssistant = createCodeAssistant();
 const translator = createTranslator();
 const summarizer = createSummarizer();
 
-// Orenda WebSocket sunucusunu başlat (port 3142)
+// Oscorpex WebSocket sunucusunu başlat (port 3142)
 startWSServer();
 
 // Webhook sender — event bus'a abone ol, tüm event tiplerini dinle

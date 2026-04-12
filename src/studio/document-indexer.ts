@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Document Indexer
+// Oscorpex — Document Indexer
 // Indexes documents and project codebases into the vector store for RAG.
 // ---------------------------------------------------------------------------
 

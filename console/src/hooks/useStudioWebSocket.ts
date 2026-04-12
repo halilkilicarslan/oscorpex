@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — WebSocket Hook
+// Oscorpex — WebSocket Hook
 //
 // Kullanım:
 //   const { connectionState, lastEvent, send } = useStudioWebSocket(projectId);

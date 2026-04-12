@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Agent Log Store (Dosya Tabanlı)
+// Oscorpex — Agent Log Store (Dosya Tabanlı)
 // Agent terminal çıktılarını .voltagent/logs/{projectId}/{agentId}.log
 // dosyalarına persist eder. DB'ye yük binmez.
 // ---------------------------------------------------------------------------

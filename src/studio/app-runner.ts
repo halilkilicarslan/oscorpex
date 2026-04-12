@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Universal App Runner
+// Oscorpex — Universal App Runner
 // .studio.json, Docker Compose, ve otomatik dil algılama ile proje çalıştırma.
 //
 // Öncelik sırası:

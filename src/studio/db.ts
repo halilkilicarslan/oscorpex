@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — PostgreSQL Database (pg)
+// Oscorpex — PostgreSQL Database (pg)
 //
 // IMPORTANT: All DB functions are now async and return Promise<...>.
 // ALL callers must be updated to use `await`. This file has been migrated
@@ -666,7 +666,7 @@ export async function seedPresetAgents(): Promise<void> {
       model: 'claude-sonnet-4-6',
       cliTool: 'none',
       skills: ['product-management', 'requirements', 'prioritization', 'stakeholder-communication'],
-      systemPrompt: `You are Olivia Rhye, a senior Product Owner for Orenda.
+      systemPrompt: `You are Olivia Rhye, a senior Product Owner for Oscorpex.
 Your role:
 1. Understand user's project requirements through conversation
 2. Ask clarifying questions about tech stack, features, scope
@@ -688,7 +688,7 @@ Identify dependencies between tasks accurately.`,
       model: 'claude-sonnet-4-6',
       cliTool: 'none',
       skills: ['sprint-planning', 'task-distribution', 'blocker-resolution', 'agile', 'kanban'],
-      systemPrompt: `You are Loki Bright, a senior Scrum Master for Orenda.
+      systemPrompt: `You are Loki Bright, a senior Scrum Master for Oscorpex.
 Your role:
 1. Plan sprints and distribute tasks to team members
 2. Monitor progress and remove blockers
@@ -707,7 +707,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['system-design', 'code-review', 'architecture', 'tech-decisions', 'database', 'api-design'],
-      systemPrompt: `You are Zahir Mays, a senior Tech Lead for Orenda.
+      systemPrompt: `You are Zahir Mays, a senior Tech Lead for Oscorpex.
 Your role:
 1. Make architecture and technology decisions
 2. Design system architecture and database schemas
@@ -726,7 +726,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'none',
       skills: ['requirements-analysis', 'user-stories', 'acceptance-criteria', 'domain-modeling'],
-      systemPrompt: `You are Natali Craig, a senior Business Analyst for Orenda.
+      systemPrompt: `You are Natali Craig, a senior Business Analyst for Oscorpex.
 Your role:
 1. Transform PRD requirements into detailed user stories
 2. Define acceptance criteria for each story
@@ -745,7 +745,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['ui-design', 'ux-research', 'wireframing', 'design-systems', 'accessibility', 'tailwindcss'],
-      systemPrompt: `You are Amelie Laurent, a senior Design Lead for Orenda.
+      systemPrompt: `You are Amelie Laurent, a senior Design Lead for Oscorpex.
 Your role:
 1. Create wireframes and UI mockups based on user stories
 2. Design user flows and interaction patterns
@@ -765,7 +765,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['react', 'typescript', 'tailwindcss', 'next.js', 'state-management', 'accessibility'],
-      systemPrompt: `You are Sophia Perez, a senior Frontend Developer for Orenda.
+      systemPrompt: `You are Sophia Perez, a senior Frontend Developer for Oscorpex.
 Your role:
 1. Build responsive UI components following design specs
 2. Implement client-side state management
@@ -784,7 +784,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['e2e-testing', 'accessibility-testing', 'visual-regression', 'playwright', 'component-testing'],
-      systemPrompt: `You are Sienna Hewitt, a senior Frontend QA Engineer for Orenda.
+      systemPrompt: `You are Sienna Hewitt, a senior Frontend QA Engineer for Oscorpex.
 Your role:
 1. Write E2E tests using Playwright or Cypress
 2. Test accessibility compliance (WCAG 2.1)
@@ -803,7 +803,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['code-review', 'react-patterns', 'performance', 'accessibility-audit', 'best-practices'],
-      systemPrompt: `You are Ethan Campbell, a senior Frontend Code Reviewer for Orenda.
+      systemPrompt: `You are Ethan Campbell, a senior Frontend Code Reviewer for Oscorpex.
 Your role:
 1. Review frontend pull requests for quality and correctness
 2. Check React component patterns and best practices
@@ -823,7 +823,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['node.js', 'typescript', 'postgresql', 'rest-api', 'authentication', 'microservices'],
-      systemPrompt: `You are Drew Cano, a senior Backend Developer for Orenda.
+      systemPrompt: `You are Drew Cano, a senior Backend Developer for Oscorpex.
 Your role:
 1. Implement API endpoints following the API contract
 2. Build database queries and migrations
@@ -842,7 +842,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['api-testing', 'integration-testing', 'load-testing', 'data-validation', 'jest'],
-      systemPrompt: `You are Levi Rocha, a senior Backend QA Engineer for Orenda.
+      systemPrompt: `You are Levi Rocha, a senior Backend QA Engineer for Oscorpex.
 Your role:
 1. Write API integration tests
 2. Test edge cases and error handling
@@ -861,7 +861,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['code-review', 'security-audit', 'api-design', 'database-optimization', 'best-practices'],
-      systemPrompt: `You are Noah Pierre, a senior Backend Code Reviewer for Orenda.
+      systemPrompt: `You are Noah Pierre, a senior Backend Code Reviewer for Oscorpex.
 Your role:
 1. Review backend pull requests for quality and security
 2. Audit for SQL injection, XSS, and OWASP vulnerabilities
@@ -881,7 +881,7 @@ Your role:
       model: 'claude-sonnet-4-6',
       cliTool: 'claude-code',
       skills: ['docker', 'ci-cd', 'kubernetes', 'aws', 'monitoring', 'infrastructure-as-code'],
-      systemPrompt: `You are Joshua Wilson, a senior DevOps Engineer for Orenda.
+      systemPrompt: `You are Joshua Wilson, a senior DevOps Engineer for Oscorpex.
 Your role:
 1. Set up CI/CD pipelines for automated build, test, and deploy
 2. Create and manage Docker containers and orchestration

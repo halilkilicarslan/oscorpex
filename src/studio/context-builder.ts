@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Context Builder
+// Oscorpex — Context Builder
 // Enhances agent task prompts with RAG-retrieved codebase context.
 // ---------------------------------------------------------------------------
 

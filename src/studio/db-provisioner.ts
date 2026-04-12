@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Database Provisioner
+// Oscorpex — Database Provisioner
 // Docker container ile veritabanı servislerini yönetir.
 // PostgreSQL, MySQL, MongoDB, Redis destekler.
 // ---------------------------------------------------------------------------

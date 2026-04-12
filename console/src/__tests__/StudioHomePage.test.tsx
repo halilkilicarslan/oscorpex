@@ -180,7 +180,7 @@ describe('StudioHomePage — header', () => {
     renderSayfa();
 
     await waitFor(() => {
-      expect(screen.getByText('Orenda')).toBeInTheDocument();
+      expect(screen.getByText('Oscorpex')).toBeInTheDocument();
     });
   });
 
@@ -268,7 +268,7 @@ describe('StudioHomePage — proje olusturma modali', () => {
     renderSayfa();
 
     // Sayfanin yuklendigini bekle
-    await waitFor(() => screen.getByRole('heading', { name: 'Orenda' }));
+    await waitFor(() => screen.getByRole('heading', { name: 'Oscorpex' }));
 
     // New Project butonuna tikla — header butonunu secmek icin
     const newProjectBtns = screen.getAllByText('New Project');

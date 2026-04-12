@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Pipeline Execution Engine v2
+// Oscorpex — Pipeline Execution Engine v2
 // DAG tabanlı paralel execution: agent_dependencies'den dependency graph
 // oluşturur, bağımlılıkları karşılanan agent'ları paralel çalıştırır.
 //

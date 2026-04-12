@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Agent Execution Tools
+// Oscorpex — Agent Execution Tools
 // Tools that AI agents can use during task execution to interact with the
 // file system, run commands, and commit changes.
 // ---------------------------------------------------------------------------

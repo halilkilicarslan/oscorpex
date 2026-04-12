@@ -1,4 +1,4 @@
-# Orenda — Status
+# Oscorpex — Status
 
 ## Current: v2.4 — Preview System Fixes + Port Conflict Resolution
 

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Ajan-Arası Mesajlaşma Modülü (Agent-to-Agent Messaging)
+// Oscorpex — Ajan-Arası Mesajlaşma Modülü (Agent-to-Agent Messaging)
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from 'node:crypto';

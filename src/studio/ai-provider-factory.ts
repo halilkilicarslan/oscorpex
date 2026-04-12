@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — AI Model Factory
+// Oscorpex — AI Model Factory
 // Yapılandırılmış provider tablosuna göre doğru AI SDK modelini döndürür.
 // ---------------------------------------------------------------------------
 

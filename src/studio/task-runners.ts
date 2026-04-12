@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Orenda — Special Task Runners
+// Oscorpex — Special Task Runners
 // Integration test ve run-app gibi özel task type'ları için executor'lar.
 // ---------------------------------------------------------------------------
 
