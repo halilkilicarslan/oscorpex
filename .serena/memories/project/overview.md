@@ -3,10 +3,10 @@
 ## Key Facts
 - Language: Turkish responses, pnpm (never npm), don't push unless asked
 - Don't edit AI-generated code: `.voltagent/repos/` altındaki agent kodlarına müdahale etme
-- Backend: port 3141, Hono + better-sqlite3 (WAL), 16 DB tables
+- Backend: port 3141, Hono + PostgreSQL (pg) (WAL), 16 DB tables
 - Frontend: port 5173, React + Vite + Tailwind
 - Execution: CLI-only (Claude CLI) — no AI SDK generateText/streamText in execution path
-- DB path: STUDIO_DB_PATH env var
+- DB path: DATABASE_URL env var
 - Teams: project-scoped via project_agents table (not global agent_configs)
 - Tests: Backend 119 + Frontend 213 = 332 total (Vitest)
 
