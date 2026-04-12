@@ -26,10 +26,13 @@ import type { Task, Project, AgentConfig, TaskOutput } from './types.js';
 import { runIntegrationTest } from './task-runners.js';
 import { startApp } from './app-runner.js';
 import { isClaudeCliAvailable, executeWithCLI, resolveFilePaths } from './cli-runtime.js';
+import { getAdapter } from './cli-adapter.js';
 import { runLintFix } from './lint-runner.js';
 import { updateDocsAfterTask } from './docs-generator.js';
 import { buildRAGContext, formatRAGContext } from './context-builder.js';
 import { persistAgentLog } from './agent-log-store.js';
+import { getDefaultPolicy, buildPolicyPromptSection } from './command-policy.js';
+import { resolveAllowedTools } from './capability-resolver.js';
 
 // ---------------------------------------------------------------------------
 // Timeout configuration
@@ -372,7 +375,7 @@ class ExecutionEngine {
     await taskEngine.assignTask(task.id, agent.id);
     await taskEngine.startTask(task.id);
 
-    const prompt = await this.buildTaskPrompt(task, project);
+    const prompt = await this.buildTaskPrompt(task, project, agent.role);
 
     // Complexity ve proje timeout_multiplier ayarına göre efektif timeout hesapla
     const timeoutMs = await resolveTaskTimeoutMs(projectId, task.complexity, agent.taskTimeout);
@@ -402,14 +405,18 @@ class ExecutionEngine {
         throw new Error(`Project ${projectId} has no repoPath configured`);
       }
 
-      const cliReady = await isClaudeCliAvailable();
-      console.log(`[execution] CLI check: repoPath=${!!project.repoPath}, cliReady=${cliReady}`);
+      // CLI adapter seçimi: agent'ın cliTool ayarına göre
+      const adapter = getAdapter(agent.cliTool ?? 'claude-code');
+      const adapterReady = await adapter.isAvailable();
+      console.log(`[execution] CLI adapter: ${adapter.name}, ready=${adapterReady}`);
 
-      if (!cliReady) {
-        throw new Error('Claude CLI is not available. Install Claude Code CLI to run tasks.');
+      if (!adapterReady) {
+        throw new Error(`CLI adapter "${adapter.name}" is not available. Install it to run tasks.`);
       }
 
-      const cliResult = await executeWithCLI({
+      const allowedTools = await resolveAllowedTools(projectId, agent.id, agent.role);
+
+      const cliResult = await adapter.execute({
         projectId,
         agentId: agent.id,
         agentName: agent.name,
@@ -419,6 +426,7 @@ class ExecutionEngine {
         timeoutMs,
         model: 'sonnet',
         signal: undefined,
+        allowedTools,
       });
 
       const output: TaskOutput = {
@@ -440,6 +448,8 @@ class ExecutionEngine {
           outputTokens: cliResult.outputTokens,
           totalTokens,
           costUsd: cliResult.totalCostUsd,
+          cacheCreationTokens: cliResult.cacheCreationTokens,
+          cacheReadTokens: cliResult.cacheReadTokens,
         });
       }
 
@@ -575,7 +585,7 @@ class ExecutionEngine {
    * the local AI SDK model). Includes full task context so the agent knows
    * exactly what to implement.
    */
-  async buildTaskPrompt(task: Task, project: Project): Promise<string> {
+  async buildTaskPrompt(task: Task, project: Project, agentRole?: string): Promise<string> {
     const techStack =
       project.techStack.length > 0 ? project.techStack.join(', ') : 'Not specified';
 
@@ -696,6 +706,12 @@ class ExecutionEngine {
       `## Output`,
       'After completing all tool calls, provide a brief summary of what you did.',
     );
+
+    // Role bazlı güvenlik politikasını prompt'a ekle
+    if (agentRole) {
+      const policy = getDefaultPolicy(agentRole);
+      lines.push('', buildPolicyPromptSection(policy));
+    }
 
     return lines.join('\n');
   }
@@ -852,7 +868,10 @@ class ExecutionEngine {
     ].join('\n');
 
     try {
-      const cliResult = await executeWithCLI({
+      const reviewTools = await resolveAllowedTools(projectId, reviewer.id, reviewer.role);
+      const reviewAdapter = getAdapter(reviewer.cliTool ?? 'claude-code');
+
+      const cliResult = await reviewAdapter.execute({
         projectId,
         agentId: reviewer.id,
         agentName: reviewer.name,
@@ -861,7 +880,7 @@ class ExecutionEngine {
         systemPrompt: reviewer.systemPrompt || this.defaultSystemPrompt(reviewer),
         timeoutMs: reviewer.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS,
         model: 'sonnet',
-        allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep'],
+        allowedTools: reviewTools,
       });
 
       // Record token usage
@@ -877,6 +896,8 @@ class ExecutionEngine {
           outputTokens: cliResult.outputTokens,
           totalTokens,
           costUsd: cliResult.totalCostUsd,
+          cacheCreationTokens: cliResult.cacheCreationTokens,
+          cacheReadTokens: cliResult.cacheReadTokens,
         });
         termLog(`[review-cost] ${cliResult.model}: ${totalTokens} tokens ($${cliResult.totalCostUsd.toFixed(4)})`);
       }

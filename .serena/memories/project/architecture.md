@@ -30,6 +30,11 @@
 | agent-files.ts | .md file system per agent |
 | routes.ts | 100+ Hono routes at /api/studio (includes preview proxy) |
 | webhook-sender.ts | Webhook delivery for events |
+| capability-resolver.ts | Role-based CLI tool restrictions (resolveAllowedTools) |
+| secret-vault.ts | AES-256-GCM encrypt/decrypt for API keys |
+| command-policy.ts | Prompt-level command restrictions per role |
+| github-integration.ts | Octokit PR creation + repo info |
+| middleware/policy-middleware.ts | Hono budget guard + capability guard |
 
 ## DB Tables (16)
 projects, project_plans, phases, tasks, agent_configs, project_agents,

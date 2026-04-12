@@ -127,7 +127,10 @@ export type AgentRole =
   | 'backend'
   | 'coder'
   | 'qa'
-  | 'reviewer';
+  | 'reviewer'
+  // v2.5 roles
+  | 'security-reviewer'
+  | 'docs-writer';
 
 export type CLITool = 'claude-code' | 'codex' | 'aider' | 'none';
 
@@ -413,6 +416,8 @@ export interface TokenUsage {
   outputTokens: number;
   totalTokens: number;
   costUsd: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
   createdAt: string;
 }
 
@@ -422,6 +427,8 @@ export interface ProjectCostSummary {
   totalOutputTokens: number;
   totalTokens: number;
   taskCount: number;
+  totalCacheCreationTokens: number;
+  totalCacheReadTokens: number;
 }
 
 export interface CostBreakdownEntry {
@@ -478,8 +485,8 @@ export interface AgentDependency {
 
 // ---- Agent Capabilities (file scope restrictions) --------------------------
 
-export type CapabilityScopeType = 'path' | 'filetype' | 'module';
-export type CapabilityPermission = 'read' | 'write' | 'readwrite';
+export type CapabilityScopeType = 'path' | 'filetype' | 'module' | 'tool';
+export type CapabilityPermission = 'read' | 'write' | 'readwrite' | 'allow';
 
 export interface AgentCapability {
   id: string;

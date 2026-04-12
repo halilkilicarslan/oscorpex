@@ -71,9 +71,12 @@ import {
   getAgentAnalytics,
   getActivityTimeline,
   getProjectCostSummary,
+  getAgentCostSummary,
   getProjectCostBreakdown,
   listTokenUsage,
   getProjectSettingsMap,
+  getProjectSetting,
+  setProjectSetting,
   setProjectSettings,
   recordTokenUsage,
   createAgentDependency,
@@ -98,6 +101,7 @@ import {
 import { sendWebhookNotification } from './webhook-sender.js';
 import { recordChatToMemory } from './memory-bridge.js';
 import { loadAgentLog } from './agent-log-store.js';
+import { budgetGuard } from './middleware/policy-middleware.js';
 import { eventBus } from './event-bus.js';
 import { PM_SYSTEM_PROMPT, buildPlan, estimatePlanCost } from './pm-agent.js';
 import { taskEngine } from './task-engine.js';
@@ -127,6 +131,8 @@ import {
   broadcastToTeam,
   notifyNextInPipeline,
 } from './agent-messaging.js';
+import { GitHubIntegration } from './github-integration.js';
+import { encrypt, decrypt, isEncrypted } from './secret-vault.js';
 
 // Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();
@@ -174,6 +180,11 @@ eventBus.on('budget:warning', (event) => {
 });
 
 const studio = new Hono();
+
+// Budget guard for execution routes
+studio.use('/projects/:id/execute*', budgetGuard());
+studio.use('/projects/:id/pipeline/start*', budgetGuard());
+studio.use('/projects/:id/agents/:agentId/exec*', budgetGuard());
 
 // ---- Projects CRUD --------------------------------------------------------
 
@@ -2404,6 +2415,137 @@ studio.get('/projects/:id/costs/history', async (c) => {
   const project = await getProject(projectId);
   if (!project) return c.json({ error: 'Project not found' }, 404);
   return c.json(await listTokenUsage(projectId));
+});
+
+studio.get('/projects/:id/token-analytics', async (c) => {
+  const { id } = c.req.param();
+  const project = await getProject(id);
+  if (!project) return c.json({ error: 'Not found' }, 404);
+
+  const summary = await getProjectCostSummary(id);
+  const totalInput = summary.totalInputTokens;
+  const cacheRead = summary.totalCacheReadTokens;
+  const cacheHitRatio = totalInput > 0 ? cacheRead / totalInput : 0;
+
+  // Cache read tokens cost ~90% less than regular input tokens
+  const estimatedSavingsUsd = cacheRead * 0.000003 * 0.9; // rough estimate
+
+  return c.json({
+    ...summary,
+    cacheHitRatio: Math.round(cacheHitRatio * 100) / 100,
+    estimatedCacheSavingsUsd: Math.round(estimatedSavingsUsd * 10000) / 10000,
+  });
+});
+
+studio.get('/projects/:id/budget/status', async (c) => {
+  const { id } = c.req.param();
+  const project = await getProject(id);
+  if (!project) return c.json({ error: 'Not found' }, 404);
+
+  const settings = await getProjectSettingsMap(id);
+  const budgetSettings = settings['budget'] || {};
+  const maxCost = budgetSettings['maxCostUsd'] ? parseFloat(budgetSettings['maxCostUsd']) : null;
+  const agentMaxCost = budgetSettings['agent_max_cost_usd'] ? parseFloat(budgetSettings['agent_max_cost_usd']) : null;
+
+  const projectCost = await getProjectCostSummary(id);
+  const agents = await listProjectAgents(id);
+
+  const agentBudgets = await Promise.all(agents.map(async (agent) => {
+    const cost = await getAgentCostSummary(id, agent.id);
+    return {
+      agentId: agent.id,
+      agentName: agent.name,
+      role: agent.role,
+      totalCostUsd: cost.totalCostUsd,
+      taskCount: cost.taskCount,
+      budgetExceeded: agentMaxCost ? cost.totalCostUsd >= agentMaxCost : false,
+    };
+  }));
+
+  return c.json({
+    projectBudget: {
+      maxCostUsd: maxCost,
+      currentCostUsd: projectCost.totalCostUsd,
+      exceeded: maxCost ? projectCost.totalCostUsd >= maxCost : false,
+    },
+    agentBudget: {
+      maxCostPerAgentUsd: agentMaxCost,
+      agents: agentBudgets,
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GitHub Integration
+// ---------------------------------------------------------------------------
+
+studio.post('/projects/:id/github/configure', async (c) => {
+  const { id } = c.req.param();
+  const project = await getProject(id);
+  if (!project) return c.json({ error: 'Not found' }, 404);
+
+  const body = await c.req.json();
+  const { token, autoPR } = body;
+
+  if (token) {
+    const encryptedToken = encrypt(token);
+    await setProjectSetting(id, 'github', 'token', encryptedToken);
+  }
+
+  if (autoPR !== undefined) {
+    await setProjectSetting(id, 'github', 'auto_pr', String(autoPR));
+  }
+
+  return c.json({ ok: true });
+});
+
+studio.post('/projects/:id/github/create-pr', async (c) => {
+  const { id } = c.req.param();
+  const project = await getProject(id);
+  if (!project) return c.json({ error: 'Not found' }, 404);
+
+  const tokenEncrypted = await getProjectSetting(id, 'github', 'token');
+  if (!tokenEncrypted) return c.json({ error: 'GitHub not configured' }, 400);
+
+  const token = isEncrypted(tokenEncrypted) ? decrypt(tokenEncrypted) : tokenEncrypted;
+
+  if (!project.repoPath) return c.json({ error: 'No repo path configured' }, 400);
+  const repoInfo = GitHubIntegration.getRepoInfo(project.repoPath);
+  if (!repoInfo) return c.json({ error: 'Could not determine GitHub repo from remote' }, 400);
+
+  const body = await c.req.json();
+  const { head, base = 'main', title, prBody } = body;
+
+  if (!head || !title) return c.json({ error: 'head and title are required' }, 400);
+
+  const gh = new GitHubIntegration(token);
+  const pr = await gh.createPR({
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
+    head,
+    base,
+    title,
+    body: prBody || '',
+  });
+
+  return c.json(pr);
+});
+
+studio.get('/projects/:id/github/status', async (c) => {
+  const { id } = c.req.param();
+  const project = await getProject(id);
+  if (!project) return c.json({ error: 'Not found' }, 404);
+
+  const tokenEncrypted = await getProjectSetting(id, 'github', 'token');
+  const autoPR = await getProjectSetting(id, 'github', 'auto_pr');
+
+  const repoInfo = project.repoPath ? GitHubIntegration.getRepoInfo(project.repoPath) : null;
+
+  return c.json({
+    configured: !!tokenEncrypted,
+    autoPR: autoPR === 'true',
+    repo: repoInfo,
+  });
 });
 
 // ---------------------------------------------------------------------------

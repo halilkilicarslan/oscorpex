@@ -16,6 +16,7 @@ import {
   listProjectAgents,
   listAgentDependencies,
   getProjectCostSummary,
+  getAgentCostSummary,
   getProjectSettingsMap,
 } from './db.js';
 import { queryOne } from './pg.js';
@@ -95,7 +96,7 @@ class TaskEngine {
    * - Budget aşılmamışsa: null döner (devam et)
    * - Budget aşılmışsa: { exceeded: true, level: 'error' | 'warning', message } döner
    */
-  private async checkProjectBudget(projectId: string): Promise<{ exceeded: boolean; level: 'warning' | 'error'; message: string } | null> {
+  private async checkProjectBudget(projectId: string, agentId?: string): Promise<{ exceeded: boolean; level: 'warning' | 'error'; message: string } | null> {
     try {
       const settingsMap = await getProjectSettingsMap(projectId);
       const budgetSettings = settingsMap['budget'];
@@ -131,6 +132,20 @@ class TaskEngine {
           level: 'warning',
           message: `Budget warning: $${currentCost.toFixed(4)} / $${maxCost.toFixed(2)} USD (${Math.round((currentCost / maxCost) * 100)}% used).`,
         };
+      }
+
+      // Agent-level budget kontrolü
+      const agentMaxCostStr = budgetSettings['agent_max_cost_usd'];
+      const agentMaxCost = agentMaxCostStr ? parseFloat(agentMaxCostStr) : null;
+      if (agentId && agentMaxCost && !isNaN(agentMaxCost) && agentMaxCost > 0) {
+        const agentCost = await getAgentCostSummary(projectId, agentId);
+        if (agentCost.totalCostUsd >= agentMaxCost) {
+          return {
+            exceeded: true,
+            level: 'error',
+            message: `Agent budget limit exceeded: $${agentCost.totalCostUsd.toFixed(4)} / $${agentMaxCost.toFixed(2)} USD.`,
+          };
+        }
       }
 
       return null;
@@ -178,7 +193,7 @@ class TaskEngine {
 
     // Budget limiti kontrolü — aşıldıysa task'ı blocked yap ve event emit et
     // (projectId yukarıda zaten tanımlandı)
-    const budgetStatus = await this.checkProjectBudget(projectId);
+    const budgetStatus = await this.checkProjectBudget(projectId, task.assignedAgentId);
 
     if (budgetStatus && budgetStatus.exceeded) {
       // Task'ı 'blocked' statüsüne al (failed yerine ayrı bir durum olarak işaretlenir)
