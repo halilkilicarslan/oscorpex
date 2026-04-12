@@ -20,6 +20,7 @@ import {
 } from './db.js';
 import { queryOne } from './pg.js';
 import { eventBus } from './event-bus.js';
+import { recordAgentStep } from './memory-bridge.js';
 import type { Task, Phase, TaskOutput, ProjectAgent } from './types.js';
 
 // Onay gerektiren task keyword'leri — büyük/küçük harf duyarsız kontrol
@@ -414,6 +415,21 @@ class TaskEngine {
 
     await this.checkAndAdvancePhase(task.phaseId, projectId);
     this.notifyCompleted(taskId, projectId);
+
+    // Record to memory tables for Memory page
+    const proj = await getProject(projectId);
+    if (proj) {
+      const agents = await listProjectAgents(projectId);
+      const agent = agents.find(a => a.id === task.assignedAgentId);
+      recordAgentStep(
+        projectId,
+        proj.name,
+        task.assignedAgentId || task.assignedAgent,
+        agent?.name || task.assignedAgent,
+        task.title,
+        output.summary || null,
+      ).catch(() => {});
+    }
 
     return updated;
   }

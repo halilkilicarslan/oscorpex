@@ -96,6 +96,7 @@ import {
   listTasks,
 } from './db.js';
 import { sendWebhookNotification } from './webhook-sender.js';
+import { recordChatToMemory } from './memory-bridge.js';
 import { loadAgentLog } from './agent-log-store.js';
 import { eventBus } from './event-bus.js';
 import { PM_SYSTEM_PROMPT, buildPlan, estimatePlanCost } from './pm-agent.js';
@@ -382,6 +383,8 @@ studio.post('/projects/:id/chat', async (c) => {
 
   // Persist user message
   await insertChatMessage({ projectId, role: 'user', content: userMessage });
+  // Write to memory tables for Memory page
+  recordChatToMemory(projectId, project.name, 'user', userMessage).catch(() => {});
 
   // Build conversation history for context
   const history = await listChatMessages(projectId);
@@ -477,6 +480,7 @@ Every assignable agent MUST get at least one task.`;
                 // Persist assistant response (without the plan-json block for clean display)
                 if (fullText) {
                   await insertChatMessage({ projectId, role: 'assistant', content: fullText });
+                  recordChatToMemory(projectId, project!.name, 'assistant', fullText).catch(() => {});
                 }
 
                 await stream.writeSSE({
