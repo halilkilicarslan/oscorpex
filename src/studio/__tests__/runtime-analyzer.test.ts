@@ -1,7 +1,22 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+// Mock child_process so isPortInUse (lsof) always returns "not in use"
+vi.mock('node:child_process', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...mod,
+    execSync: vi.fn((cmd: string, opts?: unknown) => {
+      if (typeof cmd === 'string' && cmd.startsWith('lsof -ti:')) {
+        throw new Error('mock: port not in use');
+      }
+      return mod.execSync(cmd, opts as never);
+    }),
+  };
+});
+
 import { analyzeProject, writeEnvFile, generateStudioConfig } from '../runtime-analyzer.js';
 
 describe('runtime-analyzer', () => {

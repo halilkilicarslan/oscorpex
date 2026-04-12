@@ -7,10 +7,17 @@ import {
   updatePlanStatus,
   getProject,
 } from '../db.js';
-import { execute } from '../pg.js';
+import { execute, query } from '../pg.js';
 import { taskEngine } from '../task-engine.js';
 
-describe('Task Engine', () => {
+// Skip entire suite if DB tables don't exist
+let dbReady = false;
+try {
+  await query('SELECT 1 FROM chat_messages LIMIT 0');
+  dbReady = true;
+} catch { /* DB not available or tables missing */ }
+
+describe.skipIf(!dbReady)('Task Engine', () => {
   beforeAll(async () => {
     // Clean up tables so tests start with a known empty state
     await execute('DELETE FROM chat_messages');

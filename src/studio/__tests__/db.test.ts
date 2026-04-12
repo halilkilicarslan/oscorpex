@@ -24,12 +24,19 @@ import {
   insertChatMessage,
   listChatMessages,
 } from '../db.js';
-import { execute } from '../pg.js';
+import { execute, query } from '../pg.js';
 
 // Use PostgreSQL DB for tests. Tables must already exist (run migrations before tests).
 // Reset state between runs by deleting records in beforeAll.
 
-describe('Studio DB', () => {
+// Skip entire suite if DB tables don't exist (CI without migrations)
+let dbReady = false;
+try {
+  await query('SELECT 1 FROM chat_messages LIMIT 0');
+  dbReady = true;
+} catch { /* DB not available or tables missing */ }
+
+describe.skipIf(!dbReady)('Studio DB', () => {
   beforeAll(async () => {
     // Clean up tables so tests start with a known empty state
     await execute('DELETE FROM chat_messages');
