@@ -21,7 +21,7 @@ export function getPool(): pg.Pool {
     _pool = new Pool({
       connectionString:
         process.env.DATABASE_URL ||
-        'postgresql://voltagent:voltagent_dev@localhost:5432/voltagent',
+        'postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex',
       max: 20,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 5_000,

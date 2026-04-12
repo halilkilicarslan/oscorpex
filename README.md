@@ -22,7 +22,7 @@ Oscorpex is a full-stack development studio that orchestrates a team of 12 speci
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Node.js, Hono, better-sqlite3 (WAL) |
+| Backend | Node.js, Hono, PostgreSQL (pg + pgvector) |
 | Frontend | React 18, Vite, Tailwind CSS |
 | AI Execution | Claude CLI (no AI SDK in execution path) |
 | Terminal | xterm.js v6 |
@@ -37,7 +37,7 @@ Oscorpex is a full-stack development studio that orchestrates a team of 12 speci
 - Node.js 20+
 - pnpm
 - Claude CLI (for AI agent execution)
-- Docker (optional, for DB provisioning)
+- Docker (for PostgreSQL + pgvector)
 
 ### Installation
 
@@ -45,6 +45,12 @@ Oscorpex is a full-stack development studio that orchestrates a team of 12 speci
 git clone https://github.com/halilkilicarslan/oscorpex.git
 cd oscorpex
 pnpm install
+
+# Start PostgreSQL
+docker compose up -d postgres
+
+# Copy env
+cp .env.example .env
 ```
 
 ### Development
@@ -97,7 +103,7 @@ console/
 
 ## Database
 
-16 SQLite tables: `projects`, `project_plans`, `phases`, `tasks`, `agent_configs`, `project_agents`, `team_templates`, `events`, `chat_messages`, `ai_providers`, `agent_messages`, `pipeline_runs`, `agent_runs`, `agent_dependencies`, `agent_capabilities`, `project_settings`
+PostgreSQL + pgvector. 30+ tables: `projects`, `project_plans`, `phases`, `tasks`, `agent_configs`, `project_agents`, `team_templates`, `events`, `chat_messages`, `ai_providers`, `agent_messages`, `pipeline_runs`, `agent_runs`, `agent_dependencies`, `agent_capabilities`, `project_settings`
 
 ## How It Works
 

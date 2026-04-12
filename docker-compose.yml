@@ -1,7 +1,7 @@
 version: '3.9'
 
 # ---------------------------------------------------------------------------
-# AI Dev Studio — Docker Compose
+# Oscorpex — Docker Compose
 # ---------------------------------------------------------------------------
 # Usage:
 #   docker-compose up -d                    # Start backend + console
@@ -13,11 +13,11 @@ services:
   # ---- PostgreSQL + pgvector -----------------------------------------------
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: voltagent-postgres
+    container_name: oscorpex-postgres
     environment:
-      POSTGRES_DB: voltagent
-      POSTGRES_USER: voltagent
-      POSTGRES_PASSWORD: voltagent_dev
+      POSTGRES_DB: oscorpex
+      POSTGRES_USER: oscorpex
+      POSTGRES_PASSWORD: oscorpex_dev
     ports:
       - "5432:5432"
     volumes:
@@ -28,7 +28,7 @@ services:
       - studio-agents
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voltagent"]
+      test: ["CMD-SHELL", "pg_isready -U oscorpex"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -38,12 +38,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: voltagent-backend
+    container_name: oscorpex-backend
     ports:
       - "3141:3141"
     environment:
       - NODE_ENV=production
-      - STUDIO_DB_PATH=/app/.voltagent/studio.db
+      - DATABASE_URL=postgresql://oscorpex:oscorpex_dev@postgres:5432/oscorpex
     env_file:
       - .env
     volumes:
@@ -66,7 +66,7 @@ services:
     build:
       context: ./console
       dockerfile: Dockerfile
-    container_name: voltagent-console
+    container_name: oscorpex-console
     ports:
       - "5173:80"
     depends_on:
