@@ -7,6 +7,7 @@ import ProjectSettings from '../pages/studio/ProjectSettings';
 vi.mock('../lib/studio-api', () => ({
   fetchProjectSettings: vi.fn().mockResolvedValue({}),
   saveProjectSettings: vi.fn().mockResolvedValue({ ok: true }),
+  fetchProjectCosts: vi.fn().mockResolvedValue({ totalCostUsd: 0, totalTokens: 0, byAgent: [] }),
 }));
 
 import * as studioApi from '../lib/studio-api';

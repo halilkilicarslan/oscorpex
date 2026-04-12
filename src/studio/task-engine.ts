@@ -442,7 +442,7 @@ class TaskEngine {
         task.assignedAgentId || task.assignedAgent,
         agent?.name || task.assignedAgent,
         task.title,
-        output.summary || null,
+        output.logs?.[0] || null,
       ).catch(() => {});
     }
 
