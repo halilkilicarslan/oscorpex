@@ -470,6 +470,70 @@ CREATE TABLE IF NOT EXISTS rag_embeddings (
 );
 
 -- ---------------------------------------------------------------------------
+-- VoltAgent Memory Tables
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS voltagent_memory_conversations (
+  id          TEXT PRIMARY KEY,
+  resource_id TEXT NOT NULL DEFAULT '',
+  user_id     TEXT NOT NULL DEFAULT '',
+  title       TEXT NOT NULL DEFAULT '',
+  metadata    TEXT NOT NULL DEFAULT '{}',
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS voltagent_memory_messages (
+  conversation_id TEXT NOT NULL REFERENCES voltagent_memory_conversations(id) ON DELETE CASCADE,
+  message_id      TEXT NOT NULL,
+  user_id         TEXT NOT NULL DEFAULT '',
+  role            TEXT NOT NULL DEFAULT '',
+  parts           TEXT NOT NULL DEFAULT '[]',
+  metadata        TEXT,
+  format_version  INTEGER NOT NULL DEFAULT 1,
+  created_at      TEXT NOT NULL,
+  PRIMARY KEY (conversation_id, message_id)
+);
+
+CREATE TABLE IF NOT EXISTS voltagent_memory_steps (
+  id               TEXT PRIMARY KEY,
+  conversation_id  TEXT NOT NULL REFERENCES voltagent_memory_conversations(id) ON DELETE CASCADE,
+  user_id          TEXT NOT NULL DEFAULT '',
+  agent_id         TEXT NOT NULL DEFAULT '',
+  agent_name       TEXT,
+  operation_id     TEXT,
+  step_index       INTEGER NOT NULL DEFAULT 0,
+  type             TEXT NOT NULL DEFAULT '',
+  role             TEXT NOT NULL DEFAULT '',
+  content          TEXT,
+  arguments        TEXT,
+  result           TEXT,
+  usage            TEXT,
+  sub_agent_id     TEXT,
+  sub_agent_name   TEXT,
+  created_at       TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS voltagent_memory_workflow_states (
+  id               TEXT PRIMARY KEY,
+  workflow_id      TEXT NOT NULL DEFAULT '',
+  workflow_name    TEXT NOT NULL DEFAULT '',
+  status           TEXT NOT NULL DEFAULT '',
+  input            TEXT,
+  context          TEXT,
+  workflow_state   TEXT,
+  suspension       TEXT,
+  events           TEXT,
+  output           TEXT,
+  cancellation     TEXT,
+  user_id          TEXT,
+  conversation_id  TEXT,
+  metadata         TEXT,
+  created_at       TEXT NOT NULL,
+  updated_at       TEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------------------
 -- Indexes — Studio Tables
 -- ---------------------------------------------------------------------------
 
@@ -512,6 +576,14 @@ CREATE INDEX IF NOT EXISTS idx_feedbacks_agent        ON feedbacks(agent_id);
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_trigger   ON trigger_logs(trigger_id);
 CREATE INDEX IF NOT EXISTS idx_rag_docs_kb            ON rag_documents(kb_id);
 CREATE INDEX IF NOT EXISTS idx_rag_queries_kb         ON rag_queries(kb_id);
+
+-- ---------------------------------------------------------------------------
+-- Indexes — Memory Tables
+-- ---------------------------------------------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_mem_msg_conv    ON voltagent_memory_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_mem_steps_conv  ON voltagent_memory_steps(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_mem_wf_status   ON voltagent_memory_workflow_states(status);
 
 -- ---------------------------------------------------------------------------
 -- Indexes — RAG Embeddings (pgvector)
