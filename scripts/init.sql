@@ -1,7 +1,6 @@
 -- ---------------------------------------------------------------------------
--- AI Dev Studio — PostgreSQL Init Script
--- Converted from SQLite (better-sqlite3) schema in src/studio/db.ts
--- and observability tables from src/observability-routes.ts
+-- Oscorpex — PostgreSQL Init Script
+-- Schema for studio tables and observability tables
 -- ---------------------------------------------------------------------------
 
 -- pgvector extension (pre-installed in pgvector/pgvector:pg16 image)

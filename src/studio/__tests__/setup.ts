@@ -1,21 +1,11 @@
-import { mkdtempSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { rmSync } from 'node:fs';
 import { afterAll } from 'vitest';
-import { resetDb } from '../db.js';
+import { closePool } from '../pg.js';
 
-// Each test run gets a unique temp DB file
-const tempDir = mkdtempSync(join(tmpdir(), 'studio-test-'));
-const testDbPath = join(tempDir, 'test.db');
+// Use a test database — override via DATABASE_URL env var
+// Default: oscorpex_test on localhost
+process.env.DATABASE_URL =
+  process.env.DATABASE_URL || 'postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex_test';
 
-process.env.STUDIO_DB_PATH = testDbPath;
-
-afterAll(() => {
-  resetDb();
-  try {
-    rmSync(tempDir, { recursive: true, force: true });
-  } catch {
-    // ignore cleanup errors
-  }
+afterAll(async () => {
+  await closePool();
 });
