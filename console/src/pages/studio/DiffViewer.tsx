@@ -105,7 +105,6 @@ function FileDiff({ file }: { file: DiffFile }) {
 // ---------------------------------------------------------------------------
 
 export default function DiffViewer({ projectId }: { projectId: string }) {
-  const [diff, setDiff] = useState('');
   const [files, setFiles] = useState<DiffFile[]>([]);
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [log, setLog] = useState<GitLogEntry[]>([]);
@@ -128,7 +127,6 @@ export default function DiffViewer({ projectId }: { projectId: string }) {
         fetchGitStatus(projectId),
         fetchGitLog(projectId),
       ]);
-      setDiff(diffRes.diff);
       setFiles(parseDiff(diffRes.diff));
       setStatus(statusRes);
       setLog(logRes);

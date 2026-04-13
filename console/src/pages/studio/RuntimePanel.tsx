@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Server, Database, Key, Package, Play, Square, RefreshCw, Loader2,
-  CheckCircle2, XCircle, AlertTriangle, Globe, Container, HardDrive,
-  Eye, EyeOff, ChevronDown, ChevronRight, Zap, Settings2,
+  Server, Database, Key, Package, Play, Square, Loader2,
+  CheckCircle2, AlertTriangle, Globe, Container, HardDrive,
+  Eye, EyeOff, ChevronDown, ChevronRight, Settings2,
 } from 'lucide-react';
 import {
   analyzeRuntime, saveEnvVars, provisionDb, stopDb, installDeps, startApp, fetchAppStatus,
-  type RuntimeAnalysis, type DetectedService, type DetectedDatabase, type EnvVarRequirement,
-  type DbStatus, type DatabaseType, type DbProvisionMethod, type AppStatus,
+  type RuntimeAnalysis, type EnvVarRequirement,
+  type DatabaseType, type DbProvisionMethod, type AppStatus,
 } from '../../lib/studio-api';
 
 // ---------------------------------------------------------------------------

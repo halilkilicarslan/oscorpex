@@ -26,6 +26,7 @@ const ORNEK_AJAN: ProjectAgent = {
   name: 'Frontend Gelistirici',
   role: 'frontend-developer',
   avatar: '👨‍💻',
+  gender: 'male',
   personality: 'Dikkatlı ve metodolojik',
   model: 'claude-sonnet-4-6',
   cliTool: 'claude',

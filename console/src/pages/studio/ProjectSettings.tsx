@@ -801,7 +801,7 @@ interface Props {
 }
 
 export default function ProjectSettings({ projectId }: Props) {
-  const [settings, setSettings] = useState<SettingsMap>({});
+  const [, setSettings] = useState<SettingsMap>({});
   const [local, setLocal] = useState<SettingsMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

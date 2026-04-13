@@ -11,6 +11,7 @@ interface ObservabilityLog {
   timestamp: string;
   trace_id: string | null;
   span_id: string | null;
+  trace_flags: number | null;
   severity_text: string | null;
   body: string;
   attributes: Record<string, unknown> | null;

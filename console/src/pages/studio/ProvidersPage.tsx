@@ -635,7 +635,6 @@ function FallbackOrderPanel({
   return (
     <div className="flex flex-col gap-2">
       {chain.map((provider, index) => {
-        const meta = PROVIDER_META[provider.type];
         const isPrimary = index === 0;
         const label = getFallbackLabel(index);
 

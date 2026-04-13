@@ -471,9 +471,17 @@ export async function fetchProjectAgent(projectId: string, agentId: string): Pro
   return json(await fetch(`${BASE}/projects/${projectId}/team/${agentId}`));
 }
 
+// Backend sunar color ve pipelineOrder icin default degerler; form bunlari
+// gondermeden de ajan olusturabilir.
+export type ProjectAgentCreateInput = Omit<
+  ProjectAgent,
+  'id' | 'projectId' | 'createdAt' | 'color' | 'pipelineOrder'
+> &
+  Partial<Pick<ProjectAgent, 'color' | 'pipelineOrder'>>;
+
 export async function addProjectAgent(
   projectId: string,
-  data: Omit<ProjectAgent, 'id' | 'projectId' | 'createdAt'>,
+  data: ProjectAgentCreateInput,
 ): Promise<ProjectAgent> {
   return json(await fetch(`${BASE}/projects/${projectId}/team`, {
     method: 'POST',
@@ -669,13 +677,17 @@ export interface PipelineState {
 
 // Pipeline'ı başlat
 export async function startPipeline(projectId: string): Promise<PipelineState> {
-  const data = await json(await fetch(`${BASE}/projects/${projectId}/pipeline/start`, { method: 'POST' }));
+  const data = await json<{ pipeline?: PipelineState } & PipelineState>(
+    await fetch(`${BASE}/projects/${projectId}/pipeline/start`, { method: 'POST' }),
+  );
   return data.pipeline ?? data;
 }
 
 // Pipeline durumunu getir
 export async function getPipelineStatus(projectId: string): Promise<PipelineState> {
-  const data = await json(await fetch(`${BASE}/projects/${projectId}/pipeline/status`));
+  const data = await json<{ pipeline?: PipelineState } & PipelineState>(
+    await fetch(`${BASE}/projects/${projectId}/pipeline/status`),
+  );
   // API { pipeline, taskProgress, status } formatında dönüyor — içindeki pipeline objesini çıkar
   return data.pipeline ?? data;
 }
@@ -692,7 +704,9 @@ export async function resumePipeline(projectId: string): Promise<void> {
 
 // Pipeline'ı manuel olarak ilerlet (test amaçlı)
 export async function advancePipeline(projectId: string): Promise<PipelineState> {
-  const data = await json(await fetch(`${BASE}/projects/${projectId}/pipeline/advance`, { method: 'POST' }));
+  const data = await json<{ pipeline?: PipelineState } & PipelineState>(
+    await fetch(`${BASE}/projects/${projectId}/pipeline/advance`, { method: 'POST' }),
+  );
   return data.pipeline ?? data;
 }
 
@@ -1024,8 +1038,15 @@ export async function updateFallbackOrder(orderedIds: string[]): Promise<AIProvi
   );
 }
 
+// Backend createProvider yalnizca bu alanlari zorunlu tutar; fallbackOrder
+// ayri bir endpoint ile guncellenir.
+export type ProviderCreateInput = Pick<
+  AIProvider,
+  'name' | 'type' | 'apiKey' | 'baseUrl' | 'model' | 'isActive'
+>;
+
 export async function createProvider(
-  data: Omit<AIProvider, 'id' | 'createdAt' | 'updatedAt' | 'isDefault'>,
+  data: ProviderCreateInput,
 ): Promise<AIProvider> {
   return json(
     await fetch(`${BASE}/providers`, {

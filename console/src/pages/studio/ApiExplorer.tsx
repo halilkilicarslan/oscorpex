@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Search, Send, Plus, Trash2, ChevronRight, ChevronDown, Loader2,
+  Search, Send, Trash2, ChevronRight, ChevronDown, Loader2,
   Copy, Check, Clock, FileJson, Code2, Globe,
 } from 'lucide-react';
 import {

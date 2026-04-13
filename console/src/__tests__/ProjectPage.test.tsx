@@ -83,6 +83,7 @@ const ORNEK_AJANLAR: ProjectAgent[] = [
     name: 'Frontend Ajan',
     role: 'frontend',
     avatar: 'F',
+    gender: 'male',
     personality: 'Dikkatli',
     model: 'claude-sonnet-4-6',
     cliTool: 'claude',

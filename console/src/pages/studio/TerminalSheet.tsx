@@ -14,7 +14,7 @@ import AgentAvatarImg from '../../components/AgentAvatar';
 
 interface TerminalSheetProps {
   projectId: string;
-  taskId: string;
+  taskId: string; // kept for API stability at call sites; currently unused inside component
   taskTitle: string;
   agent: ProjectAgent | null;
   isRunning: boolean;
@@ -23,7 +23,6 @@ interface TerminalSheetProps {
 
 export default function TerminalSheet({
   projectId,
-  taskId,
   taskTitle,
   agent,
   isRunning,

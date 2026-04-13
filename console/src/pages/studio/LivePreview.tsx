@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Loader2, ExternalLink, RotateCcw, Maximize2, Minimize2, Smartphone, Monitor, Tablet, Settings2, Braces, Globe, Server } from 'lucide-react';
-import { startApp, stopApp, fetchAppStatus, switchPreviewService, type AppStatus } from '../../lib/studio-api';
+import { stopApp, fetchAppStatus, switchPreviewService, type AppStatus } from '../../lib/studio-api';
 import RuntimePanel from './RuntimePanel';
 import ApiExplorer from './ApiExplorer';
 
@@ -97,16 +97,6 @@ export default function LivePreview({
         apiDetectedOnce.current = true;
       }).catch(() => {});
     }, 500);
-  };
-
-  const handleStart = async () => {
-    setLoading(true);
-    try {
-      await startApp(projectId);
-      const status = await fetchAppStatus(projectId);
-      onStatusChange(status);
-    } catch { /* ignore */ }
-    setLoading(false);
   };
 
   const handleStop = async () => {
