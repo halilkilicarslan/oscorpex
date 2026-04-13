@@ -14,6 +14,11 @@ export default defineConfig({
     // Use temp DB for studio tests
     setupFiles: ["src/studio/__tests__/setup.ts"],
 
+    // Studio tests share a single PostgreSQL database. Parallel test files
+    // race on broad DELETEs in beforeAll hooks → wipe each other's rows.
+    // Serialize files to keep DB-backed assertions deterministic.
+    fileParallelism: false,
+
     coverage: {
       // Use the V8 built-in coverage provider (no Babel transform required)
       provider: "v8",
