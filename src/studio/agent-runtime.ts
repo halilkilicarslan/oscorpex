@@ -10,6 +10,7 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { eventBus } from "./event-bus.js";
 import { execute, query, queryOne } from "./pg.js";
 import type { AgentProcessRecord, AgentProcessStatus, AgentRun } from "./types.js";
@@ -154,7 +155,8 @@ export async function startAgent(
 	processes.set(key, record);
 
 	// `none` — süreç başlatma, sadece idle durumu döndür
-	const cmdSpec = buildCommand(agent.cliTool, taskPrompt, agent.systemPrompt);
+	const effectiveSystemPrompt = agent.systemPrompt ? composeSystemPrompt(agent.systemPrompt) : undefined;
+	const cmdSpec = buildCommand(agent.cliTool, taskPrompt, effectiveSystemPrompt);
 	if (!cmdSpec) {
 		record.status = "idle";
 		return record;

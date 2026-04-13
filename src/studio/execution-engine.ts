@@ -7,6 +7,7 @@
 import { persistAgentLog } from "./agent-log-store.js";
 import { agentRuntime } from "./agent-runtime.js";
 import { startApp } from "./app-runner.js";
+import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { resolveAllowedTools } from "./capability-resolver.js";
 import { getAdapter } from "./cli-adapter.js";
 import { executeWithCLI, isClaudeCliAvailable, resolveFilePaths } from "./cli-runtime.js";
@@ -425,7 +426,7 @@ class ExecutionEngine {
 				agentName: agent.name,
 				repoPath: project.repoPath,
 				prompt,
-				systemPrompt: agent.systemPrompt || this.defaultSystemPrompt(agent),
+				systemPrompt: agent.systemPrompt ? composeSystemPrompt(agent.systemPrompt) : this.defaultSystemPrompt(agent),
 				timeoutMs,
 				model: "sonnet",
 				signal: undefined,
@@ -884,7 +885,7 @@ class ExecutionEngine {
 				agentName: reviewer.name,
 				repoPath: project.repoPath,
 				prompt: reviewPrompt,
-				systemPrompt: reviewer.systemPrompt || this.defaultSystemPrompt(reviewer),
+				systemPrompt: reviewer.systemPrompt ? composeSystemPrompt(reviewer.systemPrompt) : this.defaultSystemPrompt(reviewer),
 				timeoutMs: reviewer.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS,
 				model: "sonnet",
 				allowedTools: reviewTools,
@@ -1093,9 +1094,10 @@ class ExecutionEngine {
 	// -------------------------------------------------------------------------
 
 	private defaultSystemPrompt(agent: { name: string; role: string; skills: string[] }): string {
-		return `You are ${agent.name}, a ${agent.role} agent in an Oscorpex.
+		const rolePrompt = `You are ${agent.name}, a ${agent.role} agent in Oscorpex.
 Your skills include: ${agent.skills.join(", ") || "general software development"}.
 Complete the task described in the user message. Be precise and produce working code.`;
+		return composeSystemPrompt(rolePrompt);
 	}
 
 	// -------------------------------------------------------------------------
