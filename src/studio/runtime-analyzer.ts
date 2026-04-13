@@ -7,7 +7,6 @@
 //   - Bağımlılık kurulum komutu
 // ---------------------------------------------------------------------------
 
-import { execSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
@@ -386,26 +385,6 @@ function detectPort(dirPath: string, framework: FrameworkType): number {
 
 	// 3. Framework default
 	return FRAMEWORK_DEFAULT_PORTS[framework] ?? 3000;
-}
-
-/** Synchronous port-in-use check via lsof */
-function isPortInUse(port: number): boolean {
-	try {
-		execSync(`lsof -ti:${port}`, { stdio: "pipe", timeout: 2000 });
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-/** Find next available port starting from given port */
-function findFreePort(startPort: number, usedPorts: Set<number>): number {
-	let port = startPort;
-	while (usedPorts.has(port) || isPortInUse(port)) {
-		port++;
-		if (port > 65535) break;
-	}
-	return port;
 }
 
 function detectFramework(dirPath: string, dirName: string): FrameworkDetection | null {
@@ -810,15 +789,10 @@ export function analyzeProject(repoPath: string): RuntimeRequirements {
 		}
 	}
 
-	// 3.5. Port çakışma kontrolü — aynı port veya kullanımda olan portları çöz
-	const usedPorts = new Set<number>();
-	for (const svc of services) {
-		if (usedPorts.has(svc.port) || isPortInUse(svc.port)) {
-			const oldPort = svc.port;
-			svc.port = findFreePort(oldPort + 1, usedPorts);
-		}
-		usedPorts.add(svc.port);
-	}
+	// NOT: Port çakışma kontrolü burada YAPILMAZ. analyzeProject saf bir
+	// fonksiyondur ve servislerin framework default'larını döner. Port
+	// allocation app-runner katmanının sorumluluğudur (resolvePort), böylece
+	// testler deterministik kalır.
 
 	// 4. Durumları hesapla
 	const allDepsInstalled = services.every((s) => s.depsInstalled);
