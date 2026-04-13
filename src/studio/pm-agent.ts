@@ -17,6 +17,7 @@ import {
 	updatePlanStatus,
 	updateTask,
 } from "./db.js";
+import { BEHAVIORAL_PRINCIPLES } from "./behavioral-prompt.js";
 import { eventBus } from "./event-bus.js";
 import { gitManager } from "./git-manager.js";
 import { execute, queryOne } from "./pg.js";
@@ -131,7 +132,9 @@ export async function estimatePlanCost(projectId: string, planId: string): Promi
 // System prompt
 // ---------------------------------------------------------------------------
 
-export const PM_SYSTEM_PROMPT = `You are the AI Planner, a senior Project Manager for Oscorpex.
+export const PM_SYSTEM_PROMPT = `${BEHAVIORAL_PRINCIPLES}
+
+You are the AI Planner, a senior Project Manager for Oscorpex.
 
 ## Your Role
 You help users plan and manage software projects end-to-end. You work with a team of AI developer agents who will implement the project in Docker containers.
