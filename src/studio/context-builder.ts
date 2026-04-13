@@ -3,25 +3,25 @@
 // Enhances agent task prompts with RAG-retrieved codebase context.
 // ---------------------------------------------------------------------------
 
-import { query, queryOne, execute } from './pg.js';
-import { searchSimilar } from './vector-store.js';
+import { execute, query, queryOne } from "./pg.js";
+import { searchSimilar } from "./vector-store.js";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface RAGContext {
-  relevantChunks: Array<{
-    content: string;
-    source: string; // filename or doc name
-    score: number;
-  }>;
-  totalTokensEstimate: number;
+	relevantChunks: Array<{
+		content: string;
+		source: string; // filename or doc name
+		score: number;
+	}>;
+	totalTokensEstimate: number;
 }
 
 interface KBRow {
-  id: string;
-  name: string;
+	id: string;
+	name: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,9 +34,9 @@ interface KBRow {
  * rag_* tables — see observability-routes.ts initRagTables which calls pg helpers).
  */
 async function findProjectKB(projectId: string): Promise<{ kbId: string; name: string } | null> {
-  try {
-    // Ensure the table exists (idempotent — mirrors initRagTables guard)
-    await execute(`
+	try {
+		// Ensure the table exists (idempotent — mirrors initRagTables guard)
+		await execute(`
       CREATE TABLE IF NOT EXISTS rag_knowledge_bases (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -54,45 +54,40 @@ async function findProjectKB(projectId: string): Promise<{ kbId: string; name: s
       )
     `);
 
-    // First try: exact match on project ID stored in description or name
-    // Strategy: KB name contains the project id OR the project name.
-    // We resolve the project name from the projects table so we can match by name too.
-    const projectRow = await queryOne<{ name: string }>(
-      'SELECT name FROM projects WHERE id = $1',
-      [projectId],
-    );
+		// First try: exact match on project ID stored in description or name
+		// Strategy: KB name contains the project id OR the project name.
+		// We resolve the project name from the projects table so we can match by name too.
+		const projectRow = await queryOne<{ name: string }>("SELECT name FROM projects WHERE id = $1", [projectId]);
 
-    if (!projectRow) {
-      return null;
-    }
+		if (!projectRow) {
+			return null;
+		}
 
-    const projectName = projectRow.name.toLowerCase();
+		const projectName = projectRow.name.toLowerCase();
 
-    // Fetch all active KBs and find the best match
-    const kbs = await query<KBRow>(
-      `SELECT id, name FROM rag_knowledge_bases WHERE status = 'active'`,
-    );
+		// Fetch all active KBs and find the best match
+		const kbs = await query<KBRow>(`SELECT id, name FROM rag_knowledge_bases WHERE status = 'active'`);
 
-    if (kbs.length === 0) {
-      return null;
-    }
+		if (kbs.length === 0) {
+			return null;
+		}
 
-    // Prefer exact project-id match, then name substring match
-    const byId = kbs.find((kb) => kb.name.toLowerCase().includes(projectId.toLowerCase()));
-    if (byId) {
-      return { kbId: byId.id, name: byId.name };
-    }
+		// Prefer exact project-id match, then name substring match
+		const byId = kbs.find((kb) => kb.name.toLowerCase().includes(projectId.toLowerCase()));
+		if (byId) {
+			return { kbId: byId.id, name: byId.name };
+		}
 
-    const byName = kbs.find((kb) => kb.name.toLowerCase().includes(projectName));
-    if (byName) {
-      return { kbId: byName.id, name: byName.name };
-    }
+		const byName = kbs.find((kb) => kb.name.toLowerCase().includes(projectName));
+		if (byName) {
+			return { kbId: byName.id, name: byName.name };
+		}
 
-    return null;
-  } catch (err) {
-    console.warn('[context-builder] findProjectKB failed:', err);
-    return null;
-  }
+		return null;
+	} catch (err) {
+		console.warn("[context-builder] findProjectKB failed:", err);
+		return null;
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -110,69 +105,69 @@ async function findProjectKB(projectId: string): Promise<{ kbId: string; name: s
  * @param maxTokens      Token budget for injected context (default: 4000)
  */
 async function buildRAGContext(
-  projectId: string,
-  taskTitle: string,
-  taskDescription: string,
-  maxChunks = 5,
-  maxTokens = 4000,
+	projectId: string,
+	taskTitle: string,
+	taskDescription: string,
+	maxChunks = 5,
+	maxTokens = 4000,
 ): Promise<RAGContext | null> {
-  // 1. Locate the KB for this project
-  const kb = await findProjectKB(projectId);
-  if (!kb) {
-    return null;
-  }
+	// 1. Locate the KB for this project
+	const kb = await findProjectKB(projectId);
+	if (!kb) {
+		return null;
+	}
 
-  // 2. Build search query from task metadata
-  const descriptionSnippet = (taskDescription ?? '').slice(0, 200);
-  const searchQuery = [taskTitle, descriptionSnippet].filter(Boolean).join(' — ');
+	// 2. Build search query from task metadata
+	const descriptionSnippet = (taskDescription ?? "").slice(0, 200);
+	const searchQuery = [taskTitle, descriptionSnippet].filter(Boolean).join(" — ");
 
-  // 3. Retrieve candidates from the vector store
-  const candidates = await searchSimilar(kb.kbId, searchQuery, maxChunks);
+	// 3. Retrieve candidates from the vector store
+	const candidates = await searchSimilar(kb.kbId, searchQuery, maxChunks);
 
-  // 4. Filter by relevance threshold
-  const RELEVANCE_THRESHOLD = 0.3;
-  const filtered = candidates.filter((c) => c.score >= RELEVANCE_THRESHOLD);
+	// 4. Filter by relevance threshold
+	const RELEVANCE_THRESHOLD = 0.3;
+	const filtered = candidates.filter((c) => c.score >= RELEVANCE_THRESHOLD);
 
-  if (filtered.length === 0) {
-    return null;
-  }
+	if (filtered.length === 0) {
+		return null;
+	}
 
-  // 5. Build chunks with token budget enforcement (rough estimate: 1 token ≈ 4 chars)
-  const relevantChunks: RAGContext['relevantChunks'] = [];
-  let usedTokens = 0;
+	// 5. Build chunks with token budget enforcement (rough estimate: 1 token ≈ 4 chars)
+	const relevantChunks: RAGContext["relevantChunks"] = [];
+	let usedTokens = 0;
 
-  for (const hit of filtered) {
-    const chunkTokens = Math.ceil(hit.content.length / 4);
-    // Resolve human-readable source label from metadata
-    const meta = hit.metadata as Record<string, unknown> | undefined;
-    const source = String(meta?.source ?? meta?.filename ?? 'unknown');
+	for (const hit of filtered) {
+		const chunkTokens = Math.ceil(hit.content.length / 4);
+		// Resolve human-readable source label from metadata
+		const meta = hit.metadata as Record<string, unknown> | undefined;
+		const source = String(meta?.source ?? meta?.filename ?? "unknown");
 
-    if (usedTokens + chunkTokens > maxTokens) {
-      // Truncate the chunk so we stay within budget
-      const allowedChars = (maxTokens - usedTokens) * 4;
-      if (allowedChars <= 0) break;
+		if (usedTokens + chunkTokens > maxTokens) {
+			// Truncate the chunk so we stay within budget
+			const allowedChars = (maxTokens - usedTokens) * 4;
+			if (allowedChars <= 0) break;
 
-      relevantChunks.push({
-        content: hit.content.slice(0, allowedChars),
-        source,
-        score: hit.score,
-      });
-      usedTokens = maxTokens;
-      break;
-    }
+			relevantChunks.push({
+				content: hit.content.slice(0, allowedChars),
+				source,
+				score: hit.score,
+			});
+			usedTokens = maxTokens;
+			break;
+		}
 
-    relevantChunks.push({
-      content: hit.content,
-      source,
-      score: hit.score,
-    });
-    usedTokens += chunkTokens;
-  }
+		relevantChunks.push({
+			content: hit.content,
+			source,
+			score: hit.score,
+		});
+		usedTokens += chunkTokens;
+	}
 
-  return {
-    relevantChunks,
-    totalTokensEstimate: usedTokens,
-  };
+	return {
+		relevantChunks,
+		totalTokensEstimate: usedTokens,
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -183,23 +178,23 @@ async function buildRAGContext(
  * Format RAG context as a markdown section ready for prompt injection.
  */
 function formatRAGContext(context: RAGContext): string {
-  const lines: string[] = [
-    '## Relevant Codebase Context (RAG)',
-    '',
-    'The following code snippets are relevant to your task. Read them carefully before making changes:',
-    '',
-  ];
+	const lines: string[] = [
+		"## Relevant Codebase Context (RAG)",
+		"",
+		"The following code snippets are relevant to your task. Read them carefully before making changes:",
+		"",
+	];
 
-  for (const chunk of context.relevantChunks) {
-    const relevanceLabel = chunk.score.toFixed(2);
-    lines.push(`### ${chunk.source} (relevance: ${relevanceLabel})`);
-    lines.push('```typescript');
-    lines.push(chunk.content);
-    lines.push('```');
-    lines.push('');
-  }
+	for (const chunk of context.relevantChunks) {
+		const relevanceLabel = chunk.score.toFixed(2);
+		lines.push(`### ${chunk.source} (relevance: ${relevanceLabel})`);
+		lines.push("```typescript");
+		lines.push(chunk.content);
+		lines.push("```");
+		lines.push("");
+	}
 
-  return lines.join('\n');
+	return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,13 @@
 
 import { randomUUID } from "node:crypto";
 import { execute, getPool, query } from "../pg.js";
-import type { AgentCapability, AgentDependency, CapabilityPermission, CapabilityScopeType, DependencyType } from "../types.js";
+import type {
+	AgentCapability,
+	AgentDependency,
+	CapabilityPermission,
+	CapabilityScopeType,
+	DependencyType,
+} from "../types.js";
 import { rowToCapability, rowToDependency } from "./helpers.js";
 
 // ---------------------------------------------------------------------------

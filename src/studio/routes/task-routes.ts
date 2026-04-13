@@ -5,17 +5,10 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { containerManager } from "../container-manager.js";
+import { appendTaskLogs, getProject, getTask, listPendingApprovals, listProjectTasks, updateTask } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { executionEngine } from "../execution-engine.js";
 import { taskEngine } from "../task-engine.js";
-import {
-	appendTaskLogs,
-	getProject,
-	getTask,
-	listPendingApprovals,
-	listProjectTasks,
-	updateTask,
-} from "../db.js";
 
 export const taskRoutes = new Hono();
 
@@ -238,4 +231,3 @@ taskRoutes.get("/projects/:id/tasks/:taskId/stream", async (c) => {
 		});
 	});
 });
-

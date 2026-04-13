@@ -11,7 +11,6 @@ import {
 	updateAgentFiles,
 	writeAgentFile,
 } from "../agent-files.js";
-import type { ProjectAgent } from "../types.js";
 import {
 	copyAgentsToProject,
 	createCustomTeamTemplate,
@@ -29,6 +28,7 @@ import {
 	updateCustomTeamTemplate,
 	updateProjectAgent,
 } from "../db.js";
+import type { ProjectAgent } from "../types.js";
 
 export const teamRoutes = new Hono();
 

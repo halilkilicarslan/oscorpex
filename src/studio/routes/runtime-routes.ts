@@ -8,10 +8,10 @@ import { Hono } from "hono";
 import { getAppStatus, getResolvedConfig, startApp, stopApp, switchPreviewService } from "../app-runner.js";
 import { getDbStatus, parseCloudUrl, provisionDatabase, stopAllDatabases, stopDatabase } from "../db-provisioner.js";
 import type { DbProvisionMethod } from "../db-provisioner.js";
+import { getProject } from "../db.js";
+import { eventBus } from "../event-bus.js";
 import { analyzeProject, writeEnvFile } from "../runtime-analyzer.js";
 import type { DatabaseType } from "../runtime-analyzer.js";
-import { eventBus } from "../event-bus.js";
-import { getProject } from "../db.js";
 
 export const runtimeRoutes = new Hono();
 

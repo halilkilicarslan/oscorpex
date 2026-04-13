@@ -3,12 +3,24 @@
 // ---------------------------------------------------------------------------
 
 import type {
+	AIProvider,
+	AIProviderType,
+	AgentCapability,
+	AgentConfig,
+	AgentDependency,
+	AgentProcessStatus,
 	AgentRole,
+	AgentRun,
 	CLITool,
+	CapabilityPermission,
+	CapabilityScopeType,
+	ChatMessage,
 	ChatRole,
 	DependencyType,
 	EventType,
+	Phase,
 	PhaseStatus,
+	PipelineRun,
 	PipelineStatus,
 	PlanStatus,
 	Project,
@@ -20,18 +32,6 @@ import type {
 	TaskComplexity,
 	TaskStatus,
 	TeamTemplate,
-	AgentConfig,
-	AgentDependency,
-	AgentCapability,
-	CapabilityScopeType,
-	CapabilityPermission,
-	AgentProcessStatus,
-	AgentRun,
-	AIProvider,
-	AIProviderType,
-	Phase,
-	ChatMessage,
-	PipelineRun,
 } from "../types.js";
 
 // ---------------------------------------------------------------------------

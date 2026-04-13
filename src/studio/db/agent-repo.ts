@@ -5,8 +5,8 @@
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
 import type { AgentConfig, DependencyType, ProjectAgent } from "../types.js";
-import { now, rowToAgentConfig, rowToProjectAgent } from "./helpers.js";
 import { bulkCreateDependencies } from "./dependency-repo.js";
+import { now, rowToAgentConfig, rowToProjectAgent } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
 // Agent Configs CRUD

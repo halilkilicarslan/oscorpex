@@ -4,24 +4,21 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import {
-	seedPresetAgents,
-	seedTeamTemplates,
-} from "../db.js";
+import { seedPresetAgents, seedTeamTemplates } from "../db.js";
 import { eventBus } from "../event-bus.js";
-import { sendWebhookNotification } from "../webhook-sender.js";
 import { budgetGuard } from "../middleware/policy-middleware.js";
+import { sendWebhookNotification } from "../webhook-sender.js";
 
-import { projectRoutes } from "./project-routes.js";
-import { taskRoutes } from "./task-routes.js";
 import { agentRoutes } from "./agent-routes.js";
-import { teamRoutes } from "./team-routes.js";
-import { gitFileRoutes } from "./git-file-routes.js";
-import { pipelineRoutes } from "./pipeline-routes.js";
 import { analyticsRoutes } from "./analytics-routes.js";
-import { runtimeRoutes } from "./runtime-routes.js";
+import { gitFileRoutes } from "./git-file-routes.js";
 import { integrationRoutes } from "./integration-routes.js";
+import { pipelineRoutes } from "./pipeline-routes.js";
+import { projectRoutes } from "./project-routes.js";
 import { providerRoutes } from "./provider-routes.js";
+import { runtimeRoutes } from "./runtime-routes.js";
+import { taskRoutes } from "./task-routes.js";
+import { teamRoutes } from "./team-routes.js";
 
 // Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();

@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
 import type { Phase, PhaseStatus, PlanStatus, Project, ProjectPlan } from "../types.js";
-import { now, rowToProject, rowToPhase } from "./helpers.js";
+import { now, rowToPhase, rowToProject } from "./helpers.js";
 import { listTasks } from "./task-repo.js";
 
 // ---------------------------------------------------------------------------

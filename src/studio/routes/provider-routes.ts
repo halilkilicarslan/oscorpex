@@ -7,8 +7,8 @@ import { isAnyProviderConfigured } from "../ai-provider-factory.js";
 import {
 	createProvider,
 	deleteProvider,
-	getFallbackChain,
 	getDefaultProvider,
+	getFallbackChain,
 	getProvider,
 	getRawProviderApiKey,
 	listProviders,

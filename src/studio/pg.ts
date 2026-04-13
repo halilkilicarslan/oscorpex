@@ -6,7 +6,7 @@
 // Parameter style: $1, $2, $3, … (PostgreSQL positional placeholders)
 // ---------------------------------------------------------------------------
 
-import pg from 'pg';
+import pg from "pg";
 
 const { Pool } = pg;
 
@@ -17,21 +17,19 @@ let _pool: pg.Pool | null = null;
  * Lazily created on first call; reused on subsequent calls.
  */
 export function getPool(): pg.Pool {
-  if (!_pool) {
-    _pool = new Pool({
-      connectionString:
-        process.env.DATABASE_URL ||
-        'postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex',
-      max: 20,
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 5_000,
-    });
+	if (!_pool) {
+		_pool = new Pool({
+			connectionString: process.env.DATABASE_URL || "postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex",
+			max: 20,
+			idleTimeoutMillis: 30_000,
+			connectionTimeoutMillis: 5_000,
+		});
 
-    _pool.on('error', (err) => {
-      console.error('[pg] Unexpected error on idle client:', err);
-    });
-  }
-  return _pool;
+		_pool.on("error", (err) => {
+			console.error("[pg] Unexpected error on idle client:", err);
+		});
+	}
+	return _pool;
 }
 
 /**
@@ -40,12 +38,9 @@ export function getPool(): pg.Pool {
  * @example
  *   const projects = await query<Project>('SELECT * FROM projects WHERE id = $1', [id]);
  */
-export async function query<T = Record<string, unknown>>(
-  sql: string,
-  params?: unknown[],
-): Promise<T[]> {
-  const result = await getPool().query(sql, params);
-  return result.rows as T[];
+export async function query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]> {
+	const result = await getPool().query(sql, params);
+	return result.rows as T[];
 }
 
 /**
@@ -54,12 +49,9 @@ export async function query<T = Record<string, unknown>>(
  * @example
  *   const project = await queryOne<Project>('SELECT * FROM projects WHERE id = $1', [id]);
  */
-export async function queryOne<T = Record<string, unknown>>(
-  sql: string,
-  params?: unknown[],
-): Promise<T | undefined> {
-  const result = await getPool().query(sql, params);
-  return result.rows[0] as T | undefined;
+export async function queryOne<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T | undefined> {
+	const result = await getPool().query(sql, params);
+	return result.rows[0] as T | undefined;
 }
 
 /**
@@ -69,12 +61,9 @@ export async function queryOne<T = Record<string, unknown>>(
  * @example
  *   const { rowCount } = await execute('DELETE FROM projects WHERE id = $1', [id]);
  */
-export async function execute(
-  sql: string,
-  params?: unknown[],
-): Promise<{ rowCount: number }> {
-  const result = await getPool().query(sql, params);
-  return { rowCount: result.rowCount ?? 0 };
+export async function execute(sql: string, params?: unknown[]): Promise<{ rowCount: number }> {
+	const result = await getPool().query(sql, params);
+	return { rowCount: result.rowCount ?? 0 };
 }
 
 /**
@@ -87,21 +76,19 @@ export async function execute(
  *     await client.query('INSERT INTO project_plans ...', [...]);
  *   });
  */
-export async function withTransaction<T>(
-  fn: (client: pg.PoolClient) => Promise<T>,
-): Promise<T> {
-  const client = await getPool().connect();
-  try {
-    await client.query('BEGIN');
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+export async function withTransaction<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+	const client = await getPool().connect();
+	try {
+		await client.query("BEGIN");
+		const result = await fn(client);
+		await client.query("COMMIT");
+		return result;
+	} catch (err) {
+		await client.query("ROLLBACK");
+		throw err;
+	} finally {
+		client.release();
+	}
 }
 
 /**
@@ -109,8 +96,8 @@ export async function withTransaction<T>(
  * Call this during application shutdown to allow in-flight queries to finish.
  */
 export async function closePool(): Promise<void> {
-  if (_pool) {
-    await _pool.end();
-    _pool = null;
-  }
+	if (_pool) {
+		await _pool.end();
+		_pool = null;
+	}
 }
