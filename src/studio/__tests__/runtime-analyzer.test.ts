@@ -1,21 +1,11 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-// Mock child_process so isPortInUse (lsof) always returns "not in use"
-vi.mock("node:child_process", async (importOriginal) => {
-	const mod = await importOriginal<typeof import("node:child_process")>();
-	return {
-		...mod,
-		execSync: vi.fn((cmd: string, opts?: unknown) => {
-			if (typeof cmd === "string" && cmd.startsWith("lsof -ti:")) {
-				throw new Error("mock: port not in use");
-			}
-			return mod.execSync(cmd, opts as never);
-		}),
-	};
-});
+// Not: analyzeProject artık saf bir fonksiyondur — port çakışma kontrolü ve
+// lsof çağrısı app-runner katmanına taşındı, bu yüzden child_process mock'u
+// gerekli değildir.
 
 import { analyzeProject, generateStudioConfig, writeEnvFile } from "../runtime-analyzer.js";
 
