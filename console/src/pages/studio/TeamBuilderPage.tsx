@@ -28,10 +28,12 @@ import {
   Plus,
   ArrowLeft,
   Pencil,
+  Sparkles,
 } from 'lucide-react';
 import {
   fetchPresetAgents,
   fetchCustomTeams,
+  fetchTeamTemplates,
   createCustomTeam,
   updateCustomTeam,
   deleteCustomTeam,
@@ -39,8 +41,10 @@ import {
   type AgentConfig,
   type CustomTeamTemplate,
   type DependencyType,
+  type TeamTemplate,
 } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
+import PresetAgentSheet from './PresetAgentSheet';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -58,6 +62,8 @@ const COLOR_MAP: Record<string, string> = {
   'backend-qa': '#a855f7',
   'frontend-reviewer': '#ef4444',
   'backend-reviewer': '#ef4444',
+  'security-reviewer': '#dc2626',
+  'docs-writer': '#14b8a6',
   devops: '#0ea5e9',
 };
 
@@ -154,11 +160,13 @@ function RolePalette({
   placedRoles,
   collapsed,
   onToggle,
+  onAgentClick,
 }: {
   presets: AgentConfig[];
   placedRoles: Set<string>;
   collapsed: boolean;
   onToggle: () => void;
+  onAgentClick?: (agent: AgentConfig) => void;
 }) {
   const available = presets.filter((p) => !placedRoles.has(p.role));
 
@@ -197,6 +205,7 @@ function RolePalette({
               key={preset.role}
               draggable
               onDragStart={(e) => onDragStart(e, preset.role)}
+              onClick={() => onAgentClick?.(preset)}
               className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[#111111] border border-[#1f1f1f] cursor-grab active:cursor-grabbing hover:border-[#333] transition-colors"
             >
               <AgentAvatarImg avatar={preset.avatar} name={preset.name} size="xs" />
@@ -277,12 +286,14 @@ function FlowCanvas({
   initialDeps,
   onSave,
   saving,
+  onAgentClick,
 }: {
   presets: AgentConfig[];
   initialRoles: string[];
   initialDeps: { from: string; to: string; type: string }[];
   onSave: (roles: string[], deps: { from: string; to: string; type: string }[]) => void;
   saving: boolean;
+  onAgentClick?: (agent: AgentConfig) => void;
 }) {
   const presetMap = useMemo(() => new Map(presets.map((p) => [p.role, p])), [presets]);
 
@@ -394,6 +405,7 @@ function FlowCanvas({
         placedRoles={placedRoles}
         collapsed={paletteCollapsed}
         onToggle={() => setPaletteCollapsed((p) => !p)}
+        onAgentClick={onAgentClick}
       />
       <div className="flex-1 relative">
         <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
@@ -421,6 +433,10 @@ function FlowCanvas({
           onConnect={onConnect}
           onDragOver={onDragOver}
           onDrop={onDrop}
+          onNodeClick={(_, node) => {
+            const data = node.data as BuilderNodeData | undefined;
+            if (data?.preset && onAgentClick) onAgentClick(data.preset);
+          }}
           nodeTypes={nodeTypes}
           fitView
           className="bg-[#0a0a0a]"
@@ -453,21 +469,57 @@ function FlowCanvas({
 // ---------------------------------------------------------------------------
 
 function TeamList({
+  presetTeams,
   teams,
   selectedId,
+  selectedPresetId,
   onSelect,
+  onSelectPreset,
   onNew,
   onDelete,
 }: {
+  presetTeams: TeamTemplate[];
   teams: CustomTeamTemplate[];
   selectedId: string | null;
+  selectedPresetId: string | null;
   onSelect: (id: string) => void;
+  onSelectPreset: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
 }) {
   return (
     <div className="w-[220px] shrink-0 bg-[#0a0a0a] border-r border-[#1f1f1f] flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#1f1f1f]">
+      {/* Preset Teams */}
+      <div className="flex items-center gap-1.5 px-3 py-2.5 border-b border-[#1f1f1f]">
+        <Sparkles size={11} className="text-[#a78bfa]" />
+        <span className="text-[11px] font-semibold text-[#a3a3a3] uppercase">Preset Teams</span>
+      </div>
+      <div className="overflow-y-auto p-2 space-y-1 max-h-[40%]">
+        {presetTeams.length === 0 && (
+          <p className="text-[10px] text-[#525252] text-center py-4">No preset teams.</p>
+        )}
+        {presetTeams.map((t) => (
+          <div
+            key={t.id}
+            onClick={() => onSelectPreset(t.id)}
+            className={[
+              'flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors',
+              selectedPresetId === t.id
+                ? 'bg-[#1a1626] border border-[#a78bfa]/40'
+                : 'hover:bg-[#111111] border border-transparent',
+            ].join(' ')}
+            title={t.description}
+          >
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-medium text-[#e5e5e5] block truncate">{t.name}</span>
+              <span className="text-[9px] text-[#525252]">{t.roles.length} roles</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* My Teams */}
+      <div className="flex items-center justify-between px-3 py-2.5 border-t border-b border-[#1f1f1f]">
         <span className="text-[11px] font-semibold text-[#a3a3a3] uppercase">My Teams</span>
         <button
           onClick={onNew}
@@ -479,7 +531,7 @@ function TeamList({
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {teams.length === 0 && (
           <p className="text-[10px] text-[#525252] text-center py-8">
-            No custom teams yet. Click "New" to create one.
+            No custom teams yet. Click a preset above or "New" to create one.
           </p>
         )}
         {teams.map((t) => (
@@ -576,28 +628,46 @@ function TeamNameModal({
 export default function TeamBuilderPage() {
   const navigate = useNavigate();
   const [presets, setPresets] = useState<AgentConfig[]>([]);
+  const [presetTeams, setPresetTeams] = useState<TeamTemplate[]>([]);
   const [teams, setTeams] = useState<CustomTeamTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showNameModal, setShowNameModal] = useState<'new' | 'edit' | null>(null);
 
   // Pending canvas state (roles + deps) while naming
   const [pendingCanvas, setPendingCanvas] = useState<{ roles: string[]; deps: { from: string; to: string; type: string }[] } | null>(null);
 
+  // Right-side sheet: selected preset agent
+  const [sheetAgent, setSheetAgent] = useState<AgentConfig | null>(null);
+
   useEffect(() => {
-    Promise.all([fetchPresetAgents(), fetchCustomTeams()])
-      .then(([p, t]) => {
+    Promise.all([fetchPresetAgents(), fetchCustomTeams(), fetchTeamTemplates()])
+      .then(([p, t, pt]) => {
         setPresets(p);
         setTeams(t);
+        setPresetTeams(pt);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   const selected = teams.find((t) => t.id === selectedId);
+  const selectedPreset = presetTeams.find((t) => t.id === selectedPresetId);
 
   const handleNew = useCallback(() => {
+    setSelectedId(null);
+    setSelectedPresetId(null);
+  }, []);
+
+  const handleSelectCustom = useCallback((id: string) => {
+    setSelectedId(id);
+    setSelectedPresetId(null);
+  }, []);
+
+  const handleSelectPreset = useCallback((id: string) => {
+    setSelectedPresetId(id);
     setSelectedId(null);
   }, []);
 
@@ -629,6 +699,7 @@ export default function TeamBuilderPage() {
         });
         setTeams((prev) => [created, ...prev]);
         setSelectedId(created.id);
+        setSelectedPresetId(null);
       }
     } catch (err) {
       console.error('Failed to save team:', err);
@@ -679,6 +750,11 @@ export default function TeamBuilderPage() {
             <Pencil size={11} /> Rename
           </button>
         )}
+        {selectedPreset && (
+          <span className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] text-[#a78bfa] bg-[#a78bfa]/10 border border-[#a78bfa]/30 rounded-lg">
+            <Sparkles size={10} /> Preset template — click Save to create a custom copy
+          </span>
+        )}
       </div>
 
       {/* Legend */}
@@ -695,20 +771,24 @@ export default function TeamBuilderPage() {
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         <TeamList
+          presetTeams={presetTeams}
           teams={teams}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          selectedPresetId={selectedPresetId}
+          onSelect={handleSelectCustom}
+          onSelectPreset={handleSelectPreset}
           onNew={handleNew}
           onDelete={handleDelete}
         />
 
-        <ReactFlowProvider key={selectedId ?? '__new__'}>
+        <ReactFlowProvider key={selectedId ?? selectedPresetId ?? '__new__'}>
           <FlowCanvas
             presets={presets}
-            initialRoles={selected?.roles ?? []}
-            initialDeps={selected?.dependencies ?? []}
+            initialRoles={selected?.roles ?? selectedPreset?.roles ?? []}
+            initialDeps={selected?.dependencies ?? selectedPreset?.dependencies ?? []}
             onSave={handleSave}
             saving={saving}
+            onAgentClick={setSheetAgent}
           />
         </ReactFlowProvider>
       </div>
@@ -719,6 +799,15 @@ export default function TeamBuilderPage() {
           initial={showNameModal === 'edit' && selected ? { name: selected.name, description: selected.description } : undefined}
           onSave={handleNameSave}
           onCancel={() => { setShowNameModal(null); setPendingCanvas(null); }}
+        />
+      )}
+
+      {/* Agent detail sheet (preset properties) */}
+      {sheetAgent && (
+        <PresetAgentSheet
+          agent={sheetAgent}
+          color={COLOR_MAP[sheetAgent.role] ?? '#525252'}
+          onClose={() => setSheetAgent(null)}
         />
       )}
     </div>
