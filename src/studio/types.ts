@@ -193,7 +193,8 @@ export type EventType =
   | 'task:timeout_warning'
   | 'pipeline:completed'
   | 'budget:warning'
-  | 'budget:exceeded';
+  | 'budget:exceeded'
+  | 'prompt:size';
 
 export interface StudioEvent {
   id: string;
