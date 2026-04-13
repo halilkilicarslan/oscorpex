@@ -3,9 +3,9 @@
 ## Stack
 - Runtime: Node.js + tsx
 - Backend: Hono (via VoltAgent server-hono), port 3141
-- Database: PostgreSQL (pg) (WAL, FK), 16 tables
+- Database: PostgreSQL (pg), 16+ tables
 - AI Execution: CLI-only (Claude CLI `executeWithCLI` / `streamWithCLI`) — no AI SDK in execution path
-- Frontend: React 18 + Vite (port 5173) + Tailwind CSS
+- Frontend: React 19 + Vite (port 5173) + Tailwind CSS
 - Terminal: @xterm/xterm v6 + addon-fit
 - Git: simple-git
 
@@ -13,7 +13,8 @@
 | Module | Purpose |
 |--------|---------|
 | types.ts | 35+ interfaces, AgentRole, MessageType, PipelineStatus |
-| db.ts | SQLite schema (16 tables), all CRUD, seeds |
+| **db/** | Modular DB layer (15 files, see below) |
+| db.ts | Backward-compat shim → re-exports from db/index.js |
 | event-bus.ts | Pub/sub with DB persistence |
 | pm-agent.ts | PM system prompt + 4 AI SDK tools |
 | ai-provider-factory.ts | getAIModel() dynamic from DB |
@@ -28,19 +29,57 @@
 | app-runner.ts | 3-strategy app launch (config → runtime analysis → Docker Compose) |
 | git-manager.ts | Git operations + file CRUD |
 | agent-files.ts | .md file system per agent |
-| routes.ts | 100+ Hono routes at /api/studio (includes preview proxy) |
+| **routes/** | Modular Hono routes (11 files, see below) |
+| routes.ts | Backward-compat shim → re-exports studioRoutes from routes/index.js |
 | webhook-sender.ts | Webhook delivery for events |
-| capability-resolver.ts | Role-based CLI tool restrictions (resolveAllowedTools) |
+| capability-resolver.ts | Role-based CLI tool restrictions |
 | secret-vault.ts | AES-256-GCM encrypt/decrypt for API keys |
 | command-policy.ts | Prompt-level command restrictions per role |
 | github-integration.ts | Octokit PR creation + repo info |
 | middleware/policy-middleware.ts | Hono budget guard + capability guard |
 
-## DB Tables (16)
+## Modular Routes (src/studio/routes/) — v2.6 decomposition
+Previously monolithic routes.ts (3200+ lines) split into 11 sub-routers mounted via Hono `route('/')`:
+- `index.ts` — mount point, budget guard, event bus → webhook bridge
+- `project-routes.ts` — Project CRUD + Plan + Chat
+- `task-routes.ts` — Tasks, Approvals, Stream
+- `agent-routes.ts` — Agent Management + Runs
+- `team-routes.ts` — Team CRUD + Files
+- `git-file-routes.ts` — File CRUD + Git Ops
+- `pipeline-routes.ts` — Pipeline Engine
+- `analytics-routes.ts` — Analytics + Costs + Budgets
+- `runtime-routes.ts` — App Runner + Runtime Config
+- `integration-routes.ts` — GitHub + API Explorer + Webhooks
+- `provider-routes.ts` — AI Providers + Fallback
+
+URL structure unchanged — all mounted at `/api/studio`. External imports still use `./routes.js` (shim).
+
+## Modular DB (src/studio/db/) — v2.6 decomposition
+Previously monolithic db.ts (2280+ lines) split into 15 repo modules:
+- `index.ts` — re-exports everything (backward compat)
+- `helpers.ts` — row mappers (rowToProject, rowToTask, ...) + now()
+- `project-repo.ts` — Project + Plan + Phase CRUD
+- `task-repo.ts` — Task CRUD + lifecycle
+- `agent-repo.ts` — Agent Config + Project Agent
+- `team-repo.ts` — Team Templates + Custom Teams
+- `provider-repo.ts` — AI Provider + Fallback Chain
+- `analytics-repo.ts` — Token Usage + Cost + Analytics
+- `event-repo.ts` — Events + Chat Messages
+- `pipeline-repo.ts` — Pipeline Runs + Agent Runs
+- `dependency-repo.ts` — Dependencies + Capabilities
+- `webhook-repo.ts` — Webhooks + Deliveries
+- `settings-repo.ts` — Project Settings
+- `seed.ts` — seedPresetAgents + seedTeamTemplates
+- `reset.ts` — resetDb (pool close, for tests)
+
+All repos use shared `getPool()` from `src/studio/pg.ts`. External imports still use `./db.js` (shim).
+
+## DB Tables (16+)
 projects, project_plans, phases, tasks, agent_configs, project_agents,
 team_templates, events, chat_messages, ai_providers,
 agent_messages, pipeline_runs, agent_runs,
-agent_dependencies, agent_capabilities, project_settings
+agent_dependencies, agent_capabilities, project_settings,
+token_usage (with cache_creation_tokens, cache_read_tokens)
 
 ## 12-Agent Scrum Team (v2.0)
 PM, Designer, Architect, Frontend, Backend, Coder, QA, Reviewer, DevOps,
