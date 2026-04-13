@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import {
+	recordTokenUsage as _recordTokenUsage,
 	getActivityTimeline,
 	getAgentAnalytics,
 	getAgentCostSummary,
@@ -14,8 +15,9 @@ import {
 	getProjectSettingsMap,
 	listProjectAgents,
 	listTokenUsage,
-	recordTokenUsage as _recordTokenUsage,
 } from "../db.js";
+import { getAgentConfig, getProjectAgent, listProjectTasks } from "../db.js";
+import { checkDocsFreshness, generateReadme, regenerateAllDocs } from "../docs-generator.js";
 import {
 	fetchQualityGate,
 	getLatestSonarScan,
@@ -24,12 +26,6 @@ import {
 	recordSonarScan,
 	runSonarScan,
 } from "../sonar-runner.js";
-import { checkDocsFreshness, generateReadme, regenerateAllDocs } from "../docs-generator.js";
-import {
-	getAgentConfig,
-	getProjectAgent,
-	listProjectTasks,
-} from "../db.js";
 
 export const analyticsRoutes = new Hono();
 

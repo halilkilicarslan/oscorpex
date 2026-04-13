@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { gitManager } from "../git-manager.js";
 import { getProject } from "../db.js";
+import { gitManager } from "../git-manager.js";
 
 export const gitFileRoutes = new Hono();
 

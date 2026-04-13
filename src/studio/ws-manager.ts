@@ -10,11 +10,11 @@
 //   - Heartbeat: 30 saniyede bir ping gönderilir, pong alınmazsa bağlantı kesilir
 // ---------------------------------------------------------------------------
 
-import { WebSocketServer, WebSocket } from 'ws';
-import type { IncomingMessage } from 'node:http';
-import type { Duplex } from 'node:stream';
-import { eventBus } from './event-bus.js';
-import type { StudioEvent } from './types.js';
+import type { IncomingMessage } from "node:http";
+import type { Duplex } from "node:stream";
+import { WebSocket, WebSocketServer } from "ws";
+import { eventBus } from "./event-bus.js";
+import type { StudioEvent } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Tipler
@@ -22,288 +22,281 @@ import type { StudioEvent } from './types.js';
 
 /** WebSocket üzerinden gönderilen / alınan mesaj zarfı */
 export interface WSMessage {
-  /** Mesaj türü */
-  type: WSMessageType;
-  /** İlgili proje kimliği */
-  projectId?: string;
-  /** Agent kimliği (agent mesajları için) */
-  agentId?: string;
-  /** Taşınan veri */
-  payload?: unknown;
+	/** Mesaj türü */
+	type: WSMessageType;
+	/** İlgili proje kimliği */
+	projectId?: string;
+	/** Agent kimliği (agent mesajları için) */
+	agentId?: string;
+	/** Taşınan veri */
+	payload?: unknown;
 }
 
 export type WSMessageType =
-  // Client -> Server
-  | 'subscribe'       // Bir projeye abone ol
-  | 'unsubscribe'     // Aboneliği iptal et
-  | 'ping'            // Client heartbeat
-  // Server -> Client
-  | 'event'           // StudioEvent
-  | 'agent:output'    // Agent çıktı satırı
-  | 'pong'            // Server heartbeat yanıtı
-  | 'error'           // Hata bildirimi
-  | 'subscribed'      // Abone onayı
-  | 'unsubscribed';   // Abonelik iptali onayı
+	// Client -> Server
+	| "subscribe" // Bir projeye abone ol
+	| "unsubscribe" // Aboneliği iptal et
+	| "ping" // Client heartbeat
+	// Server -> Client
+	| "event" // StudioEvent
+	| "agent:output" // Agent çıktı satırı
+	| "pong" // Server heartbeat yanıtı
+	| "error" // Hata bildirimi
+	| "subscribed" // Abone onayı
+	| "unsubscribed"; // Abonelik iptali onayı
 
 /** Bağlı client'ı temsil eden dahili kayıt */
 interface ClientRecord {
-  ws: WebSocket;
-  /** Client'ın abone olduğu proje ID'leri */
-  subscriptions: Set<string>;
-  /** Heartbeat için son pong zamanı */
-  lastPong: number;
-  /** Ölü bağlantı tespiti için ping timer'ı */
-  pingTimer?: ReturnType<typeof setInterval>;
+	ws: WebSocket;
+	/** Client'ın abone olduğu proje ID'leri */
+	subscriptions: Set<string>;
+	/** Heartbeat için son pong zamanı */
+	lastPong: number;
+	/** Ölü bağlantı tespiti için ping timer'ı */
+	pingTimer?: ReturnType<typeof setInterval>;
 }
 
 // ---------------------------------------------------------------------------
 // Sabitler
 // ---------------------------------------------------------------------------
 
-const HEARTBEAT_INTERVAL_MS = 30_000;  // 30 saniye
-const HEARTBEAT_TIMEOUT_MS  = 10_000;  // Pong için bekleme süresi
+const HEARTBEAT_INTERVAL_MS = 30_000; // 30 saniye
+const HEARTBEAT_TIMEOUT_MS = 10_000; // Pong için bekleme süresi
 
 // ---------------------------------------------------------------------------
 // WebSocketManager
 // ---------------------------------------------------------------------------
 
 class WebSocketManager {
-  private wss: WebSocketServer;
-  /** Tüm bağlı client'lar */
-  private clients = new Map<WebSocket, ClientRecord>();
-  /** projectId -> event-bus unsubscribe fonksiyonu */
-  private projectUnsubscribers = new Map<string, () => void>();
-  /** projectId -> aktif client sayısı */
-  private projectRefCounts = new Map<string, number>();
+	private wss: WebSocketServer;
+	/** Tüm bağlı client'lar */
+	private clients = new Map<WebSocket, ClientRecord>();
+	/** projectId -> event-bus unsubscribe fonksiyonu */
+	private projectUnsubscribers = new Map<string, () => void>();
+	/** projectId -> aktif client sayısı */
+	private projectRefCounts = new Map<string, number>();
 
-  constructor() {
-    // noServer: true — HTTP upgrade'ini kendimiz yöneteceğiz
-    this.wss = new WebSocketServer({ noServer: true });
-    this._setupWSS();
-  }
+	constructor() {
+		// noServer: true — HTTP upgrade'ini kendimiz yöneteceğiz
+		this.wss = new WebSocketServer({ noServer: true });
+		this._setupWSS();
+	}
 
-  // -------------------------------------------------------------------------
-  // Dışa açık API
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Dışa açık API
+	// -------------------------------------------------------------------------
 
-  /**
-   * HTTP upgrade isteğini WebSocket bağlantısına yükseltir.
-   * `src/index.ts` veya Hono adapter'ından çağrılır.
-   */
-  handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
-    this.wss.handleUpgrade(req, socket, head, (ws) => {
-      this.wss.emit('connection', ws, req);
-    });
-  }
+	/**
+	 * HTTP upgrade isteğini WebSocket bağlantısına yükseltir.
+	 * `src/index.ts` veya Hono adapter'ından çağrılır.
+	 */
+	handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
+		this.wss.handleUpgrade(req, socket, head, (ws) => {
+			this.wss.emit("connection", ws, req);
+		});
+	}
 
-  /**
-   * Belirli bir projeye abone olan tüm client'lara mesaj gönderir.
-   * event-bus dışından (örn. agent-runtime) da kullanılabilir.
-   */
-  broadcastToProject(projectId: string, message: WSMessage): void {
-    const data = JSON.stringify(message);
-    for (const [ws, record] of this.clients) {
-      if (
-        record.subscriptions.has(projectId) &&
-        ws.readyState === WebSocket.OPEN
-      ) {
-        ws.send(data);
-      }
-    }
-  }
+	/**
+	 * Belirli bir projeye abone olan tüm client'lara mesaj gönderir.
+	 * event-bus dışından (örn. agent-runtime) da kullanılabilir.
+	 */
+	broadcastToProject(projectId: string, message: WSMessage): void {
+		const data = JSON.stringify(message);
+		for (const [ws, record] of this.clients) {
+			if (record.subscriptions.has(projectId) && ws.readyState === WebSocket.OPEN) {
+				ws.send(data);
+			}
+		}
+	}
 
-  /**
-   * Bağlı client sayısını döndürür (izleme amaçlı).
-   */
-  get connectionCount(): number {
-    return this.clients.size;
-  }
+	/**
+	 * Bağlı client sayısını döndürür (izleme amaçlı).
+	 */
+	get connectionCount(): number {
+		return this.clients.size;
+	}
 
-  // -------------------------------------------------------------------------
-  // Dahili kurulum
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Dahili kurulum
+	// -------------------------------------------------------------------------
 
-  private _setupWSS(): void {
-    this.wss.on('connection', (ws: WebSocket) => {
-      const record: ClientRecord = {
-        ws,
-        subscriptions: new Set(),
-        lastPong: Date.now(),
-      };
-      this.clients.set(ws, record);
+	private _setupWSS(): void {
+		this.wss.on("connection", (ws: WebSocket) => {
+			const record: ClientRecord = {
+				ws,
+				subscriptions: new Set(),
+				lastPong: Date.now(),
+			};
+			this.clients.set(ws, record);
 
-      // Heartbeat başlat
-      record.pingTimer = setInterval(() => {
-        this._checkHeartbeat(ws, record);
-      }, HEARTBEAT_INTERVAL_MS);
+			// Heartbeat başlat
+			record.pingTimer = setInterval(() => {
+				this._checkHeartbeat(ws, record);
+			}, HEARTBEAT_INTERVAL_MS);
 
-      // Gelen mesajları işle
-      ws.on('message', (raw) => {
-        try {
-          const msg = JSON.parse(raw.toString()) as WSMessage;
-          this._handleClientMessage(ws, record, msg);
-        } catch {
-          this._send(ws, { type: 'error', payload: { message: 'Geçersiz JSON' } });
-        }
-      });
+			// Gelen mesajları işle
+			ws.on("message", (raw) => {
+				try {
+					const msg = JSON.parse(raw.toString()) as WSMessage;
+					this._handleClientMessage(ws, record, msg);
+				} catch {
+					this._send(ws, { type: "error", payload: { message: "Geçersiz JSON" } });
+				}
+			});
 
-      // Pong — heartbeat yanıtı
-      ws.on('pong', () => {
-        record.lastPong = Date.now();
-      });
+			// Pong — heartbeat yanıtı
+			ws.on("pong", () => {
+				record.lastPong = Date.now();
+			});
 
-      // Bağlantı kapandı
-      ws.on('close', () => {
-        this._cleanup(ws, record);
-      });
+			// Bağlantı kapandı
+			ws.on("close", () => {
+				this._cleanup(ws, record);
+			});
 
-      ws.on('error', () => {
-        this._cleanup(ws, record);
-      });
-    });
-  }
+			ws.on("error", () => {
+				this._cleanup(ws, record);
+			});
+		});
+	}
 
-  // -------------------------------------------------------------------------
-  // Client mesaj işleyicisi
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Client mesaj işleyicisi
+	// -------------------------------------------------------------------------
 
-  private _handleClientMessage(
-    ws: WebSocket,
-    record: ClientRecord,
-    msg: WSMessage,
-  ): void {
-    switch (msg.type) {
-      case 'subscribe': {
-        const projectId = msg.projectId;
-        if (!projectId) {
-          this._send(ws, { type: 'error', payload: { message: 'projectId zorunlu' } });
-          return;
-        }
-        this._subscribe(ws, record, projectId);
-        this._send(ws, { type: 'subscribed', projectId });
-        break;
-      }
+	private _handleClientMessage(ws: WebSocket, record: ClientRecord, msg: WSMessage): void {
+		switch (msg.type) {
+			case "subscribe": {
+				const projectId = msg.projectId;
+				if (!projectId) {
+					this._send(ws, { type: "error", payload: { message: "projectId zorunlu" } });
+					return;
+				}
+				this._subscribe(ws, record, projectId);
+				this._send(ws, { type: "subscribed", projectId });
+				break;
+			}
 
-      case 'unsubscribe': {
-        const projectId = msg.projectId;
-        if (!projectId) return;
-        this._unsubscribe(record, projectId);
-        this._send(ws, { type: 'unsubscribed', projectId });
-        break;
-      }
+			case "unsubscribe": {
+				const projectId = msg.projectId;
+				if (!projectId) return;
+				this._unsubscribe(record, projectId);
+				this._send(ws, { type: "unsubscribed", projectId });
+				break;
+			}
 
-      case 'ping': {
-        this._send(ws, { type: 'pong' });
-        break;
-      }
+			case "ping": {
+				this._send(ws, { type: "pong" });
+				break;
+			}
 
-      default:
-        // Bilinmeyen tip — sessizce yoksay
-        break;
-    }
-  }
+			default:
+				// Bilinmeyen tip — sessizce yoksay
+				break;
+		}
+	}
 
-  // -------------------------------------------------------------------------
-  // Abonelik yönetimi
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Abonelik yönetimi
+	// -------------------------------------------------------------------------
 
-  private _subscribe(ws: WebSocket, record: ClientRecord, projectId: string): void {
-    if (record.subscriptions.has(projectId)) return; // Zaten abone
+	private _subscribe(ws: WebSocket, record: ClientRecord, projectId: string): void {
+		if (record.subscriptions.has(projectId)) return; // Zaten abone
 
-    record.subscriptions.add(projectId);
+		record.subscriptions.add(projectId);
 
-    // Proje için ref count'u artır
-    const prev = this.projectRefCounts.get(projectId) ?? 0;
-    this.projectRefCounts.set(projectId, prev + 1);
+		// Proje için ref count'u artır
+		const prev = this.projectRefCounts.get(projectId) ?? 0;
+		this.projectRefCounts.set(projectId, prev + 1);
 
-    // İlk client aboneyse event-bus'a bağlan
-    if (prev === 0) {
-      const unsub = eventBus.onProject(projectId, (event: StudioEvent) => {
-        this._onProjectEvent(projectId, event);
-      });
-      this.projectUnsubscribers.set(projectId, unsub);
-    }
-  }
+		// İlk client aboneyse event-bus'a bağlan
+		if (prev === 0) {
+			const unsub = eventBus.onProject(projectId, (event: StudioEvent) => {
+				this._onProjectEvent(projectId, event);
+			});
+			this.projectUnsubscribers.set(projectId, unsub);
+		}
+	}
 
-  private _unsubscribe(record: ClientRecord, projectId: string): void {
-    if (!record.subscriptions.has(projectId)) return;
+	private _unsubscribe(record: ClientRecord, projectId: string): void {
+		if (!record.subscriptions.has(projectId)) return;
 
-    record.subscriptions.delete(projectId);
+		record.subscriptions.delete(projectId);
 
-    const count = (this.projectRefCounts.get(projectId) ?? 1) - 1;
-    if (count <= 0) {
-      // Son client — event-bus aboneliğini kaldır
-      this.projectRefCounts.delete(projectId);
-      const unsub = this.projectUnsubscribers.get(projectId);
-      if (unsub) {
-        unsub();
-        this.projectUnsubscribers.delete(projectId);
-      }
-    } else {
-      this.projectRefCounts.set(projectId, count);
-    }
-  }
+		const count = (this.projectRefCounts.get(projectId) ?? 1) - 1;
+		if (count <= 0) {
+			// Son client — event-bus aboneliğini kaldır
+			this.projectRefCounts.delete(projectId);
+			const unsub = this.projectUnsubscribers.get(projectId);
+			if (unsub) {
+				unsub();
+				this.projectUnsubscribers.delete(projectId);
+			}
+		} else {
+			this.projectRefCounts.set(projectId, count);
+		}
+	}
 
-  // -------------------------------------------------------------------------
-  // Event-bus olayını client'lara ilet
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Event-bus olayını client'lara ilet
+	// -------------------------------------------------------------------------
 
-  private _onProjectEvent(projectId: string, event: StudioEvent): void {
-    this.broadcastToProject(projectId, {
-      type: 'event',
-      projectId,
-      payload: event,
-    });
-  }
+	private _onProjectEvent(projectId: string, event: StudioEvent): void {
+		this.broadcastToProject(projectId, {
+			type: "event",
+			projectId,
+			payload: event,
+		});
+	}
 
-  // -------------------------------------------------------------------------
-  // Heartbeat
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Heartbeat
+	// -------------------------------------------------------------------------
 
-  private _checkHeartbeat(ws: WebSocket, record: ClientRecord): void {
-    if (ws.readyState !== WebSocket.OPEN) return;
+	private _checkHeartbeat(ws: WebSocket, record: ClientRecord): void {
+		if (ws.readyState !== WebSocket.OPEN) return;
 
-    const now = Date.now();
-    if (now - record.lastPong > HEARTBEAT_INTERVAL_MS + HEARTBEAT_TIMEOUT_MS) {
-      // Pong gelmedi — ölü bağlantı, kapat
-      ws.terminate();
-      return;
-    }
+		const now = Date.now();
+		if (now - record.lastPong > HEARTBEAT_INTERVAL_MS + HEARTBEAT_TIMEOUT_MS) {
+			// Pong gelmedi — ölü bağlantı, kapat
+			ws.terminate();
+			return;
+		}
 
-    ws.ping();
-  }
+		ws.ping();
+	}
 
-  // -------------------------------------------------------------------------
-  // Temizlik
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Temizlik
+	// -------------------------------------------------------------------------
 
-  private _cleanup(ws: WebSocket, record: ClientRecord): void {
-    // Heartbeat timer'ı durdur
-    if (record.pingTimer) {
-      clearInterval(record.pingTimer);
-    }
+	private _cleanup(ws: WebSocket, record: ClientRecord): void {
+		// Heartbeat timer'ı durdur
+		if (record.pingTimer) {
+			clearInterval(record.pingTimer);
+		}
 
-    // Tüm abonelikleri kaldır
-    for (const projectId of record.subscriptions) {
-      this._unsubscribe(record, projectId);
-    }
+		// Tüm abonelikleri kaldır
+		for (const projectId of record.subscriptions) {
+			this._unsubscribe(record, projectId);
+		}
 
-    this.clients.delete(ws);
-  }
+		this.clients.delete(ws);
+	}
 
-  // -------------------------------------------------------------------------
-  // Yardımcı
-  // -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Yardımcı
+	// -------------------------------------------------------------------------
 
-  private _send(ws: WebSocket, msg: WSMessage): void {
-    if (ws.readyState === WebSocket.OPEN) {
-      try {
-        ws.send(JSON.stringify(msg));
-      } catch {
-        // Gönderme hatası — yoksay
-      }
-    }
-  }
+	private _send(ws: WebSocket, msg: WSMessage): void {
+		if (ws.readyState === WebSocket.OPEN) {
+			try {
+				ws.send(JSON.stringify(msg));
+			} catch {
+				// Gönderme hatası — yoksay
+			}
+		}
+	}
 }
 
 // Singleton instance

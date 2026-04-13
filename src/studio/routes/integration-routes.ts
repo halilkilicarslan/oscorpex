@@ -5,9 +5,7 @@
 import { Hono } from "hono";
 import { discoverApi, loadCollection, saveCollection } from "../api-discovery.js";
 import type { SavedRequest } from "../api-discovery.js";
-import { GitHubIntegration } from "../github-integration.js";
-import { decrypt, encrypt, isEncrypted } from "../secret-vault.js";
-import { sendWebhookNotification } from "../webhook-sender.js";
+import { getAppStatus } from "../app-runner.js";
 import {
 	type Webhook,
 	createWebhook,
@@ -19,7 +17,9 @@ import {
 	setProjectSetting,
 	updateWebhook,
 } from "../db.js";
-import { getAppStatus } from "../app-runner.js";
+import { GitHubIntegration } from "../github-integration.js";
+import { decrypt, encrypt, isEncrypted } from "../secret-vault.js";
+import { sendWebhookNotification } from "../webhook-sender.js";
 
 export const integrationRoutes = new Hono();
 

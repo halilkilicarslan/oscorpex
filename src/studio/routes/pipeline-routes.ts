@@ -3,15 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { getLatestPlan, getProject, getTask, listPhases, listProjectAgents, listTasks } from "../db.js";
 import { pipelineEngine } from "../pipeline-engine.js";
-import {
-	getLatestPlan,
-	getProject,
-	getTask,
-	listPhases,
-	listProjectAgents,
-	listTasks,
-} from "../db.js";
 import type { Task } from "../types.js";
 
 export const pipelineRoutes = new Hono();

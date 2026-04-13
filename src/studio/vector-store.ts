@@ -7,7 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { openai } from "@ai-sdk/openai";
 import { embed, embedMany } from "ai";
-import { query, queryOne, execute, getPool } from "./pg.js";
+import { execute, getPool, query, queryOne } from "./pg.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,10 +39,7 @@ function vectorToString(v: number[]): string {
  * Birden fazla metin için toplu embedding üretir.
  * AI SDK v6'nın `embedMany` fonksiyonunu kullanır.
  */
-export async function generateEmbeddings(
-	texts: string[],
-	model = "text-embedding-3-small",
-): Promise<number[][]> {
+export async function generateEmbeddings(texts: string[], model = "text-embedding-3-small"): Promise<number[][]> {
 	if (texts.length === 0) return [];
 
 	const embeddingModel = openai.embedding(model);
@@ -57,10 +54,7 @@ export async function generateEmbeddings(
  * Tek bir metin için embedding üretir.
  * AI SDK v6'nın `embed` fonksiyonunu kullanır.
  */
-export async function generateEmbedding(
-	text: string,
-	model = "text-embedding-3-small",
-): Promise<number[]> {
+export async function generateEmbedding(text: string, model = "text-embedding-3-small"): Promise<number[]> {
 	const embeddingModel = openai.embedding(model);
 	const { embedding } = await embed({ model: embeddingModel, value: text });
 	return embedding;
@@ -78,11 +72,7 @@ export async function generateEmbedding(
  * @param chunkSize  - Maksimum karakter sayısı (varsayılan: 512)
  * @param overlap    - Parçalar arası örtüşme (varsayılan: 50)
  */
-export function chunkText(
-	text: string,
-	chunkSize = 512,
-	overlap = 50,
-): string[] {
+export function chunkText(text: string, chunkSize = 512, overlap = 50): string[] {
 	if (!text || text.trim().length === 0) return [];
 
 	// Cümle sınırlarına göre bölümlere ayır
@@ -205,9 +195,7 @@ export async function searchSimilar(
 ): Promise<SearchResult[]> {
 	if (!queryText.trim()) return [];
 
-	console.log(
-		`[VectorStore] Searching kbId=${kbId} topK=${topK} query="${queryText.slice(0, 80)}..."`,
-	);
+	console.log(`[VectorStore] Searching kbId=${kbId} topK=${topK} query="${queryText.slice(0, 80)}..."`);
 
 	// 1. Sorgu embedding'i üret
 	const queryVector = await generateEmbedding(queryText, model);
@@ -241,9 +229,7 @@ export async function searchSimilar(
 		kbId: row.kb_id,
 		content: row.content,
 		score: row.score,
-		metadata: row.metadata
-			? (JSON.parse(row.metadata) as Record<string, unknown>)
-			: null,
+		metadata: row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : null,
 	}));
 
 	console.log(
@@ -275,15 +261,11 @@ export async function indexDocument(
 	model = "text-embedding-3-small",
 ): Promise<{ chunkCount: number }> {
 	if (!content || !content.trim()) {
-		console.warn(
-			`[VectorStore] indexDocument called with empty content for docId=${docId}`,
-		);
+		console.warn(`[VectorStore] indexDocument called with empty content for docId=${docId}`);
 		return { chunkCount: 0 };
 	}
 
-	console.log(
-		`[VectorStore] Indexing docId=${docId} kbId=${kbId} model=${model}`,
-	);
+	console.log(`[VectorStore] Indexing docId=${docId} kbId=${kbId} model=${model}`);
 
 	// 1. Metni chunk'lara böl
 	const chunks = chunkText(content, chunkSize, chunkOverlap);
@@ -292,9 +274,7 @@ export async function indexDocument(
 		return { chunkCount: 0 };
 	}
 
-	console.log(
-		`[VectorStore] Generated ${chunks.length} chunks, requesting embeddings...`,
-	);
+	console.log(`[VectorStore] Generated ${chunks.length} chunks, requesting embeddings...`);
 
 	// 2. Toplu embedding üret
 	let embeddings: number[][];
@@ -319,16 +299,7 @@ export async function indexDocument(
 			await client.query(
 				`INSERT INTO rag_embeddings (id, kb_id, doc_id, chunk_index, content, metadata, vector, created_at)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-				[
-					id,
-					kbId,
-					docId,
-					i,
-					chunks[i],
-					null,
-					vectorToString(embeddings[i]),
-					new Date().toISOString(),
-				],
+				[id, kbId, docId, i, chunks[i], null, vectorToString(embeddings[i]), new Date().toISOString()],
 			);
 		}
 
@@ -340,9 +311,7 @@ export async function indexDocument(
 		client.release();
 	}
 
-	console.log(
-		`[VectorStore] Indexed ${chunks.length} chunks for docId=${docId}`,
-	);
+	console.log(`[VectorStore] Indexed ${chunks.length} chunks for docId=${docId}`);
 
 	return { chunkCount: chunks.length };
 }

@@ -4,6 +4,18 @@
 
 import { Hono } from "hono";
 import { loadAgentLog } from "../agent-log-store.js";
+import {
+	getMessage as _getMessage,
+	archiveMessage,
+	broadcastToTeam,
+	getInbox,
+	getThread,
+	getUnreadCount,
+	listProjectMessages,
+	markAsRead,
+	notifyNextInPipeline,
+	sendMessage,
+} from "../agent-messaging.js";
 import { agentRuntime } from "../agent-runtime.js";
 import { AVATARS, FEMALE_AVATARS, MALE_AVATARS } from "../avatars.js";
 import { containerManager } from "../container-manager.js";
@@ -19,18 +31,6 @@ import {
 	listProjectTasks,
 	updateAgentConfig,
 } from "../db.js";
-import {
-	archiveMessage,
-	broadcastToTeam,
-	getInbox,
-	getMessage as _getMessage,
-	getThread,
-	getUnreadCount,
-	listProjectMessages,
-	markAsRead,
-	notifyNextInPipeline,
-	sendMessage,
-} from "../agent-messaging.js";
 
 export const agentRoutes = new Hono();
 

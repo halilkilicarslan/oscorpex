@@ -4,7 +4,7 @@
 // prompts are visible in observability dashboards.
 // ---------------------------------------------------------------------------
 
-import { eventBus } from './event-bus.js';
+import { eventBus } from "./event-bus.js";
 
 // Rough char → token estimation (Anthropic: ~4 chars per token for English/code)
 const CHARS_PER_TOKEN = 4;
@@ -33,7 +33,7 @@ export function estimateTokens(chars: number): number {
 }
 
 /** Truncate text with a suffix marker if over the limit. */
-export function capText(text: string, maxChars: number, marker = '\n…[truncated]'): string {
+export function capText(text: string, maxChars: number, marker = "\n…[truncated]"): string {
 	if (!text || text.length <= maxChars) return text;
 	return text.slice(0, maxChars - marker.length) + marker;
 }
@@ -60,12 +60,12 @@ export function enforcePromptBudget(
 		truncated = true;
 		console.warn(
 			`[prompt-budget] Prompt truncated: ${chars} → ${finalPrompt.length} chars ` +
-				`(project=${ctx.projectId}, task=${ctx.taskId ?? 'n/a'})`,
+				`(project=${ctx.projectId}, task=${ctx.taskId ?? "n/a"})`,
 		);
 	} else if (warn) {
 		console.warn(
 			`[prompt-budget] Prompt near limit: ${chars} chars (~${estimatedTokens} tokens) ` +
-				`(project=${ctx.projectId}, task=${ctx.taskId ?? 'n/a'})`,
+				`(project=${ctx.projectId}, task=${ctx.taskId ?? "n/a"})`,
 		);
 	}
 
@@ -80,7 +80,7 @@ export function enforcePromptBudget(
 	// Emit telemetry so analytics/observability can pick it up
 	eventBus.emitTransient({
 		projectId: ctx.projectId,
-		type: 'prompt:size',
+		type: "prompt:size",
 		agentId: ctx.agentId,
 		taskId: ctx.taskId,
 		payload: {
