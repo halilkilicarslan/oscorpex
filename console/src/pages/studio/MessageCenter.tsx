@@ -106,16 +106,6 @@ function agentName(agents: ProjectAgent[], id: string): string {
   return agents.find((a) => a.id === id)?.name ?? id;
 }
 
-// Ajan avatar'ını ID'den bul
-function agentAvatar(agents: ProjectAgent[], id: string): string {
-  return agents.find((a) => a.id === id)?.avatar ?? '?';
-}
-
-// Ajan rengini ID'den bul
-function agentColor(agents: ProjectAgent[], id: string): string {
-  return agents.find((a) => a.id === id)?.color ?? '#525252';
-}
-
 // ---- Alt Bileşenler -------------------------------------------------------
 
 // Mesaj türü rozeti

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Loader2, FileText, ChevronDown } from 'lucide-react';
+import { X, Loader2, FileText } from 'lucide-react';
 import {
   addProjectAgent,
   updateProjectAgent,

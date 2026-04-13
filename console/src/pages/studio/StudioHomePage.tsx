@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -14,7 +14,6 @@ import {
   X,
   FolderInput,
   LayoutTemplate,
-  Users,
   ListTodo,
   CheckCircle,
 } from 'lucide-react';

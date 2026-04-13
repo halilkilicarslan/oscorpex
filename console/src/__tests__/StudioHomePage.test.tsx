@@ -58,7 +58,7 @@ describe('StudioHomePage — proje listesi', () => {
     vi.mocked(studioApi.fetchTeamTemplates).mockResolvedValue([]);
     vi.mocked(studioApi.fetchCustomTeams).mockResolvedValue([]);
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
-    vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completed: 0, inProgress: 0, failed: 0, queued: 0, avgCompletionTime: 0 });
+    vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completedTasks: 0, inProgressTasks: 0, blockedTasks: 0, tasksPerAgent: [], avgCompletionTimeMs: null, pipelineRunCount: 0, pipelineSuccessRate: 0 });
   });
 
   it('projeler yuklenirken spinner gosterilmeli', () => {
@@ -132,7 +132,7 @@ describe('StudioHomePage — bos durum', () => {
     vi.mocked(studioApi.fetchTeamTemplates).mockResolvedValue([]);
     vi.mocked(studioApi.fetchCustomTeams).mockResolvedValue([]);
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
-    vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completed: 0, inProgress: 0, failed: 0, queued: 0, avgCompletionTime: 0 });
+    vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completedTasks: 0, inProgressTasks: 0, blockedTasks: 0, tasksPerAgent: [], avgCompletionTimeMs: null, pipelineRunCount: 0, pipelineSuccessRate: 0 });
   });
 
   it('proje yoksa bos durum mesaji gosterilmeli', async () => {
@@ -172,7 +172,7 @@ describe('StudioHomePage — header', () => {
     vi.mocked(studioApi.fetchTeamTemplates).mockResolvedValue([]);
     vi.mocked(studioApi.fetchCustomTeams).mockResolvedValue([]);
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
-    vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completed: 0, inProgress: 0, failed: 0, queued: 0, avgCompletionTime: 0 });
+    vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completedTasks: 0, inProgressTasks: 0, blockedTasks: 0, tasksPerAgent: [], avgCompletionTimeMs: null, pipelineRunCount: 0, pipelineSuccessRate: 0 });
     vi.mocked(studioApi.fetchProjects).mockResolvedValue([]);
   });
 
@@ -199,7 +199,7 @@ describe('StudioHomePage — proje olusturma modali', () => {
     vi.mocked(studioApi.fetchTeamTemplates).mockResolvedValue([]);
     vi.mocked(studioApi.fetchCustomTeams).mockResolvedValue([]);
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
-    vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completed: 0, inProgress: 0, failed: 0, queued: 0, avgCompletionTime: 0 });
+    vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completedTasks: 0, inProgressTasks: 0, blockedTasks: 0, tasksPerAgent: [], avgCompletionTimeMs: null, pipelineRunCount: 0, pipelineSuccessRate: 0 });
     vi.mocked(studioApi.fetchProjects).mockResolvedValue([]);
   });
 
@@ -324,7 +324,7 @@ describe('StudioHomePage — proje silme', () => {
     vi.mocked(studioApi.fetchTeamTemplates).mockResolvedValue([]);
     vi.mocked(studioApi.fetchCustomTeams).mockResolvedValue([]);
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
-    vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completed: 0, inProgress: 0, failed: 0, queued: 0, avgCompletionTime: 0 });
+    vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completedTasks: 0, inProgressTasks: 0, blockedTasks: 0, tasksPerAgent: [], avgCompletionTimeMs: null, pipelineRunCount: 0, pipelineSuccessRate: 0 });
     vi.mocked(studioApi.deleteProject).mockResolvedValue(undefined);
   });
 

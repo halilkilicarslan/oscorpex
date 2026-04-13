@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import '@testing-library/jest-dom';
 
 // jsdom + undici/Node.js surum uyumsuzlugundan kaynaklanan WebSocket

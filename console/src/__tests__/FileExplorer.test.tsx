@@ -20,15 +20,6 @@ vi.stubGlobal('fetch', mockFetch);
 const mockClipboard = { writeText: vi.fn() };
 vi.stubGlobal('navigator', { clipboard: mockClipboard });
 
-// Basit JSON yaniti olusturmak icin yardimci
-function mockJsonOk(data: unknown) {
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    json: () => Promise.resolve(data),
-  } as Response);
-}
-
 function mockFetchError() {
   return Promise.resolve({
     ok: false,
@@ -156,7 +147,6 @@ describe('FileExplorer — dosya agaci', () => {
   });
 
   it('dizine tiklaninca alt dosyalar acilmali', async () => {
-    const user = userEvent.setup();
     render(<FileExplorer projectId="proj-1" />);
 
     await waitFor(() => screen.getByText('src'));

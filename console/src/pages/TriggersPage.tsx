@@ -6,7 +6,6 @@ import {
   Globe,
   Activity,
   Play,
-  Pause,
   Trash2,
   Edit3,
   Plus,

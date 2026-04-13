@@ -785,7 +785,7 @@ export default function TeamBuilderPage() {
           <FlowCanvas
             presets={presets}
             initialRoles={selected?.roles ?? selectedPreset?.roles ?? []}
-            initialDeps={selected?.dependencies ?? selectedPreset?.dependencies ?? []}
+            initialDeps={selected?.dependencies ?? []}
             onSave={handleSave}
             saving={saving}
             onAgentClick={setSheetAgent}
