@@ -33,6 +33,7 @@ import { buildRAGContext, formatRAGContext } from './context-builder.js';
 import { persistAgentLog } from './agent-log-store.js';
 import { getDefaultPolicy, buildPolicyPromptSection } from './command-policy.js';
 import { resolveAllowedTools } from './capability-resolver.js';
+import { enforcePromptBudget, capText, PROMPT_LIMITS } from './prompt-budget.js';
 
 // ---------------------------------------------------------------------------
 // Timeout configuration
@@ -589,6 +590,10 @@ class ExecutionEngine {
     const techStack =
       project.techStack.length > 0 ? project.techStack.join(', ') : 'Not specified';
 
+    // Cap potentially-unbounded user input early so downstream concatenations
+    // stay within budget.
+    const safeDescription = capText(task.description ?? '', PROMPT_LIMITS.taskDescription);
+
     // --- Code Context: gather files from completed tasks in this project ---
     const completedTasks = (await listProjectTasks(project.id)).filter(
       (t) => t.status === 'done' && t.output && t.id !== task.id,
@@ -635,7 +640,7 @@ class ExecutionEngine {
 
     // RAG Context: retrieve relevant code snippets from the project's vector store
     try {
-      const ragContext = await buildRAGContext(project.id, task.title, task.description);
+      const ragContext = await buildRAGContext(project.id, task.title, safeDescription);
       if (ragContext && ragContext.relevantChunks.length > 0) {
         lines.push(formatRAGContext(ragContext));
       }
@@ -681,7 +686,7 @@ class ExecutionEngine {
       `- Retry: ${task.retryCount > 0 ? `#${task.retryCount}` : 'first attempt'}`,
       '',
       `## Instructions`,
-      task.description,
+      safeDescription,
       '',
       `## Available Tools`,
       'You have the following tools to complete this task:',
@@ -713,7 +718,12 @@ class ExecutionEngine {
       lines.push('', buildPolicyPromptSection(policy));
     }
 
-    return lines.join('\n');
+    // Prompt boyutunu ölç, limit aşılırsa truncate et ve telemetri emit et
+    const { prompt } = enforcePromptBudget(lines.join('\n'), {
+      projectId: project.id,
+      taskId: task.id,
+    });
+    return prompt;
   }
 
   // -------------------------------------------------------------------------
