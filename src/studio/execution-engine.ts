@@ -25,6 +25,7 @@ import {
 	listProjectTasks,
 	listProjects,
 	recordTokenUsage,
+	updateProject,
 	updatePhaseStatus,
 	updateTask,
 } from "./db.js";
@@ -748,7 +749,7 @@ class ExecutionEngine {
 
 			if (task.taskType === "integration-test") {
 				termLog("[execution-engine] Running integration tests...");
-				output = await runIntegrationTest(project.repoPath, termLog);
+				output = await runIntegrationTest(projectId, project.repoPath, termLog);
 			} else {
 				// run-app
 				termLog("[execution-engine] Starting application...");
@@ -771,6 +772,7 @@ class ExecutionEngine {
 				payload: { error: errorMsg },
 			});
 			await taskEngine.failTask(task.id, errorMsg);
+			await updateProject(projectId, { status: "failed" });
 		}
 
 		// Dispatch next tasks
@@ -824,17 +826,6 @@ class ExecutionEngine {
 
 		const allFiles = [...(originalTask.output?.filesCreated ?? []), ...(originalTask.output?.filesModified ?? [])];
 
-		if (allFiles.length === 0) {
-			// No files to review
-			await taskEngine.completeTask(reviewTask.id, {
-				filesCreated: [],
-				filesModified: [],
-				logs: ["İncelenecek dosya yok — otomatik onaylandı"],
-			});
-			await taskEngine.submitReview(originalTaskId!, true, "No files to review");
-			return;
-		}
-
 		const termLog = (msg: string) => {
 			agentRuntime.ensureVirtualProcess(projectId, reviewer.id, reviewer.name);
 			agentRuntime.appendVirtualOutput(projectId, reviewer.id, msg);
@@ -847,33 +838,82 @@ class ExecutionEngine {
 			});
 		};
 
-		termLog(`[review] "${originalTask.title}" inceleniyor — ${allFiles.length} dosya...`);
+		// Zero-file decision review: decision.md dosyası varsa özel prompt
+		const isZeroFileDecision =
+			allFiles.length === 1 && allFiles[0].includes("decision.md");
 
-		const reviewPrompt = [
-			`# Code Review: ${originalTask.title}`,
-			"",
-			`## Context`,
-			`- Project: ${project.name}`,
-			`- Original task: ${originalTask.title}`,
-			`- Description: ${originalTask.description}`,
-			"",
-			`## Files to Review`,
-			...allFiles.map((f) => `- \`${f}\``),
-			"",
-			`## Instructions`,
-			"Review the code for each file:",
-			"1. Use readFile to read the file contents",
-			"2. Check for bugs, security issues, code style problems, and missing edge cases",
-			"3. If you find issues, use writeFile to fix them directly",
-			"4. If the code is good, just note it as approved",
-			"",
-			"## Output Format",
-			"Provide a brief review summary. Start with either:",
-			'- "APPROVED" if the code is good',
-			'- "FIXED" if you made corrections',
-			"",
-			"Then list what you found and any changes you made.",
-		].join("\n");
+		let reviewPrompt: string;
+
+		if (isZeroFileDecision) {
+			termLog(`[review] "${originalTask.title}" — zero-file decision inceleniyor...`);
+			reviewPrompt = [
+				`# Zero-File Decision Review: ${originalTask.title}`,
+				"",
+				`## Context`,
+				`- Project: ${project.name}`,
+				`- Original task: ${originalTask.title}`,
+				`- Description: ${originalTask.description}`,
+				"",
+				`## Durum`,
+				"Orijinal task hiçbir dosya oluşturmadı veya değiştirmedi.",
+				"Bir decision.md dosyası oluşturuldu. Bu dosyayı oku ve değerlendir.",
+				"",
+				`## Decision Dosyası`,
+				`- \`${allFiles[0]}\``,
+				"",
+				`## Reviewer Talimatları`,
+				"1. readFile ile decision.md dosyasını oku",
+				"2. Orijinal task açıklamasını dikkatlice incele",
+				"3. Task'ın dosya değişikliği gerektirip gerektirmediğini değerlendir:",
+				"   - Eğer task gerçekten dosya değişikliği gerektirmiyorsa (analiz, araştırma vb.) → APPROVED",
+				"   - Eğer agent hatalı çalıştıysa ve dosya üretmeliydi → REJECTED",
+				"4. Kararını net gerekçeyle açıkla",
+				"",
+				"## Output Format",
+				'- "APPROVED" — task dosya değişikliği gerektirmiyor, kabul edildi',
+				'- "REJECTED" — task dosya üretmeliydi ama üretmedi, revizyon gerekli',
+			].join("\n");
+		} else if (allFiles.length === 0) {
+			// Hiç dosya yok ve decision.md de yok — doğrudan reject
+			await taskEngine.completeTask(reviewTask.id, {
+				filesCreated: [],
+				filesModified: [],
+				logs: ["İncelenecek dosya yok — orijinal task dosya değişikliği üretmedi"],
+			});
+			await taskEngine.submitReview(
+				originalTaskId!,
+				false,
+				"İncelenecek dosya yok — orijinal task dosya değişikliği üretmedi",
+			);
+			return;
+		} else {
+			termLog(`[review] "${originalTask.title}" inceleniyor — ${allFiles.length} dosya...`);
+			reviewPrompt = [
+				`# Code Review: ${originalTask.title}`,
+				"",
+				`## Context`,
+				`- Project: ${project.name}`,
+				`- Original task: ${originalTask.title}`,
+				`- Description: ${originalTask.description}`,
+				"",
+				`## Files to Review`,
+				...allFiles.map((f) => `- \`${f}\``),
+				"",
+				`## Instructions`,
+				"Review the code for each file:",
+				"1. Use readFile to read the file contents",
+				"2. Check for bugs, security issues, code style problems, and missing edge cases",
+				"3. If you find issues, use writeFile to fix them directly",
+				"4. If the code is good, just note it as approved",
+				"",
+				"## Output Format",
+				"Provide a brief review summary. Start with either:",
+				'- "APPROVED" if the code is good',
+				'- "FIXED" if you made corrections',
+				"",
+				"Then list what you found and any changes you made.",
+			].join("\n");
+		}
 
 		try {
 			const reviewTools = await resolveAllowedTools(projectId, reviewer.id, reviewer.role);
@@ -966,6 +1006,10 @@ class ExecutionEngine {
 	 * dependencies are now satisfied and dispatch them in parallel.
 	 */
 	private async dispatchReadyTasks(projectId: string, phaseId: string): Promise<void> {
+		const project = await getProject(projectId);
+		if (!project || project.status === "failed") return;
+		if (await taskEngine.isPhaseFailed(phaseId)) return;
+
 		const ready = await taskEngine.getReadyTasks(phaseId);
 		if (ready.length === 0) return;
 

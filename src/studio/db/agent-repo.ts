@@ -278,9 +278,17 @@ export async function getProjectAgentsWithSkills(projectId: string): Promise<
 /**
  * Belirtilen rollere sahip preset agentları projeye kopyalar.
  */
-export async function copyAgentsToProject(projectId: string, roles: string[]): Promise<ProjectAgent[]> {
+export async function copyAgentsToProject(
+	projectId: string,
+	roles: string[],
+	options?: { plannerSourceAgentId?: string },
+): Promise<ProjectAgent[]> {
 	const presets = await listPresetAgents();
 	const created: ProjectAgent[] = [];
+	const normalizedRoles = Array.from(new Set(roles));
+	if (!normalizedRoles.some((role) => role === "product-owner" || role === "pm")) {
+		normalizedRoles.unshift("product-owner");
+	}
 
 	const colorMap: Record<string, string> = {
 		// v2 roles
@@ -332,7 +340,7 @@ export async function copyAgentsToProject(projectId: string, roles: string[]): P
 		reviewer: 5,
 	};
 
-	for (const role of roles) {
+	for (const role of normalizedRoles) {
 		const preset = presets.find((p) => p.role === role);
 		if (preset) {
 			const agent = await createProjectAgent({
@@ -350,6 +358,38 @@ export async function copyAgentsToProject(projectId: string, roles: string[]): P
 				pipelineOrder: pipelineMap[preset.role] ?? 2,
 			});
 			created.push(agent);
+		}
+	}
+
+	if (options?.plannerSourceAgentId) {
+		const selectedPlanner = presets.find((preset) => preset.id === options.plannerSourceAgentId);
+		const projectPlanner =
+			created.find((agent) => agent.role === "product-owner") ??
+			created.find((agent) => agent.role === "pm");
+
+		if (
+			selectedPlanner &&
+			projectPlanner &&
+			(selectedPlanner.role === "product-owner" || selectedPlanner.role === "pm")
+		) {
+			const updated = await updateProjectAgent(projectPlanner.id, {
+				sourceAgentId: selectedPlanner.id,
+				name: selectedPlanner.name,
+				role: selectedPlanner.role,
+				avatar: selectedPlanner.avatar,
+				gender: selectedPlanner.gender,
+				personality: selectedPlanner.personality,
+				model: selectedPlanner.model,
+				cliTool: selectedPlanner.cliTool,
+				skills: selectedPlanner.skills,
+				systemPrompt: selectedPlanner.systemPrompt,
+				color: colorMap[selectedPlanner.role] || "#f59e0b",
+				pipelineOrder: pipelineMap[selectedPlanner.role] ?? 0,
+			});
+			if (updated) {
+				const idx = created.findIndex((agent) => agent.id === updated.id);
+				if (idx >= 0) created[idx] = updated;
+			}
 		}
 	}
 

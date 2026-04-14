@@ -7,7 +7,6 @@ import { join, resolve } from "node:path";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { createAgentFiles } from "../agent-files.js";
-import { isClaudeCliAvailable, streamWithCLI } from "../cli-runtime.js";
 import {
 	copyAgentsToProject,
 	createProject,
@@ -16,6 +15,8 @@ import {
 	getCustomTeamTemplate,
 	getLatestPlan,
 	getProject,
+	getProjectSetting,
+	getProjectSettingsMap,
 	getTeamTemplate,
 	insertChatMessage,
 	listAgentDependencies,
@@ -23,6 +24,7 @@ import {
 	listProjectAgents,
 	listProjects,
 	listTeamTemplates,
+	setProjectSettings,
 	updatePlanStatus,
 	updateProject,
 } from "../db.js";
@@ -32,12 +34,59 @@ import { gitManager } from "../git-manager.js";
 import { initLintConfig } from "../lint-runner.js";
 import { recordChatToMemory } from "../memory-bridge.js";
 import { pipelineEngine } from "../pipeline-engine.js";
+import {
+	listPlannerCLIProviders,
+	streamPlannerWithCLI,
+	type PlannerCLIProvider,
+	type PlannerReasoningEffort,
+} from "../planner-cli.js";
 import { PM_SYSTEM_PROMPT, buildPlan, estimatePlanCost } from "../pm-agent.js";
 import { getProjectTemplate, listProjectTemplates, scaffoldFromTemplate } from "../project-templates.js";
 import { initSonarConfig, isSonarEnabled } from "../sonar-runner.js";
 import { taskEngine } from "../task-engine.js";
 
 export const projectRoutes = new Hono();
+
+function normalizeStringList(value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	return value.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function parseStoredStringList(value?: string): string[] {
+	if (!value) return [];
+	try {
+		return normalizeStringList(JSON.parse(value));
+	} catch {
+		return value
+			.split(",")
+			.map((item) => item.trim())
+			.filter(Boolean);
+	}
+}
+
+async function saveProjectIntake(
+	projectId: string,
+	data: {
+		previewEnabled?: boolean;
+		projectType?: string;
+		techPreference?: string[];
+	},
+): Promise<void> {
+	await setProjectSettings(projectId, "runtime", {
+		previewEnabled: data.previewEnabled === false ? "false" : "true",
+	});
+
+	const intakeEntries: Record<string, string> = {};
+	if (data.projectType?.trim()) {
+		intakeEntries.projectType = data.projectType.trim();
+	}
+	if (data.techPreference && data.techPreference.length > 0) {
+		intakeEntries.techPreference = JSON.stringify(data.techPreference);
+	}
+	if (Object.keys(intakeEntries).length > 0) {
+		await setProjectSettings(projectId, "intake", intakeEntries);
+	}
+}
 
 // ---- Projects CRUD --------------------------------------------------------
 
@@ -50,13 +99,22 @@ projectRoutes.post("/projects", async (c) => {
 		name: string;
 		description?: string;
 		techStack?: string[];
+		techPreference?: string[];
+		projectType?: string;
 		teamTemplateId?: string;
+		plannerAgentId?: string;
+		previewEnabled?: boolean;
 	};
 	const project = await createProject({
 		name: body.name,
 		description: body.description ?? "",
 		techStack: body.techStack ?? [],
 		repoPath: "",
+	});
+	await saveProjectIntake(project.id, {
+		previewEnabled: body.previewEnabled,
+		projectType: body.projectType,
+		techPreference: normalizeStringList(body.techPreference),
 	});
 
 	// Proje oluşturulduktan sonra takım şablonundan agentları kopyala
@@ -66,7 +124,9 @@ projectRoutes.post("/projects", async (c) => {
 		const customTemplate = !presetTemplate ? await getCustomTeamTemplate(templateId) : undefined;
 		const roles = presetTemplate?.roles ?? customTemplate?.roles;
 		if (roles) {
-			const copiedAgents = await copyAgentsToProject(project.id, roles);
+			const copiedAgents = await copyAgentsToProject(project.id, roles, {
+				plannerSourceAgentId: body.plannerAgentId,
+			});
 			for (const agent of copiedAgents) {
 				createAgentFiles(project.id, agent.name, {
 					skills: agent.skills,
@@ -82,7 +142,9 @@ projectRoutes.post("/projects", async (c) => {
 		const templates = await listTeamTemplates();
 		const fullStack = templates.find((t) => t.name === "Full Stack Team");
 		if (fullStack) {
-			const copiedAgents = await copyAgentsToProject(project.id, fullStack.roles);
+			const copiedAgents = await copyAgentsToProject(project.id, fullStack.roles, {
+				plannerSourceAgentId: body.plannerAgentId,
+			});
 			for (const agent of copiedAgents) {
 				createAgentFiles(project.id, agent.name, {
 					skills: agent.skills,
@@ -119,6 +181,8 @@ projectRoutes.post("/projects/import", async (c) => {
 		description?: string;
 		techStack?: string[];
 		teamTemplateId?: string;
+		plannerAgentId?: string;
+		previewEnabled?: boolean;
 	};
 
 	if (!body.repoPath) return c.json({ error: "repoPath is required" }, 400);
@@ -163,12 +227,17 @@ projectRoutes.post("/projects/import", async (c) => {
 		techStack,
 		repoPath: body.repoPath,
 	});
+	await saveProjectIntake(project.id, {
+		previewEnabled: body.previewEnabled,
+	});
 
 	const templateId = body.teamTemplateId;
 	if (templateId) {
 		const template = await getTeamTemplate(templateId);
 		if (template) {
-			const copiedAgents = await copyAgentsToProject(project.id, template.roles);
+			const copiedAgents = await copyAgentsToProject(project.id, template.roles, {
+				plannerSourceAgentId: body.plannerAgentId,
+			});
 			for (const agent of copiedAgents) {
 				createAgentFiles(project.id, agent.name, {
 					skills: agent.skills,
@@ -183,7 +252,9 @@ projectRoutes.post("/projects/import", async (c) => {
 		const templates = await listTeamTemplates();
 		const fullStack = templates.find((t) => t.name === "Full Stack Team");
 		if (fullStack) {
-			const copiedAgents = await copyAgentsToProject(project.id, fullStack.roles);
+			const copiedAgents = await copyAgentsToProject(project.id, fullStack.roles, {
+				plannerSourceAgentId: body.plannerAgentId,
+			});
 			for (const agent of copiedAgents) {
 				createAgentFiles(project.id, agent.name, {
 					skills: agent.skills,
@@ -230,11 +301,12 @@ projectRoutes.delete("/projects/:id", async (c) => {
 // ---- Planner Chat (SSE streaming) -----------------------------------------
 
 projectRoutes.post("/projects/:id/chat", async (c) => {
-	const cliReady = await isClaudeCliAvailable();
-	if (!cliReady) {
+	const plannerProviders = await listPlannerCLIProviders();
+	const availableProviders = plannerProviders.filter((provider) => provider.available);
+	if (availableProviders.length === 0) {
 		return c.json(
 			{
-				error: "Claude CLI is not available. Install Claude Code CLI to use the Planner.",
+				error: "No supported planner CLI is available. Install Claude CLI, Codex CLI, or Gemini CLI to use the Planner.",
 			},
 			503,
 		);
@@ -248,19 +320,45 @@ projectRoutes.post("/projects/:id/chat", async (c) => {
 		return c.json({ error: "Project has no repoPath configured." }, 400);
 	}
 
-	const body = (await c.req.json()) as { message: string };
+	const body = (await c.req.json()) as {
+		message: string;
+		model?: string;
+		provider?: PlannerCLIProvider;
+		effort?: PlannerReasoningEffort;
+	};
 	const userMessage = body.message;
+	const selectedProvider = availableProviders.find((provider) => provider.id === body.provider)?.id ?? availableProviders[0].id;
+	const selectedProviderInfo =
+		availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0];
+	const plannerModel =
+		body.model && selectedProviderInfo.models.includes(body.model)
+			? body.model
+			: selectedProviderInfo.defaultModel;
+	const plannerEffort =
+		body.effort && selectedProviderInfo.efforts.includes(body.effort)
+			? body.effort
+			: selectedProviderInfo.defaultEffort;
 
 	await insertChatMessage({ projectId, role: "user", content: userMessage });
 	recordChatToMemory(projectId, project.name, "user", userMessage).catch(() => {});
 
 	const history = await listChatMessages(projectId);
+	const settingsMap = await getProjectSettingsMap(projectId);
+	const previewEnabled = (await getProjectSetting(projectId, "runtime", "previewEnabled")) !== "false";
+	const intakeSettings = settingsMap.intake || {};
+	const projectType = intakeSettings.projectType || "Not specified";
+	const techPreference = parseStoredStringList(intakeSettings.techPreference);
+	const resolvedTechStack = parseStoredStringList(intakeSettings.resolvedTechStack);
 
 	const agents = await listProjectAgents(projectId);
 	const deps = await listAgentDependencies(projectId);
 	const reviewTargetIds = new Set(deps.filter((d) => d.type === "review").map((d) => d.toAgentId));
-	const pmOrder = Math.min(...agents.map((a) => a.pipelineOrder ?? 99));
-	const pmAgentIds = new Set(agents.filter((a) => (a.pipelineOrder ?? 99) === pmOrder).map((a) => a.id));
+	const plannerAgents = agents.filter((a) => a.role === "product-owner" || a.role === "pm");
+	if (plannerAgents.length === 0) {
+		return c.json({ error: "Project has no planner agent configured." }, 400);
+	}
+	const pmAgentIds = new Set(plannerAgents.map((a) => a.id));
+	const plannerAgent = plannerAgents[0];
 
 	const teamInfo = agents
 		.map((a) => {
@@ -280,14 +378,40 @@ projectRoutes.post("/projects/:id/chat", async (c) => {
 		.map((a) => `"${a.role}"`)
 		.join(", ");
 
+	const plannerProfile = [
+		`Name: ${plannerAgent.name}`,
+		`Role: ${plannerAgent.role}`,
+		`Personality: ${plannerAgent.personality || "Not specified"}`,
+		`Skills: ${plannerAgent.skills.join(", ") || "Not specified"}`,
+		plannerAgent.systemPrompt ? `Agent Guidance: ${plannerAgent.systemPrompt}` : "",
+	]
+		.filter(Boolean)
+		.join("\n");
+
 	const systemPrompt = `${PM_SYSTEM_PROMPT}
+
+[Planner Agent Profile]
+Follow the selected planner agent profile below unless it conflicts with explicit planning rules.
+${plannerProfile}
 
 [Current Project Context]
 Project ID: ${projectId}
 Project Name: ${project.name}
 Status: ${project.status}
-Tech Stack: ${project.techStack.join(", ") || "Not decided yet"}
+Resolved Tech Stack: ${resolvedTechStack.join(", ") || project.techStack.join(", ") || "Not decided yet"}
 Description: ${project.description || "No description yet"}
+In-studio Preview Required: ${previewEnabled ? "yes" : "no"}
+
+[User Intake]
+Project Type Preference: ${projectType}
+Technology Preference: ${techPreference.join(", ") || "Planner should recommend"}
+
+[Runtime Expectations]
+${
+	previewEnabled
+		? "Include a final run-app phase when a runnable application is expected."
+		: "Do NOT include run-app tasks unless the user explicitly asks for an in-studio preview. Only use integration-test if runnable services are expected."
+}
 
 [Your Team — ${agents.length} agents]
 ${teamInfo}
@@ -307,12 +431,14 @@ Every assignable agent MUST get at least one task.`;
 	return streamSSE(c, async (stream) => {
 		try {
 			await new Promise<void>((resolveStream, rejectStream) => {
-				const cancel = streamWithCLI(
+				const cancel = streamPlannerWithCLI(
 					{
 						repoPath: project.repoPath!,
 						prompt,
 						systemPrompt,
-						model: "sonnet",
+						provider: selectedProvider,
+						model: plannerModel,
+						effort: plannerEffort,
 						timeoutMs: 120_000,
 					},
 					{
@@ -337,7 +463,14 @@ Every assignable agent MUST get at least one task.`;
 											if (oldPlan && oldPlan.status === "draft") {
 												await updatePlanStatus(oldPlan.id, "rejected");
 											}
+											const recommendedTechStack = normalizeStringList(planData.techStack);
 											await buildPlan(projectId, planData.phases);
+											if (recommendedTechStack.length > 0) {
+												await updateProject(projectId, { techStack: recommendedTechStack });
+												await setProjectSettings(projectId, "intake", {
+													resolvedTechStack: JSON.stringify(recommendedTechStack),
+												});
+											}
 											console.log(`[Planner] Plan created for project ${projectId} (${planData.phases.length} phases)`);
 										}
 									} catch (parseErr) {
@@ -375,7 +508,13 @@ Every assignable agent MUST get at least one task.`;
 			});
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : "Unknown error";
-			console.error("[Planner Error]", errorMsg);
+			console.error("[Planner Error]", {
+				projectId,
+				provider: selectedProvider,
+				model: plannerModel,
+				effort: plannerEffort ?? null,
+				error: errorMsg,
+			});
 			await stream.writeSSE({
 				event: "error",
 				data: JSON.stringify({ error: errorMsg }),
@@ -548,6 +687,8 @@ projectRoutes.post("/projects/from-template", async (c) => {
 		name: string;
 		templateId: string;
 		description?: string;
+		plannerAgentId?: string;
+		previewEnabled?: boolean;
 	};
 
 	const template = getProjectTemplate(body.templateId);
@@ -559,11 +700,16 @@ projectRoutes.post("/projects/from-template", async (c) => {
 		techStack: template.techStack,
 		repoPath: "",
 	});
+	await saveProjectIntake(project.id, {
+		previewEnabled: body.previewEnabled,
+	});
 
 	const templates = await listTeamTemplates();
 	const teamTpl = templates.find((t) => t.name === template.teamTemplate) ?? templates[0];
 	if (teamTpl) {
-		const copiedAgents = await copyAgentsToProject(project.id, teamTpl.roles);
+		const copiedAgents = await copyAgentsToProject(project.id, teamTpl.roles, {
+			plannerSourceAgentId: body.plannerAgentId,
+		});
 		for (const agent of copiedAgents) {
 			createAgentFiles(project.id, agent.name, {
 				skills: agent.skills,

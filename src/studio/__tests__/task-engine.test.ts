@@ -135,7 +135,7 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 			// Complete t1
 			await taskEngine.assignTask(t1.id, "agent-1");
 			await taskEngine.startTask(t1.id);
-			await taskEngine.completeTask(t1.id, { filesCreated: [], filesModified: [], logs: [] });
+			await taskEngine.completeTask(t1.id, { filesCreated: ["src/setup.ts"], filesModified: [], logs: [] });
 
 			// Now t2 should be ready
 			ready = await taskEngine.getReadyTasks(phase.id);
@@ -155,11 +155,11 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 			// Complete both tasks
 			await taskEngine.assignTask(t1.id, "a1");
 			await taskEngine.startTask(t1.id);
-			await taskEngine.completeTask(t1.id, { filesCreated: [], filesModified: [], logs: [] });
+			await taskEngine.completeTask(t1.id, { filesCreated: ["src/setup.ts"], filesModified: [], logs: [] });
 
 			await taskEngine.assignTask(t2.id, "a2");
 			await taskEngine.startTask(t2.id);
-			await taskEngine.completeTask(t2.id, { filesCreated: [], filesModified: [], logs: [] });
+			await taskEngine.completeTask(t2.id, { filesCreated: ["src/config.ts"], filesModified: [], logs: [] });
 
 			expect(await taskEngine.isPhaseComplete(phase.id)).toBe(true);
 		});
