@@ -374,12 +374,15 @@ class TaskEngine {
 
 		if (isCodingTask && !isReviewTask && changedFileCount === 0) {
 			// Fail etme — decision.md yaz ve reviewer'a gönder
-			await this.writeZeroFileDecision(projectId, task);
-			// output'a decision.md'yi ekle ki reviewer görsün
-			output.filesCreated = [this.decisionMdPath(projectId, task)];
+			const decisionContent = this.buildDecisionContent(task);
+			const fileWritten = await this.writeZeroFileDecision(projectId, task, decisionContent);
+			output.filesCreated = fileWritten ? [this.decisionMdPath(projectId, task)] : [];
 			output.logs = [
 				...(output.logs ?? []),
-				"[zero-file-guard] Task hiçbir dosya üretmedi. decision.md yazıldı, reviewer inceleyecek.",
+				"[zero-file-guard] Task hiçbir dosya üretmedi. Reviewer inceleyecek.",
+				"--- DECISION ---",
+				decisionContent,
+				"--- /DECISION ---",
 			];
 		}
 
@@ -925,18 +928,8 @@ class TaskEngine {
 		return `.oscorpex/decisions/${task.id}-decision.md`;
 	}
 
-	private async writeZeroFileDecision(projectId: string, task: Task): Promise<void> {
-		const project = await getProject(projectId);
-		if (!project?.repoPath) return;
-
-		const dir = join(project.repoPath, ".oscorpex", "decisions");
-		try {
-			mkdirSync(dir, { recursive: true });
-		} catch {
-			return;
-		}
-
-		const content = [
+	private buildDecisionContent(task: Task): string {
+		return [
 			`# Zero-File Decision — ${task.title}`,
 			"",
 			`**Task ID:** ${task.id}`,
@@ -959,11 +952,23 @@ class TaskEngine {
 			"## Karar",
 			"Reviewer bu dosyayı inceleyip APPROVED veya REJECTED kararı vermelidir.",
 		].join("\n");
+	}
 
+	private async writeZeroFileDecision(projectId: string, task: Task, content: string): Promise<boolean> {
+		const project = await getProject(projectId);
+		if (!project?.repoPath) {
+			console.warn(`[task-engine] decision.md yazılamadı: proje repoPath boş (projectId=${projectId})`);
+			return false;
+		}
+
+		const dir = join(project.repoPath, ".oscorpex", "decisions");
 		try {
+			mkdirSync(dir, { recursive: true });
 			writeFileSync(join(project.repoPath, this.decisionMdPath(projectId, task)), content);
+			return true;
 		} catch (err) {
 			console.warn(`[task-engine] decision.md yazılamadı: ${err}`);
+			return false;
 		}
 	}
 

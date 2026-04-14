@@ -838,9 +838,30 @@ class ExecutionEngine {
 			});
 		};
 
-		// Zero-file decision review: decision.md dosyası varsa özel prompt
+		// Zero-file decision review: decision.md veya log'larda DECISION bloğu var
 		const isZeroFileDecision =
-			allFiles.length === 1 && allFiles[0].includes("decision.md");
+			(allFiles.length <= 1 && allFiles[0]?.includes("decision.md")) ||
+			(originalTask.output?.logs ?? []).some((l) => l.includes("--- DECISION ---"));
+
+		// Decision içeriğini log'lardan çıkar (dosya yazılmamış olsa bile)
+		let decisionContent = "";
+		if (isZeroFileDecision) {
+			const logs = originalTask.output?.logs ?? [];
+			let capture = false;
+			const lines: string[] = [];
+			for (const line of logs) {
+				if (line.includes("--- DECISION ---")) {
+					capture = true;
+					continue;
+				}
+				if (line.includes("--- /DECISION ---")) {
+					capture = false;
+					continue;
+				}
+				if (capture) lines.push(line);
+			}
+			decisionContent = lines.join("\n");
+		}
 
 		let reviewPrompt: string;
 
@@ -856,13 +877,17 @@ class ExecutionEngine {
 				"",
 				`## Durum`,
 				"Orijinal task hiçbir dosya oluşturmadı veya değiştirmedi.",
-				"Bir decision.md dosyası oluşturuldu. Bu dosyayı oku ve değerlendir.",
 				"",
-				`## Decision Dosyası`,
-				`- \`${allFiles[0]}\``,
-				"",
+				...(allFiles.length > 0
+					? [`## Decision Dosyası`, `- \`${allFiles[0]}\``, ""]
+					: []),
+				...(decisionContent
+					? ["## Decision İçeriği (inline)", decisionContent, ""]
+					: []),
 				`## Reviewer Talimatları`,
-				"1. readFile ile decision.md dosyasını oku",
+				...(allFiles.length > 0
+					? ["1. readFile ile decision.md dosyasını oku"]
+					: ["1. Yukarıdaki decision içeriğini oku"]),
 				"2. Orijinal task açıklamasını dikkatlice incele",
 				"3. Task'ın dosya değişikliği gerektirip gerektirmediğini değerlendir:",
 				"   - Eğer task gerçekten dosya değişikliği gerektirmiyorsa (analiz, araştırma vb.) → APPROVED",
