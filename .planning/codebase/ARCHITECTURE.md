@@ -1,81 +1,80 @@
-# Architecture Analysis
+# Mimari Analiz
 
-Generated on 2026-04-12 from direct repository inspection and local command runs.
+12 Nisan 2026 tarihinde doğrudan depo incelemesi ve yerel komut çıktıları ile oluşturulmuştur.
 
-## High-Level Shape
+## Üst Düzey Yapı
 
-The repository is best understood as four layers:
+Depo en iyi dört katman olarak anlaşılabilir:
 
-1. Entry application layer
+1. Giriş Uygulama Katmanı
    - `src/index.ts`
-   - boots VoltAgent, Hono routes, WebSocket server, webhook sender, and container pool
+   - VoltAgent, Hono rotaları, WebSocket sunucusu, webhook göndericisi ve konteyner havuzunu başlatır.
 
-2. Studio backend layer
+2. Studio Arka Uç Katmanı
    - `src/studio/*`
-   - project management, planning, execution, pipeline orchestration, repo/file access, runtime analysis, app running, metrics, providers, webhooks
+   - Proje yönetimi, planlama, yürütme, ardışık düzen (pipeline) orkestrasyonu, depo/dosya erişimi, çalışma zamanı analizi, uygulama çalıştırma, metrikler, sağlayıcılar ve webhook'lar.
 
-3. Console frontend layer
+3. Console Ön Uç Katmanı
    - `console/src/*`
-   - large SPA for studio operations and observability
+   - Studio operasyonları ve gözlemlenebilirlik için büyük SPA (Single Page Application).
 
-4. Supporting/demo layer
+4. Destekleyici/Demo Katmanı
    - `src/agents/*`, `src/tools/*`, `src/workflows/*`
-   - assistant/researcher utilities plus example workflow logic
+   - Asistan/araştırmacı yardımcı programları ve örnek iş akışı mantığı.
 
-## Runtime Flow
+## Çalışma Zamanı Akışı
 
-Typical project execution flow:
+Tipik bir proje yürütme akışı:
 
-1. User creates or imports a project in the frontend.
-2. Backend persists project metadata in PostgreSQL.
-3. PM-style planning logic creates plans, phases, and tasks.
-4. `task-engine` manages task lifecycle, approval gates, and phase transitions.
-5. `pipeline-engine` maps agent dependencies into DAG waves.
-6. `execution-engine` dispatches ready tasks.
-7. `cli-runtime` launches Claude CLI subprocesses in the target repo.
-8. events, logs, files, analytics, and app preview state are surfaced through the API and WebSocket channels.
+1. Kullanıcı ön uçta bir proje oluşturur veya içe aktarır.
+2. Arka uç, proje meta verilerini PostgreSQL'e kaydeder.
+3. PM tarzı planlama mantığı planlar, fazlar ve görevler oluşturur.
+4. `task-engine` görev yaşam döngüsünü, onay kapılarını ve faz geçişlerini yönetir.
+5. `pipeline-engine` ajan bağımlılıklarını DAG dalgalarına dönüştürür.
+6. `execution-engine` hazır görevleri dağıtır.
+7. `cli-runtime` hedef depoda Claude CLI alt süreçlerini başlatır.
+8. Olaylar, günlükler, dosyalar, analitikler ve uygulama önizleme durumu API ve WebSocket kanalları aracılığıyla yüzeye çıkarılır.
 
-## Backend Architectural Characteristics
+## Arka Uç Mimari Özellikleri
 
-### Strengths
+### Güçlü Yönler
 
-- Clear subsystem naming under `src/studio/`
-- Reasonable separation between task lifecycle, execution dispatch, and pipeline graph logic
-- Strong feature coverage: planning, approvals, cost tracking, docs generation, runtime discovery, app preview, webhooks
+- `src/studio/` altında net alt sistem isimlendirmeleri.
+- Görev yaşam döngüsü, yürütme dağıtımı ve ardışık düzen grafiği mantığı arasında makul ayrım.
+- Güçlü özellik kapsamı: planlama, onaylar, maliyet takibi, doküman üretimi, çalışma zamanı keşfi, uygulama önizlemesi, webhook'lar.
 
-### Weaknesses
+### Zayıf Yönler
 
-- The backend concentrates too much behavior into a few very large files:
-  - `src/studio/routes.ts`: 3,079 lines
-  - `src/studio/db.ts`: 2,191 lines
-  - `src/studio/execution-engine.ts`: 1,106 lines
-  - `src/studio/pipeline-engine.ts`: 917 lines
-  - `src/studio/task-engine.ts`: 850 lines
-- API, orchestration, persistence, and product policy are all implemented inline instead of through narrower services
+- Arka uç, çok fazla davranışı birkaç çok büyük dosyada toplamıştır:
+  - `src/studio/routes.ts`: 3.079 satır
+  - `src/studio/db.ts`: 2.191 satır
+  - `src/studio/execution-engine.ts`: 1.106 satır
+  - `src/studio/pipeline-engine.ts`: 917 satır
+  - `src/studio/task-engine.ts`: 850 satır
+- API, orkestrasyon, süreklilik ve ürün politikası, daha dar servisler yerine doğrudan iç içe uygulanmıştır.
 
-## Frontend Architectural Characteristics
+## Ön Uç Mimari Özellikleri
 
-### Strengths
+### Güçlü Yönler
 
-- Central API client in `console/src/lib/studio-api.ts`
-- Lazy-loaded top-level routes in `console/src/main.tsx`
-- Rich UI surface covering most studio workflows
+- `console/src/lib/studio-api.ts` içinde merkezi API istemcisi.
+- `console/src/main.tsx` içinde tembel yüklenen (lazy-loaded) üst düzey rotalar.
+- Çoğu studio iş akışını kapsayan zengin kullanıcı arayüzü yüzeyi.
 
-### Weaknesses
+### Zayıf Yönler
 
-- Several pages are very large and state-heavy:
-  - `console/src/pages/studio/StudioHomePage.tsx`: 816 lines
-  - `console/src/lib/studio-api.ts`: 1,889 lines
-  - `console/src/pages/studio/ProjectPage.tsx`: 362 lines
-- Local UI state and effect logic are heavily coupled
-- Frontend contracts are duplicated manually instead of shared from backend types or schema
+- Bazı sayfalar çok büyük ve durum (state) ağırlıklıdır:
+  - `console/src/pages/studio/StudioHomePage.tsx`: 816 satır
+  - `console/src/lib/studio-api.ts`: 1.889 satır
+  - `console/src/pages/studio/ProjectPage.tsx`: 362 satır
+- Yerel kullanıcı arayüzü durumu ve efekt mantığı birbirine sıkı sıkıya bağlıdır.
+- Ön uç sözleşmeleri (contracts), arka uç tiplerinden veya şemadan paylaşılmak yerine manuel olarak kopyalanmıştır.
 
-## Architectural Drift
+## Mimari Kayma (Drift)
 
-The repository contains overlapping product identities:
+Depo, çakışan ürün kimlikleri içermektedir:
 
-- current codebase name and feature set: Oscorpex studio
-- historical/documented references: VoltAgent / VoltOps / older console topology
+- Mevcut kod tabanı adı ve özellik seti: Oscorpex Studio
+- Geçmiş/dokümante edilmiş referanslar: VoltAgent / VoltOps / eski konsol topolojisi
 
-This is not cosmetic only. It shows up in docs, ports, storage descriptions, and terminology, which will slow onboarding and increase maintenance cost.
-
+Bu sadece kozmetik bir sorun değildir. Dokümanlarda, portlarda, depolama açıklamalarında ve terminolojide kendini gösterir; bu da oryantasyonu yavaşlatacak ve bakım maliyetini artıracaktır.

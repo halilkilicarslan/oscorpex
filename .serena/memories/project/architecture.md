@@ -81,6 +81,18 @@ agent_messages, pipeline_runs, agent_runs,
 agent_dependencies, agent_capabilities, project_settings,
 token_usage (with cache_creation_tokens, cache_read_tokens)
 
+## Agent Scoring System (v2.7)
+- Computed in `analytics-repo.ts:getAgentAnalytics()` per agent
+- 5 metrics: successRate(W_SUCCESS), firstPassRate(W_FIRST_PASS), reviewApprovalRate(W_REVIEW), timeScore(W_TIME), costScore(W_COST)
+- Weights & baselines from `project_settings` (category: `scoring`), defaults: 30/25/20/15/10, 30min, $0.50
+- `firstPassTasks`: tasks completed without any `task:failed` event (query events table by task_id)
+- UI: score badge on avatar (AgentDashboard.tsx), "Takım Skoru" average card
+
+## Reserved Ports (v2.7)
+- `app-runner.ts`: `RESERVED_PORTS = new Set([5173, 4242, 3142])`
+- 5173=frontend Vite, 4242=backend API, 3142=WebSocket
+- `resolvePort()` and `nextPort()` skip these
+
 ## 12-Agent Scrum Team (v2.0)
 PM, Designer, Architect, Frontend, Backend, Coder, QA, Reviewer, DevOps,
 DataEngineer, SecurityEngineer, TechWriter

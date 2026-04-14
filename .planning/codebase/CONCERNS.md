@@ -1,114 +1,113 @@
-# Main Concerns
+# Temel Sorunlar
 
-Generated on 2026-04-12 from direct repository inspection and local command runs.
+12 Nisan 2026 tarihinde doğrudan depo incelemesi ve yerel komut çıktıları ile oluşturulmuştur.
 
-## 1. Documentation Drift
+## 1. Dokümantasyon Kayması
 
-The repo documentation no longer describes the current system consistently.
+Depo dokümantasyonu artık mevcut sistemi tutarlı bir şekilde açıklamamaktadır.
 
-Examples:
+Örnekler:
 
-- `README.md` says React 18, current frontend is React 19
-- `ARCHITECTURE.md` describes VoltAgent/LibSQL on port 4242
-- current runtime uses Oscorpex + Hono on port 3141 with PostgreSQL plus LibSQL side stores
+- `README.md` React 18 diyor, mevcut ön uç React 19.
+- `ARCHITECTURE.md` 4242 portunda VoltAgent/LibSQL'i açıklıyor.
+- Mevcut çalışma zamanı, PostgreSQL ve LibSQL yan depoları ile 3141 portunda Oscorpex + Hono kullanıyor.
 
-Impact:
+Etki:
 
-- onboarding confusion
-- higher risk of wrong deployment/debugging assumptions
+- Oryantasyon karmaşası.
+- Yanlış dağıtım/hata ayıklama varsayımları riski.
 
-## 2. God Files in Core Paths
+## 2. Çekirdek Yollardaki "Dev Dosyalar" (God Files)
 
-Several critical files are too large for safe change velocity:
+Birkaç kritik dosya, güvenli değişim hızı için çok büyüktür:
 
-- `src/studio/routes.ts` - 3,079 lines
-- `src/studio/db.ts` - 2,191 lines
-- `src/studio/execution-engine.ts` - 1,106 lines
-- `src/studio/pipeline-engine.ts` - 917 lines
-- `src/studio/task-engine.ts` - 850 lines
-- `console/src/lib/studio-api.ts` - 1,889 lines
-- `console/src/pages/studio/StudioHomePage.tsx` - 816 lines
+- `src/studio/routes.ts` - 3.079 satır
+- `src/studio/db.ts` - 2.191 satır
+- `src/studio/execution-engine.ts` - 1.106 satır
+- `src/studio/pipeline-engine.ts` - 917 satır
+- `src/studio/task-engine.ts` - 850 satır
+- `console/src/lib/studio-api.ts` - 1.889 satır
+- `console/src/pages/studio/StudioHomePage.tsx` - 816 satır
 
-Impact:
+Etki:
 
-- harder reviews
-- higher regression probability
-- weaker ownership boundaries
+- Zorlaşan kod incelemeleri (reviews).
+- Daha yüksek regresyon olasılığı.
+- Zayıf sahiplik sınırları.
 
-## 3. Frontend/Backend Contract Drift
+## 3. Ön Üç/Arka Uç Sözleşme Kayması
 
-The frontend maintains its own type universe, and it is already diverging from current behavior.
+Ön uç kendi tip evrenini korumaktadır ve bu evren mevcut davranıştan zaten sapmaktadır.
 
-Concrete evidence:
+Somut kanıtlar:
 
-- tests and build break on required `gender`
-- build breaks on required `fallbackOrder`
-- `ProjectAnalytics` shape changed without all tests being updated
-- `LogsPage.tsx` expects a field not present in its local type
+- Testler ve derleme (build), zorunlu `gender` alanı nedeniyle başarısız oluyor.
+- Derleme, zorunlu `fallbackOrder` alanı nedeniyle başarısız oluyor.
+- `ProjectAnalytics` yapısı, tüm testler güncellenmeden değişti.
+- `LogsPage.tsx`, yerel arayüzünde tanımlanmayan bir alan bekliyor.
 
-Impact:
+Etki:
 
-- UI changes are brittle
-- tests do not reliably protect refactors
+- Kullanıcı arayüzü değişiklikleri kırılgandır.
+- Testler, yeniden yapılandırmaları (refactoring) güvenilir bir şekilde korumaz.
 
-## 4. Test Environment Instability
+## 4. Test Ortamı Kararsızlığı
 
-Backend tests rely on PostgreSQL but the test setup does not initialize schema automatically. Frontend tests are also sensitive to API client shape changes.
+Arka uç testleri PostgreSQL'e dayanmaktadır ancak test kurulumu şemayı otomatik olarak başlatmaz. Ön uç testleri de API istemci yapısı değişikliklerine karşı hassastır.
 
-Impact:
+Etki:
 
-- local confidence is lower than the test count suggests
-- CI would be unstable without additional setup
+- Yerel güven, test sayısının önerdiğinden daha düşüktür.
+- Ek kurulum olmadan CI (Sürekli Entegrasyon) kararsız olacaktır.
 
-## 5. Runtime Analyzer Mixes Detection with Port Mutation
+## 5. Çalışma Zamanı Analizi ile Port Atama Karışıklığı
 
-`analyzeProject()` both detects intended ports and mutates them to avoid conflicts on the current machine.
+`analyzeProject()` hem hedeflenen portları tespit eder hem de mevcut makinedeki çakışmaları önlemek için bunları değiştirir.
 
-Impact:
+Etki:
 
-- nondeterministic tests
-- blurred semantics: analysis result vs runnable allocation
+- Belirsiz (nondeterministic) testler.
+- Bulanıklaşan anlamlar: analiz sonucu vs. çalıştırılabilir tahsis.
 
-Recommended direction:
+Önerilen yön:
 
-- separate "detected port" from "allocated free port"
+- "Tespit edilen port" ile "tahsis edilen boş port" ayrılmalıdır.
 
-## 6. Hybrid Storage and Naming Complexity
+## 6. Hibrit Depolama ve İsimlendirme Karmaşıklığı
 
-The product uses PostgreSQL, pgvector, LibSQL, file logs, and repo-local artifacts while also mixing Oscorpex/VoltAgent/VoltOps naming.
+Ürün PostgreSQL, pgvector, LibSQL, dosya günlükleri ve yerel depo bileşenlerini kullanırken aynı zamanda Oscorpex/VoltAgent/VoltOps isimlendirmelerini karıştırmaktadır.
 
-Impact:
+Etki:
 
-- steep cognitive load
-- harder operational debugging
+- Yüksek bilişsel yük.
+- Zorlaşan operasyonel hata ayıklama.
 
-## 7. Frontend Hooks Discipline Is Not Enforced in Practice
+## 7. Ön Üç Hook Disiplini Uygulanmıyor
 
-The ESLint output shows many places where state is set inside effects or impure values are computed during render.
+ESLint çıktısı, durumun (state) efektler içinde ayarlandığı veya render sırasında saf olmayan değerlerin hesaplandığı birçok yer göstermektedir.
 
-Impact:
+Etki:
 
-- avoidable rerenders
-- stale state bugs
-- hard-to-maintain component logic
+- Kaçınılabilir yeniden render işlemleri.
+- Güncel olmayan durum hataları.
+- Bakımı zor bileşen mantığı.
 
-## 8. Docker Privilege Surface
+## 8. Docker Ayrıcalık Yüzeyi
 
-The backend mounts `/var/run/docker.sock`, and agent orchestration depends on container execution.
+Arka uç `/var/run/docker.sock` bağlar ve ajan orkestrasyonu konteyner yürütülmesine bağlıdır.
 
-Impact:
+Etki:
 
-- very high local host access for the backend process
-- should be treated as a trusted-developer environment, not a casually exposed service
+- Arka uç süreci için çok yüksek yerel ana makine erişimi.
+- Güvenilir bir geliştirici ortamı olarak değerlendirilmeli, sıradan bir hizmet gibi açılmamalıdır.
 
-## Priority Recommendations
+## Öncelikli Öneriler
 
-1. Make docs truthful again and pick one architecture source of truth.
-2. Stabilize CI:
-   - bootstrap test schema
-   - repair frontend build
-   - get frontend tests green
-3. Extract shared contracts for API and analytics types.
-4. Split the biggest backend and frontend files by bounded context.
-5. Separate runtime analysis from runtime port allocation.
-
+1. Dokümanları yeniden doğru hale getirin ve mimari için tek bir gerçek kaynağı seçin.
+2. CI'yı stabilize edin:
+   - Test şemasını önyükleyin (bootstrap).
+   - Ön uç derlemesini onarın.
+   - Ön uç testlerini yeşile döndürün.
+3. API ve analitik tipleri için paylaşılan sözleşmeleri (contracts) çıkarın.
+4. En büyük arka uç ve ön uç dosyalarını bağlamsal sınırlara (bounded contexts) göre bölün.
+5. Çalışma zamanı analizini, çalışma zamanı port tahsisinden ayırın.

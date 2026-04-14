@@ -1,97 +1,96 @@
-# Testing and Verification
+# Test ve Doğrulama
 
-Generated on 2026-04-12 from direct repository inspection and local command runs.
+12 Nisan 2026 tarihinde doğrudan depo incelemesi ve yerel komut çıktıları ile oluşturulmuştur.
 
-## Commands Run
+## Çalıştırılan Komutlar
 
-Backend:
+Arka Uç:
 
 - `pnpm typecheck`
 - `pnpm build`
 - `pnpm test`
 - `pnpm lint`
 
-Frontend:
+Ön Üç:
 
 - `cd console && pnpm build`
 - `cd console && pnpm test:run`
 - `cd console && pnpm lint`
 
-## Backend Status
+## Arka Uç Durumu
 
-### Passing
+### Başarılı
 
-- `pnpm typecheck`: passed
-- `pnpm build`: passed
+- `pnpm typecheck`: Başarılı
+- `pnpm build`: Başarılı
 
-### Failing
+### Başarısız
 
-- `pnpm test`: failed
-  - 12 test files executed
-  - 161 tests total
-  - 132 passed
-  - 27 skipped
-  - 2 failed
-  - 2 suites failed
+- `pnpm test`: Başarısız
+  - 12 test dosyası çalıştırıldı
+  - Toplam 161 test
+  - 132 başarılı
+  - 27 atlandı
+  - 2 başarısız
+  - 2 suite başarısız
 
-Failure categories:
+Hata kategorileri:
 
-- database test environment is not fully bootstrapped
+- Veritabanı test ortamı tam olarak önyüklenmemiş
   - `src/studio/__tests__/db.test.ts`
   - `src/studio/__tests__/task-engine.test.ts`
-  - error: relation `chat_messages` does not exist
+  - Hata: `chat_messages` ilişkisi (tablosu) mevcut değil.
 
-- runtime analyzer test drift
+- Çalışma zamanı analizörü test kayması
   - `src/studio/__tests__/runtime-analyzer.test.ts`
-  - expected ports `8080` and `3000`
-  - actual ports `8081` and `3003`
-  - likely caused by runtime port collision avoidance now changing ports during analysis
+  - Beklenen portlar: `8080` ve `3000`
+  - Gerçek portlar: `8081` ve `3003`
+  - Muhtemelen analiz sırasında port çakışmasını önleme mantığının portları değiştirmesinden kaynaklanıyor.
 
-- `pnpm lint`: failed
-  - 395 Biome errors reported
-  - most visible issues are formatting/import ordering
-  - some test files also violate style rules such as non-null assertions
+- `pnpm lint`: Başarısız
+  - 395 Biome hatası rapor edildi.
+  - En görünür sorunlar formatlama ve import sıralaması.
+  - Bazı test dosyaları da null olmayan iddialar (non-null assertions) gibi stil kurallarını ihlal ediyor.
 
-## Frontend Status
+## Ön Üç Durumu
 
-### Failing
+### Başarısız
 
-- `cd console && pnpm test:run`: failed
-  - 10 test files executed
-  - 213 tests total
-  - 211 passed
-  - 2 failed
+- `cd console && pnpm test:run`: Başarısız
+  - 10 test dosyası çalıştırıldı
+  - Toplam 213 test
+  - 211 başarılı
+  - 2 başarısız
 
-Failed test file:
+Başarısız test dosyası:
 
 - `console/src/__tests__/ProjectSettings.test.tsx`
 
-Observed causes:
+Gözlemlenen nedenler:
 
-- mock for `../lib/studio-api` no longer includes `fetchProjectCosts`
-- settings loading now uses `Promise.allSettled`, so the error surface differs from the original test expectations
+- `../lib/studio-api` mock'u artık `fetchProjectCosts` içermiyor.
+- Ayarların yüklenmesi artık `Promise.allSettled` kullanıyor, bu nedenle hata yüzeyi orijinal test beklentilerinden farklı.
 
-- `cd console && pnpm build`: failed during TypeScript compilation
-  - contract drift in tests and UI types:
-    - `ProjectAgent.gender` now required
-    - `AIProvider.fallbackOrder` now required
-    - `ProjectAnalytics` shape changed
-  - `LogsPage.tsx` expects `trace_flags` on a local interface that does not define it
-  - `src/test/setup.ts` is missing Node typing configuration
+- `cd console && pnpm build`: TypeScript derlemesi sırasında başarısız oldu
+  - Testlerde ve UI tiplerinde sözleşme (contract) kayması:
+    - `ProjectAgent.gender` artık zorunlu.
+    - `AIProvider.fallbackOrder` artık zorunlu.
+    - `ProjectAnalytics` yapısı değişti.
+  - `LogsPage.tsx`, yerel bir arayüzde tanımlanmayan `trace_flags` alanını bekliyor.
+  - `src/test/setup.ts` içinde Node tipi yapılandırması eksik.
 
-- `cd console && pnpm lint`: failed
-  - 72 errors, 5 warnings
-  - repeated categories:
-    - unused variables
-    - `any` usage
-    - React Hooks `set-state-in-effect`
-    - purity violations such as `Date.now()` during render
-    - missing dependencies in effects
-    - missing ESLint rule plugin for `jsx-a11y/no-autofocus`
+- `cd console && pnpm lint`: Başarısız
+  - 72 hata, 5 uyarı.
+  - Tekrar eden kategoriler:
+    - Kullanılmayan değişkenler.
+    - `any` kullanımı.
+    - React Hooks `set-state-in-effect`.
+    - Render sırasında `Date.now()` gibi saflık (purity) ihlalleri.
+    - Efektlerde eksik bağımlılıklar.
+    - `jsx-a11y/no-autofocus` için eksik ESLint kural eklentisi.
 
-## Interpretation
+## Yorumlama
 
-The repo is actively developed but not currently in a clean CI-ready state.
+Depo aktif olarak geliştiriliyor ancak şu anda temiz bir CI-hazır (Sürekli Entegrasyon) durumda değil.
 
-The backend core still compiles, which is a strong sign. The frontend is carrying more contract drift and lint debt, and the backend test harness needs deterministic database initialization.
-
+Arka uç çekirdeği hala derleniyor, bu güçlü bir işaret. Ön uç daha fazla sözleşme kayması ve lint borcu taşıyor; arka uç test düzeneği ise deterministik veritabanı başlatılmasına ihtiyaç duyuyor.
