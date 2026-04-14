@@ -10,11 +10,18 @@ import type { Project, TeamTemplate } from '../lib/studio-api';
 vi.mock('../lib/studio-api', () => ({
   fetchProjects: vi.fn(),
   createProject: vi.fn(),
+  createProjectFromTemplate: vi.fn(),
+  importProject: vi.fn(),
+  createCustomTeam: vi.fn(),
   deleteProject: vi.fn(),
   fetchTeamTemplates: vi.fn(),
   fetchCustomTeams: vi.fn(),
+  fetchProjectTemplates: vi.fn().mockResolvedValue([]),
   fetchProjectAgents: vi.fn(),
   fetchProjectAnalytics: vi.fn(),
+  fetchPresetAgents: vi.fn().mockResolvedValue([]),
+  streamTeamArchitectChat: vi.fn().mockReturnValue(() => {}),
+  roleLabel: vi.fn((role: string) => role),
 }));
 
 // window.confirm'i mockla
@@ -212,8 +219,8 @@ describe('StudioHomePage — proje olusturma modali', () => {
     await user.click(screen.getByText('New Project'));
 
     expect(screen.getByText('New Project', { selector: 'h2' })).toBeInTheDocument();
-    // Modal icinde proje adi inputu olmali
-    expect(screen.getByPlaceholderText('My Awesome App')).toBeInTheDocument();
+    // Step 1: proje adi inputu olmali (yeni placeholder)
+    expect(screen.getByPlaceholderText(/Counter App/)).toBeInTheDocument();
   });
 
   it('modal "Cancel" butonuna tiklaninca kapanmali', async () => {
@@ -223,72 +230,62 @@ describe('StudioHomePage — proje olusturma modali', () => {
     await waitFor(() => screen.getByText('New Project'));
 
     await user.click(screen.getByText('New Project'));
-    expect(screen.getByPlaceholderText('My Awesome App')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Counter App/)).toBeInTheDocument();
 
     await user.click(screen.getByText('Cancel'));
-    expect(screen.queryByPlaceholderText('My Awesome App')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Counter App/)).not.toBeInTheDocument();
   });
 
-  it('"Create Project" butonu isim girilmeden disabled olmali', async () => {
+  it('Step 1 "Continue to Team" butonu isim girilmeden disabled olmali', async () => {
     const user = userEvent.setup();
     renderSayfa();
 
     await waitFor(() => screen.getByText('New Project'));
     await user.click(screen.getByText('New Project'));
 
-    // Modalin icindeki Create Project butonunu sec (disabled olan)
-    const createBtns = screen.getAllByRole('button', { name: 'Create Project' });
-    // Modal icindeki buton — disabled olmali (isim girilmedi)
-    const modalBtn = createBtns.find((btn) => btn.hasAttribute('disabled'));
-    expect(modalBtn).toBeTruthy();
-    expect(modalBtn).toBeDisabled();
+    const continueBtn = screen.getByRole('button', { name: 'Continue to Team' });
+    expect(continueBtn).toBeDisabled();
   });
 
-  it('isim girildikten sonra "Create Project" butonu aktif olmali', async () => {
+  it('isim girildikten sonra "Continue to Team" butonu aktif olmali', async () => {
     const user = userEvent.setup();
     renderSayfa();
 
     await waitFor(() => screen.getByText('New Project'));
     await user.click(screen.getByText('New Project'));
 
-    const nameInput = screen.getByPlaceholderText('My Awesome App');
+    const nameInput = screen.getByPlaceholderText(/Counter App/);
     await user.type(nameInput, 'Benim Projem');
 
-    // Buton artik disabled olmamali
-    const createBtns = screen.getAllByRole('button', { name: 'Create Project' });
-    const enabledBtn = createBtns.find((btn) => !btn.hasAttribute('disabled'));
-    expect(enabledBtn).toBeTruthy();
-    expect(enabledBtn).not.toBeDisabled();
+    const continueBtn = screen.getByRole('button', { name: 'Continue to Team' });
+    expect(continueBtn).not.toBeDisabled();
   });
 
-  it('form gonderildiginde createProject API cagrisi yapilmali', async () => {
+  it('Step 2 de "Create Project" butonuyla API cagrisi yapilmali', async () => {
     const user = userEvent.setup();
     const yeniProje: Project = { ...ORNEK_PROJELER[0], id: 'proj-yeni', name: 'Benim Projem' };
     vi.mocked(studioApi.createProject).mockResolvedValue(yeniProje);
     renderSayfa();
 
-    // Sayfanin yuklendigini bekle
     await waitFor(() => screen.getByRole('heading', { name: 'Oscorpex' }));
 
-    // New Project butonuna tikla — header butonunu secmek icin
     const newProjectBtns = screen.getAllByText('New Project');
     await user.click(newProjectBtns[0]);
 
-    // Modal acildiginda isim girilecek inputu bekle
-    await waitFor(() => screen.getByPlaceholderText('My Awesome App'));
+    await waitFor(() => screen.getByPlaceholderText(/Counter App/));
 
-    const nameInput = screen.getByPlaceholderText('My Awesome App');
+    const nameInput = screen.getByPlaceholderText(/Counter App/);
     await user.type(nameInput, 'Benim Projem');
 
-    // Modal icindeki son Create Project butonuna tikla
-    // Not: React'in disabled prop'u DOM attribute'u olarak atanmis olabilir veya
-    // sadece CSS class ile gizlenebilir. Her iki durumu da desteklemek icin
-    // modal footer'indaki son butonu hedefliyoruz.
-    const modalFooterBtn = screen
-      .getByText('Cancel')
-      .closest('div')!
-      .querySelector('button:last-child')!;
-    await user.click(modalFooterBtn);
+    // Step 2 ye ilerle
+    await user.click(screen.getByRole('button', { name: 'Continue to Team' }));
+
+    // Step 2: modal footer'daki Create Project butonunu bul ve tikla
+    await waitFor(() => screen.getAllByRole('button', { name: 'Create Project' }));
+    const createBtns = screen.getAllByRole('button', { name: 'Create Project' });
+    // Footer butonu: Cancel'in yanındaki
+    const modalCreateBtn = createBtns.find(btn => btn.closest('.border-t'));
+    await user.click(modalCreateBtn ?? createBtns[createBtns.length - 1]);
 
     await waitFor(() => {
       expect(studioApi.createProject).toHaveBeenCalledWith(
@@ -297,7 +294,7 @@ describe('StudioHomePage — proje olusturma modali', () => {
     });
   });
 
-  it('takim sablonu secildiginde template gosterilmeli', async () => {
+  it('takim sablonu secildiginde step 2 de template gosterilmeli', async () => {
     const user = userEvent.setup();
     const sablon: TeamTemplate = {
       id: 'tmpl-1',
@@ -312,8 +309,17 @@ describe('StudioHomePage — proje olusturma modali', () => {
     await waitFor(() => screen.getByText('New Project'));
     await user.click(screen.getByText('New Project'));
 
+    // İsim girip step 2 ye ilerle
+    const nameInput = screen.getByPlaceholderText(/Counter App/);
+    await user.type(nameInput, 'Test');
+    await user.click(screen.getByRole('button', { name: 'Continue to Team' }));
+
+    // Step 2: "Ben seçeceğim" butonuyla manuel moda geç — template'ler orada
+    await waitFor(() => screen.getByText(/seçeceğim/i));
+    await user.click(screen.getByText(/seçeceğim/i));
+
     await waitFor(() => {
-      expect(screen.getByText('Full Stack Takim')).toBeInTheDocument();
+      expect(screen.getAllByText('Full Stack Takim').length).toBeGreaterThanOrEqual(1);
     });
   });
 });

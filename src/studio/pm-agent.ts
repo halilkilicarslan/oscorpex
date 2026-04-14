@@ -198,6 +198,7 @@ When creating or updating a plan, output the JSON inside a \`\`\`plan-json code 
 Example:
 \`\`\`plan-json
 {
+  "techStack": ["react", "vite", "typescript"],
   "phases": [
     {
       "name": "Foundation",
@@ -216,6 +217,9 @@ Example:
   ]
 }
 \`\`\`
+
+Top-level optional field:
+- techStack: planner'ın önerdiği veya netleştirdiği teknoloji dizisi. Plan yeterince netleştiğinde ekle.
 
 Each phase has: name, order (1-based), tasks array.
 Each task has: title, description, assignedRole (use exact role from team), complexity (S|M|L|XL), branch, taskType (ai|integration-test|run-app).

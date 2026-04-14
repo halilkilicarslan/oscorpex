@@ -179,7 +179,16 @@ export async function fetchProject(id: string): Promise<Project> {
   return json(await fetch(`${BASE}/projects/${id}`));
 }
 
-export async function createProject(data: { name: string; description?: string; techStack?: string[]; teamTemplateId?: string }): Promise<Project> {
+export async function createProject(data: {
+  name: string;
+  description?: string;
+  techStack?: string[];
+  techPreference?: string[];
+  projectType?: string;
+  teamTemplateId?: string;
+  plannerAgentId?: string;
+  previewEnabled?: boolean;
+}): Promise<Project> {
   return json(await fetch(`${BASE}/projects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -201,7 +210,13 @@ export async function fetchProjectTemplates(): Promise<ProjectTemplateInfo[]> {
   return json(await fetch(`${BASE}/project-templates`));
 }
 
-export async function createProjectFromTemplate(data: { name: string; templateId: string; description?: string }): Promise<Project & { filesCreated?: string[] }> {
+export async function createProjectFromTemplate(data: {
+  name: string;
+  templateId: string;
+  description?: string;
+  plannerAgentId?: string;
+  previewEnabled?: boolean;
+}): Promise<Project & { filesCreated?: string[] }> {
   return json(await fetch(`${BASE}/projects/from-template`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -209,7 +224,15 @@ export async function createProjectFromTemplate(data: { name: string; templateId
   }));
 }
 
-export async function importProject(data: { name: string; repoPath: string; description?: string; techStack?: string[]; teamTemplateId?: string }): Promise<Project> {
+export async function importProject(data: {
+  name: string;
+  repoPath: string;
+  description?: string;
+  techStack?: string[];
+  teamTemplateId?: string;
+  plannerAgentId?: string;
+  previewEnabled?: boolean;
+}): Promise<Project> {
   return json(await fetch(`${BASE}/projects/import`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -553,9 +576,41 @@ export async function fetchChatHistory(projectId: string): Promise<ChatMessage[]
   return json(await fetch(`${BASE}/projects/${projectId}/chat/history`));
 }
 
+export type PlannerCLIProvider = 'claude-code' | 'codex' | 'gemini';
+
+export interface PlannerCLIProviderInfo {
+  id: PlannerCLIProvider;
+  label: string;
+  binary: string;
+  available: boolean;
+  version?: string;
+  models: string[];
+  defaultModel: string;
+  efforts: PlannerReasoningEffort[];
+  defaultEffort?: PlannerReasoningEffort;
+}
+
+export type PlannerChatModel = string;
+export type PlannerReasoningEffort = 'low' | 'medium' | 'high' | 'max' | 'xhigh';
+export interface ArchitectMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface TeamArchitectIntake {
+  name: string;
+  description: string;
+  projectType: string;
+  previewEnabled: boolean;
+  techPreference: string[];
+}
+
 export function streamPMChat(
   projectId: string,
   message: string,
+  provider: PlannerCLIProvider,
+  model: PlannerChatModel,
+  effort: PlannerReasoningEffort | null,
   onText: (text: string) => void,
   onDone: () => void,
   onError: (err: Error) => void,
@@ -565,7 +620,7 @@ export function streamPMChat(
   fetch(`${BASE}/projects/${projectId}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, provider, model, effort }),
     signal: controller.signal,
   })
     .then(async (res) => {
@@ -615,6 +670,78 @@ export function streamPMChat(
         }
       }
       onDone();
+    })
+    .catch((err) => {
+      if (err.name !== 'AbortError') onError(err);
+    });
+
+  return () => controller.abort();
+}
+
+export function streamTeamArchitectChat(
+  intake: TeamArchitectIntake,
+  messages: ArchitectMessage[],
+  onText: (text: string) => void,
+  onDone: (fullText: string) => void,
+  onError: (err: Error) => void,
+): () => void {
+  const controller = new AbortController();
+
+  fetch(`${BASE}/team-architect/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ intake, messages }),
+    signal: controller.signal,
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No reader');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentEvent = '';
+      let finalText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('event: ')) {
+            currentEvent = trimmed.slice(7);
+            continue;
+          }
+          if (!trimmed.startsWith('data: ')) continue;
+          const jsonStr = trimmed.slice(6);
+          try {
+            const parsed = JSON.parse(jsonStr);
+            if (currentEvent === 'error' && parsed.error) {
+              throw new Error(parsed.error);
+            }
+            if (currentEvent === 'text-delta' && typeof parsed.text === 'string') {
+              onText(parsed.text);
+            }
+            if (currentEvent === 'done' && typeof parsed.fullText === 'string') {
+              finalText = parsed.fullText;
+            }
+          } catch (e) {
+            if (e instanceof Error && e.message !== 'Unexpected end of JSON input') throw e;
+          }
+          currentEvent = '';
+        }
+      }
+
+      onDone(finalText);
     })
     .catch((err) => {
       if (err.name !== 'AbortError') onError(err);
@@ -989,8 +1116,17 @@ export async function fetchDockerStatus(): Promise<{ docker: boolean; coderImage
 
 // ---- Config status --------------------------------------------------------
 
-export async function fetchConfigStatus(): Promise<{ openaiConfigured: boolean }> {
+export async function fetchConfigStatus(): Promise<{
+  openaiConfigured: boolean;
+  providerConfigured: boolean;
+  providerName?: string;
+  plannerAvailable: boolean;
+}> {
   return json(await fetch(`${BASE}/config/status`));
+}
+
+export async function fetchPlannerProviders(): Promise<PlannerCLIProviderInfo[]> {
+  return json(await fetch(`${BASE}/planner/providers`));
 }
 
 // ---- AI Providers ---------------------------------------------------------

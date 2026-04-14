@@ -31,6 +31,12 @@ function rowToCustomTeamTemplate(row: any): CustomTeamTemplate {
 	};
 }
 
+function ensurePlannerRole(roles: string[]): string[] {
+	const deduped = Array.from(new Set(roles.map((role) => role.trim()).filter(Boolean)));
+	const hasPlanner = deduped.some((role) => role === "product-owner" || role === "pm");
+	return hasPlanner ? deduped : ["product-owner", ...deduped];
+}
+
 // ---------------------------------------------------------------------------
 // Preset Team Templates
 // ---------------------------------------------------------------------------
@@ -67,15 +73,16 @@ export async function createCustomTeamTemplate(data: {
 }): Promise<CustomTeamTemplate> {
 	const id = randomUUID();
 	const createdAt = now();
+	const roles = ensurePlannerRole(data.roles);
 	await execute(
 		"INSERT INTO custom_team_templates (id, name, description, roles, dependencies, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
-		[id, data.name, data.description ?? "", JSON.stringify(data.roles), JSON.stringify(data.dependencies), createdAt],
+		[id, data.name, data.description ?? "", JSON.stringify(roles), JSON.stringify(data.dependencies), createdAt],
 	);
 	return {
 		id,
 		name: data.name,
 		description: data.description ?? "",
-		roles: data.roles,
+		roles,
 		dependencies: data.dependencies,
 		createdAt,
 	};
@@ -94,7 +101,7 @@ export async function updateCustomTeamTemplate(
 	if (!existing) return undefined;
 	const name = data.name ?? existing.name;
 	const description = data.description ?? existing.description;
-	const roles = data.roles ?? existing.roles;
+	const roles = ensurePlannerRole(data.roles ?? existing.roles);
 	const dependencies = data.dependencies ?? existing.dependencies;
 	await execute(
 		"UPDATE custom_team_templates SET name = $1, description = $2, roles = $3, dependencies = $4 WHERE id = $5",

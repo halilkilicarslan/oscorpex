@@ -20,6 +20,7 @@ import {
   Eye,
   FileText,
   CheckCircle2,
+  Brain,
 } from 'lucide-react';
 import {
   fetchProject,
@@ -29,8 +30,16 @@ import {
   stopApp,
   fetchAppStatus,
   generateReadme,
+  fetchConfigStatus,
+  fetchPlannerProviders,
+  fetchProjectSettings,
   type Project,
   type AppStatus,
+  type PlannerCLIProvider,
+  type PlannerCLIProviderInfo,
+  type PlannerChatModel,
+  type PlannerReasoningEffort,
+  type ProjectAgent,
 } from '../../lib/studio-api';
 import PMChat from './PMChat';
 import AgentGrid from './AgentGrid';
@@ -44,6 +53,7 @@ import ProjectSettings from './ProjectSettings';
 import DiffViewer from './DiffViewer';
 import AgentLogViewer from './AgentLogViewer';
 import LivePreview from './LivePreview';
+import PlannerSettingsModal from './PlannerSettingsModal';
 import { useStudioWebSocket } from '../../hooks/useStudioWebSocket';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -78,6 +88,7 @@ export default function ProjectPage() {
   const [boardView, setBoardView] = useState<BoardView>('kanban');
   // Messages sekmesi için toplam okunmamış mesaj sayısı
   const [totalUnread, setTotalUnread] = useState(0);
+  const [projectAgents, setProjectAgents] = useState<ProjectAgent[]>([]);
   // Polling referansı — bellek sızıntısını önlemek için
   const unreadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // App runner state
@@ -90,6 +101,13 @@ export default function ProjectPage() {
   // README oluşturma durumu
   const [readmeLoading, setReadmeLoading] = useState(false);
   const [readmeDone, setReadmeDone] = useState(false);
+  const [plannerSettingsOpen, setPlannerSettingsOpen] = useState(false);
+  const [plannerAvailable, setPlannerAvailable] = useState<boolean | null>(null);
+  const [plannerProviders, setPlannerProviders] = useState<PlannerCLIProviderInfo[]>([]);
+  const [plannerProvider, setPlannerProvider] = useState<PlannerCLIProvider>('claude-code');
+  const [plannerModel, setPlannerModel] = useState<PlannerChatModel>('sonnet');
+  const [plannerEffort, setPlannerEffort] = useState<PlannerReasoningEffort | null>('high');
+  const [previewEnabled, setPreviewEnabled] = useState(true);
 
   useEffect(() => {
     if (!projectId) return;
@@ -99,11 +117,19 @@ export default function ProjectPage() {
       .finally(() => setLoading(false));
   }, [projectId, navigate]);
 
+  useEffect(() => {
+    if (!projectId) return;
+    fetchProjectSettings(projectId)
+      .then((settings) => setPreviewEnabled(settings.runtime?.previewEnabled !== 'false'))
+      .catch(() => setPreviewEnabled(true));
+  }, [projectId]);
+
   // Tüm ajanların okunmamış mesaj sayısını topla
   const refreshUnreadTotal = useCallback(async () => {
     if (!projectId) return;
     try {
       const agents = await fetchProjectAgents(projectId);
+      setProjectAgents(agents);
       if (agents.length === 0) return;
       const counts = await Promise.all(
         agents.map((a) =>
@@ -117,6 +143,60 @@ export default function ProjectPage() {
       // sessizce geç
     }
   }, [projectId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !projectId) return;
+    const savedProvider = window.localStorage.getItem(`planner-provider:${projectId}`) as PlannerCLIProvider | null;
+    const savedModel = window.localStorage.getItem(`planner-model:${projectId}`) as PlannerChatModel | null;
+    const savedEffort = window.localStorage.getItem(`planner-effort:${projectId}`) as PlannerReasoningEffort | null;
+    if (savedProvider === 'claude-code' || savedProvider === 'codex' || savedProvider === 'gemini') {
+      setPlannerProvider(savedProvider);
+    }
+    if (savedModel) {
+      setPlannerModel(savedModel);
+    }
+    if (savedEffort === 'low' || savedEffort === 'medium' || savedEffort === 'high' || savedEffort === 'max' || savedEffort === 'xhigh') {
+      setPlannerEffort(savedEffort);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    Promise.allSettled([fetchConfigStatus(), fetchPlannerProviders()])
+      .then(([configResult, providersResult]) => {
+        if (configResult.status === 'fulfilled') {
+          setPlannerAvailable(configResult.value.plannerAvailable);
+        }
+        if (providersResult.status === 'fulfilled') {
+          setPlannerProviders(providersResult.value);
+        }
+      })
+      .catch(() => {});
+  }, [projectId]);
+
+  useEffect(() => {
+    if (plannerProviders.length === 0) return;
+    const available = plannerProviders.filter((provider) => provider.available);
+    if (available.length === 0) return;
+    const provider = available.find((item) => item.id === plannerProvider) ?? available[0];
+    if (provider.id !== plannerProvider) {
+      setPlannerProvider(provider.id);
+    }
+    if (!provider.models.includes(plannerModel)) {
+      setPlannerModel(provider.defaultModel);
+    }
+    if (provider.efforts.length === 0) {
+      setPlannerEffort(null);
+    } else if (!plannerEffort || !provider.efforts.includes(plannerEffort)) {
+      setPlannerEffort(provider.defaultEffort ?? provider.efforts[0] ?? null);
+    }
+  }, [plannerProviders, plannerProvider, plannerModel, plannerEffort]);
+
+  useEffect(() => {
+    if (!previewEnabled && activeTab === 'preview') {
+      setActiveTab('chat');
+    }
+  }, [previewEnabled, activeTab]);
 
   // Proje yüklendikten sonra okunmamış sayıları çek ve polling başlat
   useEffect(() => {
@@ -179,6 +259,10 @@ export default function ProjectPage() {
 
   if (!project) return null;
 
+  const plannerAgent =
+    projectAgents.find((agent) => agent.role === 'product-owner' || agent.role === 'pm') ?? null;
+  const visibleTabs = previewEnabled ? STATIC_TABS : STATIC_TABS.filter((tab) => tab.id !== 'preview');
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -226,24 +310,26 @@ export default function ProjectPage() {
             )}
           </div>
         </div>
-        <button
-          onClick={handleToggleApp}
-          disabled={appLoading}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
-            appStatus.running
-              ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
-              : 'bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20'
-          } disabled:opacity-50`}
-        >
-          {appLoading ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : appStatus.running ? (
-            <Square size={14} />
-          ) : (
-            <Play size={14} />
-          )}
-          {appStatus.running ? 'Stop App' : 'Run App'}
-        </button>
+        {previewEnabled && (
+          <button
+            onClick={handleToggleApp}
+            disabled={appLoading}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
+              appStatus.running
+                ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
+                : 'bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20'
+            } disabled:opacity-50`}
+          >
+            {appLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : appStatus.running ? (
+              <Square size={14} />
+            ) : (
+              <Play size={14} />
+            )}
+            {appStatus.running ? 'Stop App' : 'Run App'}
+          </button>
+        )}
         {/* README oluşturma butonu — küçük, secondary stil */}
         <button
           onClick={handleGenerateReadme}
@@ -261,6 +347,14 @@ export default function ProjectPage() {
           {readmeDone ? 'README Ready' : 'Gen README'}
         </button>
         <button
+          onClick={() => setPlannerSettingsOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors bg-[#1f1f1f] text-[#a3a3a3] hover:bg-[#262626] hover:text-[#fafafa]"
+          title="Planner ayarlarını aç"
+        >
+          <Brain size={14} />
+          Planner Settings
+        </button>
+        <button
           onClick={() => { if (!notifyEnabled) requestPermission(); }}
           className={`p-1.5 rounded-lg transition-colors ${
             notifyEnabled
@@ -275,7 +369,7 @@ export default function ProjectPage() {
 
       {/* Sekme çubuğu */}
       <div className="flex items-center gap-1 px-6 py-2 border-b border-[#262626] bg-[#0a0a0a]">
-        {STATIC_TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => {
@@ -303,7 +397,15 @@ export default function ProjectPage() {
 
       {/* Sekme içerikleri */}
       <div className="flex-1 overflow-y-auto flex flex-col min-h-0" style={{ maxHeight: 'calc(100vh - 140px)' }}>
-        {activeTab === 'chat' && <PMChat projectId={projectId!} />}
+        {activeTab === 'chat' && (
+          <PMChat
+            projectId={projectId!}
+            plannerAvailable={plannerAvailable}
+            selectedProvider={plannerProvider}
+            selectedModel={plannerModel}
+            selectedEffort={plannerEffort}
+          />
+        )}
         {activeTab === 'team' && <AgentGrid projectId={projectId!} />}
         {activeTab === 'board' && (
           <div className="flex flex-col h-full">
@@ -357,6 +459,35 @@ export default function ProjectPage() {
         {activeTab === 'diff' && <DiffViewer projectId={projectId!} />}
         {activeTab === 'settings' && <ProjectSettings projectId={projectId!} />}
       </div>
+      {plannerSettingsOpen && (
+        <PlannerSettingsModal
+          projectId={projectId!}
+          plannerAgent={plannerAgent}
+          plannerProviders={plannerProviders}
+          plannerAvailable={plannerAvailable}
+          selectedProvider={plannerProvider}
+          selectedModel={plannerModel}
+          selectedEffort={plannerEffort}
+          onClose={() => setPlannerSettingsOpen(false)}
+          onSavePlanner={(provider, model, effort) => {
+            setPlannerProvider(provider);
+            setPlannerModel(model);
+            setPlannerEffort(effort);
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem(`planner-provider:${projectId!}`, provider);
+              window.localStorage.setItem(`planner-model:${projectId!}`, model);
+              if (effort) {
+                window.localStorage.setItem(`planner-effort:${projectId!}`, effort);
+              } else {
+                window.localStorage.removeItem(`planner-effort:${projectId!}`);
+              }
+            }
+          }}
+          onAgentSaved={(agent) => {
+            setProjectAgents((prev) => prev.map((item) => (item.id === agent.id ? agent : item)));
+          }}
+        />
+      )}
     </div>
   );
 }

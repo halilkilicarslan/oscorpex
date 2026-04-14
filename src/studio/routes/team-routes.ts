@@ -3,6 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
+import { resolve } from "node:path";
 import {
 	createAgentFiles,
 	deleteAgentFiles,
@@ -22,12 +24,15 @@ import {
 	getProject,
 	getProjectAgent,
 	getTeamTemplate,
+	listPresetAgents,
 	listCustomTeamTemplates,
 	listProjectAgents,
 	listTeamTemplates,
 	updateCustomTeamTemplate,
 	updateProjectAgent,
 } from "../db.js";
+import { listPlannerCLIProviders, streamPlannerWithCLI, type PlannerCLIProvider, type PlannerReasoningEffort } from "../planner-cli.js";
+import { TEAM_ARCHITECT_SYSTEM_PROMPT } from "../team-architect.js";
 import type { ProjectAgent } from "../types.js";
 
 export const teamRoutes = new Hono();
@@ -67,6 +72,133 @@ teamRoutes.delete("/custom-teams/:id", async (c) => {
 	const ok = await deleteCustomTeamTemplate(c.req.param("id"));
 	if (!ok) return c.json({ error: "Not found" }, 404);
 	return c.json({ success: true });
+});
+
+teamRoutes.post("/team-architect/chat", async (c) => {
+	const plannerProviders = await listPlannerCLIProviders();
+	const availableProviders = plannerProviders.filter((provider) => provider.available);
+	if (availableProviders.length === 0) {
+		return c.json(
+			{ error: "No supported planner CLI is available. Install Claude CLI, Codex CLI, or Gemini CLI." },
+			503,
+		);
+	}
+
+	const body = (await c.req.json()) as {
+		messages?: { role: "user" | "assistant"; content: string }[];
+		intake?: {
+			name?: string;
+			description?: string;
+			projectType?: string;
+			previewEnabled?: boolean;
+			techPreference?: string[];
+		};
+		provider?: PlannerCLIProvider;
+		model?: string;
+		effort?: PlannerReasoningEffort;
+	};
+
+	const selectedProvider = availableProviders.find((provider) => provider.id === body.provider)?.id ?? availableProviders[0].id;
+	const selectedProviderInfo =
+		availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0];
+	const selectedModel =
+		body.model && selectedProviderInfo.models.includes(body.model) ? body.model : selectedProviderInfo.defaultModel;
+	const selectedEffort =
+		body.effort && selectedProviderInfo.efforts.includes(body.effort) ? body.effort : selectedProviderInfo.defaultEffort;
+
+	const intake = body.intake ?? {};
+	const teamTemplates = await listTeamTemplates();
+	const customTeams = await listCustomTeamTemplates();
+	const presetAgents = await listPresetAgents();
+	const allowedRoles = Array.from(
+		new Set([...presetAgents.map((agent) => agent.role), ...teamTemplates.flatMap((team) => team.roles), ...customTeams.flatMap((team) => team.roles)]),
+	).sort();
+
+	const teamCatalog = [
+		...teamTemplates.map((team) => ({
+			id: team.id,
+			name: team.name,
+			source: "preset",
+			description: team.description,
+			roles: team.roles,
+		})),
+		...customTeams.map((team) => ({
+			id: team.id,
+			name: team.name,
+			source: "custom",
+			description: team.description,
+			roles: team.roles,
+		})),
+	]
+		.map(
+			(team) =>
+				`- id: ${team.id}\n  name: ${team.name}\n  source: ${team.source}\n  description: ${team.description || "N/A"}\n  roles: ${team.roles.join(", ")}`,
+		)
+		.join("\n");
+
+	const conversation = (body.messages ?? [])
+		.map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
+		.join("\n\n");
+
+	const prompt = `${conversation || "User: Based on the intake below, recommend the most suitable team. Ask follow-up questions only if needed."}
+
+[Project Intake]
+Name: ${intake.name || "Untitled project"}
+Description: ${intake.description || "Not specified"}
+Project Type: ${intake.projectType || "Not specified"}
+Preview Required: ${intake.previewEnabled === false ? "no" : "yes"}
+Technology Preference: ${(intake.techPreference ?? []).join(", ") || "Not specified"}
+
+[Available Teams]
+${teamCatalog}
+
+[Allowed Roles]
+${allowedRoles.join(", ")}`;
+
+	return streamSSE(c, async (stream) => {
+		try {
+			await new Promise<void>((resolveStream, rejectStream) => {
+				const cancel = streamPlannerWithCLI(
+					{
+						repoPath: resolve("."),
+						prompt,
+						systemPrompt: TEAM_ARCHITECT_SYSTEM_PROMPT,
+						provider: selectedProvider,
+						model: selectedModel,
+						effort: selectedEffort,
+						timeoutMs: 120_000,
+					},
+					{
+						onTextDelta: (text) => {
+							stream
+								.writeSSE({ event: "text-delta", data: JSON.stringify({ text }) })
+								.catch(() => {
+									/* stream closed */
+								});
+						},
+						onDone: async (fullText) => {
+							await stream.writeSSE({
+								event: "done",
+								data: JSON.stringify({ message: "Stream completed", fullText }),
+							});
+							resolveStream();
+						},
+						onError: (error) => rejectStream(error),
+					},
+				);
+
+				stream.onAbort(() => {
+					cancel();
+				});
+			});
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : "Unknown error";
+			await stream.writeSSE({
+				event: "error",
+				data: JSON.stringify({ error: errorMsg }),
+			});
+		}
+	});
 });
 
 // ---- Project Team (project_agents) ----------------------------------------
@@ -210,6 +342,13 @@ teamRoutes.delete("/projects/:id/team/:agentId", async (c) => {
 	const existing = await getProjectAgent(agentId);
 	if (!existing || existing.projectId !== c.req.param("id")) {
 		return c.json({ error: "Agent not found" }, 404);
+	}
+	if (existing.role === "product-owner" || existing.role === "pm") {
+		const projectAgents = await listProjectAgents(c.req.param("id"));
+		const plannerCount = projectAgents.filter((agent) => agent.role === "product-owner" || agent.role === "pm").length;
+		if (plannerCount <= 1) {
+			return c.json({ error: "Project must always have at least one planner agent." }, 400);
+		}
 	}
 	const ok = await deleteProjectAgent(agentId);
 	if (!ok) return c.json({ error: "Agent not found" }, 404);

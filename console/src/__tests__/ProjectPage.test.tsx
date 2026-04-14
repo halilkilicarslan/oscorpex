@@ -14,6 +14,10 @@ vi.mock('../lib/studio-api', () => ({
   fetchAppStatus: vi.fn().mockResolvedValue({ running: false, backendUrl: null, frontendUrl: null }),
   startApp: vi.fn().mockResolvedValue({ ok: true }),
   stopApp: vi.fn().mockResolvedValue({ ok: true }),
+  generateReadme: vi.fn().mockResolvedValue({ ok: true }),
+  fetchConfigStatus: vi.fn().mockResolvedValue({ openaiConfigured: false, providerConfigured: false, plannerAvailable: true }),
+  fetchPlannerProviders: vi.fn().mockResolvedValue([]),
+  fetchProjectSettings: vi.fn().mockResolvedValue({}),
 }));
 
 // Alt bilesenler — sadece stub render et

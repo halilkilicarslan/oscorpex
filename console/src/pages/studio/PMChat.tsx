@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Loader2, Bot, User, AlertCircle, Zap, TriangleAlert } from 'lucide-react';
+import { Send, Loader2, Bot, User, AlertCircle, Zap, TriangleAlert, Sparkles } from 'lucide-react';
 import {
+  type PlannerReasoningEffort,
   fetchChatHistory,
   fetchPlan,
   approvePlan,
   rejectPlan,
   streamPMChat,
-  fetchConfigStatus,
+  type PlannerChatModel,
+  type PlannerCLIProvider,
   type ChatMessage,
   type ProjectPlan,
 } from '../../lib/studio-api';
@@ -125,32 +127,43 @@ function StreamingBubble({ text }: { text: string }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function PMChat({ projectId }: { projectId: string }) {
+export default function PMChat({
+  projectId,
+  plannerAvailable,
+  selectedProvider,
+  selectedModel,
+  selectedEffort,
+}: {
+  projectId: string;
+  plannerAvailable: boolean | null;
+  selectedProvider: PlannerCLIProvider;
+  selectedModel: PlannerChatModel;
+  selectedEffort: PlannerReasoningEffort | null;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [plan, setPlan] = useState<ProjectPlan | null>(null);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [loading, setLoading] = useState(true);
-  const [openaiConfigured, setOpenaiConfigured] = useState<boolean | null>(null);
   const [pipelineToast, setPipelineToast] = useState<PipelineToastState>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
+  const createPlanPrompt =
+    'Proje intake bilgilerini ve seçilmiş takım yapısını kullanarak detaylı proje planını şimdi oluştur. Bilgi yeterliyse doğrudan plan-json üret; gereksiz soru sorma.';
 
   // Load history, plan, and config status
   useEffect(() => {
     const load = async () => {
       try {
-        const [history, latestPlan, configStatus] = await Promise.allSettled([
+        const [history, latestPlan] = await Promise.allSettled([
           fetchChatHistory(projectId),
           fetchPlan(projectId),
-          fetchConfigStatus(),
         ]);
         if (history.status === 'fulfilled') setMessages(history.value);
         if (latestPlan.status === 'fulfilled' && latestPlan.value) {
           setPlan(latestPlan.value);
         }
-        if (configStatus.status === 'fulfilled') setOpenaiConfigured(configStatus.value.openaiConfigured);
       } finally {
         setLoading(false);
       }
@@ -167,11 +180,13 @@ export default function PMChat({ projectId }: { projectId: string }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamText]);
 
-  const sendMessage = () => {
-    const text = input.trim();
+  const sendMessage = (prefilledText?: string) => {
+    const text = (prefilledText ?? input).trim();
     if (!text || streaming) return;
 
-    setInput('');
+    if (!prefilledText) {
+      setInput('');
+    }
     setStreaming(true);
     setStreamText('');
 
@@ -190,6 +205,9 @@ export default function PMChat({ projectId }: { projectId: string }) {
     abortRef.current = streamPMChat(
       projectId,
       text,
+      selectedProvider,
+      selectedModel,
+      selectedEffort,
       (chunk) => {
         accumulated += chunk;
         setStreamText(accumulated);
@@ -297,7 +315,19 @@ export default function PMChat({ projectId }: { projectId: string }) {
             </div>
             <h3 className="text-[14px] font-medium text-[#a3a3a3] mb-1">Chat with AI Planner</h3>
             <p className="text-[12px] text-[#525252] max-w-sm">
-              Describe what you want to build and I'll help you create a project plan with phases and tasks.
+              Project intake ve takım hazırsa planner’dan tek tıkla detaylı plan oluşturabilirsin.
+            </p>
+            <button
+              type="button"
+              onClick={() => sendMessage(createPlanPrompt)}
+              disabled={plannerAvailable === false}
+              className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-[#22c55e] px-4 py-2.5 text-[13px] font-medium text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Sparkles size={14} />
+              Planı Oluştur
+            </button>
+            <p className="mt-2 text-[11px] text-[#525252]">
+              Sonrasında gerekiyorsa aynı ekrandan plan güncellemesi isteyebilirsin.
             </p>
           </div>
         )}
@@ -335,9 +365,36 @@ export default function PMChat({ projectId }: { projectId: string }) {
 
       {/* Input */}
       <div className="px-6 py-4 border-t border-[#262626]">
-        {openaiConfigured === false && (
+        {plannerAvailable === false && (
           <div className="mb-3 bg-[#f59e0b]/10 border border-[#f59e0b]/20 text-[#f59e0b] rounded-lg px-4 py-2 text-[12px]">
-            OpenAI API key is not configured. Add OPENAI_API_KEY to your .env file to enable the Planner.
+            Planner kullanılamıyor. Desteklenen CLI araçlarından en az biri kurulu olmalı: Claude, Codex veya Gemini.
+          </div>
+        )}
+        <div className="mb-3 rounded-xl border border-[#262626] bg-[#0a0a0a] px-4 py-3 text-[12px] text-[#737373]">
+          Planner provider: <span className="font-medium text-[#fafafa]">{selectedProvider}</span>
+          {' · '}
+          model: <span className="font-medium text-[#fafafa]">{selectedModel}</span>
+          {selectedEffort ? (
+            <>
+              {' · '}
+              effort: <span className="font-medium text-[#fafafa]">{selectedEffort}</span>
+            </>
+          ) : null}
+        </div>
+        {!plan && messages.length > 0 && !streaming && (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-[#1f1f1f] bg-[#0d0d0d] px-4 py-3">
+            <div className="text-[12px] text-[#737373]">
+              Hazırsan planner’dan ayrıntılı planı üretmesini iste.
+            </div>
+            <button
+              type="button"
+              onClick={() => sendMessage(createPlanPrompt)}
+              disabled={plannerAvailable === false}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#22c55e]/10 px-3 py-2 text-[12px] font-medium text-[#22c55e] hover:bg-[#22c55e]/20 disabled:opacity-40"
+            >
+              <Sparkles size={13} />
+              Planı Oluştur
+            </button>
           </div>
         )}
         <div className="flex items-center gap-2">
@@ -352,12 +409,12 @@ export default function PMChat({ projectId }: { projectId: string }) {
               }
             }}
             placeholder="Describe what you want to build..."
-            disabled={streaming || openaiConfigured === false}
+            disabled={streaming || plannerAvailable === false}
             className="flex-1 px-4 py-2.5 bg-[#0a0a0a] border border-[#262626] rounded-xl text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none disabled:opacity-50"
           />
           <button
-            onClick={sendMessage}
-            disabled={!input.trim() || streaming || openaiConfigured === false}
+            onClick={() => sendMessage()}
+            disabled={!input.trim() || streaming || plannerAvailable === false}
             className="p-2.5 rounded-xl bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             {streaming ? (

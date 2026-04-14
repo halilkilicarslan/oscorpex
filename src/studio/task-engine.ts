@@ -4,6 +4,8 @@
 // v2: Review loop, escalation, revision support
 // ---------------------------------------------------------------------------
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
 	createTask,
 	getAgentCostSummary,
@@ -367,6 +369,19 @@ class TaskEngine {
 
 		// Review task'ları için tekrar review araması yapma (sonsuz döngü önleme)
 		const isReviewTask = task.title.startsWith("Code Review: ");
+		const isCodingTask = !task.taskType || task.taskType === "ai";
+		const changedFileCount = (output.filesCreated?.length ?? 0) + (output.filesModified?.length ?? 0);
+
+		if (isCodingTask && !isReviewTask && changedFileCount === 0) {
+			// Fail etme — decision.md yaz ve reviewer'a gönder
+			await this.writeZeroFileDecision(projectId, task);
+			// output'a decision.md'yi ekle ki reviewer görsün
+			output.filesCreated = [this.decisionMdPath(projectId, task)];
+			output.logs = [
+				...(output.logs ?? []),
+				"[zero-file-guard] Task hiçbir dosya üretmedi. decision.md yazıldı, reviewer inceleyecek.",
+			];
+		}
 
 		// v2: Review dependency kontrolü
 		const reviewer = isReviewTask ? null : await this.findReviewerForTask(projectId, task);
@@ -434,6 +449,7 @@ class TaskEngine {
 			output,
 			completedAt: new Date().toISOString(),
 			reviewStatus: "approved",
+			error: null as any,
 		}))!;
 
 		eventBus.emit({
@@ -494,6 +510,7 @@ class TaskEngine {
 				status: "done",
 				reviewStatus: "approved",
 				completedAt: new Date().toISOString(),
+				error: null as any,
 			}))!;
 
 			eventBus.emit({
@@ -684,6 +701,15 @@ class TaskEngine {
 			payload: { title: task.title, error },
 		});
 
+		await updatePhaseStatus(task.phaseId, "failed");
+		await updateProject(projectId, { status: "failed" });
+		eventBus.emit({
+			projectId,
+			type: "execution:error",
+			taskId,
+			payload: { title: task.title, error, phaseId: task.phaseId },
+		});
+
 		return updated;
 	}
 
@@ -696,6 +722,7 @@ class TaskEngine {
 		const updated = (await updateTask(taskId, {
 			status: "queued",
 			retryCount: task.retryCount + 1,
+			error: null as any,
 		}))!;
 
 		const projectId = await this.getProjectIdForTask(task);
@@ -892,6 +919,52 @@ class TaskEngine {
 		const task = await getTask(taskId);
 		if (!task) throw new Error(`Task ${taskId} not found`);
 		return task;
+	}
+
+	private decisionMdPath(projectId: string, task: Task): string {
+		return `.oscorpex/decisions/${task.id}-decision.md`;
+	}
+
+	private async writeZeroFileDecision(projectId: string, task: Task): Promise<void> {
+		const project = await getProject(projectId);
+		if (!project?.repoPath) return;
+
+		const dir = join(project.repoPath, ".oscorpex", "decisions");
+		try {
+			mkdirSync(dir, { recursive: true });
+		} catch {
+			return;
+		}
+
+		const content = [
+			`# Zero-File Decision — ${task.title}`,
+			"",
+			`**Task ID:** ${task.id}`,
+			`**Branch:** ${task.branch || "N/A"}`,
+			`**Agent:** ${task.assignedAgent}`,
+			`**Date:** ${new Date().toISOString()}`,
+			"",
+			"## Durum",
+			"Bu task tamamlandığını bildirdi ancak hiçbir dosya oluşturmadı veya değiştirmedi.",
+			"",
+			"## Task Açıklaması",
+			task.description || "(açıklama yok)",
+			"",
+			"## Reviewer İçin Kontrol Listesi",
+			"- [ ] Task gerçekten dosya değişikliği gerektirmiyor mu?",
+			"- [ ] Agent yanlışlıkla mı dosya üretmedi?",
+			"- [ ] Bu bir araştırma/analiz task'ı olarak kabul edilebilir mi?",
+			"- [ ] Proje bütünlüğü etkileniyor mu?",
+			"",
+			"## Karar",
+			"Reviewer bu dosyayı inceleyip APPROVED veya REJECTED kararı vermelidir.",
+		].join("\n");
+
+		try {
+			writeFileSync(join(project.repoPath, this.decisionMdPath(projectId, task)), content);
+		} catch (err) {
+			console.warn(`[task-engine] decision.md yazılamadı: ${err}`);
+		}
 	}
 
 	private async getProjectIdForTask(task: Task): Promise<string> {

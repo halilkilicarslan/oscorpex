@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import { isAnyProviderConfigured } from "../ai-provider-factory.js";
+import { isAnyPlannerCLIAvailable, listPlannerCLIProviders } from "../planner-cli.js";
 import {
 	createProvider,
 	deleteProvider,
@@ -23,12 +24,18 @@ export const providerRoutes = new Hono();
 
 providerRoutes.get("/config/status", async (c) => {
 	const defaultProvider = await getDefaultProvider();
+	const plannerAvailable = await isAnyPlannerCLIAvailable();
 
 	return c.json({
 		openaiConfigured: !!process.env.OPENAI_API_KEY,
 		providerConfigured: isAnyProviderConfigured(),
 		providerName: defaultProvider?.name,
+		plannerAvailable,
 	});
+});
+
+providerRoutes.get("/planner/providers", async (c) => {
+	return c.json(await listPlannerCLIProviders());
 });
 
 // ---- AI Providers ---------------------------------------------------------
