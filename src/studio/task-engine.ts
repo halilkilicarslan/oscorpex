@@ -144,17 +144,8 @@ class TaskEngine {
 				};
 			}
 
-			// Uyarı eşiği kontrolü
-			const warnThreshold = warnThresholdStr ? Number.parseFloat(warnThresholdStr) : null;
-			if (warnThreshold !== null && !isNaN(warnThreshold) && warnThreshold > 0 && currentCost >= warnThreshold) {
-				return {
-					exceeded: false,
-					level: "warning",
-					message: `Budget warning: $${currentCost.toFixed(4)} / $${maxCost.toFixed(2)} USD (${Math.round((currentCost / maxCost) * 100)}% used).`,
-				};
-			}
-
-			// Agent-level budget kontrolü
+			// Agent-level budget kontrolü — project warning'den önce kontrol
+			// edilmeli, yoksa project warning early-return agent aşımını gizler
 			const agentMaxCostStr = budgetSettings["agent_max_cost_usd"];
 			const agentMaxCost = agentMaxCostStr ? Number.parseFloat(agentMaxCostStr) : null;
 			if (agentId && agentMaxCost && !isNaN(agentMaxCost) && agentMaxCost > 0) {
@@ -166,6 +157,16 @@ class TaskEngine {
 						message: `Agent budget limit exceeded: $${agentCost.totalCostUsd.toFixed(4)} / $${agentMaxCost.toFixed(2)} USD.`,
 					};
 				}
+			}
+
+			// Uyarı eşiği kontrolü
+			const warnThreshold = warnThresholdStr ? Number.parseFloat(warnThresholdStr) : null;
+			if (warnThreshold !== null && !isNaN(warnThreshold) && warnThreshold > 0 && currentCost >= warnThreshold) {
+				return {
+					exceeded: false,
+					level: "warning",
+					message: `Budget warning: $${currentCost.toFixed(4)} / $${maxCost.toFixed(2)} USD (${Math.round((currentCost / maxCost) * 100)}% used).`,
+				};
 			}
 
 			return null;
