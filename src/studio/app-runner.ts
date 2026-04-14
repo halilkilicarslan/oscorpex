@@ -400,13 +400,17 @@ function autoDetect(repoPath: string): StudioConfig | null {
 
 	if (detected.length === 0) return null;
 
-	// Assign ports
+	// Assign ports (skip reserved Oscorpex ports)
 	let portCounter = 4100;
+	const nextPort = () => {
+		while (RESERVED_PORTS.has(portCounter)) portCounter++;
+		return portCounter++;
+	};
 	const services: ServiceConfig[] = detected.map((d) => ({
 		name: d.name,
 		path: d.path,
 		command: d.command,
-		port: portCounter++,
+		port: nextPort(),
 		readyPattern: d.readyPattern,
 	}));
 
@@ -449,9 +453,12 @@ function isPortInUse(port: number): boolean {
 	}
 }
 
+/** Ports reserved for Oscorpex core services — agents must never bind to these */
+const RESERVED_PORTS = new Set([5173, 4242, 3141, 3142]);
+
 function resolvePort(desiredPort: number, usedPorts: Set<number>): number {
 	let port = desiredPort;
-	while (usedPorts.has(port) || isPortInUse(port)) {
+	while (usedPorts.has(port) || RESERVED_PORTS.has(port) || isPortInUse(port)) {
 		port++;
 	}
 	return port;
@@ -479,6 +486,7 @@ function startService(repoPath: string, config: ServiceConfig, onLog: (msg: stri
 			env: { ...process.env, PORT: String(config.port), ...config.env },
 			stdio: ["ignore", "pipe", "pipe"],
 			shell: true,
+			detached: true, // isolate from main process group — prevents killing console Vite
 		});
 
 		const output: string[] = [];
@@ -889,7 +897,9 @@ export async function stopApp(projectId: string, onLog?: (msg: string) => void):
 
 	for (const proc of procs) {
 		try {
-			proc.kill("SIGTERM");
+			// Kill entire process group (detached children) with negative PID
+			if (proc.pid) process.kill(-proc.pid, "SIGTERM");
+			else proc.kill("SIGTERM");
 		} catch {
 			/* ignore */
 		}
@@ -899,7 +909,8 @@ export async function stopApp(projectId: string, onLog?: (msg: string) => void):
 
 	for (const proc of procs) {
 		try {
-			proc.kill("SIGKILL");
+			if (proc.pid) process.kill(-proc.pid, "SIGKILL");
+			else proc.kill("SIGKILL");
 		} catch {
 			/* ignore */
 		}

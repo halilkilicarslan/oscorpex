@@ -28,6 +28,7 @@ import {
 } from "./db.js";
 import { generateReadme } from "./docs-generator.js";
 import { eventBus } from "./event-bus.js";
+import { executionEngine } from "./execution-engine.js";
 import { gitManager } from "./git-manager.js";
 import { GitHubIntegration } from "./github-integration.js";
 import { decrypt, isEncrypted } from "./secret-vault.js";
@@ -794,10 +795,14 @@ class PipelineEngine {
 		_states.set(projectId, state);
 		await persistState(state);
 
+		// Actually stop running agent processes and abort in-flight tasks
+		const cancelledCount = await executionEngine.cancelRunningTasks(projectId);
+		console.log(`[pipeline-engine] Pipeline paused: ${cancelledCount} task(s) cancelled for ${projectId}`);
+
 		eventBus.emit({
 			projectId,
 			type: "pipeline:paused" as any,
-			payload: { pausedAt: now(), currentStage: state.currentStage },
+			payload: { pausedAt: now(), currentStage: state.currentStage, cancelledTasks: cancelledCount },
 		});
 	}
 
@@ -817,6 +822,11 @@ class PipelineEngine {
 			projectId,
 			type: "pipeline:resumed" as any,
 			payload: { resumedAt: now(), currentStage: state.currentStage },
+		});
+
+		// Re-dispatch queued tasks that were paused
+		executionEngine.startProjectExecution(projectId).catch((err) => {
+			console.error(`[pipeline-engine] Resume dispatch failed:`, err);
 		});
 
 		await this.advanceStage(projectId);

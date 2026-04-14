@@ -6,7 +6,7 @@
 
 import { persistAgentLog } from "./agent-log-store.js";
 import { agentRuntime } from "./agent-runtime.js";
-import { startApp } from "./app-runner.js";
+import { startApp, stopApp } from "./app-runner.js";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { resolveAllowedTools } from "./capability-resolver.js";
 import { getAdapter } from "./cli-adapter.js";
@@ -31,6 +31,7 @@ import {
 } from "./db.js";
 import { updateDocsAfterTask } from "./docs-generator.js";
 import { eventBus } from "./event-bus.js";
+import { execute as pgExecute } from "./pg.js";
 import { runLintFix } from "./lint-runner.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { taskEngine } from "./task-engine.js";
@@ -162,6 +163,9 @@ class ExecutionEngine {
 	/** Guard: prevents the same task from being dispatched concurrently */
 	private _dispatchingTasks = new Set<string>();
 
+	/** Active AbortControllers for running tasks, keyed by `projectId:taskId` */
+	private _activeControllers = new Map<string, AbortController>();
+
 	constructor() {
 		// Register completion callback: when a task completes and a new phase starts,
 		// dispatch the newly ready tasks automatically
@@ -262,6 +266,66 @@ class ExecutionEngine {
 	}
 
 	// -------------------------------------------------------------------------
+	// Cancel running tasks — used by pipeline pause
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Projedeki tüm çalışan görevleri iptal eder:
+	 *  1. AbortController'ları abort eder → CLI süreçleri SIGTERM alır
+	 *  2. agent-runtime'daki süreçleri durdurur
+	 *  3. "running" durumundaki task'ları "queued" ye geri alır (resume'da tekrar çalışsın)
+	 */
+	async cancelRunningTasks(projectId: string): Promise<number> {
+		let cancelled = 0;
+
+		// 1. Abort all active controllers for this project
+		for (const [key, controller] of this._activeControllers) {
+			if (key.startsWith(`${projectId}:`)) {
+				controller.abort();
+				this._activeControllers.delete(key);
+				cancelled++;
+			}
+		}
+
+		// 2. Stop all agent-runtime processes for this project
+		const runningProcesses = agentRuntime.listProjectProcesses(projectId);
+		for (const proc of runningProcesses) {
+			if (proc.status === "running" || proc.status === "starting") {
+				agentRuntime.stopAgent(projectId, proc.agentId);
+			}
+		}
+
+		// 3. Stop any app services (vite, next dev, etc.) spawned for the project
+		try {
+			await stopApp(projectId);
+		} catch {
+			/* non-critical */
+		}
+
+		// 4. Reset running tasks back to queued so they re-run on resume
+		const tasks = await listProjectTasks(projectId);
+		for (const task of tasks) {
+			if (task.status === "running" || task.status === "assigned") {
+				try {
+					await pgExecute(
+						"UPDATE tasks SET status = 'queued', started_at = NULL WHERE id = $1",
+						[task.id],
+					);
+					console.log(`[execution-engine] Task "${task.title}" → queued (pipeline paused)`);
+				} catch (err) {
+					console.warn(`[execution-engine] Task reset failed: ${task.id}`, err);
+				}
+			}
+		}
+
+		if (cancelled > 0) {
+			console.log(`[execution-engine] Cancelled ${cancelled} running task(s) for project ${projectId}`);
+		}
+
+		return cancelled;
+	}
+
+	// -------------------------------------------------------------------------
 	// Main entry point — called after plan approval
 	// -------------------------------------------------------------------------
 
@@ -332,8 +396,8 @@ class ExecutionEngine {
 
 		// Re-fetch task to get current status — another caller may have already started it
 		const freshTask = await getTask(task.id);
-		if (!freshTask || freshTask.status !== "queued") {
-			console.log(`[execution-engine] Task "${task.title}" artık queued değil (${freshTask?.status}), skip.`);
+		if (!freshTask || (freshTask.status !== "queued" && freshTask.status !== "running")) {
+			console.log(`[execution-engine] Task "${task.title}" çalıştırılabilir durumda değil (${freshTask?.status}), skip.`);
 			return;
 		}
 
@@ -343,12 +407,18 @@ class ExecutionEngine {
 			await this._executeTaskInner(projectId, freshTask);
 		} finally {
 			this._dispatchingTasks.delete(task.id);
+			this._activeControllers.delete(`${projectId}:${task.id}`);
 		}
 	}
 
 	private async _executeTaskInner(projectId: string, task: Task): Promise<void> {
 		const project = await getProject(projectId);
 		if (!project) throw new Error(`Project ${projectId} not found`);
+
+		// Register AbortController for this task so it can be cancelled externally
+		const taskController = new AbortController();
+		const controllerKey = `${projectId}:${task.id}`;
+		this._activeControllers.set(controllerKey, taskController);
 
 		// --- Non-AI task types: integration-test & run-app ---
 		if (task.taskType === "integration-test" || task.taskType === "run-app") {
@@ -376,9 +446,11 @@ class ExecutionEngine {
 			return;
 		}
 
-		// Mark task as assigned then running
-		await taskEngine.assignTask(task.id, agent.id);
-		await taskEngine.startTask(task.id);
+		// Mark task as assigned then running (skip if already running — e.g. revision restart)
+		if (task.status !== "running") {
+			await taskEngine.assignTask(task.id, agent.id);
+			await taskEngine.startTask(task.id);
+		}
 
 		const prompt = await this.buildTaskPrompt(task, project, agent.role);
 
@@ -430,7 +502,7 @@ class ExecutionEngine {
 				systemPrompt: agent.systemPrompt ? composeSystemPrompt(agent.systemPrompt) : this.defaultSystemPrompt(agent),
 				timeoutMs,
 				model: "sonnet",
-				signal: undefined,
+				signal: taskController.signal,
 				allowedTools,
 			});
 
@@ -513,6 +585,13 @@ class ExecutionEngine {
 			// Review task dispatch: task-engine creates a review task which
 			// will be picked up by dispatchReadyTasks below.
 		} catch (err) {
+			// If task was aborted by pipeline pause, don't mark as failed — cancelRunningTasks
+			// already reset it to queued. Just bail out silently.
+			if (taskController.signal.aborted) {
+				console.log(`[execution-engine] Task "${task.title}" aborted (pipeline paused)`);
+				return;
+			}
+
 			const isTimeout = err instanceof TaskTimeoutError;
 			const errorMsg = err instanceof Error ? err.message : String(err);
 			console.error(`[execution-engine] Task failed: "${task.title}" — ${errorMsg}`);
