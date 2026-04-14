@@ -109,10 +109,21 @@ export function buildDAGWaves(agents: ProjectAgent[], deps: AgentDependency[]): 
 		});
 	}
 
-	// Dependency edge'lerini ekle (workflow, review, gate tipleri pipeline'ı etkiler)
-	// hierarchy tipi sadece org chart için, pipeline'da etkisiz
+	// v3.1: Edge tipleri sınıflandırması
+	// DAG constraint olan tipler: workflow, review, gate, conditional, handoff, approval
+	// DAG constraint olmayan tipler: hierarchy, notification, mentoring, escalation, fallback
+	// Özel: pair — her iki agent aynı wave'e
+	const NON_BLOCKING_TYPES = new Set(["hierarchy", "notification", "mentoring", "escalation", "fallback"]);
+	const pairEdges: Array<{ a: string; b: string }> = [];
+
 	for (const dep of deps) {
-		if (dep.type === "hierarchy") continue;
+		if (NON_BLOCKING_TYPES.has(dep.type)) continue;
+
+		if (dep.type === "pair") {
+			pairEdges.push({ a: dep.fromAgentId, b: dep.toAgentId });
+			continue;
+		}
+
 		const from = nodes.get(dep.fromAgentId);
 		const to = nodes.get(dep.toAgentId);
 		if (from && to) {
@@ -160,7 +171,27 @@ export function buildDAGWaves(agents: ProjectAgent[], deps: AgentDependency[]): 
 		}
 	}
 
-	return waves;
+	// v3.1: Pair edge'leri — her iki agent'ı aynı wave'e taşı (en geç olanı baz al)
+	for (const { a, b } of pairEdges) {
+		let waveA = -1;
+		let waveB = -1;
+		for (let i = 0; i < waves.length; i++) {
+			if (waves[i].includes(a)) waveA = i;
+			if (waves[i].includes(b)) waveB = i;
+		}
+		if (waveA >= 0 && waveB >= 0 && waveA !== waveB) {
+			const targetWave = Math.max(waveA, waveB);
+			const sourceWave = Math.min(waveA, waveB);
+			const moveId = waveA < waveB ? a : b;
+			waves[sourceWave] = waves[sourceWave].filter((id) => id !== moveId);
+			if (!waves[targetWave].includes(moveId)) {
+				waves[targetWave].push(moveId);
+			}
+		}
+	}
+
+	// Boş wave'leri temizle
+	return waves.filter((w) => w.length > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -584,6 +615,13 @@ class PipelineEngine {
 		this.tryCreatePR(projectId).catch((err) => {
 			console.warn("[pipeline-engine] Auto PR oluşturulamadı:", err);
 		});
+
+		// v3.5: Lifecycle transition — pipeline completion triggers maintenance readiness
+		eventBus.emit({
+			projectId,
+			type: "lifecycle:transition" as any,
+			payload: { from: "running", to: "completed", trigger: "pipeline_completed" },
+		});
 	}
 
 	/**
@@ -869,6 +907,49 @@ class PipelineEngine {
 		});
 
 		await this.advanceStage(projectId);
+	}
+
+	// v3.3: Refresh pipeline — rebuild DAG waves without resetting completed stages
+	async refreshPipeline(projectId: string): Promise<void> {
+		const state = _states.get(projectId) ?? (await hydrateState(projectId));
+		if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
+
+		// Sadece running pipeline'lar yeniden hesaplanabilir
+		if (state.status !== "running") {
+			throw new Error(`Pipeline refresh edilemiyor — mevcut durum: ${state.status}`);
+		}
+
+		// Mevcut agent ve dependency bilgilerini çek
+		const agents = await listProjectAgents(projectId);
+		const deps = await listAgentDependencies(projectId);
+
+		// Yeni wave'leri hesapla
+		const newWaves = buildDAGWaves(agents, deps);
+
+		// Completed stage'leri koru, yeni stage'leri ekle
+		const completedStageCount = state.stages.filter((s) => s.status === "completed").length;
+
+		// Yeni stage'leri oluştur (completed olanları atla)
+		for (let i = completedStageCount; i < newWaves.length; i++) {
+			const waveAgentIds = newWaves[i];
+			const waveAgents = agents.filter((a) => waveAgentIds.includes(a.id));
+
+			if (i < state.stages.length) {
+				// Mevcut stage'i güncelle
+				state.stages[i].agents = waveAgents;
+			} else {
+				// Yeni stage ekle
+				state.stages.push({
+					order: i,
+					agents: waveAgents,
+					tasks: [],
+					status: "pending",
+				});
+			}
+		}
+
+		await persistState(state);
+		console.log(`[pipeline-engine] Pipeline refresh — ${newWaves.length} stage (${completedStageCount} completed korundu)`);
 	}
 
 	// -------------------------------------------------------------------------

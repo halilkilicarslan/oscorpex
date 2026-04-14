@@ -16,5 +16,10 @@ export * from "./webhook-repo.js";
 export * from "./settings-repo.js";
 export * from "./seed.js";
 
+// v3.2: Work Items
+export * from "./work-item-repo.js";
+// v3.4: Memory Architecture
+export * from "./memory-repo.js";
+
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";

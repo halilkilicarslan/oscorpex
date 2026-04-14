@@ -313,6 +313,44 @@ Read the code first, then write accurate documentation.`,
 // Seed team templates
 // ---------------------------------------------------------------------------
 
+function buildDefaultDeps(roles: Set<string>): { from: string; to: string; type: string }[] {
+	const deps: { from: string; to: string; type: string }[] = [];
+	function add(from: string, to: string, type: string) {
+		if (roles.has(from) && roles.has(to)) deps.push({ from, to, type });
+	}
+	// Workflow
+	add("product-owner", "tech-lead", "workflow");
+	add("product-owner", "business-analyst", "workflow");
+	add("product-owner", "design-lead", "workflow");
+	add("tech-lead", "frontend-dev", "workflow");
+	add("tech-lead", "backend-dev", "workflow");
+	add("frontend-dev", "frontend-qa", "workflow");
+	add("backend-dev", "backend-qa", "workflow");
+	add("frontend-qa", "frontend-reviewer", "workflow");
+	add("backend-qa", "backend-reviewer", "workflow");
+	// Review
+	add("frontend-dev", "frontend-reviewer", "review");
+	add("backend-dev", "backend-reviewer", "review");
+	// Gate
+	add("frontend-reviewer", "devops", "gate");
+	add("backend-reviewer", "devops", "gate");
+	// Hierarchy
+	add("product-owner", "scrum-master", "hierarchy");
+	add("product-owner", "tech-lead", "hierarchy");
+	add("product-owner", "business-analyst", "hierarchy");
+	add("product-owner", "design-lead", "hierarchy");
+	add("tech-lead", "frontend-dev", "hierarchy");
+	add("tech-lead", "backend-dev", "hierarchy");
+	add("tech-lead", "devops", "hierarchy");
+	// v3.1: Escalation — failed tasks escalate to tech-lead
+	add("frontend-dev", "tech-lead", "escalation");
+	add("backend-dev", "tech-lead", "escalation");
+	// v3.1: Mentoring — tech-lead mentors devs (non-blocking)
+	add("tech-lead", "frontend-dev", "mentoring");
+	add("tech-lead", "backend-dev", "mentoring");
+	return deps;
+}
+
 export async function seedTeamTemplates(): Promise<void> {
 	// Mevcut şablonları sil ve güncellenmiş halleri ile yeniden oluştur
 	await execute("DELETE FROM team_templates");
@@ -359,14 +397,15 @@ export async function seedTeamTemplates(): Promise<void> {
 	];
 
 	for (const t of templates) {
+		const deps = buildDefaultDeps(new Set(t.roles));
 		await execute(
-			"INSERT INTO team_templates (id, name, description, agent_ids, created_at) VALUES ($1, $2, $3, $4, $5)",
+			"INSERT INTO team_templates (id, name, description, agent_ids, dependencies, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
 			[
 				randomUUID(),
 				t.name,
 				t.description,
-				// agent_ids sütunu aslında rolleri saklar — preset agent eşlemesi role üzerinden yapılır
 				JSON.stringify(t.roles),
+				JSON.stringify(deps),
 				now(),
 			],
 		);

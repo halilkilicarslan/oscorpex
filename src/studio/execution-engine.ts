@@ -401,6 +401,33 @@ class ExecutionEngine {
 			return;
 		}
 
+		// v3.0: Auto-decompose L/XL tasks into micro-tasks
+		if (
+			(freshTask.complexity === "L" || freshTask.complexity === "XL") &&
+			!freshTask.parentTaskId
+		) {
+			try {
+				const { shouldDecompose, decomposeTask } = await import("./task-decomposer.js");
+				if (shouldDecompose(freshTask)) {
+					console.log(`[execution-engine] Auto-decomposing ${freshTask.complexity} task "${freshTask.title}"`);
+					const subTasks = await decomposeTask(freshTask, projectId);
+					if (subTasks.length > 0) {
+						// Parent becomes a container — update status to track sub-tasks
+						await updateTask(freshTask.id, { status: "running" } as any);
+						// Dispatch sub-tasks
+						for (const sub of subTasks) {
+							this.executeTask(projectId, sub).catch((err) =>
+								console.error(`[execution-engine] Sub-task "${sub.title}" dispatch hatası:`, err),
+							);
+						}
+						return;
+					}
+				}
+			} catch (err) {
+				console.warn("[execution-engine] Task decomposition failed, executing as-is:", err);
+			}
+		}
+
 		this._dispatchingTasks.add(task.id);
 
 		try {

@@ -7,6 +7,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+	areAllSubTasksDone,
 	createTask,
 	getAgentCostSummary,
 	getLatestPlan,
@@ -468,6 +469,34 @@ class TaskEngine {
 			},
 		});
 
+		// v3.0: Sub-task rollup — if this task has a parent, check if all siblings are done
+		if (task.parentTaskId) {
+			try {
+				const allDone = await areAllSubTasksDone(task.parentTaskId);
+				if (allDone) {
+					const parentTask = await getTask(task.parentTaskId);
+					if (parentTask && parentTask.status !== "done") {
+						console.log(`[task-engine] All sub-tasks done — auto-completing parent "${parentTask.title}"`);
+						await updateTask(task.parentTaskId, {
+							status: "done",
+							completedAt: new Date().toISOString(),
+							output: { filesCreated: [], filesModified: [], logs: ["Auto-completed: all sub-tasks done"] },
+						});
+						eventBus.emit({
+							projectId,
+							type: "task:completed",
+							taskId: task.parentTaskId,
+							payload: { title: parentTask.title, autoCompleted: true },
+						});
+						await this.checkAndAdvancePhase(parentTask.phaseId, projectId);
+						this.notifyCompleted(task.parentTaskId, projectId);
+					}
+				}
+			} catch (err) {
+				console.warn("[task-engine] Sub-task rollup check failed:", err);
+			}
+		}
+
 		await this.checkAndAdvancePhase(task.phaseId, projectId);
 		this.notifyCompleted(taskId, projectId);
 
@@ -695,8 +724,48 @@ class TaskEngine {
 			throw new Error(`Task ${taskId} is not running (status: ${task.status})`);
 		}
 
-		const updated = (await updateTask(taskId, { status: "failed", error }))!;
 		const projectId = await this.getProjectIdForTask(task);
+
+		// v3.1: Check for fallback edge — if primary agent fails, try fallback agent
+		try {
+			const deps = await listAgentDependencies(projectId);
+			const fallbackEdge = deps.find(
+				(d) => d.type === "fallback" && d.fromAgentId === task.assignedAgentId,
+			);
+			if (fallbackEdge && task.retryCount === 0) {
+				console.log(`[task-engine] Fallback edge found — re-assigning task "${task.title}" to fallback agent`);
+				await updateTask(taskId, {
+					assignedAgentId: fallbackEdge.toAgentId,
+					assignedAgent: fallbackEdge.toAgentId,
+					status: "queued",
+					error: null as any,
+					retryCount: (task.retryCount ?? 0) + 1,
+				} as any);
+				this.notifyCompleted(taskId, projectId);
+				return (await getTask(taskId))!;
+			}
+
+			// v3.1: Check for escalation edge — if task fails N times, escalate
+			const escalationEdge = deps.find(
+				(d) => d.type === "escalation" && d.fromAgentId === task.assignedAgentId,
+			);
+			const maxFailures = escalationEdge?.metadata?.maxFailures ?? 3;
+			if (escalationEdge && (task.retryCount ?? 0) >= maxFailures) {
+				console.log(`[task-engine] Escalation triggered — task "${task.title}" failed ${task.retryCount} times`);
+				await updateTask(taskId, {
+					assignedAgentId: escalationEdge.toAgentId,
+					assignedAgent: escalationEdge.toAgentId,
+					status: "queued",
+					error: null as any,
+				} as any);
+				this.notifyCompleted(taskId, projectId);
+				return (await getTask(taskId))!;
+			}
+		} catch (err) {
+			console.warn("[task-engine] Edge-type check failed in failTask:", err);
+		}
+
+		const updated = (await updateTask(taskId, { status: "failed", error }))!;
 
 		eventBus.emit({
 			projectId,
@@ -705,6 +774,23 @@ class TaskEngine {
 			taskId,
 			payload: { title: task.title, error },
 		});
+
+		// v3.2: Auto-create defect work item on task failure
+		try {
+			const { createWorkItem } = await import("./db/work-item-repo.js");
+			await createWorkItem({
+				projectId,
+				type: "defect",
+				title: `Task failed: ${task.title}`,
+				description: `Task "${task.title}" failed with error: ${error?.slice(0, 500) ?? "unknown"}`,
+				priority: "high",
+				source: "runtime",
+				sourceTaskId: taskId,
+				sourceAgentId: task.assignedAgentId,
+			});
+		} catch (err) {
+			console.warn("[task-engine] Auto work-item creation failed:", err);
+		}
 
 		await updatePhaseStatus(task.phaseId, "failed");
 		await updateProject(projectId, { status: "failed" });

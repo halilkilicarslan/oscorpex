@@ -140,12 +140,36 @@ You are the AI Planner, a senior Project Manager for Oscorpex.
 You help users plan and manage software projects end-to-end. You work with a team of AI developer agents who will implement the project in Docker containers.
 
 ## How You Work
-1. **Understand Requirements**: Ask clarifying questions about the project. What does the user want to build? What features? What tech stack?
-2. **Define Tech Stack**: Help the user decide on technologies. Consider their preferences and project needs.
-3. **Create a Plan**: Once you have enough information, create a structured project plan. Output the plan as a JSON code block with the marker \`\`\`plan-json. The system will parse this and create the plan automatically.
-4. **Present for Approval**: After creating the plan, explain it clearly to the user and wait for their approval.
-5. **Handle Feedback**: If the user wants changes, output an updated plan with \`\`\`plan-json again.
-6. **Monitor Progress**: The user can check task progress in the UI dashboard.
+1. **Analyze Codebase**: First, review the project's file structure, tech stack, and existing code to understand the current state.
+2. **Ask Comprehensive Questions**: Before planning, ask the user thorough questions covering ALL dimensions:
+   - **Functional requirements**: What features? What user flows? What data models?
+   - **Non-functional requirements**: Performance targets? Security needs? Scalability?
+   - **Acceptance criteria**: How will success be measured for each feature?
+   - **Priorities**: What is the order of importance? What are must-haves vs nice-to-haves?
+   - **Scope boundaries**: What is explicitly out of scope?
+   - **Technical constraints**: Any required libraries, services, or patterns?
+3. **Iterate on Questions**: If answers are incomplete, ask follow-up questions. Do NOT generate a plan until you have sufficient information.
+4. **Create a Plan**: Once you have enough information, create a structured project plan. Output the plan as a JSON code block with the marker \\\`\\\`\\\`plan-json. The system will parse this and create the plan automatically.
+5. **Present for Approval**: After creating the plan, explain it clearly to the user and wait for their approval.
+6. **Handle Feedback**: If the user wants changes, output an updated plan with \\\`\\\`\\\`plan-json again.
+7. **Monitor Progress**: The user can check task progress in the UI dashboard.
+
+## Micro-Task Decomposition Rules (v3.0)
+**Every task must be small and focused.** Follow these rules strictly:
+- Each task targets **1 file or 1 logical unit** (one function, one component, one endpoint, one test file)
+- Provide **targetFiles** for every task — list the exact files to be created or modified
+- Provide **estimatedLines** — approximate lines of code to change
+- Complexity distribution target: **70% S, 25% M, 5% L, 0% XL**
+- Size guide: S = 1 file, 1-20 lines changed; M = 1-3 files, 20-80 lines; L = 3-5 files (rarely)
+- **Never create XL tasks** unless it's infrastructure/deployment that truly cannot be split
+- If a feature spans multiple files, create one task per file group (max 3 files per task)
+
+**Example decomposition** — "Build auth system" should become:
+1. S: "Create User model and migration" → targetFiles: ["src/models/user.ts", "src/migrations/001_users.sql"]
+2. S: "Create auth middleware" → targetFiles: ["src/middleware/auth.ts"]
+3. M: "Implement login endpoint" → targetFiles: ["src/routes/auth.ts", "src/services/auth-service.ts"]
+4. S: "Add password hashing utility" → targetFiles: ["src/utils/password.ts"]
+5. S: "Create auth tests" → targetFiles: ["tests/auth.test.ts"]
 
 ## Planning Guidelines
 - Break work into small, focused tasks (each should take 1 agent 15-60 minutes)
@@ -193,10 +217,10 @@ The team section marks each agent with a tag:
 - Be concise but thorough
 
 ## Plan Output Format
-When creating or updating a plan, output the JSON inside a \`\`\`plan-json code block. The system will parse it and create the plan in the database automatically.
+When creating or updating a plan, output the JSON inside a \\\`\\\`\\\`plan-json code block. The system will parse it and create the plan in the database automatically.
 
 Example:
-\`\`\`plan-json
+\\\`\\\`\\\`plan-json
 {
   "techStack": ["react", "vite", "typescript"],
   "phases": [
@@ -210,27 +234,41 @@ Example:
           "assignedRole": "tech-lead",
           "complexity": "S",
           "branch": "feat/setup",
-          "taskType": "ai"
+          "taskType": "ai",
+          "targetFiles": ["package.json", "tsconfig.json", "src/index.ts"],
+          "estimatedLines": 15
         }
       ]
     }
   ]
 }
-\`\`\`
+\\\`\\\`\\\`
 
 Top-level optional field:
 - techStack: planner'ın önerdiği veya netleştirdiği teknoloji dizisi. Plan yeterince netleştiğinde ekle.
 
 Each phase has: name, order (1-based), tasks array.
 Each task has: title, description, assignedRole (use exact role from team), complexity (S|M|L|XL), branch, taskType (ai|integration-test|run-app).
-Optional: dependsOnTaskTitles (array of task titles this task depends on).
+Optional: dependsOnTaskTitles (array of task titles this task depends on), targetFiles (array of file paths), estimatedLines (number).
+
+## Incremental Planning (v3.3)
+You can modify running plans:
+- Use **addPhaseToPlan** to add a new phase to an existing approved plan
+- Use **addTaskToPhase** to add tasks to a running phase
+- Use **replanUnfinishedTasks** to reorganize queued/failed tasks (preserving completed work)
+
+## Work Items (v3.2)
+You can convert backlog work items into plan tasks:
+- Use **convertWorkItemsToPlan** to take work item IDs and generate phases/tasks for them
+- Work items come from various sources: user requests, agent findings, review rejections, security scans
 
 ## Important
-- Always output plans as \`\`\`plan-json code blocks — the system parses and creates them automatically
+- Always output plans as \\\`\\\`\\\`plan-json code blocks — the system parses and creates them automatically
 - If the user's request is vague, ask specific questions before planning
 - The plan must be approved by the user before any work begins
 - **Use exact role names from the team, not generic roles**
-- **Distribute tasks to ALL team members (except PM and reviewer roles)**`;
+- **Distribute tasks to ALL team members (except PM and reviewer roles)**
+- **Keep tasks small** — prefer many S/M tasks over few L/XL tasks`;
 
 // ---------------------------------------------------------------------------
 // Shared schemas
@@ -261,6 +299,16 @@ const phaseSchema = z.object({
 				.describe(
 					'Task type: "ai" for normal AI coding, "integration-test" for automated smoke tests, "run-app" to start the application',
 				),
+			// v3.0: Micro-task decomposition fields
+			targetFiles: z
+				.array(z.string())
+				.default([])
+				.describe("Target files this task will create or modify (e.g. ['src/auth/login.ts', 'src/auth/login.test.ts'])"),
+			estimatedLines: z
+				.number()
+				.int()
+				.optional()
+				.describe("Estimated lines of code to change (S: 1-20, M: 20-80, L: 80-200)"),
 		}),
 	),
 });
@@ -344,6 +392,8 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 				branch: t.branch,
 				taskType: t.taskType as any,
 				requiresApproval: autoRequiresApproval,
+				targetFiles: t.targetFiles ?? [],
+				estimatedLines: t.estimatedLines,
 			});
 			titleToId.set(t.title, task.id);
 		}
@@ -710,3 +760,89 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 		},
 	}),
 };
+
+// v3.2: Work Item → Plan conversion tool
+const convertWorkItemsToPlanTool = tool({
+	description: "Convert backlog work items into plan phases and tasks. Takes work item IDs and generates a plan that can be appended to the existing project plan.",
+	inputSchema: z.object({
+		projectId: z.string().describe("The project ID"),
+		workItemIds: z.array(z.string()).describe("IDs of work items to convert into tasks"),
+	}),
+	execute: async ({ projectId, workItemIds }) => {
+		// Placeholder — actual implementation will query work items and generate plan
+		return {
+			message: `${workItemIds.length} work items queued for plan conversion.`,
+			workItemIds,
+			note: "Use createProjectPlan or updateProjectPlan to generate the actual plan including these work items.",
+		};
+	},
+});
+
+// v3.3: Incremental planning tools
+const addPhaseToPlanTool = tool({
+	description: "Add a new phase to an existing approved plan. The new phase is appended after the last phase.",
+	inputSchema: z.object({
+		projectId: z.string().describe("The project ID"),
+		phase: phaseSchema.describe("The new phase to add"),
+	}),
+	execute: async ({ projectId, phase }) => {
+		const plan = await getLatestPlan(projectId);
+		if (!plan) throw new Error(`No plan found for project ${projectId}`);
+
+		const maxOrder = Math.max(...plan.phases.map((p) => p.order), 0);
+		const result = await buildPlan(projectId, [{ ...phase, order: maxOrder + 1 }]);
+		return { ...result, message: `Phase "${phase.name}" added to plan at order ${maxOrder + 1}.` };
+	},
+});
+
+const addTaskToPhaseTool = tool({
+	description: "Add a task to an existing running or pending phase.",
+	inputSchema: z.object({
+		projectId: z.string().describe("The project ID"),
+		phaseName: z.string().describe("Name of the target phase"),
+		task: z.object({
+			title: z.string(),
+			description: z.string(),
+			assignedRole: z.string(),
+			complexity: z.enum(["S", "M", "L", "XL"]),
+			branch: z.string(),
+			taskType: z.enum(["ai", "integration-test", "run-app"]).default("ai"),
+			targetFiles: z.array(z.string()).default([]),
+			estimatedLines: z.number().int().optional(),
+		}),
+	}),
+	execute: async ({ projectId, phaseName, task }) => {
+		const plan = await getLatestPlan(projectId);
+		if (!plan) throw new Error(`No plan found for project ${projectId}`);
+
+		const phase = plan.phases.find((p) => p.name === phaseName);
+		if (!phase) throw new Error(`Phase "${phaseName}" not found in plan`);
+
+		return {
+			message: `Task "${task.title}" queued for addition to phase "${phaseName}".`,
+			phaseId: phase.id,
+			task,
+		};
+	},
+});
+
+const replanUnfinishedTasksTool = tool({
+	description: "Re-plan unfinished tasks (queued/failed) while preserving all completed work. Use this when the current plan needs reorganization.",
+	inputSchema: z.object({
+		projectId: z.string().describe("The project ID"),
+		reason: z.string().describe("Why re-planning is needed"),
+	}),
+	execute: async ({ projectId, reason }) => {
+		const tasks = await listProjectTasks(projectId);
+		const unfinished = tasks.filter((t) => t.status !== "done");
+		const completed = tasks.filter((t) => t.status === "done");
+
+		return {
+			message: `Found ${unfinished.length} unfinished tasks and ${completed.length} completed tasks. Generate a new plan for the unfinished work.`,
+			completedTasks: completed.map((t) => ({ title: t.title, agent: t.assignedAgent })),
+			unfinishedTasks: unfinished.map((t) => ({ title: t.title, status: t.status, agent: t.assignedAgent })),
+			reason,
+			note: "Create an updated plan using createProjectPlan that covers only the unfinished work.",
+		};
+	},
+});

@@ -15,6 +15,10 @@ export async function createTask(
 	data: Pick<Task, "phaseId" | "title" | "description" | "assignedAgent" | "complexity" | "dependsOn" | "branch"> & {
 		taskType?: Task["taskType"];
 		requiresApproval?: boolean;
+		parentTaskId?: string;
+		targetFiles?: string[];
+		estimatedLines?: number;
+		assignedAgentId?: string;
 	},
 ): Promise<Task> {
 	const id = randomUUID();
@@ -22,8 +26,8 @@ export async function createTask(
 	const requiresApproval = data.requiresApproval ?? false;
 	await execute(
 		`
-    INSERT INTO tasks (id, phase_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type, requires_approval)
-    VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7, $8, 0, $9, $10)
+    INSERT INTO tasks (id, phase_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type, requires_approval, parent_task_id, target_files, estimated_lines, assigned_agent_id)
+    VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7, $8, 0, $9, $10, $11, $12, $13, $14)
   `,
 		[
 			id,
@@ -36,6 +40,10 @@ export async function createTask(
 			data.branch,
 			taskType,
 			requiresApproval ? 1 : 0,
+			data.parentTaskId ?? null,
+			JSON.stringify(data.targetFiles ?? []),
+			data.estimatedLines ?? null,
+			data.assignedAgentId ?? null,
 		],
 	);
 
@@ -53,6 +61,10 @@ export async function createTask(
 		retryCount: 0,
 		revisionCount: 0,
 		requiresApproval,
+		parentTaskId: data.parentTaskId,
+		targetFiles: data.targetFiles,
+		estimatedLines: data.estimatedLines,
+		assignedAgentId: data.assignedAgentId,
 	};
 }
 
@@ -189,6 +201,45 @@ export async function listPendingApprovals(projectId: string): Promise<Task[]> {
 		[projectId],
 	);
 	return rows.map(rowToTask);
+}
+
+// ---------------------------------------------------------------------------
+// v3.0: Sub-task queries
+// ---------------------------------------------------------------------------
+
+export async function getSubTasks(parentTaskId: string): Promise<Task[]> {
+	const rows = await query<any>("SELECT * FROM tasks WHERE parent_task_id = $1 ORDER BY id", [parentTaskId]);
+	return rows.map(rowToTask);
+}
+
+export async function areAllSubTasksDone(parentTaskId: string): Promise<boolean> {
+	const row = await queryOne<{ total: string; done: string }>(
+		`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'done') as done
+		 FROM tasks WHERE parent_task_id = $1`,
+		[parentTaskId],
+	);
+	if (!row || Number(row.total) === 0) return false;
+	return Number(row.total) === Number(row.done);
+}
+
+// ---------------------------------------------------------------------------
+// v3.3: Incremental planning queries
+// ---------------------------------------------------------------------------
+
+export async function getUnfinishedTasks(projectId: string): Promise<Task[]> {
+	const rows = await query<any>(
+		`SELECT t.* FROM tasks t
+		 JOIN phases p ON t.phase_id = p.id
+		 JOIN project_plans pp ON p.plan_id = pp.id
+		 WHERE pp.project_id = $1 AND t.status NOT IN ('done', 'failed')
+		 ORDER BY p."order", t.id`,
+		[projectId],
+	);
+	return rows.map(rowToTask);
+}
+
+export async function moveTaskToPhase(taskId: string, newPhaseId: string): Promise<void> {
+	await execute("UPDATE tasks SET phase_id = $1 WHERE id = $2", [newPhaseId, taskId]);
 }
 
 /**

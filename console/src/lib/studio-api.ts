@@ -64,6 +64,7 @@ export interface Task {
   requiresApproval?: boolean;
   approvalStatus?: 'pending' | 'approved' | 'rejected' | null;
   approvalRejectionReason?: string;
+  parentTaskId?: string;
 }
 
 export interface AgentConfig {
@@ -86,6 +87,7 @@ export interface TeamTemplate {
   name: string;
   description: string;
   roles: string[];
+  dependencies: { from: string; to: string; type: string }[];
   createdAt: string;
 }
 
@@ -116,7 +118,7 @@ export interface ProjectAgent {
   pipelineOrder: number;
 }
 
-export type DependencyType = 'hierarchy' | 'workflow' | 'review' | 'gate';
+export type DependencyType = 'hierarchy' | 'workflow' | 'review' | 'gate' | 'escalation' | 'pair' | 'conditional' | 'fallback' | 'notification' | 'handoff' | 'approval' | 'mentoring';
 
 export interface AgentDependency {
   id: string;
@@ -2053,4 +2055,117 @@ export async function sendProxyRequest(
   const resHeaders: Record<string, string> = {};
   res.headers.forEach((v, k) => { resHeaders[k] = v; });
   return { status: res.status, headers: resHeaders, body: resBody, duration };
+}
+
+// v3.x Types
+export interface WorkItem {
+  id: string;
+  projectId: string;
+  type: string;
+  title: string;
+  description: string;
+  priority: string;
+  severity?: string;
+  labels: string[];
+  status: string;
+  source: string;
+  sourceAgentId?: string;
+  sourceTaskId?: string;
+  plannedTaskId?: string;
+  sprintId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Sprint {
+  id: string;
+  projectId: string;
+  name: string;
+  goal?: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface StandupReport {
+  agentId: string;
+  agentName: string;
+  completedTasks: string[];
+  inProgressTasks: string[];
+  blockers: string[];
+}
+
+export interface RetrospectiveReport {
+  whatWentWell: string[];
+  whatCouldImprove: string[];
+  actionItems: string[];
+  agentStats: { agentId: string; agentName: string; tasksCompleted: number; avgRevisions: number; successRate: number }[];
+}
+
+export interface ProjectReport {
+  projectName: string;
+  status: string;
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  totalCostUsd: number;
+  durationMs: number;
+  qualityMetrics: { reviewPassRate: number; avgRevisions: number; firstPassRate: number };
+  topFileChanges: string[];
+}
+
+// --- Work Items (v3.2) ---
+export async function fetchWorkItems(projectId: string, filters?: Record<string, string>): Promise<WorkItem[]> {
+  const params = new URLSearchParams(filters);
+  return json(`${BASE}/projects/${projectId}/work-items?${params}`);
+}
+
+export async function createWorkItem(projectId: string, data: Partial<WorkItem>): Promise<WorkItem> {
+  return json(`${BASE}/projects/${projectId}/work-items`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+}
+
+export async function updateWorkItem(projectId: string, itemId: string, data: Partial<WorkItem>): Promise<WorkItem> {
+  return json(`${BASE}/projects/${projectId}/work-items/${itemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+}
+
+export async function deleteWorkItem(projectId: string, itemId: string): Promise<void> {
+  await fetch(`${BASE}/projects/${projectId}/work-items/${itemId}`, { method: 'DELETE' });
+}
+
+export async function convertWorkItemToPlan(projectId: string, itemId: string): Promise<any> {
+  return json(`${BASE}/projects/${projectId}/work-items/${itemId}/plan`, { method: 'POST' });
+}
+
+// --- Sub-tasks (v3.0) ---
+export async function fetchSubTasks(projectId: string, taskId: string): Promise<Task[]> {
+  return json(`${BASE}/projects/${projectId}/tasks/${taskId}/subtasks`);
+}
+
+// --- Sprints (v3.9) ---
+export async function fetchSprints(projectId: string): Promise<Sprint[]> {
+  return json(`${BASE}/projects/${projectId}/sprints`);
+}
+
+export async function createSprint(projectId: string, data: { name: string; goal?: string; startDate: string; endDate: string }): Promise<Sprint> {
+  return json(`${BASE}/projects/${projectId}/sprints`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+}
+
+// --- Ceremonies (v3.6) ---
+export async function runStandup(projectId: string): Promise<StandupReport[]> {
+  return json(`${BASE}/projects/${projectId}/ceremonies/standup`, { method: 'POST' });
+}
+
+export async function runRetrospective(projectId: string): Promise<RetrospectiveReport> {
+  return json(`${BASE}/projects/${projectId}/ceremonies/retro`, { method: 'POST' });
+}
+
+// --- Agent Chat (v3.8) ---
+export async function chatWithAgent(projectId: string, agentId: string, message: string): Promise<{ response: string }> {
+  return json(`${BASE}/projects/${projectId}/agents/${agentId}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) });
+}
+
+// --- Reports (v3.5) ---
+export async function fetchProjectReport(projectId: string): Promise<ProjectReport> {
+  return json(`${BASE}/projects/${projectId}/report`);
 }

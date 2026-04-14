@@ -7,6 +7,7 @@ import { execute, getPool, query } from "../pg.js";
 import type {
 	AgentCapability,
 	AgentDependency,
+	AgentDependencyMetadata,
 	CapabilityPermission,
 	CapabilityScopeType,
 	DependencyType,
@@ -22,14 +23,15 @@ export async function createAgentDependency(
 	fromAgentId: string,
 	toAgentId: string,
 	type: DependencyType = "workflow",
+	metadata?: AgentDependencyMetadata,
 ): Promise<AgentDependency> {
 	const id = randomUUID();
 	const createdAt = new Date().toISOString();
 	await execute(
-		"INSERT INTO agent_dependencies (id, project_id, from_agent_id, to_agent_id, type, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
-		[id, projectId, fromAgentId, toAgentId, type, createdAt],
+		"INSERT INTO agent_dependencies (id, project_id, from_agent_id, to_agent_id, type, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+		[id, projectId, fromAgentId, toAgentId, type, JSON.stringify(metadata ?? {}), createdAt],
 	);
-	return { id, projectId, fromAgentId, toAgentId, type, createdAt };
+	return { id, projectId, fromAgentId, toAgentId, type, metadata, createdAt };
 }
 
 export async function listAgentDependencies(projectId: string, type?: DependencyType): Promise<AgentDependency[]> {
@@ -55,7 +57,7 @@ export async function deleteAllDependencies(projectId: string): Promise<void> {
 
 export async function bulkCreateDependencies(
 	projectId: string,
-	deps: { fromAgentId: string; toAgentId: string; type: DependencyType }[],
+	deps: { fromAgentId: string; toAgentId: string; type: DependencyType; metadata?: AgentDependencyMetadata }[],
 ): Promise<AgentDependency[]> {
 	const createdAt = new Date().toISOString();
 	const results: AgentDependency[] = [];
@@ -65,8 +67,8 @@ export async function bulkCreateDependencies(
 		for (const dep of deps) {
 			const id = randomUUID();
 			await client.query(
-				"INSERT INTO agent_dependencies (id, project_id, from_agent_id, to_agent_id, type, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
-				[id, projectId, dep.fromAgentId, dep.toAgentId, dep.type, createdAt],
+				"INSERT INTO agent_dependencies (id, project_id, from_agent_id, to_agent_id, type, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+				[id, projectId, dep.fromAgentId, dep.toAgentId, dep.type, JSON.stringify(dep.metadata ?? {}), createdAt],
 			);
 			results.push({
 				id,
@@ -74,6 +76,7 @@ export async function bulkCreateDependencies(
 				fromAgentId: dep.fromAgentId,
 				toAgentId: dep.toAgentId,
 				type: dep.type,
+				metadata: dep.metadata,
 				createdAt,
 			});
 		}

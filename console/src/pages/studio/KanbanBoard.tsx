@@ -309,6 +309,15 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
     );
   }
 
+  // Sub-task map: parentTaskId -> sub-task listesi
+  const subTaskMap = new Map<string, Task[]>();
+  for (const task of tasks) {
+    if (task.parentTaskId) {
+      if (!subTaskMap.has(task.parentTaskId)) subTaskMap.set(task.parentTaskId, []);
+      subTaskMap.get(task.parentTaskId)!.push(task);
+    }
+  }
+
   // Task'ları status'e göre grupla
   const grouped = new Map<Task['status'], Task[]>();
   for (const col of COLUMNS) grouped.set(col.key, []);
@@ -405,18 +414,33 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
 
                 {/* Tasks */}
                 <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
-                  {colTasks.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      agents={agents}
-                      onRetry={task.status === 'failed' ? () => handleRetry(task.id) : undefined}
-                      onApprove={isApprovalCol ? () => handleApprove(task.id) : undefined}
-                      onReject={isApprovalCol ? () => handleOpenReject(task) : undefined}
-                      onTerminal={() => setTerminalTask(task)}
-                      onClick={() => setDetailTask(task)}
-                    />
-                  ))}
+                  {colTasks.map((task) => {
+                    const subTasks = subTaskMap.get(task.id) ?? [];
+                    const doneSubTasks = subTasks.filter((st) => st.status === 'done').length;
+                    return (
+                      <div key={task.id} className="relative">
+                        {task.parentTaskId && (
+                          <span className="absolute -top-1.5 right-2 z-10 text-[8px] font-semibold px-1.5 py-0.5 rounded-full bg-[#3b82f6]/20 text-[#3b82f6] border border-[#3b82f6]/30">
+                            Sub-task
+                          </span>
+                        )}
+                        {subTasks.length > 0 && (
+                          <span className="absolute -top-1.5 left-2 z-10 text-[8px] font-medium px-1.5 py-0.5 rounded-full bg-[#1f1f1f] text-[#737373] border border-[#262626]">
+                            {doneSubTasks}/{subTasks.length} sub-tasks
+                          </span>
+                        )}
+                        <TaskCard
+                          task={task}
+                          agents={agents}
+                          onRetry={task.status === 'failed' ? () => handleRetry(task.id) : undefined}
+                          onApprove={isApprovalCol ? () => handleApprove(task.id) : undefined}
+                          onReject={isApprovalCol ? () => handleOpenReject(task) : undefined}
+                          onTerminal={() => setTerminalTask(task)}
+                          onClick={() => setDetailTask(task)}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

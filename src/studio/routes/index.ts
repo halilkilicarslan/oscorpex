@@ -19,6 +19,7 @@ import { providerRoutes } from "./provider-routes.js";
 import { runtimeRoutes } from "./runtime-routes.js";
 import { taskRoutes } from "./task-routes.js";
 import { teamRoutes } from "./team-routes.js";
+import { workItemRoutes } from "./work-item-routes.js";
 
 // Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();
@@ -85,5 +86,6 @@ studio.route("/", analyticsRoutes);
 studio.route("/", runtimeRoutes);
 studio.route("/", integrationRoutes);
 studio.route("/", providerRoutes);
+studio.route("/", workItemRoutes);
 
 export { studio as studioRoutes };

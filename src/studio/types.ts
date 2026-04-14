@@ -4,7 +4,7 @@
 
 // ---- Project (Workspace) --------------------------------------------------
 
-export type ProjectStatus = "planning" | "approved" | "running" | "paused" | "completed" | "failed";
+export type ProjectStatus = "planning" | "approved" | "running" | "paused" | "completed" | "failed" | "maintenance" | "archived";
 
 export interface Project {
 	id: string;
@@ -95,6 +95,10 @@ export interface Task {
 	requiresApproval: boolean;
 	approvalStatus?: ApprovalStatus | null;
 	approvalRejectionReason?: string;
+	// v3.0: Micro-task decomposition
+	parentTaskId?: string;
+	targetFiles?: string[];
+	estimatedLines?: number;
 }
 
 // ---- Agent Configuration ---------------------------------------------------
@@ -189,7 +193,16 @@ export type EventType =
 	| "pipeline:completed"
 	| "budget:warning"
 	| "budget:exceeded"
-	| "prompt:size";
+	| "prompt:size"
+	// v3.x: lifecycle & governance events
+	| "work_item:created"
+	| "work_item:planned"
+	| "sprint:started"
+	| "sprint:completed"
+	| "ceremony:standup"
+	| "ceremony:retrospective"
+	| "policy:violation"
+	| "lifecycle:transition";
 
 export interface StudioEvent {
 	id: string;
@@ -277,8 +290,8 @@ export interface TeamTemplate {
 	id: string;
 	name: string;
 	description: string;
-	// agent_ids sütununda roller (ör: ["pm","frontend","qa"]) saklanır
 	roles: string[];
+	dependencies: { from: string; to: string; type: string }[];
 	createdAt: string;
 }
 
@@ -290,7 +303,14 @@ export type MessageType =
 	| "review_request"
 	| "bug_report"
 	| "feedback"
-	| "notification";
+	| "notification"
+	// v3.6: Agent ceremonies & communication
+	| "standup"
+	| "retrospective"
+	| "conflict"
+	| "help_request"
+	| "pair_session"
+	| "handoff_doc";
 
 export type MessageStatus = "unread" | "read" | "archived";
 
@@ -462,7 +482,27 @@ export interface GitStatus {
 
 // ---- Agent Dependencies (v2 org structure) ---------------------------------
 
-export type DependencyType = "hierarchy" | "workflow" | "review" | "gate";
+export type DependencyType =
+	| "hierarchy"
+	| "workflow"
+	| "review"
+	| "gate"
+	// v3.1: New edge types
+	| "escalation"
+	| "pair"
+	| "conditional"
+	| "fallback"
+	| "notification"
+	| "handoff"
+	| "approval"
+	| "mentoring";
+
+export interface AgentDependencyMetadata {
+	condition?: string;
+	maxFailures?: number;
+	priority?: number;
+	documentRequired?: boolean;
+}
 
 export interface AgentDependency {
 	id: string;
@@ -470,6 +510,7 @@ export interface AgentDependency {
 	fromAgentId: string;
 	toAgentId: string;
 	type: DependencyType;
+	metadata?: AgentDependencyMetadata;
 	createdAt: string;
 }
 
@@ -485,4 +526,116 @@ export interface AgentCapability {
 	scopeType: CapabilityScopeType;
 	pattern: string;
 	permission: CapabilityPermission;
+}
+
+// ---- Work Items (v3.2 Backlog) ---------------------------------------------
+
+export type WorkItemType = "feature" | "bug" | "defect" | "security" | "hotfix" | "improvement";
+export type WorkItemPriority = "critical" | "high" | "medium" | "low";
+export type WorkItemSeverity = "blocker" | "major" | "minor" | "trivial";
+export type WorkItemStatus = "open" | "planned" | "in_progress" | "done" | "closed" | "wontfix";
+export type WorkItemSource = "user" | "agent" | "security_scan" | "runtime" | "review";
+
+export interface WorkItem {
+	id: string;
+	projectId: string;
+	type: WorkItemType;
+	title: string;
+	description: string;
+	priority: WorkItemPriority;
+	severity?: WorkItemSeverity;
+	labels: string[];
+	status: WorkItemStatus;
+	source: WorkItemSource;
+	sourceAgentId?: string;
+	sourceTaskId?: string;
+	plannedTaskId?: string;
+	sprintId?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+// ---- Sprints (v3.9) --------------------------------------------------------
+
+export type SprintStatus = "planned" | "active" | "completed" | "cancelled";
+
+export interface Sprint {
+	id: string;
+	projectId: string;
+	name: string;
+	goal?: string;
+	startDate: string;
+	endDate: string;
+	status: SprintStatus;
+	createdAt: string;
+}
+
+// ---- Model Routing (v3.4) --------------------------------------------------
+
+export interface ModelRoutingConfig {
+	S: string;
+	M: string;
+	L: string;
+	XL: string;
+}
+
+export interface ModelRoutingPolicy {
+	scope: string;
+	taskType: string;
+	riskLevel: string;
+	provider: string;
+	model: string;
+	effort: string;
+	fallbackChain: string[];
+}
+
+// ---- Memory Architecture (v3.4) --------------------------------------------
+
+export interface ProjectContextSnapshot {
+	projectId: string;
+	kind: string;
+	summaryJson: Record<string, unknown>;
+	sourceVersion: number;
+	updatedAt: string;
+}
+
+export interface ConversationCompaction {
+	projectId: string;
+	channel: string;
+	lastMessageId: string;
+	summary: string;
+	updatedAt: string;
+}
+
+export interface MemoryFact {
+	projectId: string;
+	scope: string;
+	key: string;
+	value: string;
+	confidence: number;
+	source: string;
+	updatedAt: string;
+}
+
+// ---- Policy Engine (v3.7) --------------------------------------------------
+
+export interface PolicyRule {
+	id: string;
+	projectId: string;
+	name: string;
+	condition: string;
+	action: string;
+	enabled: boolean;
+}
+
+// ---- Context Packet (v3.4) -------------------------------------------------
+
+export type ContextPacketMode = "planner" | "execution" | "review" | "team_architect";
+
+export interface ContextPacketOptions {
+	projectId: string;
+	taskId?: string;
+	agentId?: string;
+	mode: ContextPacketMode;
+	maxTokens?: number;
 }

@@ -72,6 +72,14 @@ const EDGE_STYLES: Record<DependencyType, { stroke: string; strokeDasharray?: st
   workflow: { stroke: '#3b82f6' },
   review: { stroke: '#a855f7', strokeDasharray: '8 4', animated: true },
   gate: { stroke: '#f59e0b' },
+  escalation: { stroke: '#ef4444', strokeDasharray: '4 2' },
+  pair: { stroke: '#22c55e', strokeDasharray: '2 2' },
+  conditional: { stroke: '#f97316', strokeDasharray: '6 3' },
+  fallback: { stroke: '#6b7280', strokeDasharray: '8 4' },
+  notification: { stroke: '#06b6d4', strokeDasharray: '3 3' },
+  handoff: { stroke: '#8b5cf6' },
+  approval: { stroke: '#f59e0b', strokeDasharray: '4 4', animated: true },
+  mentoring: { stroke: '#14b8a6', strokeDasharray: '6 2' },
 };
 
 const EDGE_LABELS: Record<DependencyType, string> = {
@@ -79,6 +87,14 @@ const EDGE_LABELS: Record<DependencyType, string> = {
   workflow: 'Workflow',
   review: 'Review',
   gate: 'Gate',
+  escalation: 'Escalation',
+  pair: 'Pair',
+  conditional: 'Conditional',
+  fallback: 'Fallback',
+  notification: 'Notification',
+  handoff: 'Handoff',
+  approval: 'Approval',
+  mentoring: 'Mentoring',
 };
 
 // ---------------------------------------------------------------------------
@@ -128,7 +144,7 @@ function EdgeTypePicker({
   onSelect: (type: DependencyType) => void;
   onCancel: () => void;
 }) {
-  const types: DependencyType[] = ['workflow', 'review', 'gate', 'hierarchy'];
+  const types: DependencyType[] = ['workflow', 'review', 'gate', 'hierarchy', 'escalation', 'pair', 'conditional', 'fallback', 'notification', 'handoff', 'approval', 'mentoring'];
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onCancel} />
@@ -760,7 +776,7 @@ export default function TeamBuilderPage() {
       {/* Legend */}
       <div className="flex items-center gap-4 px-6 py-2 border-b border-[#1f1f1f] bg-[#0a0a0a]">
         <span className="text-[10px] text-[#525252] uppercase font-semibold">Edges:</span>
-        {(['workflow', 'review', 'gate', 'hierarchy'] as DependencyType[]).map((type) => (
+        {(['workflow', 'review', 'gate', 'hierarchy', 'escalation', 'pair', 'conditional', 'fallback', 'notification', 'handoff', 'approval', 'mentoring'] as DependencyType[]).map((type) => (
           <div key={type} className="flex items-center gap-1.5">
             <span className="w-4 h-0.5 rounded-full inline-block" style={{ backgroundColor: EDGE_STYLES[type].stroke }} />
             <span className="text-[10px] text-[#737373]">{EDGE_LABELS[type]}</span>
@@ -785,7 +801,7 @@ export default function TeamBuilderPage() {
           <FlowCanvas
             presets={presets}
             initialRoles={selected?.roles ?? selectedPreset?.roles ?? []}
-            initialDeps={selected?.dependencies ?? []}
+            initialDeps={selected?.dependencies ?? selectedPreset?.dependencies ?? []}
             onSave={handleSave}
             saving={saving}
             onAgentClick={setSheetAgent}
