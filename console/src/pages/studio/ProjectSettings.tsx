@@ -162,6 +162,22 @@ const WIDGETS: WidgetDef[] = [
       { key: 'warningThreshold', label: 'Uyari Esigi ($)', type: 'number', placeholder: '8.00', defaultValue: '' },
     ],
   },
+  {
+    category: 'scoring',
+    title: 'Ajan Puanlama',
+    icon: '\u{2B50}',
+    color: '#facc15',
+    description: 'Ajan performans skoru agirlik ve baseline ayarlari.',
+    fields: [
+      { key: 'w_success', label: 'Basari Orani Agirligi (%)', type: 'number', placeholder: '30', defaultValue: '30' },
+      { key: 'w_firstPass', label: 'Ilk Gecis Agirligi (%)', type: 'number', placeholder: '25', defaultValue: '25' },
+      { key: 'w_review', label: 'Review Onay Agirligi (%)', type: 'number', placeholder: '20', defaultValue: '20' },
+      { key: 'w_time', label: 'Hiz Agirligi (%)', type: 'number', placeholder: '15', defaultValue: '15' },
+      { key: 'w_cost', label: 'Maliyet Agirligi (%)', type: 'number', placeholder: '10', defaultValue: '10' },
+      { key: 'baselineTimeMin', label: 'Hiz Baseline (dk)', type: 'number', placeholder: '30', defaultValue: '30' },
+      { key: 'baselineCostUsd', label: 'Maliyet Baseline ($)', type: 'number', placeholder: '0.50', defaultValue: '0.50' },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------

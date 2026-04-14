@@ -185,6 +185,7 @@ export type EventType =
 	| "git:commit"
 	| "git:pr-created"
 	| "task:timeout_warning"
+	| "task:review_rejected"
 	| "pipeline:completed"
 	| "budget:warning"
 	| "budget:exceeded"

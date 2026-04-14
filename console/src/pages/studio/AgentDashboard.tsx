@@ -54,6 +54,13 @@ function formatDuration(ms: number | null): string {
 }
 
 
+function formatTokenCount(count: number): string {
+  if (!count) return '-';
+  if (count < 1000) return String(count);
+  if (count < 1_000_000) return `${(count / 1000).toFixed(1)}K`;
+  return `${(count / 1_000_000).toFixed(1)}M`;
+}
+
 /** Tamamlanma oranına göre renk sınıfı */
 function rateColor(rate: number): string {
   if (rate >= 80) return 'text-[#22c55e]';
@@ -196,17 +203,37 @@ interface AgentRowProps {
   agent: AgentAnalytics;
 }
 
+function scoreColor(score: number): string {
+  if (score >= 80) return '#22c55e';
+  if (score >= 60) return '#f59e0b';
+  if (score >= 40) return '#f97316';
+  return '#ef4444';
+}
+
 function AgentRow({ agent }: AgentRowProps) {
   const successRate =
     agent.tasksAssigned > 0
       ? Math.round((agent.tasksCompleted / agent.tasksAssigned) * 100)
       : 0;
 
+  const sc = agent.score ?? 0;
+
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1a1a1a] last:border-0 hover:bg-[#0f0f0f] transition-colors">
-      {/* Avatar + ajan adı + rol */}
+      {/* Avatar + ajan adı + rol + skor */}
       <div className="flex items-center gap-2.5 w-44 shrink-0">
-        <AgentAvatarImg avatar={agent.avatar} name={agent.agentName} size="sm" />
+        <div className="relative">
+          <AgentAvatarImg avatar={agent.avatar} name={agent.agentName} size="sm" />
+          {agent.tasksAssigned > 0 && (
+            <span
+              className="absolute -bottom-1 -right-1 text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center text-black"
+              style={{ backgroundColor: scoreColor(sc) }}
+              title={`Skor: ${sc}/100`}
+            >
+              {sc}
+            </span>
+          )}
+        </div>
         <div className="min-w-0">
           <p className="text-[12px] font-medium text-[#fafafa] truncate">{agent.agentName}</p>
           <p className="text-[10px] text-[#525252] truncate">{roleLabel(agent.role)}</p>
@@ -214,18 +241,22 @@ function AgentRow({ agent }: AgentRowProps) {
       </div>
 
       {/* Atanan / Tamamlanan */}
-      <div className="flex gap-4 text-center">
-        <div className="w-14">
+      <div className="flex gap-3 text-center flex-wrap">
+        <div className="w-12">
           <p className="text-[13px] font-semibold text-[#fafafa]">{agent.tasksAssigned}</p>
           <p className="text-[9px] text-[#525252]">Atanan</p>
         </div>
-        <div className="w-14">
+        <div className="w-12">
           <p className="text-[13px] font-semibold text-[#22c55e]">{agent.tasksCompleted}</p>
           <p className="text-[9px] text-[#525252]">Biten</p>
         </div>
-        <div className="w-14">
-          <p className="text-[13px] font-semibold text-[#ef4444]">{agent.tasksFailed}</p>
-          <p className="text-[9px] text-[#525252]">Basarisiz</p>
+        <div className="w-12">
+          <p className="text-[13px] font-semibold text-[#ef4444]">{agent.totalFailures ?? agent.tasksFailed}</p>
+          <p className="text-[9px] text-[#525252]">Hata</p>
+        </div>
+        <div className="w-12">
+          <p className="text-[13px] font-semibold text-[#f97316]">{agent.totalReviewRejections ?? 0}</p>
+          <p className="text-[9px] text-[#525252]">Red</p>
         </div>
       </div>
 
@@ -257,6 +288,18 @@ function AgentRow({ agent }: AgentRowProps) {
       <div className="w-16 text-center shrink-0">
         <p className="text-[12px] font-medium text-[#a3a3a3]">{formatDuration(agent.totalRuntimeMs)}</p>
         <p className="text-[9px] text-[#525252]">Sure</p>
+      </div>
+
+      {/* Token */}
+      <div className="w-16 text-center shrink-0">
+        <p className="text-[12px] font-medium text-[#38bdf8]">{formatTokenCount(agent.totalTokens)}</p>
+        <p className="text-[9px] text-[#525252]">Token</p>
+      </div>
+
+      {/* Maliyet */}
+      <div className="w-16 text-center shrink-0">
+        <p className="text-[12px] font-medium text-[#a78bfa]">${(agent.costUsd ?? 0).toFixed(2)}</p>
+        <p className="text-[9px] text-[#525252]">Maliyet</p>
       </div>
 
       {/* Mesaj sayilari */}
@@ -483,7 +526,7 @@ export default function AgentDashboard({ projectId }: Props) {
 
       {/* Ortalama tamamlanma suresi + pipeline bilgisi */}
       {(overview?.avgCompletionTimeMs !== null || (overview?.pipelineRunCount ?? 0) > 0) && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
             <span className="text-[10px] text-[#525252] uppercase tracking-wider">Ort. Tamamlanma</span>
             <span className="text-[18px] font-bold text-[#fafafa]">
@@ -492,11 +535,25 @@ export default function AgentDashboard({ projectId }: Props) {
             <span className="text-[10px] text-[#525252]">Gorev basi</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Basarisiz Gorev</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Toplam Hata</span>
+            <span className="text-[18px] font-bold text-[#ef4444]">
+              {overview?.totalFailures ?? 0}
+            </span>
+            <span className="text-[10px] text-[#525252]">Retry dahil tum hatalar</span>
+          </div>
+          <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Aktif Hata</span>
             <span className="text-[18px] font-bold text-[#ef4444]">
               {overview?.blockedTasks ?? 0}
             </span>
             <span className="text-[10px] text-[#525252]">Mudahale gerekiyor</span>
+          </div>
+          <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Review Red</span>
+            <span className="text-[18px] font-bold text-[#f97316]">
+              {overview?.totalReviewRejections ?? 0}
+            </span>
+            <span className="text-[10px] text-[#525252]">Kod reddedildi</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
             <span className="text-[10px] text-[#525252] uppercase tracking-wider">Pipeline Basarisi</span>
@@ -506,12 +563,27 @@ export default function AgentDashboard({ projectId }: Props) {
             <span className="text-[10px] text-[#525252]">{overview?.pipelineRunCount ?? 0} calistirma</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Gozden Gecirme</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Devam Eden</span>
             <span className="text-[18px] font-bold text-[#f59e0b]">
               {overview?.inProgressTasks ?? 0}
             </span>
-            <span className="text-[10px] text-[#525252]">Devam eden</span>
+            <span className="text-[10px] text-[#525252]">Gorev islemde</span>
           </div>
+          {agents.length > 0 && (() => {
+            const scored = agents.filter(a => a.tasksAssigned > 0);
+            const avgScore = scored.length > 0
+              ? Math.round(scored.reduce((s, a) => s + (a.score ?? 0), 0) / scored.length)
+              : 0;
+            return (
+              <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
+                <span className="text-[10px] text-[#525252] uppercase tracking-wider">Takim Skoru</span>
+                <span className="text-[18px] font-bold" style={{ color: scoreColor(avgScore) }}>
+                  {avgScore}
+                </span>
+                <span className="text-[10px] text-[#525252]">{scored.length} ajan ortalamasi</span>
+              </div>
+            );
+          })()}
         </div>
       )}
 

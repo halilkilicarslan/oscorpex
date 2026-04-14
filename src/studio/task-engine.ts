@@ -225,6 +225,7 @@ class TaskEngine {
 			eventBus.emit({
 				projectId,
 				type: "task:failed",
+				agentId: task.assignedAgent,
 				taskId,
 				payload: {
 					title: task.title,
@@ -552,11 +553,11 @@ class TaskEngine {
 
 		eventBus.emit({
 			projectId,
-			type: "task:failed" as any,
+			type: "task:review_rejected" as any,
+			agentId: task.assignedAgent,
 			taskId,
 			payload: {
 				title: task.title,
-				reviewRejected: true,
 				revisionCount: newRevisionCount,
 				feedback,
 				reviewerAgentId: task.reviewerAgentId,
@@ -621,7 +622,7 @@ class TaskEngine {
 		const updated = (await updateTask(taskId, {
 			status: "running",
 			startedAt: new Date().toISOString(),
-			reviewStatus: null,
+			reviewStatus: undefined,
 		}))!;
 
 		const projectId = await this.getProjectIdForTask(task);
@@ -637,7 +638,7 @@ class TaskEngine {
 			},
 		});
 
-		console.log(`[task-engine] Task ${taskId} revision'dan tekrar çalışmaya alındı (döngü ${task.revisionCount})`);
+		console.log(`[task-engine] Task ${taskId} revision'dan tekrar kuyruğa alındı (döngü ${task.revisionCount})`);
 
 		return updated;
 	}
@@ -700,6 +701,7 @@ class TaskEngine {
 		eventBus.emit({
 			projectId,
 			type: "task:failed",
+			agentId: task.assignedAgent,
 			taskId,
 			payload: { title: task.title, error },
 		});
@@ -736,6 +738,9 @@ class TaskEngine {
 			taskId,
 			payload: { title: task.title, retryCount: updated.retryCount },
 		});
+
+		await updatePhaseStatus(task.phaseId, "running");
+		await updateProject(projectId, { status: "running" });
 
 		return updated;
 	}

@@ -4,6 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
+import { getProjectSettingsMap } from "./settings-repo.js";
 import type { CostBreakdownEntry, ProjectCostSummary, TokenUsage } from "../types.js";
 
 // ---------------------------------------------------------------------------
@@ -200,6 +201,20 @@ export async function getProjectAnalytics(projectId: string) {
 		[projectId],
 	);
 
+	// Failure count from events table — survives retries/requeues
+	const failEventRow = await queryOne<any>(
+		`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:failed'`,
+		[projectId],
+	);
+	const totalFailures = Number.parseInt(failEventRow?.cnt ?? "0", 10);
+
+	// Review rejection count from events table
+	const rejectEventRow = await queryOne<any>(
+		`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:review_rejected'`,
+		[projectId],
+	);
+	const totalReviewRejections = Number.parseInt(rejectEventRow?.cnt ?? "0", 10);
+
 	// Match tasks to project agents by: project_agent ID, source_agent_id, or role
 	const agentTaskRows = await query<any>(
 		`
@@ -262,6 +277,8 @@ export async function getProjectAnalytics(projectId: string) {
 		completedTasks: Number.parseInt(taskStats?.completed ?? "0", 10),
 		inProgressTasks: Number.parseInt(taskStats?.in_progress ?? "0", 10),
 		blockedTasks: Number.parseInt(taskStats?.blocked ?? "0", 10),
+		totalFailures,
+		totalReviewRejections,
 		tasksPerAgent,
 		avgCompletionTimeMs: avgRow?.avg_ms ? Number.parseFloat(avgRow.avg_ms) : null,
 		pipelineRunCount: runCount,
@@ -282,6 +299,17 @@ export async function getAgentAnalytics(projectId: string) {
 		seen.add(key);
 		return true;
 	});
+
+	// Load scoring config from project settings (category: 'scoring')
+	const settingsMap = await getProjectSettingsMap(projectId);
+	const sc = settingsMap.scoring ?? {};
+	const W_SUCCESS = Number.parseFloat(sc.w_success || "30");
+	const W_FIRST_PASS = Number.parseFloat(sc.w_firstPass || "25");
+	const W_REVIEW = Number.parseFloat(sc.w_review || "20");
+	const W_TIME = Number.parseFloat(sc.w_time || "15");
+	const W_COST = Number.parseFloat(sc.w_cost || "10");
+	const BASELINE_MS = Number.parseFloat(sc.baselineTimeMin || "30") * 60 * 1000;
+	const BASELINE_COST = Number.parseFloat(sc.baselineCostUsd || "0.50");
 
 	return Promise.all(
 		agents.map(async (a: any) => {
@@ -311,6 +339,39 @@ export async function getAgentAnalytics(projectId: string) {
 				[projectId, a.id],
 			);
 
+			// Failure events — survives retries/requeues
+			const failEvtRow = await queryOne<any>(
+				`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:failed' AND agent_id IN (${placeholders})`,
+				[projectId, ...matchIds],
+			);
+			// Review rejection events
+			const rejectEvtRow = await queryOne<any>(
+				`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:review_rejected' AND agent_id IN (${placeholders})`,
+				[projectId, ...matchIds],
+			);
+
+			// First-pass tasks: completed without any prior task:failed event
+			const firstPassRow = await queryOne<any>(
+				`
+      SELECT COUNT(*) AS cnt FROM tasks t
+      JOIN phases ph ON ph.id = t.phase_id
+      JOIN project_plans pp ON pp.id = ph.plan_id
+      WHERE pp.project_id = $1 AND t.assigned_agent IN (${placeholders})
+        AND t.status = 'done'
+        AND t.id NOT IN (
+          SELECT DISTINCT task_id FROM events
+          WHERE project_id = $1 AND type = 'task:failed' AND task_id IS NOT NULL
+        )
+    `,
+				[projectId, ...matchIds],
+			);
+
+			// Token usage
+			const tokenRow = await queryOne<any>(
+				`SELECT COALESCE(SUM(input_tokens),0) AS input_tokens, COALESCE(SUM(output_tokens),0) AS output_tokens, COALESCE(SUM(total_tokens),0) AS total_tokens, COALESCE(SUM(cost_usd),0) AS cost_usd FROM token_usage WHERE project_id = $1 AND agent_id = $2`,
+				[projectId, a.id],
+			);
+
 			const msgSentRow = await queryOne<any>(
 				"SELECT COUNT(*) AS cnt FROM agent_messages WHERE project_id = $1 AND from_agent_id = $2",
 				[projectId, a.id],
@@ -326,6 +387,35 @@ export async function getAgentAnalytics(projectId: string) {
 
 			const msgSent = Number.parseInt(msgSentRow?.cnt ?? "0", 10);
 			const msgReceived = Number.parseInt(msgReceivedRow?.cnt ?? "0", 10);
+			const tasksAssigned = Number.parseInt(taskStats?.assigned ?? "0", 10);
+			const tasksCompleted = Number.parseInt(taskStats?.completed ?? "0", 10);
+			const totalFailures = Number.parseInt(failEvtRow?.cnt ?? "0", 10);
+			const totalReviewRejections = Number.parseInt(rejectEvtRow?.cnt ?? "0", 10);
+			const firstPassTasks = Number.parseInt(firstPassRow?.cnt ?? "0", 10);
+			const costUsd = Number.parseFloat(tokenRow?.cost_usd ?? "0");
+
+			// --- Agent Score (0-100) ---
+			const successRate = tasksAssigned > 0 ? tasksCompleted / tasksAssigned : 0;
+			const firstPassRate = tasksCompleted > 0 ? firstPassTasks / tasksCompleted : 0;
+			const reviewApprovalRate = tasksAssigned > 0
+				? Math.max(0, 1 - totalReviewRejections / tasksAssigned)
+				: 0;
+			const avgTimeMs = tasksCompleted > 0
+				? (Number.parseFloat(runStats?.total_runtime_ms ?? "0") / tasksCompleted)
+				: 0;
+			const timeScore = avgTimeMs > 0 ? Math.min(1, BASELINE_MS / avgTimeMs) : 0;
+			const costPerTask = tasksCompleted > 0 ? costUsd / tasksCompleted : 0;
+			const costScore = costPerTask > 0 ? Math.min(1, BASELINE_COST / costPerTask) : 0;
+
+			const score = tasksAssigned > 0
+				? Math.round(
+					successRate * W_SUCCESS +
+					firstPassRate * W_FIRST_PASS +
+					reviewApprovalRate * W_REVIEW +
+					timeScore * W_TIME +
+					costScore * W_COST
+				)
+				: 0;
 
 			return {
 				agentId: a.id,
@@ -333,11 +423,19 @@ export async function getAgentAnalytics(projectId: string) {
 				role: a.role,
 				avatar: a.avatar ?? "",
 				color: a.color,
-				tasksAssigned: Number.parseInt(taskStats?.assigned ?? "0", 10),
-				tasksCompleted: Number.parseInt(taskStats?.completed ?? "0", 10),
+				tasksAssigned,
+				tasksCompleted,
 				tasksFailed: Number.parseInt(taskStats?.failed ?? "0", 10),
+				totalFailures,
+				totalReviewRejections,
+				firstPassTasks,
+				score,
 				runCount: Number.parseInt(runStats?.run_count ?? "0", 10),
 				totalRuntimeMs: Math.round(Number.parseFloat(runStats?.total_runtime_ms ?? "0")),
+				inputTokens: Number.parseInt(tokenRow?.input_tokens ?? "0", 10),
+				outputTokens: Number.parseInt(tokenRow?.output_tokens ?? "0", 10),
+				totalTokens: Number.parseInt(tokenRow?.total_tokens ?? "0", 10),
+				costUsd,
 				messagesSent: msgSent,
 				messagesReceived: msgReceived,
 				isRunning: lastRun?.status === "running" || lastRun?.status === "starting",

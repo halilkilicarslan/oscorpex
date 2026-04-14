@@ -1,0 +1,82 @@
+# Oscorpex Codebase Analysis & Strategic Report
+**Date:** 2026-04-14
+**Status:** Confidential / Internal Engineering Report
+
+## 1. Executive Summary
+
+Oscorpex is a sophisticated AI orchestration platform designed for autonomous software engineering tasks. The project follows a monorepo-like structure, integrating a high-performance Node.js backend (Hono/VoltAgent) with a feature-rich React 19 frontend. While the platform demonstrates advanced capabilities in planning, task execution, and observability, it currently faces significant technical debt, documentation drift, and architectural "god file" patterns that could impede scaling and maintenance.
+
+---
+
+## 2. Technical Stack & Architecture
+
+### 2.1 Core Technologies
+- **Backend:** Node.js 20.19+, Hono (via `@voltagent/server-hono`), `@voltagent/core`.
+- **Frontend:** React 19, Vite 8, Tailwind CSS 4, `@xyflow/react` for workflow visualization.
+- **Persistence:** Hybrid model using PostgreSQL (pgvector) for application data and LibSQL/SQLite for observability/memory.
+- **AI Execution:** Primarily driven by Claude CLI subprocesses, with secondary support for OpenAI, Anthropic, and Google via AI SDK.
+
+### 2.2 Architectural Layers
+1. **Entry Layer (`src/index.ts`):** Orchestrates service boot, WebSocket servers, and container pools.
+2. **Studio Backend (`src/studio/*`):** The "brain" of the system, handling project planning, task lifecycles (`task-engine`), and execution (`execution-engine`).
+3. **Console Frontend (`console/src/*`):** A dense operations UI for project management, real-time logs, and agent interaction.
+4. **Agent/Tooling Layer (`src/agents/*`, `src/tools/*`):** Specialized agents (researchers, coders) and utility tools (web-search, calculator).
+
+---
+
+## 3. Integration Ecosystem
+
+The platform's strength lies in its deep integrations:
+- **Claude CLI:** Serves as the primary execution engine, streaming JSON events and tracking costs.
+- **Docker:** Utilized for containerized agent execution and pre-warmed coder-agent pools.
+- **Notification Services:** Out-of-the-box support for Slack, Discord, and generic Webhooks.
+- **VoltAgent Framework:** Deeply embedded for agentic workflows and observability stores.
+
+---
+
+## 4. Critical Concerns & Risks
+
+### 4.1 Documentation & Naming Drift
+There is a noticeable mismatch between the codebase and its documentation. References to "VoltAgent" or "VoltOps" persist alongside the "Oscorpex" branding, and documented ports/dependencies (e.g., React 18 vs 19) are outdated.
+
+### 4.2 Architectural "God Files"
+Critical logic is concentrated in a few massive files, creating a "single point of failure" for developer productivity:
+- `src/studio/routes.ts` (3,000+ lines)
+- `src/studio/db.ts` (2,000+ lines)
+- `console/src/lib/studio-api.ts` (1,800+ lines)
+
+### 4.3 Contract Fragility
+The frontend maintains its own type universe, leading to "contract drift." Recent changes in the backend schema (e.g., required fields like `gender` or `fallbackOrder`) have broken frontend builds and tests.
+
+### 4.4 Security: Docker Privilege
+The backend requires access to `/var/run/docker.sock`. While necessary for container management, this creates a high-privilege surface area that must be strictly controlled in production environments.
+
+---
+
+## 5. Quality & Testing State
+
+Current verification metrics show a system in active development but needing stabilization:
+- **Backend Tests:** ~82% pass rate. Failures primarily due to uninitialized database schemas in test environments.
+- **Frontend Tests:** Nearly 100% pass rate in isolation, but the **build process fails** due to TypeScript contract mismatches.
+- **Linting:** High volume of Biome (backend) and ESLint (frontend) warnings, particularly around React hook discipline and `any` usage.
+
+---
+
+## 6. Strategic Recommendations
+
+### 6.1 Phase 1: Stabilization (Short-term)
+1. **Unify Documentation:** Synchronize `README.md` and `ARCHITECTURE.md` with the current implementation state.
+2. **Fix Build Pipeline:** Address the TypeScript errors in the frontend caused by contract drift.
+3. **Bootstrap Test DB:** Implement automatic schema initialization for backend Vitest suites.
+
+### 6.2 Phase 2: Refactoring (Mid-term)
+1. **Decompose God Files:** Break down `routes.ts` and `db.ts` into domain-specific modules (e.g., `ProjectService`, `TaskService`).
+2. **Shared Contracts:** Extract API types into a shared package or use a schema-first approach (e.g., tRPC or Zod-to-TS) to synchronize the frontend and backend.
+3. **Hook Discipline:** Refactor large frontend components (`StudioHomePage`) to use custom hooks, separating logic from presentation.
+
+### 6.3 Phase 3: Operational Excellence (Long-term)
+1. **Naming Consolidation:** Finalize the transition from "VoltAgent" branding to "Oscorpex" across all modules and stores.
+2. **Security Hardening:** Explore lower-privilege alternatives for container management or isolate the execution engine from the main API.
+
+---
+*Report generated by Gemini CLI Orchestrator.*

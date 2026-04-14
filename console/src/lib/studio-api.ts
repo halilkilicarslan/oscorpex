@@ -1396,6 +1396,8 @@ export interface ProjectAnalytics {
   completedTasks: number;
   inProgressTasks: number;
   blockedTasks: number;
+  totalFailures: number;
+  totalReviewRejections: number;
   tasksPerAgent: { agentId: string; agentName: string; total: number; completed: number; completionRate: number }[];
   avgCompletionTimeMs: number | null;
   pipelineRunCount: number;
@@ -1411,8 +1413,16 @@ export interface AgentAnalytics {
   tasksAssigned: number;
   tasksCompleted: number;
   tasksFailed: number;
+  totalFailures: number;
+  totalReviewRejections: number;
+  firstPassTasks: number;
+  score: number;
   runCount: number;
   totalRuntimeMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
   messagesSent: number;
   messagesReceived: number;
   isRunning: boolean;
