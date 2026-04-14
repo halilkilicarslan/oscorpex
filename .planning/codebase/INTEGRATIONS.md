@@ -1,85 +1,84 @@
-# Integrations Map
+# Entegrasyon Haritası
 
-Generated on 2026-04-12 from direct repository inspection and local command runs.
+12 Nisan 2026 tarihinde doğrudan depo incelemesi ve yerel komut çıktıları ile oluşturulmuştur.
 
-## AI Providers and Model Routing
+## Yapay Zeka Sağlayıcıları ve Model Yönlendirme
 
-The backend supports multiple AI provider integrations through `src/studio/ai-provider-factory.ts`:
+Arka uç, `src/studio/ai-provider-factory.ts` aracılığıyla birden fazla yapay zeka sağlayıcısı entegrasyonunu destekler:
 
 - OpenAI
 - Anthropic
 - Google
 - Ollama
-- Custom OpenAI-compatible endpoints
+- Özel OpenAI uyumlu uç noktalar
 
-The provider configuration is stored in the database, with support for:
+Sağlayıcı yapılandırması veritabanında saklanır ve şunları destekler:
 
-- default provider selection
-- fallback order
-- model-level cost estimation
+- Varsayılan sağlayıcı seçimi
+- Geri dönüş (fallback) sırası
+- Model düzeyinde maliyet tahmini
 
-## Claude CLI Integration
+## Claude CLI Entegrasyonu
 
-The most important execution integration is the Claude CLI runtime in `src/studio/cli-runtime.ts`.
+En önemli yürütme entegrasyonu, `src/studio/cli-runtime.ts` içindeki Claude CLI çalışma zamanıdır.
 
-It:
+Şunları yapar:
 
-- resolves the `claude` binary from common install locations
-- streams JSON events from subprocess execution
-- emits terminal output through the studio event pipeline
-- tracks token usage and cost
+- Yaygın kurulum konumlarından `claude` ikili dosyasını bulur.
+- Alt süreç yürütülmesinden gelen JSON olaylarını akış olarak iletir.
+- Terminal çıktısını studio olay ardışık düzeni aracılığıyla yayınlar.
+- Belirteç (token) kullanımını ve maliyeti izler.
 
-This is the real execution path for task work, not just a demo integration.
+Bu sadece bir demo entegrasyonu değil, görev çalışmaları için gerçek yürütme yoludur.
 
 ## VoltAgent / VoltOps
 
-The application still depends heavily on VoltAgent:
+Uygulama hala yoğun bir şekilde VoltAgent'a bağımlıdır:
 
-- `@voltagent/core` agents and workflows are initialized in `src/index.ts`
-- LibSQL adapters are used for memory and observability
-- VoltOps keys are supported through environment variables
+- `@voltagent/core` ajanları ve iş akışları `src/index.ts` içinde başlatılır.
+- Bellek ve gözlemlenebilirlik için LibSQL adaptörleri kullanılır.
+- VoltOps anahtarları ortam değişkenleri aracılığıyla desteklenir.
 
-This means Oscorpex is both a custom studio product and a VoltAgent-hosted application.
+Bu, Oscorpex'in hem özel bir studio ürünü hem de VoltAgent tarafından barındırılan bir uygulama olduğu anlamına gelir.
 
-## Databases and Infrastructure
+## Veritabanları ve Altyapı
 
-- PostgreSQL + pgvector via Docker Compose
-- LibSQL local files under `.voltagent/`
-- Docker socket mounted into backend for container management
-- Optional SonarQube service
-- Optional coder-agent pool containers
+- Docker Compose aracılığıyla PostgreSQL + pgvector.
+- `.voltagent/` altındaki yerel LibSQL dosyaları.
+- Konteyner yönetimi için arka uca bağlanan Docker soketi.
+- İsteğe bağlı SonarQube servisi.
+- İsteğe bağlı coder-agent havuzu konteynerleri.
 
-## External Notifications
+## Harici Bildirimler
 
-Webhook support exists in the studio subsystem:
+Studio alt sisteminde Webhook desteği mevcuttur:
 
-- generic webhooks
+- Genel Webhook'lar
 - Slack
 - Discord
 
-Supported events include:
+Desteklenen olaylar:
 
-- task completed / failed
-- approval required / approved / rejected
-- pipeline completed
-- execution errors
-- budget warnings
+- Görev tamamlandı / başarısız oldu
+- Onay gerekli / onaylandı / reddedildi
+- Ardışık düzen tamamlandı
+- Yürütme hataları
+- Bütçe uyarıları
 
-## Developer Environment Dependencies
+## Geliştirici Ortamı Bağımlılıkları
 
-A functional local environment depends on:
+İşlevsel bir yerel ortam şunlara bağlıdır:
 
 - Node.js
 - pnpm
 - Docker
-- PostgreSQL container
-- Claude CLI for task execution
-- optional AI provider API keys
+- PostgreSQL konteyneri
+- Görev yürütme için Claude CLI
+- İsteğe bağlı yapay zeka sağlayıcısı API anahtarları
 
-## Integration Risks
+## Entegrasyon Riskleri
 
-- Backend has privileged Docker access through `/var/run/docker.sock`
-- Agent network comments claim isolation, but `internal: false` means outbound access is still possible
-- Hybrid storage increases debugging and backup complexity
-- Provider support exists in code, but execution still has a strong Claude CLI dependency
-
+- Arka uç, `/var/run/docker.sock` aracılığıyla ayrıcalıklı Docker erişimine sahiptir.
+- Ajan ağ yorumları izolasyon iddia eder, ancak `internal: false` dışa dönük erişimin hala mümkün olduğu anlamına gelir.
+- Hibrit depolama, hata ayıklama ve yedekleme karmaşıklığını artırır.
+- Kodda sağlayıcı desteği mevcuttur, ancak yürütme hala güçlü bir Claude CLI bağımlılığına sahiptir.

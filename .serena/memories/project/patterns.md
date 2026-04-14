@@ -52,6 +52,21 @@
 - Rejection → `submitReview(approved=false)` → task goes to 'revision' → auto-restart via `restartRevision()` + `executeTask()`
 - Review task title pattern: `"Code Review: {originalTitle}"`
 - Max revision cycles: 3 (then escalation to tech-lead)
+- CRITICAL: `restartRevision()` sets task to `"running"` — `executeTask` guard must accept `"running"` (not just `"queued"`)
+- CRITICAL: `_executeTaskInner` skips `assignTask`+`startTask` if task is already `"running"` (revision case)
+- CRITICAL: `dispatchReadyTasks` allows review tasks even when phase has failed tasks (filters non-review tasks only)
+
+## Pipeline Pause/Resume
+- Pause: `cancelRunningTasks()` — aborts via AbortController, kills process groups, stops apps, resets tasks to queued
+- Resume: `startProjectExecution()` re-dispatches queued tasks
+- `_activeControllers` Map tracks running task AbortControllers by `${projectId}:${taskId}`
+- Aborted tasks return silently in catch block (no failTask)
+
+## Event-Sourced Metrics
+- Failure count: query `events` table for `task:failed` type (NOT task.status — survives retry/requeue)
+- Review rejections: query `events` table for `task:review_rejected` type
+- First-pass tasks: completed tasks where task_id NOT IN events with type `task:failed`
+- Always prefer events table over task snapshot for cumulative metrics
 
 ## Pipeline Stage Assignment
 - Normal tasks: matched to stage by assignedAgent → wave agent match

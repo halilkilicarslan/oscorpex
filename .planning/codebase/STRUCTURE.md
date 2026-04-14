@@ -1,58 +1,58 @@
-# Repository Structure
+# Depo Yapısı
 
-Generated on 2026-04-12 from direct repository inspection and local command runs.
+12 Nisan 2026 tarihinde doğrudan depo incelemesi ve yerel komut çıktıları ile oluşturulmuştur.
 
-## Root Layout
+## Kök Düzen
 
 - `src/`
-  - backend entrypoint, agents, tools, workflows, and studio subsystem
+  - Arka uç giriş noktası, ajanlar, araçlar, iş akışları ve studio alt sistemi.
 - `console/`
-  - frontend SPA and frontend tests
+  - Ön uç SPA ve ön uç testleri.
 - `scripts/`
-  - PostgreSQL initialization
+  - PostgreSQL başlatma betikleri.
 - `docker/`
-  - coder-agent image
+  - coder-agent imajı.
 - `docs/`
-  - roadmap and planning documents
+  - Yol haritası ve planlama dökümanları.
 - `coverage/`, `dist/`
-  - generated artifacts
+  - Üretilen çıktılar (artifacts).
 
-## Backend Structure
+## Arka Uç Yapısı
 
 ### `src/index.ts`
 
-Application bootstrap. Starts:
+Uygulama önyüklemesi (bootstrap). Şunları başlatır:
 
-- VoltAgent server
-- Hono studio routes
-- observability routes
-- WebSocket server
-- webhook sender
-- container pool warm-up
+- VoltAgent sunucusu.
+- Hono studio rotaları.
+- Gözlemlenebilirlik rotaları.
+- WebSocket sunucusu.
+- Webhook göndericisi.
+- Konteyner havuzu ön ısıtması.
 
 ### `src/studio/`
 
-Main product backend. Key clusters:
+Ana ürün arka ucu. Önemli kümeler:
 
-- execution and orchestration
+- Yürütme ve Orkestrasyon
   - `execution-engine.ts`
   - `pipeline-engine.ts`
   - `task-engine.ts`
   - `agent-runtime.ts`
   - `cli-runtime.ts`
 
-- persistence and schema access
+- Süreklilik ve Şema Erişimi
   - `db.ts`
   - `pg.ts`
 
-- project/runtime operations
+- Proje/Çalışma Zamanı Operasyonları
   - `app-runner.ts`
   - `runtime-analyzer.ts`
   - `db-provisioner.ts`
   - `container-manager.ts`
   - `container-pool.ts`
 
-- product features
+- Ürün Özellikleri
   - `routes.ts`
   - `webhook-sender.ts`
   - `agent-messaging.ts`
@@ -60,49 +60,48 @@ Main product backend. Key clusters:
   - `git-manager.ts`
   - `api-discovery.ts`
 
-- tests
+- Testler
   - `src/studio/__tests__/`
 
-### Other backend folders
+### Diğer Arka Uç Klasörleri
 
 - `src/agents/`
-  - assistant, summarizer, translator, researcher, code assistant
+  - Asistan, özetleyici, çevirmen, araştırmacı, kod asistanı.
 - `src/tools/`
-  - calculator, datetime, weather, web search
+  - Hesap makinesi, tarih-saat, hava durumu, web araması.
 - `src/workflows/`
-  - currently includes an expense approval workflow example
+  - Şu anda bir gider onay iş akışı örneği içerir.
 
-## Frontend Structure
+## Ön Üç Yapısı
 
 ### `console/src/main.tsx`
 
-Top-level SPA routing with lazy-loaded route pages.
+Tembel yüklenen (lazy-loaded) rota sayfalarıyla üst düzey SPA yönlendirmesi.
 
 ### `console/src/pages/studio/`
 
-Primary studio UI features:
+Temel studio kullanıcı arayüzü özellikleri:
 
-- home/project creation
-- project detail page
-- PM chat
-- team builder
-- kanban board
-- pipeline dashboard
-- live preview
-- runtime panel
-- file explorer
-- message center
-- settings and providers
+- Ana sayfa / Proje oluşturma.
+- Proje detay sayfası.
+- PM (Proje Yöneticisi) sohbeti.
+- Ekip oluşturucu.
+- Kanban panosu.
+- Ardışık düzen panosu.
+- Canlı önizleme.
+- Çalışma zamanı paneli.
+- Dosya gezgini.
+- Mesaj merkezi.
+- Ayarlar ve sağlayıcılar.
 
 ### `console/src/lib/studio-api.ts`
 
-Single large API client and type-definition hub for frontend/backend communication.
+Ön uç/arka uç iletişimi için tek büyük API istemcisi ve tip tanım merkezi.
 
 ### `console/src/__tests__/`
 
-Frontend test coverage concentrates on major studio UI surfaces.
+Ön uç test kapsamı, temel studio kullanıcı arayüzü yüzeylerinde yoğunlaşır.
 
-## Observed Structural Pattern
+## Gözlemlenen Yapısal Desen
 
-The codebase is feature-rich but file-granularity is coarse. Most domains exist, but many are packed into large files instead of modular slices. This improves short-term shipping speed and hurts long-term maintainability.
-
+Kod tabanı özellik bakımından zengindir ancak dosya ayrıntı düzeyi kabadır. Çoğu alan (domain) mevcuttur, ancak çoğu modüler dilimler yerine büyük dosyalarda toplanmıştır. Bu, kısa vadeli geliştirme hızını artırırken uzun vadeli bakımı zorlaştırır.

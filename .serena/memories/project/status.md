@@ -1,35 +1,56 @@
 # Oscorpex — Status
 
-## Current: v2.6 — Modular Decomposition & CI Stabilization
+## Current: v2.7 — Agent Scoring, Pipeline Fixes, Dashboard Metrics
 
-### Session 2026-04-13 — Backend Decomposition + CI Fixes
+### Session 2026-04-14 — Agent Scoring + Pipeline Fixes + Dashboard Metrics
 
-**Faz 1 — CI Stabilization:**
-- Frontend build fix: ProvidersPage fallbackOrder, tsconfig @types/node, AgentConfig.gender
-- Backend TS fix: task-engine.ts `output.summary` → `output.logs?.[0]`
-- Runtime-analyzer tests: `vi.mock('node:child_process')` so `isPortInUse` (lsof) always returns false
-- DB tests: `describe.skipIf(!dbReady)` gate (CI without migrations)
-- ProjectSettings tests: added missing `fetchProjectCosts` mock
+**Pipeline Pause & Process Kill:**
+- `executionEngine.cancelRunningTasks()` — AbortController + process group kill + stopApp + reset to queued
+- `pipeline-engine.ts` pause/resume wired to execution engine
 
-**Faz 2 — Lint:** biome.json config + `biome check --write` cleanup
+**Vite Crash Prevention:**
+- `process.on('uncaughtException')` guard in `console/vite.config.ts` for `ERR_STREAM_WRITE_AFTER_END`
+- Proxy SSE stream error handlers
 
-**Faz 3 — Frontend Unused Code:** removed unused imports/fns/props in LivePreview, MessageCenter, RuntimePanel, StudioHomePage, TriggersPage, ProvidersPage, TerminalSheet
+**Reserved Ports:**
+- `RESERVED_PORTS = new Set([5173, 4242, 3142])` in `app-runner.ts`
+- `resolvePort()` and `nextPort()` skip reserved ports
 
-**Faz 4 — Backend Decomposition (major):**
-- `src/studio/routes.ts` (3200 lines) → 11 modules under `src/studio/routes/`
-- `src/studio/db.ts` (2280 lines) → 15 modules under `src/studio/db/`
-- Original files kept as backward-compat shims (re-export from new index)
-- URL routes & external imports unchanged — zero behavior change
+**Event-Sourced Failure & Rejection Metrics:**
+- `analytics-repo.ts` queries `events` table for `task:failed` and `task:review_rejected` counts
+- Survives task retries/requeues (snapshot-based metrics reset on retry)
+- New event type `task:review_rejected` in `types.ts`
 
-**Faz 5 — Documentation:** README alignment (PostgreSQL, port 3141, React 19)
+**Token Usage Per Agent:**
+- `token_usage` table queried in `getAgentAnalytics` — inputTokens, outputTokens, totalTokens, costUsd
+- Dashboard agent cards show Token and Maliyet columns
 
-**Commit:** `65de0c9` — 36 files changed, +7094 / -5506
+**Agent Scoring System (0-100):**
+- 5-metric weighted score: successRate(30%), firstPassRate(25%), reviewApprovalRate(20%), avgCompletionTime(15%), costEfficiency(10%)
+- `firstPassTasks` query: completed tasks with no `task:failed` event in events table
+- Weights and baselines configurable via `project_settings` (category: `scoring`)
+- UI: score badge on agent avatar, "Takım Skoru" summary card in dashboard
+
+**Revision Stuck Bug Fix (CRITICAL):**
+- Bug: `executeTask` guard only accepted `"queued"` status, but `restartRevision` set task to `"running"` → guard skipped → task stuck forever
+- Fix: guard now accepts `"running"` too; `_executeTaskInner` skips assignTask/startTask if already running
+
+**Failed Phase Review Dispatch:**
+- Bug: `isPhaseFailed` blocked ALL dispatches including review tasks
+- Fix: `dispatchReadyTasks` now filters — phase failed → only review tasks dispatched, normal tasks blocked
 
 **Final state:**
 - Backend TS: 0 errors
-- Frontend TS: 0 errors
-- Backend tests: 213 passed, 3 skipped (DB), 0 failed
-- Frontend tests: 213 passed, 0 failed
+- Frontend tests: 54 AgentDashboard+AgentCard, 62 ProjectSettings — all passed
+- Task-engine tests: 13 passed
+
+### Session 2026-04-13 — Backend Decomposition + CI Fixes
+- Faz 1: CI Stabilization (frontend build, backend TS, runtime-analyzer tests, DB test gates)
+- Faz 2: Lint (biome.json + biome check --write)
+- Faz 3: Frontend unused code removal
+- Faz 4: Backend decomposition — routes.ts → 11 modules, db.ts → 15 modules
+- Faz 5: Documentation alignment
+- Commit: `65de0c9` — 36 files changed
 
 ## Previous Versions
 - **v2.0**: 12-agent Scrum, DAG pipeline, review loop, drag-drop builder
@@ -39,3 +60,4 @@
 - **v2.4**: Preview system — direct URL iframe, port conflict resolution, API_TARGET env injection
 - **v2.5**: Security layer, GitHub PR workflow, token analytics (cache tokens), per-agent budget, policy middleware
 - **v2.6**: Modular decomposition (routes/ + db/), CI stabilization
+- **v2.7**: Agent scoring, pipeline pause/resume, dashboard failure+rejection+token metrics, revision stuck fix

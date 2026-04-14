@@ -1112,13 +1112,19 @@ class ExecutionEngine {
 	private async dispatchReadyTasks(projectId: string, phaseId: string): Promise<void> {
 		const project = await getProject(projectId);
 		if (!project || project.status === "failed") return;
-		if (await taskEngine.isPhaseFailed(phaseId)) return;
 
+		const phaseFailed = await taskEngine.isPhaseFailed(phaseId);
 		const ready = await taskEngine.getReadyTasks(phaseId);
 		if (ready.length === 0) return;
 
+		// If phase has failed tasks, only dispatch review tasks (to complete in-progress work)
+		const toDispatch = phaseFailed
+			? ready.filter((t) => t.title.startsWith("Code Review: "))
+			: ready;
+		if (toDispatch.length === 0) return;
+
 		// Execute tasks sequentially to avoid rate-limit issues with AI providers
-		for (const task of ready) {
+		for (const task of toDispatch) {
 			await this.executeTask(projectId, task);
 		}
 	}
