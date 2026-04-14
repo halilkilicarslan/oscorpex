@@ -6,6 +6,7 @@ import { honoServer } from "@voltagent/server-hono";
 import { createCodeAssistant, createSummarizer, createTranslator } from "./agents";
 import { observabilityRoutes } from "./observability-routes.js";
 import { containerPool } from "./studio/container-pool.js";
+import { applyDbBootstrap } from "./studio/db-bootstrap.js";
 import { studioRoutes } from "./studio/index.js";
 import { webhookSender } from "./studio/webhook-sender.js";
 import { startWSServer } from "./studio/ws-server.js";
@@ -70,6 +71,9 @@ Focus on accuracy and cite your sources. Present findings in a structured format
 const codeAssistant = createCodeAssistant();
 const translator = createTranslator();
 const summarizer = createSummarizer();
+
+// Apply DB schema migrations (idempotent — safe on every startup)
+await applyDbBootstrap();
 
 // Oscorpex WebSocket sunucusunu başlat (port 3142)
 startWSServer();
