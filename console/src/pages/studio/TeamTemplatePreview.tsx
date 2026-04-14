@@ -60,43 +60,7 @@ const EDGE_LABELS: Record<DependencyType, string> = {
 };
 
 /** Standard dependency template — same as backend seedDefaultDependencies */
-function getDefaultDeps(roles: Set<string>): { from: string; to: string; type: DependencyType }[] {
-  const deps: { from: string; to: string; type: DependencyType }[] = [];
 
-  function add(from: string, to: string, type: DependencyType) {
-    if (roles.has(from) && roles.has(to)) deps.push({ from, to, type });
-  }
-
-  // Workflow chain
-  add('product-owner', 'tech-lead', 'workflow');
-  add('product-owner', 'business-analyst', 'workflow');
-  add('product-owner', 'design-lead', 'workflow');
-  add('tech-lead', 'frontend-dev', 'workflow');
-  add('tech-lead', 'backend-dev', 'workflow');
-  add('frontend-dev', 'frontend-qa', 'workflow');
-  add('backend-dev', 'backend-qa', 'workflow');
-  add('frontend-qa', 'frontend-reviewer', 'workflow');
-  add('backend-qa', 'backend-reviewer', 'workflow');
-
-  // Review
-  add('frontend-dev', 'frontend-reviewer', 'review');
-  add('backend-dev', 'backend-reviewer', 'review');
-
-  // Gate
-  add('frontend-reviewer', 'devops', 'gate');
-  add('backend-reviewer', 'devops', 'gate');
-
-  // Hierarchy
-  add('product-owner', 'scrum-master', 'hierarchy');
-  add('product-owner', 'tech-lead', 'hierarchy');
-  add('product-owner', 'business-analyst', 'hierarchy');
-  add('product-owner', 'design-lead', 'hierarchy');
-  add('tech-lead', 'frontend-dev', 'hierarchy');
-  add('tech-lead', 'backend-dev', 'hierarchy');
-  add('tech-lead', 'devops', 'hierarchy');
-
-  return deps;
-}
 
 // ---------------------------------------------------------------------------
 // Custom Node
@@ -221,8 +185,7 @@ function TemplateGraph({
   presets: AgentConfig[];
   viewMode: ViewMode;
 }) {
-  const roleSet = useMemo(() => new Set(template.roles), [template.roles]);
-  const allDeps = useMemo(() => getDefaultDeps(roleSet), [roleSet]);
+  const allDeps = template.dependencies;
   const visibleTypes = VIEW_FILTERS[viewMode];
   const filteredDeps = useMemo(
     () => allDeps.filter((d) => visibleTypes.includes(d.type)),

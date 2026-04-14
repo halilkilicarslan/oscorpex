@@ -21,6 +21,10 @@ import {
   FileText,
   CheckCircle2,
   Brain,
+  Package,
+  CalendarDays,
+  Users2,
+  FileBarChart,
 } from 'lucide-react';
 import {
   fetchProject,
@@ -54,6 +58,10 @@ import DiffViewer from './DiffViewer';
 import AgentLogViewer from './AgentLogViewer';
 import LivePreview from './LivePreview';
 import PlannerSettingsModal from './PlannerSettingsModal';
+import BacklogBoard from './BacklogBoard';
+import SprintBoard from './SprintBoard';
+import CeremonyPanel from './CeremonyPanel';
+import ProjectReport from './ProjectReport';
 import { useStudioWebSocket } from '../../hooks/useStudioWebSocket';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -61,7 +69,7 @@ import { useNotifications } from '../../hooks/useNotifications';
 type BoardView = 'kanban' | 'pipeline';
 
 // Sekme türü tanımı — settings sekmesi eklendi
-type Tab = 'chat' | 'team' | 'board' | 'preview' | 'files' | 'events' | 'messages' | 'dashboard' | 'logs' | 'diff' | 'settings';
+type Tab = 'chat' | 'team' | 'board' | 'preview' | 'files' | 'events' | 'messages' | 'dashboard' | 'logs' | 'diff' | 'settings' | 'backlog' | 'sprint' | 'ceremonies' | 'report' | 'agent-chat';
 
 // Sabit sekme listesi (messages badge'i dinamik olarak eklenir)
 const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -76,6 +84,10 @@ const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'logs', label: 'Logs', icon: <Terminal size={16} /> },
   { id: 'diff', label: 'Diff', icon: <GitBranch size={16} /> },
   { id: 'settings', label: 'Ayarlar', icon: <Settings size={16} /> },
+  { id: 'backlog', label: 'Backlog', icon: <Package size={16} /> },
+  { id: 'sprint', label: 'Sprint', icon: <CalendarDays size={16} /> },
+  { id: 'ceremonies', label: 'Ceremonies', icon: <Users2 size={16} /> },
+  { id: 'report', label: 'Report', icon: <FileBarChart size={16} /> },
 ];
 
 export default function ProjectPage() {
@@ -458,6 +470,10 @@ export default function ProjectPage() {
         {activeTab === 'logs' && <AgentLogViewer projectId={projectId!} />}
         {activeTab === 'diff' && <DiffViewer projectId={projectId!} />}
         {activeTab === 'settings' && <ProjectSettings projectId={projectId!} />}
+        {activeTab === 'backlog' && <BacklogBoard projectId={project.id} />}
+        {activeTab === 'sprint' && <SprintBoard projectId={project.id} />}
+        {activeTab === 'ceremonies' && <CeremonyPanel projectId={project.id} />}
+        {activeTab === 'report' && <ProjectReport projectId={project.id} />}
       </div>
       {plannerSettingsOpen && (
         <PlannerSettingsModal

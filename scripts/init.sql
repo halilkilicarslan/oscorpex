@@ -113,8 +113,9 @@ CREATE TABLE IF NOT EXISTS team_templates (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
-  agent_ids   TEXT NOT NULL DEFAULT '[]',
-  created_at  TEXT NOT NULL
+  agent_ids      TEXT NOT NULL DEFAULT '[]',
+  dependencies   TEXT NOT NULL DEFAULT '[]',
+  created_at     TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS custom_team_templates (
@@ -236,6 +237,107 @@ CREATE TABLE IF NOT EXISTS token_usage (
 -- Migration: add cache token columns to existing token_usage tables
 ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS cache_creation_tokens INTEGER DEFAULT 0;
 ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS cache_read_tokens INTEGER DEFAULT 0;
+
+-- Migration: add dependencies column to existing team_templates tables
+ALTER TABLE team_templates ADD COLUMN IF NOT EXISTS dependencies TEXT NOT NULL DEFAULT '[]';
+
+-- ---------------------------------------------------------------------------
+-- v3.0 Migration: Micro-task decomposition fields on tasks
+-- ---------------------------------------------------------------------------
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_task_id TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS target_files TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimated_lines INTEGER;
+
+-- ---------------------------------------------------------------------------
+-- v3.1 Migration: Edge type metadata on agent_dependencies
+-- ---------------------------------------------------------------------------
+ALTER TABLE agent_dependencies ADD COLUMN IF NOT EXISTS metadata TEXT NOT NULL DEFAULT '{}';
+
+-- ---------------------------------------------------------------------------
+-- v3.2: Work Items (Backlog)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS work_items (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  type              TEXT NOT NULL DEFAULT 'feature',
+  title             TEXT NOT NULL,
+  description       TEXT NOT NULL DEFAULT '',
+  priority          TEXT NOT NULL DEFAULT 'medium',
+  severity          TEXT,
+  labels            TEXT NOT NULL DEFAULT '[]',
+  status            TEXT NOT NULL DEFAULT 'open',
+  source            TEXT NOT NULL DEFAULT 'user',
+  source_agent_id   TEXT,
+  source_task_id    TEXT,
+  planned_task_id   TEXT,
+  sprint_id         TEXT,
+  created_at        TEXT NOT NULL,
+  updated_at        TEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------------------
+-- v3.4: Memory Architecture tables
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS project_context_snapshots (
+  id              TEXT PRIMARY KEY,
+  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  kind            TEXT NOT NULL,
+  summary_json    TEXT NOT NULL DEFAULT '{}',
+  source_version  INTEGER NOT NULL DEFAULT 0,
+  updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS conversation_compactions (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  channel           TEXT NOT NULL,
+  last_message_id   TEXT NOT NULL,
+  summary           TEXT NOT NULL DEFAULT '',
+  updated_at        TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_facts (
+  id              TEXT PRIMARY KEY,
+  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  scope           TEXT NOT NULL DEFAULT 'project',
+  key             TEXT NOT NULL,
+  value           TEXT NOT NULL DEFAULT '',
+  confidence      REAL NOT NULL DEFAULT 1.0,
+  source          TEXT NOT NULL DEFAULT 'system',
+  updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS model_routing_policies (
+  id              TEXT PRIMARY KEY,
+  scope           TEXT NOT NULL DEFAULT 'global',
+  task_type       TEXT NOT NULL DEFAULT '*',
+  risk_level      TEXT NOT NULL DEFAULT '*',
+  provider        TEXT NOT NULL DEFAULT '',
+  model           TEXT NOT NULL DEFAULT '',
+  effort          TEXT NOT NULL DEFAULT 'medium',
+  fallback_chain  TEXT NOT NULL DEFAULT '[]',
+  updated_at      TEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------------------
+-- v3.7 Migration: Audit fields on events
+-- ---------------------------------------------------------------------------
+ALTER TABLE events ADD COLUMN IF NOT EXISTS actor TEXT DEFAULT 'system';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS action_detail TEXT;
+
+-- ---------------------------------------------------------------------------
+-- v3.9: Sprints
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sprints (
+  id              TEXT PRIMARY KEY,
+  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  goal            TEXT,
+  start_date      TEXT NOT NULL,
+  end_date        TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'planned',
+  created_at      TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS sonar_scans (
   id              TEXT PRIMARY KEY,
@@ -568,6 +670,25 @@ CREATE INDEX IF NOT EXISTS idx_sonar_scans_project    ON sonar_scans(project_id)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_settings_unique ON project_settings(project_id, category, key);
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_created ON webhook_deliveries(created_at);
+
+-- v3.0: Sub-task parent index
+CREATE INDEX IF NOT EXISTS idx_tasks_parent             ON tasks(parent_task_id);
+
+-- v3.2: Work items indexes
+CREATE INDEX IF NOT EXISTS idx_work_items_project       ON work_items(project_id);
+CREATE INDEX IF NOT EXISTS idx_work_items_status        ON work_items(status);
+CREATE INDEX IF NOT EXISTS idx_work_items_sprint        ON work_items(sprint_id);
+
+-- v3.4: Memory indexes
+CREATE INDEX IF NOT EXISTS idx_ctx_snapshots_project    ON project_context_snapshots(project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ctx_snapshots_kind ON project_context_snapshots(project_id, kind);
+CREATE INDEX IF NOT EXISTS idx_conv_compactions_project ON conversation_compactions(project_id);
+CREATE INDEX IF NOT EXISTS idx_memory_facts_project     ON memory_facts(project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_facts_key  ON memory_facts(project_id, scope, key);
+CREATE INDEX IF NOT EXISTS idx_model_routing_scope      ON model_routing_policies(scope);
+
+-- v3.9: Sprint indexes
+CREATE INDEX IF NOT EXISTS idx_sprints_project          ON sprints(project_id);
 
 -- ---------------------------------------------------------------------------
 -- Indexes — Observability Tables
