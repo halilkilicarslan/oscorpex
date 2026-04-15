@@ -178,6 +178,30 @@ const WIDGETS: WidgetDef[] = [
       { key: 'baselineCostUsd', label: 'Maliyet Baseline ($)', type: 'number', placeholder: '0.50', defaultValue: '0.50' },
     ],
   },
+  {
+    category: 'model_routing',
+    title: 'Model Routing',
+    icon: '\u{1F9E0}',
+    color: '#38bdf8',
+    description: 'Task karmasikligina gore AI model atamasi (S/M/L/XL). Bos birakirsan varsayilan kullanilir.',
+    fields: [
+      { key: 'S', label: 'S (Kucuk)', type: 'text', placeholder: 'claude-haiku-4-5-20251001', defaultValue: '' },
+      { key: 'M', label: 'M (Orta)', type: 'text', placeholder: 'claude-sonnet-4-6', defaultValue: '' },
+      { key: 'L', label: 'L (Buyuk)', type: 'text', placeholder: 'claude-sonnet-4-6', defaultValue: '' },
+      { key: 'XL', label: 'XL (Cok Buyuk)', type: 'text', placeholder: 'claude-opus-4-6', defaultValue: '' },
+    ],
+  },
+  {
+    category: 'policy',
+    title: 'Governance Policy',
+    icon: '\u{1F6E1}',
+    color: '#fb923c',
+    description: 'Task dispatch oncesi politika kontrolu. Asim durumunda task bloklanir veya uyari verilir.',
+    fields: [
+      { key: 'task_budget_usd', label: 'Task Basina Maks Maliyet ($)', type: 'number', placeholder: '5.00', defaultValue: '' },
+      { key: 'multi_reviewer_pattern', label: 'Coklu Reviewer Pattern (regex)', type: 'text', placeholder: 'src/auth/.*', defaultValue: '' },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
