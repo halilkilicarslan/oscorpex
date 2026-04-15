@@ -17,6 +17,7 @@ import { cliUsageRoutes } from "./cli-usage-routes.js";
 import { gitFileRoutes } from "./git-file-routes.js";
 import { integrationRoutes } from "./integration-routes.js";
 import { lifecycleRoutes } from "./lifecycle-routes.js";
+import { memoryRoutes } from "./memory-routes.js";
 import { pipelineRoutes } from "./pipeline-routes.js";
 import { projectRoutes } from "./project-routes.js";
 import { providerRoutes } from "./provider-routes.js";
@@ -127,5 +128,6 @@ studio.route("/", workItemRoutes);
 studio.route("/", lifecycleRoutes);
 studio.route("/", ceremonyRoutes);
 studio.route("/", sprintRoutes);
+studio.route("/", memoryRoutes);
 
 export { studio as studioRoutes };

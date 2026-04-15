@@ -2033,6 +2033,75 @@ export async function saveCustomPolicyRules(
   });
 }
 
+// ---- Memory (v3.4) --------------------------------------------------------
+
+export interface MemoryFact {
+  projectId: string;
+  scope: string;
+  key: string;
+  value: string;
+  confidence: number;
+  /** "user" = manuel girilmis; diger degerler (system, agent vs.) otomatik. */
+  source: string;
+  updatedAt: string;
+}
+
+export interface MemorySnapshot {
+  kind: string;
+  summary: Record<string, unknown>;
+  sourceVersion: number;
+  updatedAt: string;
+}
+
+export async function fetchMemoryContext(projectId: string): Promise<string> {
+  const data = await json<{ text: string }>(await fetch(`${BASE}/projects/${projectId}/memory/context`));
+  return data.text;
+}
+
+export async function fetchMemorySnapshot(projectId: string): Promise<MemorySnapshot | null> {
+  const data = await json<{ snapshot: MemorySnapshot | null }>(
+    await fetch(`${BASE}/projects/${projectId}/memory/snapshot`),
+  );
+  return data.snapshot;
+}
+
+export async function refreshMemorySnapshot(projectId: string): Promise<MemorySnapshot | null> {
+  const data = await json<{ snapshot: MemorySnapshot | null }>(
+    await fetch(`${BASE}/projects/${projectId}/memory/refresh`, { method: 'POST' }),
+  );
+  return data.snapshot;
+}
+
+export async function fetchMemoryFacts(projectId: string, scope?: string): Promise<MemoryFact[]> {
+  const url = scope
+    ? `${BASE}/projects/${projectId}/memory/facts?scope=${encodeURIComponent(scope)}`
+    : `${BASE}/projects/${projectId}/memory/facts`;
+  const data = await json<{ facts: MemoryFact[] }>(await fetch(url));
+  return data.facts;
+}
+
+export async function upsertMemoryFact(
+  projectId: string,
+  input: { scope: string; key: string; value: string; confidence?: number; source?: string },
+): Promise<MemoryFact> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/memory/facts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function deleteMemoryFact(
+  projectId: string,
+  scope: string,
+  key: string,
+): Promise<{ ok: boolean }> {
+  const url = `${BASE}/projects/${projectId}/memory/facts?scope=${encodeURIComponent(scope)}&key=${encodeURIComponent(key)}`;
+  return json(await fetch(url, { method: 'DELETE' }));
+}
+
 // ---- Docs Freshness -------------------------------------------------------
 
 export interface DocFreshnessItem {
