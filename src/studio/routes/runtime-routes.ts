@@ -6,6 +6,7 @@ import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { getAppStatus, getResolvedConfig, startApp, stopApp, switchPreviewService } from "../app-runner.js";
+import { containerPool } from "../container-pool.js";
 import { getDbStatus, parseCloudUrl, provisionDatabase, stopAllDatabases, stopDatabase } from "../db-provisioner.js";
 import type { DbProvisionMethod } from "../db-provisioner.js";
 import { getProject } from "../db.js";
@@ -14,6 +15,13 @@ import { analyzeProject, writeEnvFile } from "../runtime-analyzer.js";
 import type { DatabaseType } from "../runtime-analyzer.js";
 
 export const runtimeRoutes = new Hono();
+
+// ---- Container Pool -------------------------------------------------------
+
+runtimeRoutes.get("/pool/status", (c) => {
+	const status = containerPool.getStatus();
+	return c.json(status);
+});
 
 // ---- App Runner -----------------------------------------------------------
 
