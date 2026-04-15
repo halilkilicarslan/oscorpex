@@ -22,6 +22,7 @@ import {
 	updateProject,
 	updateTask,
 } from "./db.js";
+import { applyPostCompletionHooks, taskNeedsApprovalFromEdges } from "./edge-hooks.js";
 import { eventBus } from "./event-bus.js";
 import { recordAgentStep } from "./memory-bridge.js";
 import { queryOne } from "./pg.js";
@@ -185,7 +186,9 @@ class TaskEngine {
 		const projectId = await this.getProjectIdForTask(task);
 
 		// Human-in-the-Loop: Onay kontrolü — budget kontrolünden önce yapılır
-		const needsApproval = task.requiresApproval || shouldRequireApproval(task);
+		// v3.1: Incoming "approval" edge on the agent also forces human approval
+		const edgeRequiresApproval = await taskNeedsApprovalFromEdges(projectId, task);
+		const needsApproval = task.requiresApproval || shouldRequireApproval(task) || edgeRequiresApproval;
 		const alreadyApproved = task.approvalStatus === "approved";
 		if (needsApproval && !alreadyApproved) {
 			// Task'ı waiting_approval durumuna al ve kullanıcıdan onay iste
@@ -467,6 +470,11 @@ class TaskEngine {
 				filesModified: output.filesModified.length,
 				testResults: output.testResults,
 			},
+		});
+
+		// v3.1: Execution-time edge hooks — notification, mentoring, handoff doc check
+		applyPostCompletionHooks(projectId, updated, output).catch((err) => {
+			console.warn("[task-engine] applyPostCompletionHooks failed:", err);
 		});
 
 		// v3.0: Sub-task rollup — if this task has a parent, check if all siblings are done
