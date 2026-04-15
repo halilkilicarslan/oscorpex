@@ -1984,6 +1984,55 @@ export async function saveProjectSettings(
   );
 }
 
+// ---- Policy Rules (v3.7) --------------------------------------------------
+
+export type PolicyAction = 'block' | 'warn' | 'require_approval';
+
+export interface PolicyRule {
+  id: string;
+  projectId: string;
+  name: string;
+  /** Supported patterns: `complexity == S|M|L|XL`, `title contains <text>`,
+   *  `branch == <branch>`, `description contains <text>` */
+  condition: string;
+  action: PolicyAction | string;
+  enabled: boolean;
+}
+
+const BUILTIN_IDS = new Set([
+  'max_cost_per_task',
+  'require_approval_for_large',
+  'multi_reviewer',
+]);
+
+export function isBuiltinPolicy(rule: PolicyRule): boolean {
+  return BUILTIN_IDS.has(rule.id);
+}
+
+/** Fetches only custom policies (built-ins are merged client-side for display). */
+export async function fetchCustomPolicyRules(projectId: string): Promise<PolicyRule[]> {
+  const settings = await fetchProjectSettings(projectId);
+  const raw = settings?.policy?.rules;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed?.rules)) return parsed.rules as PolicyRule[];
+    if (Array.isArray(parsed)) return parsed as PolicyRule[];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveCustomPolicyRules(
+  projectId: string,
+  rules: PolicyRule[],
+): Promise<{ ok: boolean }> {
+  return saveProjectSettings(projectId, 'policy', {
+    rules: JSON.stringify({ rules }),
+  });
+}
+
 // ---- Docs Freshness -------------------------------------------------------
 
 export interface DocFreshnessItem {
