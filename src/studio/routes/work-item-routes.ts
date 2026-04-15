@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import { createWorkItem, deleteWorkItem, getWorkItem, getWorkItems, updateWorkItem } from "../db.js";
+import { planWorkItem } from "../work-item-planner.js";
 import type { WorkItemPriority, WorkItemSource, WorkItemStatus, WorkItemType } from "../types.js";
 
 export const workItemRoutes = new Hono();
@@ -70,9 +71,19 @@ workItemRoutes.delete("/projects/:id/work-items/:itemId", async (c) => {
 	return c.json({ success: true });
 });
 
-// POST /projects/:id/work-items/:itemId/plan — placeholder for converting to task
+// POST /projects/:id/work-items/:itemId/plan — convert work item into a planned task
 workItemRoutes.post("/projects/:id/work-items/:itemId/plan", async (c) => {
-	const item = await getWorkItem(c.req.param("itemId"));
-	if (!item) return c.json({ error: "Work item not found" }, 404);
-	return c.json({ message: "Planning not yet implemented", workItemId: item.id });
+	const itemId = c.req.param("itemId");
+	try {
+		const result = await planWorkItem(itemId);
+		return c.json(result, 201);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		if (message.includes("not found")) return c.json({ error: message }, 404);
+		if (message.includes("not open") || message.includes("No plan")) {
+			return c.json({ error: message }, 409);
+		}
+		console.error("[work-item-routes] planWorkItem failed:", err);
+		return c.json({ error: message }, 500);
+	}
 });
