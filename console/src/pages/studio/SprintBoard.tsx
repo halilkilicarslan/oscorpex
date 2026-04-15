@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Plus, Calendar, Target, TrendingUp, ChevronDown, CheckCircle2, Clock } from 'lucide-react';
+import { Loader2, Plus, Calendar, Target, TrendingUp, ChevronDown, CheckCircle2, Clock, Play, Square, XCircle } from 'lucide-react';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
-type SprintStatus = 'planning' | 'active' | 'completed' | 'cancelled';
+type SprintStatus = 'planned' | 'active' | 'completed' | 'cancelled';
 
 interface Sprint {
   id: string;
@@ -25,7 +25,7 @@ interface SprintWorkItem {
 }
 
 const STATUS_BADGE: Record<SprintStatus, string> = {
-  planning: 'bg-[#1e3a5f] text-[#93c5fd] border-[#2563eb]',
+  planned: 'bg-[#1e3a5f] text-[#93c5fd] border-[#2563eb]',
   active: 'bg-[#052e16] text-[#86efac] border-[#166534]',
   completed: 'bg-[#1a1a1a] text-[#a3a3a3] border-[#262626]',
   cancelled: 'bg-[#450a0a] text-[#fca5a5] border-[#991b1b]',
@@ -74,6 +74,22 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
       load();
     } catch {}
     setCreating(false);
+  };
+
+  const handleLifecycleAction = async (sprintId: string, action: 'start' | 'complete' | 'cancel') => {
+    try {
+      const res = await fetch(`${BASE}/api/studio/sprints/${sprintId}/${action}`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error ?? `Sprint ${action} failed`);
+        return;
+      }
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
   };
 
   const selected = sprints.find((s) => s.id === selectedId);
@@ -148,9 +164,38 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
                       </p>
                     )}
                   </div>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${STATUS_BADGE[selected.status]}`}>
-                    {selected.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${STATUS_BADGE[selected.status]}`}>
+                      {selected.status}
+                    </span>
+                    {selected.status === 'planned' && (
+                      <button
+                        type="button"
+                        onClick={() => handleLifecycleAction(selected.id, 'start')}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold bg-[#052e16] text-[#86efac] border-[#166534] hover:bg-[#083b1d] transition-colors"
+                      >
+                        <Play size={10} /> Start
+                      </button>
+                    )}
+                    {selected.status === 'active' && (
+                      <button
+                        type="button"
+                        onClick={() => handleLifecycleAction(selected.id, 'complete')}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold bg-[#1e3a5f] text-[#93c5fd] border-[#2563eb] hover:bg-[#254877] transition-colors"
+                      >
+                        <Square size={10} /> Complete
+                      </button>
+                    )}
+                    {(selected.status === 'planned' || selected.status === 'active') && (
+                      <button
+                        type="button"
+                        onClick={() => handleLifecycleAction(selected.id, 'cancel')}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold bg-[#450a0a] text-[#fca5a5] border-[#991b1b] hover:bg-[#5a0e0e] transition-colors"
+                      >
+                        <XCircle size={10} /> Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-6 text-[11px] text-[#525252]">
