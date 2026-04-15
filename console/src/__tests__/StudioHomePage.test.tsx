@@ -301,6 +301,7 @@ describe('StudioHomePage — proje olusturma modali', () => {
       name: 'Full Stack Takim',
       description: 'Frontend ve backend ajanlar',
       roles: ['Frontend Dev', 'Backend Dev', 'QA'],
+      dependencies: [],
       createdAt: '2026-01-01T00:00:00Z',
     };
     vi.mocked(studioApi.fetchTeamTemplates).mockResolvedValue([sablon]);
