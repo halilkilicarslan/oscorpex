@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './index.css';
 import Layout from './components/Layout';
+import { PlannerChatProvider } from './contexts/PlannerChatContext';
 
 const DashboardWrapper = lazy(() => import('./pages/DashboardWrapper'));
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'));
@@ -37,8 +38,9 @@ function LoadingSpinner() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <Suspense fallback={<LoadingSpinner />}>
-        <Routes>
+      <PlannerChatProvider>
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
           <Route element={<Layout />}>
             <Route index element={<DashboardWrapper />} />
             <Route path="/dashboard" element={<ObservabilityPage />} />
@@ -56,7 +58,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/studio/:projectId" element={<ProjectPage />} />
           </Route>
         </Routes>
-      </Suspense>
+        </Suspense>
+      </PlannerChatProvider>
     </BrowserRouter>
   </StrictMode>,
 );

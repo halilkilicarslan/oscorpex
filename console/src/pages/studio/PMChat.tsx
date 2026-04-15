@@ -2,17 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Loader2, Bot, User, AlertCircle, Zap, TriangleAlert, Sparkles } from 'lucide-react';
 import {
   type PlannerReasoningEffort,
-  fetchChatHistory,
-  fetchPlan,
   approvePlan,
   rejectPlan,
-  streamPMChat,
+  fetchPlan,
   type PlannerChatModel,
   type PlannerCLIProvider,
   type ChatMessage,
-  type ProjectPlan,
 } from '../../lib/studio-api';
 import PlanPreview from './PlanPreview';
+import { usePlannerChat } from '../../contexts/PlannerChatContext';
 
 // ---------------------------------------------------------------------------
 // Pipeline auto-start bildirimi
@@ -140,39 +138,19 @@ export default function PMChat({
   selectedModel: PlannerChatModel;
   selectedEffort: PlannerReasoningEffort | null;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [plan, setPlan] = useState<ProjectPlan | null>(null);
+  // Sayfa gecisleri arasinda korunan chat state
+  const chat = usePlannerChat(projectId);
+  const { messages, plan, streaming, streamText, loaded } = chat;
   const [input, setInput] = useState('');
-  const [streaming, setStreaming] = useState(false);
-  const [streamText, setStreamText] = useState('');
-  const [loading, setLoading] = useState(true);
   const [pipelineToast, setPipelineToast] = useState<PipelineToastState>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<(() => void) | null>(null);
   const createPlanPrompt =
     'Proje intake bilgilerini ve seçilmiş takım yapısını kullanarak detaylı proje planını şimdi oluştur. Bilgi yeterliyse doğrudan plan-json üret; gereksiz soru sorma.';
 
-  // Load history, plan, and config status
+  // Ilk girişte backend'den yükle (context zaten yüklenmişse no-op)
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [history, latestPlan] = await Promise.allSettled([
-          fetchChatHistory(projectId),
-          fetchPlan(projectId),
-        ]);
-        if (history.status === 'fulfilled') setMessages(history.value);
-        if (latestPlan.status === 'fulfilled' && latestPlan.value) {
-          setPlan(latestPlan.value);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-
-    return () => {
-      abortRef.current?.();
-    };
+    chat.ensureLoaded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   // Auto-scroll
@@ -187,74 +165,19 @@ export default function PMChat({
     if (!prefilledText) {
       setInput('');
     }
-    setStreaming(true);
-    setStreamText('');
 
-    // Optimistically add user message
-    const userMsg: ChatMessage = {
-      id: `temp-${Date.now()}`,
-      projectId,
-      role: 'user',
-      content: text,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-
-    let accumulated = '';
-
-    abortRef.current = streamPMChat(
-      projectId,
-      text,
-      selectedProvider,
-      selectedModel,
-      selectedEffort,
-      (chunk) => {
-        accumulated += chunk;
-        setStreamText(accumulated);
-      },
-      () => {
-        // Done — add assistant message
-        const assistantMsg: ChatMessage = {
-          id: `temp-${Date.now()}-assistant`,
-          projectId,
-          role: 'assistant',
-          content: accumulated,
-          createdAt: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-        setStreamText('');
-        setStreaming(false);
-        abortRef.current = null;
-
-        // Refresh plan in case PM agent created/updated one
-        fetchPlan(projectId)
-          .then((p) => {
-            if (p) setPlan(p);
-          })
-          .catch(() => {});
-      },
-      (err) => {
-        // Hatayı chat mesajı olarak ekle
-        const errorMsg: ChatMessage = {
-          id: `error-${Date.now()}`,
-          projectId,
-          role: 'assistant',
-          content: `⚠️ Hata: ${err.message}`,
-          createdAt: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, errorMsg]);
-        setStreamText('');
-        setStreaming(false);
-        abortRef.current = null;
-      },
-    );
+    chat.sendMessage(text, {
+      provider: selectedProvider,
+      model: selectedModel,
+      effort: selectedEffort,
+    });
   };
 
   const handleApprove = async () => {
     try {
       const result = await approvePlan(projectId);
       const updated = await fetchPlan(projectId);
-      setPlan(updated);
+      chat.setPlan(updated);
       // Pipeline auto-start bildirimini goster
       if (result.pipeline.started) {
         setPipelineToast({
@@ -269,13 +192,13 @@ export default function PMChat({
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to approve plan';
-      setMessages((prev) => [...prev, {
+      chat.appendMessage({
         id: `error-${Date.now()}`,
         projectId,
         role: 'assistant',
         content: `⚠️ Plan onaylama hatası: ${msg}`,
         createdAt: new Date().toISOString(),
-      }]);
+      } as ChatMessage);
     }
   };
 
@@ -283,20 +206,20 @@ export default function PMChat({
     try {
       await rejectPlan(projectId, feedback);
       const updated = await fetchPlan(projectId).catch(() => null);
-      setPlan(updated);
+      chat.setPlan(updated);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to reject plan';
-      setMessages((prev) => [...prev, {
+      chat.appendMessage({
         id: `error-${Date.now()}`,
         projectId,
         role: 'assistant',
         content: `⚠️ Plan reddetme hatası: ${msg}`,
         createdAt: new Date().toISOString(),
-      }]);
+      } as ChatMessage);
     }
   };
 
-  if (loading) {
+  if (!loaded) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 size={20} className="text-[#525252] animate-spin" />
