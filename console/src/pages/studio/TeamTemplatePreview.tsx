@@ -21,7 +21,7 @@ import {
   type DependencyType,
 } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
-import { EDGE_STYLES, EDGE_LABELS, TEAM_COLOR_MAP } from './team-graph-shared';
+import { EDGE_STYLES, EDGE_LABELS, EDGE_DESCRIPTIONS, TEAM_COLOR_MAP } from './team-graph-shared';
 
 // Legacy alias (eski rol adları hâlâ bazı template'lerde olabilir)
 const COLOR_MAP: Record<string, string> = {
@@ -315,12 +315,21 @@ export default function TeamTemplatePreview() {
             {(['workflow', 'review', 'gate', 'hierarchy'] as DependencyType[])
               .filter((type) => VIEW_FILTERS[viewMode].includes(type))
               .map((type) => (
-                <div key={type} className="flex items-center gap-1">
+                <div key={type} className="relative group flex items-center gap-1 cursor-help">
                   <span
                     className="w-3 h-0.5 rounded-full inline-block"
                     style={{ backgroundColor: EDGE_STYLES[type].stroke }}
                   />
-                  <span className="text-[9px] text-[#525252]">{EDGE_LABELS[type]}</span>
+                  <span className="text-[9px] text-[#525252] group-hover:text-[#d4d4d4] transition-colors">{EDGE_LABELS[type]}</span>
+                  <div className="absolute top-full right-0 mt-2 z-50 hidden group-hover:block pointer-events-none">
+                    <div className="bg-[#171717] border border-[#333] rounded-md shadow-lg px-3 py-2 w-56 leading-snug">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="w-3 h-0.5 rounded-full" style={{ backgroundColor: EDGE_STYLES[type].stroke }} />
+                        <span className="text-[11px] font-semibold text-[#f5f5f5]">{EDGE_LABELS[type]}</span>
+                      </div>
+                      <div className="text-[11px] text-[#a3a3a3]">{EDGE_DESCRIPTIONS[type] ?? '—'}</div>
+                    </div>
+                  </div>
                 </div>
               ))}
           </div>
