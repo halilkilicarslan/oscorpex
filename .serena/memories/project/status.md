@@ -1,10 +1,10 @@
 # Oscorpex — Status
 
-## Current: v3.0–v3.4 Stabilization (2026-04-15)
+## Current: v3.0–v3.9 Stabilization Complete (2026-04-15)
 
-v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Şu an milestone bazlı gerçek implementasyon.
+v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek implementasyonla tamamlandı.
 
-### Session 2026-04-15 — v3.0 B1+B2+B3 + v3.1 + v3.2 + v3.3 + v3.4
+### Session 2026-04-15 — v3.0 B1+B2+B3 + v3.1 + v3.2 + v3.3 + v3.4 + v3.5 + v3.6 + v3.7 + v3.8 + v3.9
 
 **v3.0 B1 — Real Interactive Planner** (commit `b3b282a`, pushed)
 - `askuser-json` fenced block pattern, `intake_questions` tablosu, PMChat IntakeQuestionCard.
@@ -36,18 +36,40 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Şu an milestone bazlı ge
 - `db/memory-repo.ts` 3 latent bug fix: table name (`context_snapshots` → `project_context_snapshots`), 4 upsert'te eksik `id` PK kolonu, `conversation_compactions(project_id, channel)` + `model_routing_policies(scope, task_type, risk_level)` unique index'leri
 - 20 yeni unit test (12 model-router + 8 memory-manager)
 
+**v3.5 Project Lifecycle** (prev commit, pushed)
+- `lifecycle-routes.ts`: GET /lifecycle (allowed transitions), POST /lifecycle/transition, POST /hotfix, GET /report
+- `pipeline-engine.markCompleted` fake event emit yerine real `transitionProject("completed")` + fallback event
+- `lifecycle-manager.test.ts`: 17 test (getValidTransitions, transitionProject, triggerHotfix hotfix flow)
+
+**v3.6 Ceremonies** (commit `ec01e9a`, pushed)
+- `ceremony-routes.ts`: GET/POST standup + retrospective (+/retro alias)
+- ceremony-engine orphanedti, 14 yeni test
+
+**v3.7 Governance/Policy** (commit `ba7f3b2`, pushed)
+- task-engine.startTask: `evaluatePolicies(projectId, task)` çağrısı, block/warn action mapping, non-blocking error handling
+- policy-engine was orphaned, 16 yeni test (built-in + custom rules + event emission)
+
+**v3.8 Human Interaction** (commit `62c9fd7`, pushed)
+- agent-routes: GET/POST /agents/:agentId/chat (chatWithAgent wired)
+- lifecycle-routes: GET /report/stakeholder (generateStakeholderReport wired)
+- agent-chat.test.ts: 5 test (cross-project rejection, persist user+agent messages)
+
+**v3.9 Sprints + Plugins** (commit `1a5d043`, pushed)
+- sprint-routes.ts: GET/POST /sprints, GET /sprints/:id, lifecycle (start/complete/cancel), burndown, velocity
+- routes/index.ts: event-bus → notifyPlugins bridge (onTaskComplete, onPipelineComplete, onWorkItemCreated, onPhaseComplete), non-blocking error isolation
+- sprint-manager.test.ts: 15 test, plugin-registry.test.ts: 7 test
+
 ### Test Durumu
-- Backend: 352/352 passing, `pnpm typecheck` 0 hata
+- Backend: 428/428 passing, `pnpm typecheck` 0 hata
 
 ### Plan Kaynağı
 `.planning/architecture/V3_ROADMAP.md` — v3.0-v3.9 tüm milestone'lar.
 
 ### Sıradaki Adımlar
-- **v3.5** — Project Lifecycle (maintenance/archived states, hotfix trigger, post-completion report)
-- **v3.6** — Agent Communication & Ceremonies (standup/retro)
-- **v3.7** — Governance/Policy engine
-- **v3.8** — Human Interaction & Agent Chat
-- **v3.9** — Sprints & Plugin Architecture
+- Milestone stabilization tamamlandı
+- UI doğrulaması: her milestone için frontend sayfaları end-to-end denenmeli (SprintBoard, CeremonyPanel, AgentChat, ProjectReport, BacklogBoard)
+- Policy config UI (ProjectSettings.tsx rule builder) — orphaned frontend hala beklemede
+- Memory/routing config UI — ProjectSettings tokens/model matrisi
 
 ## Previous: v3.0-v3.9 Full Platform Upgrade
 
