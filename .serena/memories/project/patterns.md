@@ -4,12 +4,14 @@
 - Routes at /api/studio, mounted via `app.route('/api/studio', studioRoutes)`
 - CRITICAL: Static routes (/team/org) BEFORE dynamic routes (/team/:agentId)
 - Wildcard `c.req.param('*')` unreliable with mount prefix — use raw URL parsing instead
-- Routes modular: src/studio/routes/ (11 sub-files). Mount via Hono `route('/')`. `routes.ts` shim re-exports.
+- Routes modular: src/studio/routes/ (12 sub-files). Mount via Hono `route('/')`. `routes.ts` shim re-exports.
 
 ## Database
 - PostgreSQL via `pg` library, `getPool()` from `src/studio/pg.ts`
-- 16+ tables; `token_usage` has `cache_creation_tokens`, `cache_read_tokens`
-- DB modular: `src/studio/db/` (15 repos). `db.ts` shim re-exports. Add new CRUD to matching repo.
+- 22+ tables; `token_usage` has `cache_creation_tokens`, `cache_read_tokens`
+- DB modular: `src/studio/db/` (17 repos). `db.ts` shim re-exports. Add new CRUD to matching repo.
+- UUID generation: always `randomUUID()` from `node:crypto` (not uuid package)
+- All migrations use `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` for idempotency
 
 ## pnpm
 - Always pnpm add (never npm install)
@@ -45,6 +47,30 @@
 - 3-tier fallback: in-memory buffer → .log file → DB task output.logs
 - `persistAgentLog()` called on task complete/fail in execution-engine
 - `loadAgentLog()` for reading back after restart
+
+## v3.0+ Engine Patterns
+
+### Sub-task Decomposition (v3.0)
+- `execution-engine.ts:executeTask()` auto-decomposes L/XL tasks without parentTaskId
+- Dynamic import: `await import("./task-decomposer.js")` to avoid circular deps
+- Parent task stays "running", sub-tasks dispatched independently
+- `task-engine.ts:markTaskDone()` checks `areAllSubTasksDone(parentTaskId)` → auto-completes parent
+
+### Edge Type Handling (v3.1)
+- 12 edge types in `DependencyType` union
+- Blocking (DAG): hierarchy, workflow, review, gate, conditional, handoff, approval, pair
+- Non-blocking (runtime): escalation, fallback, notification, mentoring
+- `pair` edges: both agents merged into same wave in `buildDAGWaves()`
+- `failTask()`: checks fallback edges (re-assign on first fail), escalation edges (after N failures via metadata.maxFailures)
+
+### Work Items (v3.2)
+- `task-engine.ts:failTask()` auto-creates defect work items via dynamic import `./db/work-item-repo.js`
+- PM tools: `convertWorkItemsToPlan`, `addPhaseToPlan`, `addTaskToPhase`, `replanUnfinishedTasks`
+
+### Model Routing (v3.4)
+- `model-router.ts:resolveModel(task, context)` reads `project_settings` category `model_routing`
+- Defaults: S→Haiku, M→Sonnet, L→Sonnet, XL→Opus
+- Escalation: +1 tier for priorFailures>0, +1 for reviewRejections>1
 
 ## Review Loop
 - `completeTask()` → finds reviewer via `findReviewerForTask()` → creates review task → `notifyCompleted()` triggers dispatch
