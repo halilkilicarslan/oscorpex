@@ -1,67 +1,49 @@
 # Oscorpex — Status
 
-## Current: v3.0–v3.3 Stabilization (2026-04-15)
+## Current: v3.0–v3.4 Stabilization (2026-04-15)
 
 v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Şu an milestone bazlı gerçek implementasyon.
 
-### Session 2026-04-15 — v3.0 B1+B2+B3 + v3.1 + v3.2 + v3.3
+### Session 2026-04-15 — v3.0 B1+B2+B3 + v3.1 + v3.2 + v3.3 + v3.4
 
 **v3.0 B1 — Real Interactive Planner** (commit `b3b282a`, pushed)
-- `askuser-json` fenced block pattern (plan-json/team-json ile uyumlu)
-- `intake_questions` tablosu: pending/answered/skipped lifecycle
-- `[Intake Q&A]` bloğu planner system prompt'una enjekte edilir
-- Kategoriler: scope/functional/nonfunctional/priority/technical/general
-- PMChat'te IntakeQuestionCard (chip seçimi + serbest metin + skip)
+- `askuser-json` fenced block pattern, `intake_questions` tablosu, PMChat IntakeQuestionCard.
 
 **v3.0 B2 — AI Task Decomposer** (commit `0a763d0`, pushed)
-- `task-decomposer.ts` AI-first + heuristic fallback
-- Scrum Master system prompt, S/M only, 2-8 tasks, ≤3 files, codebase context
-- 15 unit test
+- `task-decomposer.ts` AI-first + heuristic fallback, 15 unit test.
 
 **v3.0 B3 — Sub-task UI Rollup** (commit `6bc695f`, pushed)
-- TaskDetailModal: parent task pointer + sub-task listesi (progress counter)
-- targetFiles & estimatedLines sections
-- `allTasks` + `onNavigateTask` prop pattern (modal içi parent/child gezinme)
-- 5 yeni test (TaskDetailModal.test.tsx)
+- TaskDetailModal parent/child nav, targetFiles/estimatedLines sections, 5 yeni test.
 
 **v3.2 Work Items Backlog** (commit `3004f7f`, pushed)
-- `work-item-planner.ts` (yeni): open work item → Backlog phase'e queued task
-- Rol eşlemesi: bug/defect→qa, security→security, hotfix→backend-dev, feature→backend-dev, improvement→tech-lead
-- Priority→complexity: critical/high→M, medium/low→S
-- Branch prefix: bug/defect/hotfix→fix/, security→sec/, feature/improvement→feat/
-- Backlog phase reuse veya otomatik yaratım
-- `/plan` REST endpoint gerçek (404/409/500 map)
-- task-engine: review escalation → otomatik bug work item (source: "review")
-- pmToolkit'e wire: convertWorkItemsToPlan, addPhaseToPlan, addTaskToPhase, replanUnfinishedTasks
-- 9 unit test (work-item-planner.test.ts)
+- `work-item-planner.ts`, `/plan` REST, auto bug work item on review escalation, 4 PM tools wired, 9 unit test.
 
 **v3.1 Edge Hooks** (commit `aa79e73` + tooltips `a051847`, pushed)
-- `edge-hooks.ts` (yeni): non-DAG edge runtime handlers
-  - `applyPostCompletionHooks`: notification / mentoring / handoff doc check
-  - `taskNeedsApprovalFromEdges`: incoming approval edges gate startTask
-  - `outputHasDocumentation`: md/README/doc keyword detection
-- task-engine: `markTaskDone` → non-blocking hook fire; `startTask` → approval edge gate
-- Edge legend tooltips (TeamBuilder, TeamBuilderPage, TeamTemplatePreview): Türkçe EDGE_DESCRIPTIONS
-- 16 unit test (edge-hooks.test.ts)
+- `edge-hooks.ts`: notification/mentoring/handoff/approval runtime
+- `applyPostCompletionHooks` + `taskNeedsApprovalFromEdges` wired into task-engine
+- Legend tooltips (TeamBuilder, TeamBuilderPage, TeamTemplatePreview) + Türkçe EDGE_DESCRIPTIONS
+- 16 unit test
 
 **v3.3 Incremental Planner** (commit `1b6bc9f`, pushed)
-- `incremental-planner.ts` (yeni): live plan mutation without new plan version
-  - `appendPhaseToPlan`: max order+1, event emit, bestEffortRefresh
-  - `appendTaskToPhase`: real createTask + role→agentId resolve
-  - `replanUnfinishedTasks`: queued/assigned/failed → failed `[replanned]` prefix, done preserved
-- PM toolkit 3 tool rewired (was: buildPlan wrapper / stub return / info-only)
-- 14 unit test (incremental-planner.test.ts)
+- `incremental-planner.ts`: appendPhaseToPlan / appendTaskToPhase / replanUnfinishedTasks
+- PM toolkit 3 tool rewired (buildPlan wrapper / stub / info-only → real mutations)
+- Live plan mutation without new plan version
+- 14 unit test
+
+**v3.4 Model Routing + Memory** (commit `dcbd990`, pushed)
+- execution-engine: task dispatch öncesi `resolveModel(task, { priorFailures, reviewRejections })` — sabit `"sonnet"` yerine tier bazlı model seçimi (S→Haiku, M/L→Sonnet, XL→Opus), retry halinde tier bump, hata durumunda agent.model fallback
+- task-engine.markTaskDone sonrasında non-blocking `updateWorkingMemory(projectId)` — snapshot: project status, plan version, task stats, team roster
+- `db/memory-repo.ts` 3 latent bug fix: table name (`context_snapshots` → `project_context_snapshots`), 4 upsert'te eksik `id` PK kolonu, `conversation_compactions(project_id, channel)` + `model_routing_policies(scope, task_type, risk_level)` unique index'leri
+- 20 yeni unit test (12 model-router + 8 memory-manager)
 
 ### Test Durumu
-- Backend: 332/332 passing, `pnpm typecheck` 0 hata
-- Frontend: 1 yeni test dosyası (TaskDetailModal)
+- Backend: 352/352 passing, `pnpm typecheck` 0 hata
 
 ### Plan Kaynağı
 `.planning/architecture/V3_ROADMAP.md` — v3.0-v3.9 tüm milestone'lar.
 
 ### Sıradaki Adımlar
-- **v3.4** — Context Assembly + Model Routing (token tasarrufu %40-60)
-- **v3.5** — Project Lifecycle (maintenance/archived states, hotfix trigger)
+- **v3.5** — Project Lifecycle (maintenance/archived states, hotfix trigger, post-completion report)
 - **v3.6** — Agent Communication & Ceremonies (standup/retro)
 - **v3.7** — Governance/Policy engine
 - **v3.8** — Human Interaction & Agent Chat
