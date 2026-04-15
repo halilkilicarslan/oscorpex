@@ -196,24 +196,26 @@ export default function ProjectReport({ projectId }: { projectId: string }) {
           <TrendingUp size={14} className="text-[#22c55e]" />
           <h3 className="text-[12px] font-semibold text-[#fafafa]">Quality Metrics</h3>
         </div>
-        <MetricRow
-          label="Review Pass Rate"
-          value={`${report?.quality.reviewPassRate ?? 0}%`}
-          bar={report?.quality.reviewPassRate ?? 0}
-          color={
-            (report?.quality.reviewPassRate ?? 0) >= 80 ? '#22c55e' :
-            (report?.quality.reviewPassRate ?? 0) >= 50 ? '#f59e0b' : '#ef4444'
-          }
-        />
-        <MetricRow
-          label="First Pass Rate"
-          value={`${report?.quality.firstPassRate ?? 0}%`}
-          bar={report?.quality.firstPassRate ?? 0}
-          color={
-            (report?.quality.firstPassRate ?? 0) >= 80 ? '#22c55e' :
-            (report?.quality.firstPassRate ?? 0) >= 50 ? '#f59e0b' : '#ef4444'
-          }
-        />
+        {(() => {
+          const reviewPct = Math.round((report?.quality.reviewPassRate ?? 0) * 100);
+          const firstPct = Math.round((report?.quality.firstPassRate ?? 0) * 100);
+          return (
+            <>
+              <MetricRow
+                label="Review Pass Rate"
+                value={`${reviewPct}%`}
+                bar={reviewPct}
+                color={reviewPct >= 80 ? '#22c55e' : reviewPct >= 50 ? '#f59e0b' : '#ef4444'}
+              />
+              <MetricRow
+                label="First Pass Rate"
+                value={`${firstPct}%`}
+                bar={firstPct}
+                color={firstPct >= 80 ? '#22c55e' : firstPct >= 50 ? '#f59e0b' : '#ef4444'}
+              />
+            </>
+          );
+        })()}
         <MetricRow
           label="Avg Revisions per Task"
           value={(report?.quality.avgRevisions ?? 0).toFixed(1)}
