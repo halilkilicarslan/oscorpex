@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { getProject, getWorkItems } from "../db.js";
 import {
 	calculateBurndown,
+	calculateSprintVelocity,
 	calculateVelocity,
 	cancelSprint,
 	completeSprint,
@@ -38,8 +39,11 @@ sprintRoutes.get("/projects/:id/sprints", async (c) => {
 		const sprints = await getSprintsByProject(projectId);
 		const enriched = await Promise.all(
 			sprints.map(async (sprint) => {
-				const workItems = await getWorkItems(projectId, { sprintId: sprint.id });
-				return { ...sprint, workItems };
+				const [workItems, velocity] = await Promise.all([
+					getWorkItems(projectId, { sprintId: sprint.id }),
+					calculateSprintVelocity(sprint.id),
+				]);
+				return { ...sprint, workItems, velocity };
 			}),
 		);
 		return c.json(enriched);

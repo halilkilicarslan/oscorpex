@@ -102,15 +102,37 @@ export async function cancelSprint(id: string): Promise<Sprint> {
 export async function calculateBurndown(
 	sprintId: string,
 ): Promise<{ date: string; remaining: number }[]> {
-	const rows = await query<{ date: string; remaining: string }>(
-		`SELECT
-       DATE(updated_at) AS date,
-       COUNT(*) FILTER (WHERE status NOT IN ('done', 'closed', 'wontfix')) AS remaining
-     FROM work_items
-     WHERE sprint_id = $1
-     GROUP BY DATE(updated_at)
-     ORDER BY date ASC`,
+	// Sprint penceresinde (startDate..min(endDate, today)) her gün icin
+	// o gune kadar sprint'e girmis ve o gunde henuz tamamlanmamis is sayisini dondur.
+	// Yaklasim: bir item "tamamlanmis" sayilir eger current status done/closed/wontfix VE
+	// updated_at <= guncel gun ise. Aksi halde aktif sayilir.
+	const sprint = await queryOne<{ start_date: string; end_date: string }>(
+		`SELECT start_date, end_date FROM sprints WHERE id = $1`,
 		[sprintId],
+	);
+	if (!sprint) return [];
+
+	const rows = await query<{ date: string; remaining: string }>(
+		`WITH series AS (
+       SELECT generate_series(
+         $2::date,
+         LEAST($3::date, NOW()::date),
+         INTERVAL '1 day'
+       )::date AS d
+     )
+     SELECT to_char(s.d, 'YYYY-MM-DD') AS date,
+            COUNT(w.id)::text AS remaining
+     FROM series s
+     LEFT JOIN work_items w
+       ON w.sprint_id = $1
+       AND w.created_at::date <= s.d
+       AND (
+         w.status NOT IN ('done', 'closed', 'wontfix')
+         OR w.updated_at::date > s.d
+       )
+     GROUP BY s.d
+     ORDER BY s.d ASC`,
+		[sprintId, sprint.start_date, sprint.end_date],
 	);
 
 	return rows.map((r) => ({ date: r.date, remaining: Number(r.remaining) }));
@@ -147,4 +169,19 @@ export async function calculateVelocity(projectId: string, lastN?: number): Prom
 	if (!countRow || Number(countRow.sprint_count) === 0) return 0;
 
 	return Math.round(Number(countRow.total) / Number(countRow.sprint_count));
+}
+
+
+// ---------------------------------------------------------------------------
+// Per-sprint velocity: tamamlanmis is sayisi (done/closed)
+// ---------------------------------------------------------------------------
+
+export async function calculateSprintVelocity(sprintId: string): Promise<number> {
+	const row = await queryOne<{ total: string }>(
+		`SELECT COUNT(*)::text AS total
+     FROM work_items
+     WHERE sprint_id = $1 AND status IN ('done', 'closed')`,
+		[sprintId],
+	);
+	return row ? Number(row.total) : 0;
 }

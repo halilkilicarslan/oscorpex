@@ -24,6 +24,7 @@ vi.mock("../db.js", () => ({
 import { execute, query, queryOne } from "../pg.js";
 import {
 	calculateBurndown,
+	calculateSprintVelocity,
 	calculateVelocity,
 	cancelSprint,
 	completeSprint,
@@ -137,7 +138,8 @@ describe("completeSprint / cancelSprint", () => {
 });
 
 describe("calculateBurndown", () => {
-	it("returns per-day remaining counts", async () => {
+	it("returns per-day remaining counts across sprint window", async () => {
+		mockQueryOne.mockResolvedValueOnce({ start_date: "2026-04-01", end_date: "2026-04-02" });
 		mockQuery.mockResolvedValueOnce([
 			{ date: "2026-04-01", remaining: "10" },
 			{ date: "2026-04-02", remaining: "7" },
@@ -149,8 +151,8 @@ describe("calculateBurndown", () => {
 		]);
 	});
 
-	it("returns empty array when no data", async () => {
-		mockQuery.mockResolvedValueOnce([]);
+	it("returns empty array when sprint does not exist", async () => {
+		mockQueryOne.mockResolvedValueOnce(null);
 		expect(await calculateBurndown("s-1")).toEqual([]);
 	});
 });
@@ -180,5 +182,17 @@ describe("calculateVelocity", () => {
 		mockQuery.mockResolvedValueOnce([{ id: "s-1" }]);
 		mockQueryOne.mockResolvedValueOnce({ total: "0", sprint_count: "0" });
 		expect(await calculateVelocity("p-1")).toBe(0);
+	});
+});
+
+describe("calculateSprintVelocity", () => {
+	it("returns completed work item count for a sprint", async () => {
+		mockQueryOne.mockResolvedValueOnce({ total: "5" });
+		expect(await calculateSprintVelocity("s-1")).toBe(5);
+	});
+
+	it("returns 0 when sprint has no items", async () => {
+		mockQueryOne.mockResolvedValueOnce(null);
+		expect(await calculateSprintVelocity("s-1")).toBe(0);
 	});
 });
