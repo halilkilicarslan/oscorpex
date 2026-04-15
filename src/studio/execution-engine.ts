@@ -33,6 +33,7 @@ import { updateDocsAfterTask } from "./docs-generator.js";
 import { eventBus } from "./event-bus.js";
 import { execute as pgExecute } from "./pg.js";
 import { runLintFix } from "./lint-runner.js";
+import { resolveModel } from "./model-router.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { taskEngine } from "./task-engine.js";
 import { runIntegrationTest } from "./task-runners.js";
@@ -520,6 +521,20 @@ class ExecutionEngine {
 
 			const allowedTools = await resolveAllowedTools(projectId, agent.id, agent.role);
 
+			// v3.4: Model routing — complexity + prior failures + review rejections drive tier selection.
+			// Falls back to agent's configured model (or "sonnet") if routing fails.
+			let routedModel: string = agent.model ?? "sonnet";
+			try {
+				const resolved = await resolveModel(task, {
+					projectId,
+					priorFailures: task.retryCount ?? 0,
+					reviewRejections: task.revisionCount ?? 0,
+				});
+				routedModel = resolved.model;
+			} catch (err) {
+				console.warn("[execution-engine] resolveModel failed, using fallback:", err);
+			}
+
 			const cliResult = await adapter.execute({
 				projectId,
 				agentId: agent.id,
@@ -528,7 +543,7 @@ class ExecutionEngine {
 				prompt,
 				systemPrompt: agent.systemPrompt ? composeSystemPrompt(agent.systemPrompt) : this.defaultSystemPrompt(agent),
 				timeoutMs,
-				model: "sonnet",
+				model: routedModel,
 				signal: taskController.signal,
 				allowedTools,
 			});
