@@ -17,6 +17,7 @@ import {
 	sendMessage,
 } from "../agent-messaging.js";
 import { agentRuntime } from "../agent-runtime.js";
+import { chatWithAgent } from "../agent-chat.js";
 import { AVATARS, FEMALE_AVATARS, MALE_AVATARS } from "../avatars.js";
 import { containerManager } from "../container-manager.js";
 import {
@@ -26,6 +27,7 @@ import {
 	getProject,
 	listAgentConfigs,
 	listAgentRuns,
+	listChatMessages,
 	listPresetAgents,
 	listProjectAgents,
 	listProjectTasks,
@@ -438,4 +440,35 @@ agentRoutes.get("/docker/status", async (c) => {
 	const available = await containerManager.isDockerAvailable();
 	const hasImage = available ? await containerManager.hasCoderImage() : false;
 	return c.json({ docker: available, coderImage: hasImage });
+});
+
+// ---- Agent Chat (v3.8) ----------------------------------------------------
+
+agentRoutes.get("/projects/:id/agents/:agentId/chat", async (c) => {
+	const projectId = c.req.param("id");
+	const messages = await listChatMessages(projectId);
+	return c.json({ messages });
+});
+
+agentRoutes.post("/projects/:id/agents/:agentId/chat", async (c) => {
+	const projectId = c.req.param("id");
+	const agentId = c.req.param("agentId");
+	const body = (await c.req.json().catch(() => ({}))) as { message?: string };
+	const message = typeof body?.message === "string" ? body.message.trim() : "";
+
+	if (!message) {
+		return c.json({ error: "message is required" }, 400);
+	}
+
+	try {
+		const reply = await chatWithAgent(projectId, agentId, message);
+		return c.json({ reply });
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		if (msg.includes("not found") || msg.includes("does not belong")) {
+			return c.json({ error: msg }, 404);
+		}
+		console.error("[agent-routes] chat failed:", err);
+		return c.json({ error: msg }, 500);
+	}
 });
