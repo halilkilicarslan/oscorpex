@@ -1,13 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
-import { Send, Loader2, Bot, User, AlertCircle, Zap, TriangleAlert, Sparkles } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Send, Loader2, Bot, User, AlertCircle, Zap, TriangleAlert, Sparkles, HelpCircle, Check, SkipForward } from 'lucide-react';
 import {
   type PlannerReasoningEffort,
   approvePlan,
   rejectPlan,
   fetchPlan,
+  fetchIntakeQuestions,
+  answerIntakeQuestion,
+  skipIntakeQuestion,
   type PlannerChatModel,
   type PlannerCLIProvider,
   type ChatMessage,
+  type IntakeQuestion,
+  type IntakeQuestionCategory,
 } from '../../lib/studio-api';
 import PlanPreview from './PlanPreview';
 import { usePlannerChat } from '../../contexts/PlannerChatContext';
@@ -122,6 +127,136 @@ function StreamingBubble({ text }: { text: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Intake Questions — interactive Q/A panel (v3.0 B1)
+// ---------------------------------------------------------------------------
+
+const CATEGORY_LABELS: Record<IntakeQuestionCategory, string> = {
+  scope: 'Kapsam',
+  functional: 'Fonksiyonel',
+  nonfunctional: 'Non-functional',
+  priority: 'Öncelik',
+  technical: 'Teknik',
+  general: 'Genel',
+};
+
+const CATEGORY_COLORS: Record<IntakeQuestionCategory, string> = {
+  scope: 'text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/20',
+  functional: 'text-[#3b82f6] bg-[#3b82f6]/10 border-[#3b82f6]/20',
+  nonfunctional: 'text-[#a855f7] bg-[#a855f7]/10 border-[#a855f7]/20',
+  priority: 'text-[#f59e0b] bg-[#f59e0b]/10 border-[#f59e0b]/20',
+  technical: 'text-[#06b6d4] bg-[#06b6d4]/10 border-[#06b6d4]/20',
+  general: 'text-[#737373] bg-[#1f1f1f] border-[#262626]',
+};
+
+function IntakeQuestionCard({
+  question,
+  onAnswer,
+  onSkip,
+  submitting,
+}: {
+  question: IntakeQuestion;
+  onAnswer: (id: string, answer: string) => Promise<void>;
+  onSkip: (id: string) => Promise<void>;
+  submitting: boolean;
+}) {
+  const [customAnswer, setCustomAnswer] = useState('');
+  const [busy, setBusy] = useState(false);
+  const disabled = busy || submitting;
+
+  const submit = async (value: string) => {
+    if (!value.trim() || disabled) return;
+    setBusy(true);
+    try {
+      await onAnswer(question.id, value.trim());
+      setCustomAnswer('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const skip = async () => {
+    if (disabled) return;
+    setBusy(true);
+    try {
+      await onSkip(question.id);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-[#262626] bg-[#0d0d0d] p-4 flex flex-col gap-3">
+      <div className="flex items-start gap-3">
+        <div className="w-7 h-7 rounded-full bg-[#3b82f6]/10 flex items-center justify-center shrink-0">
+          <HelpCircle size={14} className="text-[#3b82f6]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className={`text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border ${CATEGORY_COLORS[question.category]}`}
+            >
+              {CATEGORY_LABELS[question.category]}
+            </span>
+          </div>
+          <p className="text-[13px] text-[#e5e5e5] leading-relaxed">{question.question}</p>
+        </div>
+      </div>
+
+      {question.options.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pl-10">
+          {question.options.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              disabled={disabled}
+              onClick={() => submit(opt)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-[#262626] text-[12px] text-[#d4d4d4] hover:bg-[#22c55e]/10 hover:border-[#22c55e]/30 hover:text-[#22c55e] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 pl-10">
+        <input
+          type="text"
+          value={customAnswer}
+          onChange={(e) => setCustomAnswer(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              submit(customAnswer);
+            }
+          }}
+          placeholder={question.options.length > 0 ? 'Veya kendi cevabını yaz...' : 'Cevabını yaz...'}
+          disabled={disabled}
+          className="flex-1 px-3 py-1.5 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[12px] text-[#fafafa] placeholder-[#525252] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
+        />
+        <button
+          type="button"
+          disabled={!customAnswer.trim() || disabled}
+          onClick={() => submit(customAnswer)}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20 hover:bg-[#22c55e]/20 text-[12px] font-medium disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Cevabı gönder"
+        >
+          {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={skip}
+          className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] text-[#737373] hover:text-[#a3a3a3] hover:bg-[#1a1a1a] disabled:opacity-40"
+          title="Bu soruyu atla"
+        >
+          <SkipForward size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -143,20 +278,83 @@ export default function PMChat({
   const { messages, plan, streaming, streamText, loaded } = chat;
   const [input, setInput] = useState('');
   const [pipelineToast, setPipelineToast] = useState<PipelineToastState>(null);
+  const [pendingQuestions, setPendingQuestions] = useState<IntakeQuestion[]>([]);
+  const [intakeBusy, setIntakeBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const prevStreamingRef = useRef(streaming);
   const createPlanPrompt =
     'Proje intake bilgilerini ve seçilmiş takım yapısını kullanarak detaylı proje planını şimdi oluştur. Bilgi yeterliyse doğrudan plan-json üret; gereksiz soru sorma.';
+
+  const refreshIntakeQuestions = useCallback(async () => {
+    try {
+      const qs = await fetchIntakeQuestions(projectId, 'pending');
+      setPendingQuestions(qs);
+    } catch {
+      // sessiz — arka plan yenilemesi
+    }
+  }, [projectId]);
 
   // Ilk girişte backend'den yükle (context zaten yüklenmişse no-op)
   useEffect(() => {
     chat.ensureLoaded();
+    refreshIntakeQuestions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
+
+  // Streaming bittiğinde: backend askuser-json parse etmiş olabilir, yenile
+  useEffect(() => {
+    if (prevStreamingRef.current && !streaming) {
+      refreshIntakeQuestions();
+    }
+    prevStreamingRef.current = streaming;
+  }, [streaming, refreshIntakeQuestions]);
 
   // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamText]);
+  }, [messages, streamText, pendingQuestions]);
+
+  const handleIntakeAnswer = useCallback(
+    async (id: string, answer: string) => {
+      setIntakeBusy(true);
+      try {
+        await answerIntakeQuestion(projectId, id, answer);
+        const remaining = await fetchIntakeQuestions(projectId, 'pending');
+        setPendingQuestions(remaining);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Cevap kaydedilemedi';
+        chat.appendMessage({
+          id: `error-${Date.now()}`,
+          projectId,
+          role: 'assistant',
+          content: `⚠️ ${msg}`,
+          createdAt: new Date().toISOString(),
+        } as ChatMessage);
+      } finally {
+        setIntakeBusy(false);
+      }
+    },
+    [projectId, chat],
+  );
+
+  const handleIntakeSkip = useCallback(
+    async (id: string) => {
+      setIntakeBusy(true);
+      try {
+        await skipIntakeQuestion(projectId, id);
+        const remaining = await fetchIntakeQuestions(projectId, 'pending');
+        setPendingQuestions(remaining);
+      } finally {
+        setIntakeBusy(false);
+      }
+    },
+    [projectId],
+  );
+
+  const continuePlanningWithAnswers = () => {
+    if (streaming) return;
+    sendMessage('Cevapları verdim, lütfen plana devam et veya eksik bilgi varsa tek blokta sor.');
+  };
 
   const sendMessage = (prefilledText?: string) => {
     const text = (prefilledText ?? input).trim();
@@ -260,6 +458,39 @@ export default function PMChat({
         ))}
 
         {streaming && <StreamingBubble text={streamText} />}
+
+        {/* Intake questions panel (v3.0 B1) */}
+        {pendingQuestions.length > 0 && !streaming && (
+          <div className="mt-1 flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-[11px] font-medium text-[#3b82f6] uppercase tracking-wide">
+              <HelpCircle size={12} />
+              Planner cevap bekliyor ({pendingQuestions.length})
+            </div>
+            {pendingQuestions.map((q) => (
+              <IntakeQuestionCard
+                key={q.id}
+                question={q}
+                onAnswer={handleIntakeAnswer}
+                onSkip={handleIntakeSkip}
+                submitting={intakeBusy}
+              />
+            ))}
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-[#1f1f1f] bg-[#0d0d0d] px-4 py-3">
+              <div className="text-[11px] text-[#737373]">
+                Tüm soruları cevapladıktan sonra plana devam etmek için aşağıdaki butonu kullan.
+              </div>
+              <button
+                type="button"
+                onClick={continuePlanningWithAnswers}
+                disabled={streaming || plannerAvailable === false}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#22c55e]/10 px-3 py-1.5 text-[11px] font-medium text-[#22c55e] border border-[#22c55e]/20 hover:bg-[#22c55e]/20 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Sparkles size={12} />
+                Devam Et
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Plan preview */}
         {plan && (

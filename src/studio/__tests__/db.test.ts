@@ -1,6 +1,9 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+	answerIntakeQuestion,
+	countPendingIntakeQuestions,
 	createAgentConfig,
+	createIntakeQuestions,
 	createPhase,
 	createPlan,
 	createProject,
@@ -16,10 +19,12 @@ import {
 	listAgentConfigs,
 	listChatMessages,
 	listEvents,
+	listIntakeQuestions,
 	listPresetAgents,
 	listProjectTasks,
 	listProjects,
 	seedPresetAgents,
+	skipIntakeQuestion,
 	updatePlanStatus,
 	updateProject,
 	updateTask,
@@ -43,6 +48,7 @@ describe.skipIf(!dbReady)("Studio DB", () => {
 		// Clean up tables so tests start with a known empty state
 		await execute("DELETE FROM chat_messages");
 		await execute("DELETE FROM events");
+		await execute("DELETE FROM intake_questions").catch(() => { /* tablo yoksa atla */ });
 		await execute("DELETE FROM tasks");
 		await execute("DELETE FROM phases");
 		await execute("DELETE FROM project_plans");
@@ -269,6 +275,59 @@ describe.skipIf(!dbReady)("Studio DB", () => {
 			expect(messages).toHaveLength(2);
 			expect(messages[0].role).toBe("user"); // ASC order
 			expect(messages[1].role).toBe("assistant");
+		});
+	});
+
+	// ---- Intake Questions (v3.0 B1) -----------------------------------------
+
+	describe("Intake Questions", () => {
+		it("should create, list, answer, and skip intake questions", async () => {
+			const project = await createProject({ name: "Intake Test", description: "", techStack: [], repoPath: "" });
+
+			const created = await createIntakeQuestions(project.id, [
+				{ question: "Hedef kullanıcı kitlesi?", category: "scope", options: ["Devs", "End users"] },
+				{ question: "Auth gerekli mi?", category: "functional" },
+				{ question: "   ", category: "general" }, // boş soru atılmalı
+			]);
+			expect(created).toHaveLength(2);
+			expect(created[0].status).toBe("pending");
+			expect(created[0].options).toEqual(["Devs", "End users"]);
+
+			const pending = await listIntakeQuestions(project.id, "pending");
+			expect(pending).toHaveLength(2);
+
+			const pendingCount = await countPendingIntakeQuestions(project.id);
+			expect(pendingCount).toBe(2);
+
+			const answered = await answerIntakeQuestion(created[0].id, "End users");
+			expect(answered?.status).toBe("answered");
+			expect(answered?.answer).toBe("End users");
+			expect(answered?.answeredAt).toBeDefined();
+
+			const skipped = await skipIntakeQuestion(created[1].id);
+			expect(skipped?.status).toBe("skipped");
+
+			const stillPending = await countPendingIntakeQuestions(project.id);
+			expect(stillPending).toBe(0);
+
+			const all = await listIntakeQuestions(project.id);
+			expect(all).toHaveLength(2);
+			expect(all.map((q) => q.status).sort()).toEqual(["answered", "skipped"]);
+		});
+
+		it("should scope questions by project", async () => {
+			const a = await createProject({ name: "Intake A", description: "", techStack: [], repoPath: "" });
+			const b = await createProject({ name: "Intake B", description: "", techStack: [], repoPath: "" });
+
+			await createIntakeQuestions(a.id, [{ question: "A soru", category: "technical" }]);
+			await createIntakeQuestions(b.id, [{ question: "B soru", category: "priority" }]);
+
+			const aq = await listIntakeQuestions(a.id);
+			const bq = await listIntakeQuestions(b.id);
+			expect(aq).toHaveLength(1);
+			expect(aq[0].question).toBe("A soru");
+			expect(bq).toHaveLength(1);
+			expect(bq[0].question).toBe("B soru");
 		});
 	});
 });

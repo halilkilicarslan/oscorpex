@@ -719,3 +719,26 @@ CREATE INDEX IF NOT EXISTS idx_mem_wf_status   ON voltagent_memory_workflow_stat
 CREATE INDEX IF NOT EXISTS idx_rag_emb_kb     ON rag_embeddings(kb_id);
 CREATE INDEX IF NOT EXISTS idx_rag_emb_doc    ON rag_embeddings(doc_id);
 CREATE INDEX IF NOT EXISTS idx_rag_emb_vector ON rag_embeddings USING ivfflat (vector vector_cosine_ops) WITH (lists = 100);
+
+-- ---------------------------------------------------------------------------
+-- v3.0 B1 — Interactive Planner: intake questions
+-- ---------------------------------------------------------------------------
+-- Planner asks clarifying questions before producing a plan. Questions are
+-- persisted here; user answers via REST API. Planner reads answered questions
+-- back from this table as context on the next turn.
+
+CREATE TABLE IF NOT EXISTS intake_questions (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  question      TEXT NOT NULL,
+  options       TEXT NOT NULL DEFAULT '[]',        -- JSON array of suggested answers
+  category      TEXT NOT NULL DEFAULT 'general',   -- scope|functional|nonfunctional|priority|technical|general
+  status        TEXT NOT NULL DEFAULT 'pending',   -- pending|answered|skipped
+  answer        TEXT,
+  plan_version  INTEGER,                            -- which plan iteration asked it
+  created_at    TEXT NOT NULL,
+  answered_at   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_intake_project ON intake_questions(project_id, status);
+CREATE INDEX IF NOT EXISTS idx_intake_created ON intake_questions(project_id, created_at);

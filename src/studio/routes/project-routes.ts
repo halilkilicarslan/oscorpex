@@ -8,11 +8,14 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { createAgentFiles } from "../agent-files.js";
 import {
+	answerIntakeQuestion,
 	copyAgentsToProject,
+	createIntakeQuestions,
 	createProject,
 	deleteProject,
 	getAgentConfig,
 	getCustomTeamTemplate,
+	getIntakeQuestion,
 	getLatestPlan,
 	getProject,
 	getProjectSetting,
@@ -21,13 +24,16 @@ import {
 	insertChatMessage,
 	listAgentDependencies,
 	listChatMessages,
+	listIntakeQuestions,
 	listProjectAgents,
 	listProjects,
 	listTeamTemplates,
 	setProjectSettings,
+	skipIntakeQuestion,
 	updatePlanStatus,
 	updateProject,
 } from "../db.js";
+import type { IntakeQuestionCategory } from "../types.js";
 import { eventBus } from "../event-bus.js";
 import { executionEngine } from "../execution-engine.js";
 import { gitManager } from "../git-manager.js";
@@ -349,6 +355,9 @@ projectRoutes.post("/projects/:id/chat", async (c) => {
 	const projectType = intakeSettings.projectType || "Not specified";
 	const techPreference = parseStoredStringList(intakeSettings.techPreference);
 	const resolvedTechStack = parseStoredStringList(intakeSettings.resolvedTechStack);
+	const allIntakeQuestions = await listIntakeQuestions(projectId);
+	const answeredIntake = allIntakeQuestions.filter((q) => q.status === "answered");
+	const pendingIntake = allIntakeQuestions.filter((q) => q.status === "pending");
 
 	const agents = await listProjectAgents(projectId);
 	const deps = await listAgentDependencies(projectId);
@@ -418,7 +427,30 @@ ${teamInfo}
 
 [Assignable Roles for Tasks]
 Use ONLY these exact values for assignedRole: ${assignableRoles}
-Every assignable agent MUST get at least one task.`;
+Every assignable agent MUST get at least one task.
+
+[Intake Q&A]
+${
+	answeredIntake.length === 0 && pendingIntake.length === 0
+		? "No clarifying questions have been asked yet. If you need information, emit an askuser-json block (see system prompt)."
+		: [
+				...(answeredIntake.length > 0
+					? [
+							"Answered questions (settled — do NOT re-ask):",
+							...answeredIntake.map(
+								(q) => `- [${q.category}] Q: ${q.question}\n  A: ${q.answer ?? "(no answer)"}`,
+							),
+						]
+					: []),
+				...(pendingIntake.length > 0
+					? [
+							"",
+							"Still-pending questions (user has not answered yet — do NOT produce a plan until resolved):",
+							...pendingIntake.map((q) => `- [${q.category}] ${q.question}`),
+						]
+					: []),
+			].join("\n")
+}`;
 
 	const conversationContext = history
 		.map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
@@ -454,6 +486,68 @@ Every assignable agent MUST get at least one task.`;
 						},
 						onDone: async (fullText) => {
 							try {
+								// v3.0 B1: Detect askuser-json blocks and persist questions for the UI
+								const askMatch = fullText.match(/```askuser-json\s*\n([\s\S]*?)\n```/);
+								if (askMatch) {
+									try {
+										const askData = JSON.parse(askMatch[1]);
+										const rawQuestions = Array.isArray(askData?.questions) ? askData.questions : [];
+										const VALID_CATEGORIES: IntakeQuestionCategory[] = [
+											"scope",
+											"functional",
+											"nonfunctional",
+											"priority",
+											"technical",
+											"general",
+										];
+										const normalized = rawQuestions
+											.map((q: any) => {
+												if (!q || typeof q.question !== "string") return null;
+												const text = q.question.trim();
+												if (!text) return null;
+												const rawCat = typeof q.category === "string" ? q.category.toLowerCase() : "general";
+												const category: IntakeQuestionCategory = VALID_CATEGORIES.includes(
+													rawCat as IntakeQuestionCategory,
+												)
+													? (rawCat as IntakeQuestionCategory)
+													: "general";
+												const options = Array.isArray(q.options)
+													? q.options
+															.map((o: unknown) => String(o).trim())
+															.filter((o: string) => o.length > 0)
+													: [];
+												return { question: text, category, options };
+											})
+											.filter(Boolean) as Array<{
+											question: string;
+											category: IntakeQuestionCategory;
+											options: string[];
+										}>;
+										if (normalized.length > 0) {
+											const latestPlan = await getLatestPlan(projectId);
+											const created = await createIntakeQuestions(
+												projectId,
+												normalized.map((q) => ({ ...q, planVersion: latestPlan?.version })),
+											);
+											eventBus.emit({
+												projectId,
+												type: "escalation:user",
+												payload: {
+													questions: created.map((q) => ({
+														id: q.id,
+														question: q.question,
+														category: q.category,
+														options: q.options,
+													})),
+												},
+											});
+											console.log(`[Planner] Registered ${created.length} intake questions for project ${projectId}`);
+										}
+									} catch (parseErr) {
+										console.error("[Planner] Failed to parse askuser-json:", parseErr);
+									}
+								}
+
 								const planMatch = fullText.match(/```plan-json\s*\n([\s\S]*?)\n```/);
 								if (planMatch) {
 									try {
@@ -528,6 +622,59 @@ projectRoutes.get("/projects/:id/chat/history", async (c) => {
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 	return c.json(await listChatMessages(projectId));
+});
+
+// ---- Intake Questions (v3.0 B1 — Interactive Planner) --------------------
+
+projectRoutes.get("/projects/:id/intake-questions", async (c) => {
+	const projectId = c.req.param("id");
+	const project = await getProject(projectId);
+	if (!project) return c.json({ error: "Project not found" }, 404);
+
+	const status = c.req.query("status");
+	const filter = status === "pending" || status === "answered" || status === "skipped" ? status : undefined;
+	return c.json(await listIntakeQuestions(projectId, filter));
+});
+
+projectRoutes.post("/projects/:id/intake-questions/:qid/answer", async (c) => {
+	const projectId = c.req.param("id");
+	const qid = c.req.param("qid");
+	const project = await getProject(projectId);
+	if (!project) return c.json({ error: "Project not found" }, 404);
+
+	const question = await getIntakeQuestion(qid);
+	if (!question || question.projectId !== projectId) {
+		return c.json({ error: "Question not found" }, 404);
+	}
+
+	const body = (await c.req.json().catch(() => ({}))) as { answer?: unknown };
+	const answer = typeof body.answer === "string" ? body.answer.trim() : "";
+	if (!answer) return c.json({ error: "Answer must be a non-empty string" }, 400);
+
+	const updated = await answerIntakeQuestion(qid, answer);
+
+	eventBus.emit({
+		projectId,
+		type: "escalation:user",
+		payload: { answered: { id: qid, answer } },
+	});
+
+	return c.json(updated);
+});
+
+projectRoutes.post("/projects/:id/intake-questions/:qid/skip", async (c) => {
+	const projectId = c.req.param("id");
+	const qid = c.req.param("qid");
+	const project = await getProject(projectId);
+	if (!project) return c.json({ error: "Project not found" }, 404);
+
+	const question = await getIntakeQuestion(qid);
+	if (!question || question.projectId !== projectId) {
+		return c.json({ error: "Question not found" }, 404);
+	}
+
+	const updated = await skipIntakeQuestion(qid);
+	return c.json(updated);
 });
 
 // ---- Plans ----------------------------------------------------------------
