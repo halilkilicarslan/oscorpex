@@ -20,6 +20,11 @@ import {
 import { BEHAVIORAL_PRINCIPLES } from "./behavioral-prompt.js";
 import { eventBus } from "./event-bus.js";
 import { gitManager } from "./git-manager.js";
+import {
+	appendPhaseToPlan as incAppendPhase,
+	appendTaskToPhase as incAppendTask,
+	replanUnfinishedTasks as incReplan,
+} from "./incremental-planner.js";
 import { execute, queryOne } from "./pg.js";
 import type { TaskComplexity } from "./types.js";
 
@@ -811,25 +816,87 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 		},
 	}),
 
-	// v3.3: Incremental planning tools
+	// v3.3: Incremental planning tools — mutate the live plan in-place
 	addPhaseToPlan: tool({
-		description: "Add a new phase to an existing approved plan. The new phase is appended after the last phase.",
+		description:
+			"Append a new phase (optionally with tasks) to the end of the live plan without creating a new plan version.",
 		inputSchema: z.object({
 			projectId: z.string().describe("The project ID"),
-			phase: phaseSchema.describe("The new phase to add"),
+			phase: z
+				.object({
+					name: z.string().describe("Phase name"),
+					dependsOnPhaseNames: z
+						.array(z.string())
+						.default([])
+						.describe("Names of existing phases this new phase depends on"),
+					tasks: z
+						.array(
+							z.object({
+								title: z.string(),
+								description: z.string(),
+								assignedRole: z.string(),
+								complexity: z.enum(["S", "M", "L", "XL"]),
+								branch: z.string(),
+								taskType: z.enum(["ai", "integration-test", "run-app"]).default("ai"),
+								targetFiles: z.array(z.string()).default([]),
+								estimatedLines: z.number().int().optional(),
+								dependsOnTaskTitles: z.array(z.string()).default([]),
+								requiresApproval: z.boolean().default(false),
+							}),
+						)
+						.default([])
+						.describe("Tasks to add to the new phase"),
+				})
+				.describe("The new phase definition"),
 		}),
 		execute: async ({ projectId, phase }) => {
 			const plan = await getLatestPlan(projectId);
 			if (!plan) throw new Error(`No plan found for project ${projectId}`);
 
-			const maxOrder = Math.max(...plan.phases.map((p) => p.order), 0);
-			const result = await buildPlan(projectId, [{ ...phase, order: maxOrder + 1 }]);
-			return { ...result, message: `Phase "${phase.name}" added to plan at order ${maxOrder + 1}.` };
+			const dependsOnPhaseIds = (phase.dependsOnPhaseNames ?? [])
+				.map((n) => plan.phases.find((p) => p.name === n)?.id)
+				.filter((id): id is string => Boolean(id));
+
+			const { phase: createdPhase } = await incAppendPhase(projectId, {
+				name: phase.name,
+				dependsOnPhaseIds,
+			});
+
+			const createdTasks: { id: string; title: string }[] = [];
+			const titleToId = new Map<string, string>();
+
+			for (const t of phase.tasks ?? []) {
+				const dependsOnTaskIds = (t.dependsOnTaskTitles ?? [])
+					.map((title) => titleToId.get(title))
+					.filter((id): id is string => Boolean(id));
+
+				const created = await incAppendTask(projectId, createdPhase.id, {
+					title: t.title,
+					description: t.description,
+					assignedRole: t.assignedRole,
+					complexity: t.complexity as TaskComplexity,
+					branch: t.branch,
+					taskType: t.taskType,
+					targetFiles: t.targetFiles,
+					estimatedLines: t.estimatedLines,
+					dependsOnTaskIds,
+					requiresApproval: t.requiresApproval,
+				});
+				createdTasks.push({ id: created.id, title: created.title });
+				titleToId.set(t.title, created.id);
+			}
+
+			return {
+				message: `Phase "${createdPhase.name}" (order ${createdPhase.order}) added with ${createdTasks.length} task(s).`,
+				phaseId: createdPhase.id,
+				phaseOrder: createdPhase.order,
+				createdTasks,
+			};
 		},
 	}),
 
 	addTaskToPhase: tool({
-		description: "Add a task to an existing running or pending phase.",
+		description: "Append a new task to an existing phase of the live plan.",
 		inputSchema: z.object({
 			projectId: z.string().describe("The project ID"),
 			phaseName: z.string().describe("Name of the target phase"),
@@ -842,6 +909,8 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 				taskType: z.enum(["ai", "integration-test", "run-app"]).default("ai"),
 				targetFiles: z.array(z.string()).default([]),
 				estimatedLines: z.number().int().optional(),
+				dependsOnTaskTitles: z.array(z.string()).default([]),
+				requiresApproval: z.boolean().default(false),
 			}),
 		}),
 		execute: async ({ projectId, phaseName, task }) => {
@@ -851,32 +920,45 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 			const phase = plan.phases.find((p) => p.name === phaseName);
 			if (!phase) throw new Error(`Phase "${phaseName}" not found in plan`);
 
+			const dependsOnTaskIds = (task.dependsOnTaskTitles ?? [])
+				.map((title) => phase.tasks.find((t) => t.title === title)?.id)
+				.filter((id): id is string => Boolean(id));
+
+			const created = await incAppendTask(projectId, phase.id, {
+				title: task.title,
+				description: task.description,
+				assignedRole: task.assignedRole,
+				complexity: task.complexity as TaskComplexity,
+				branch: task.branch,
+				taskType: task.taskType,
+				targetFiles: task.targetFiles,
+				estimatedLines: task.estimatedLines,
+				dependsOnTaskIds,
+				requiresApproval: task.requiresApproval,
+			});
+
 			return {
-				message: `Task "${task.title}" queued for addition to phase "${phaseName}".`,
+				message: `Task "${created.title}" added to phase "${phaseName}".`,
+				taskId: created.id,
 				phaseId: phase.id,
-				task,
 			};
 		},
 	}),
 
 	replanUnfinishedTasks: tool({
 		description:
-			"Re-plan unfinished tasks (queued/failed) while preserving all completed work. Use this when the current plan needs reorganization.",
+			"Cancel all unfinished tasks (queued/assigned/failed) on the live plan while preserving completed work. Follow up with addPhaseToPlan / addTaskToPhase to lay down the replanned work.",
 		inputSchema: z.object({
 			projectId: z.string().describe("The project ID"),
 			reason: z.string().describe("Why re-planning is needed"),
 		}),
 		execute: async ({ projectId, reason }) => {
-			const tasks = await listProjectTasks(projectId);
-			const unfinished = tasks.filter((t) => t.status !== "done");
-			const completed = tasks.filter((t) => t.status === "done");
-
+			const result = await incReplan(projectId, reason);
 			return {
-				message: `Found ${unfinished.length} unfinished tasks and ${completed.length} completed tasks. Generate a new plan for the unfinished work.`,
-				completedTasks: completed.map((t) => ({ title: t.title, agent: t.assignedAgent })),
-				unfinishedTasks: unfinished.map((t) => ({ title: t.title, status: t.status, agent: t.assignedAgent })),
+				message: `Re-plan complete: ${result.cancelledCount} task(s) cancelled, ${result.keptCompletedCount} completed task(s) preserved.`,
 				reason,
-				note: "Create an updated plan using createProjectPlan that covers only the unfinished work.",
+				...result,
+				note: "Use addPhaseToPlan or addTaskToPhase to add the refreshed work.",
 			};
 		},
 	}),
