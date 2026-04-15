@@ -24,6 +24,68 @@ interface SprintWorkItem {
   status: string;
 }
 
+interface BurndownPoint {
+  date: string;
+  remaining: number;
+}
+
+function BurndownChart({ points, totalItems }: { points: BurndownPoint[]; totalItems: number }) {
+  if (points.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-32 rounded-lg bg-[#0d0d0d] border border-[#1a1a1a]">
+        <span className="text-[12px] text-[#333]">Henüz veri yok</span>
+      </div>
+    );
+  }
+
+  const W = 400;
+  const H = 110;
+  const P = 16; // padding
+  const maxY = Math.max(totalItems, ...points.map((p) => p.remaining), 1);
+  const step = points.length > 1 ? (W - P * 2) / (points.length - 1) : 0;
+  const toX = (i: number) => P + i * step;
+  const toY = (v: number) => H - P - (v / maxY) * (H - P * 2);
+
+  const actualPath = points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(p.remaining)}`)
+    .join(' ');
+
+  // Ideal burndown: linear from totalItems to 0 across same date range
+  const idealStart = toY(totalItems);
+  const idealEnd = toY(0);
+  const idealPath = `M ${P} ${idealStart} L ${W - P} ${idealEnd}`;
+
+  return (
+    <div className="rounded-lg bg-[#0d0d0d] border border-[#1a1a1a] p-2 overflow-hidden">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="w-full h-32"
+        role="img"
+        aria-label="Burndown chart"
+      >
+        {/* grid baseline */}
+        <line x1={P} y1={H - P} x2={W - P} y2={H - P} stroke="#1a1a1a" strokeWidth={1} />
+        {/* ideal */}
+        <path d={idealPath} stroke="#525252" strokeWidth={1} strokeDasharray="3,3" fill="none" />
+        {/* actual */}
+        <path d={actualPath} stroke="#3b82f6" strokeWidth={1.5} fill="none" />
+        {points.map((p, i) => (
+          <circle key={`${p.date}-${i}`} cx={toX(i)} cy={toY(p.remaining)} r={2} fill="#3b82f6" />
+        ))}
+      </svg>
+      <div className="flex items-center justify-between text-[10px] text-[#525252] px-2 pt-1">
+        <span>{points[0]?.date}</span>
+        <span className="flex items-center gap-3">
+          <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#3b82f6]" /> Gerçek</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-px border-t border-dashed border-[#525252]" /> İdeal</span>
+        </span>
+        <span>{points[points.length - 1]?.date}</span>
+      </div>
+    </div>
+  );
+}
+
 const STATUS_BADGE: Record<SprintStatus, string> = {
   planned: 'bg-[#1e3a5f] text-[#93c5fd] border-[#2563eb]',
   active: 'bg-[#052e16] text-[#86efac] border-[#166534]',
@@ -43,6 +105,7 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
   const [selectedId, setSelectedId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [burndown, setBurndown] = useState<BurndownPoint[]>([]);
 
   const load = useCallback(() => {
     fetch(`${BASE}/api/studio/projects/${projectId}/sprints`)
@@ -62,6 +125,17 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setBurndown([]);
+      return;
+    }
+    fetch(`${BASE}/api/studio/sprints/${selectedId}/burndown`)
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((body) => setBurndown(Array.isArray(body?.data) ? body.data : []))
+      .catch(() => setBurndown([]));
+  }, [selectedId]);
 
   const handleCreateSprint = async () => {
     setCreating(true);
@@ -249,15 +323,14 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
                 </div>
               </div>
 
-              {/* Burndown placeholder */}
+              {/* Burndown chart */}
               <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <TrendingUp size={14} className="text-[#3b82f6]" />
                   <h3 className="text-[12px] font-semibold text-[#fafafa]">Burndown Chart</h3>
+                  <span className="ml-auto text-[10px] text-[#525252]">{burndown.length} gün</span>
                 </div>
-                <div className="flex items-center justify-center h-32 rounded-lg bg-[#0d0d0d] border border-[#1a1a1a]">
-                  <span className="text-[12px] text-[#333]">Burndown Chart</span>
-                </div>
+                <BurndownChart points={burndown} totalItems={totalCount} />
               </div>
 
               {/* Work items list */}
