@@ -16,7 +16,14 @@ interface WorkItem {
   priority: Priority;
   labels?: string[];
   source?: string;
+  sprintId?: string | null;
   createdAt: string;
+}
+
+interface SprintOption {
+  id: string;
+  name: string;
+  status: string;
 }
 
 const COLUMNS: { key: WorkItemStatus; label: string; color: string }[] = [
@@ -141,7 +148,17 @@ function NewItemModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (f
   );
 }
 
-function WorkItemCard({ item, onConvert }: { item: WorkItem; onConvert: (id: string) => void }) {
+function WorkItemCard({
+  item,
+  sprints,
+  onConvert,
+  onAssignSprint,
+}: {
+  item: WorkItem;
+  sprints: SprintOption[];
+  onConvert: (id: string) => void;
+  onAssignSprint: (id: string, sprintId: string | null) => void;
+}) {
   return (
     <div className="bg-[#111111] border border-[#262626] rounded-lg p-3 hover:border-[#333] transition-colors">
       <div className="flex items-start gap-2 mb-2">
@@ -163,7 +180,20 @@ function WorkItemCard({ item, onConvert }: { item: WorkItem; onConvert: (id: str
         )}
       </div>
 
-      <div className="flex justify-end mt-2 pt-2 border-t border-[#1a1a1a]">
+      <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#1a1a1a] gap-2">
+        <select
+          value={item.sprintId ?? ''}
+          onChange={(e) => onAssignSprint(item.id, e.target.value || null)}
+          className="text-[10px] bg-[#0a0a0a] border border-[#262626] rounded px-1.5 py-0.5 text-[#a3a3a3] hover:border-[#333] focus:outline-none focus:border-[#22c55e]"
+          aria-label="Assign sprint"
+        >
+          <option value="">Sprint yok</option>
+          {sprints.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           onClick={() => onConvert(item.id)}
@@ -179,6 +209,7 @@ function WorkItemCard({ item, onConvert }: { item: WorkItem; onConvert: (id: str
 
 export default function BacklogBoard({ projectId }: { projectId: string }) {
   const [items, setItems] = useState<WorkItem[]>([]);
+  const [sprints, setSprints] = useState<SprintOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [filterType, setFilterType] = useState<WorkItemType | ''>('');
@@ -187,9 +218,14 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
   const [showFilters, setShowFilters] = useState(false);
 
   const load = useCallback(() => {
-    fetch(`${BASE}/api/studio/projects/${projectId}/work-items`)
-      .then((r) => r.json())
-      .then((data) => setItems(Array.isArray(data) ? data : (data.items ?? [])))
+    Promise.all([
+      fetch(`${BASE}/api/studio/projects/${projectId}/work-items`).then((r) => r.json()),
+      fetch(`${BASE}/api/studio/projects/${projectId}/sprints`).then((r) => r.json()).catch(() => []),
+    ])
+      .then(([wi, sp]) => {
+        setItems(Array.isArray(wi) ? wi : (wi.items ?? []));
+        setSprints(Array.isArray(sp) ? sp : (sp.sprints ?? []));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [projectId]);
@@ -214,6 +250,17 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
     try {
       await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}/plan`, {
         method: 'POST',
+      });
+      load();
+    } catch {}
+  };
+
+  const handleAssignSprint = async (itemId: string, sprintId: string | null) => {
+    try {
+      await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sprintId }),
       });
       load();
     } catch {}
@@ -342,7 +389,13 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
                 </div>
                 <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
                   {colItems.map((item) => (
-                    <WorkItemCard key={item.id} item={item} onConvert={handleConvert} />
+                    <WorkItemCard
+                      key={item.id}
+                      item={item}
+                      sprints={sprints}
+                      onConvert={handleConvert}
+                      onAssignSprint={handleAssignSprint}
+                    />
                   ))}
                   {colItems.length === 0 && (
                     <div className="flex items-center justify-center py-8 text-[11px] text-[#333]">
