@@ -779,90 +779,105 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 			};
 		},
 	}),
-};
 
-// v3.2: Work Item → Plan conversion tool
-const convertWorkItemsToPlanTool = tool({
-	description: "Convert backlog work items into plan phases and tasks. Takes work item IDs and generates a plan that can be appended to the existing project plan.",
-	inputSchema: z.object({
-		projectId: z.string().describe("The project ID"),
-		workItemIds: z.array(z.string()).describe("IDs of work items to convert into tasks"),
-	}),
-	execute: async ({ projectId, workItemIds }) => {
-		// Placeholder — actual implementation will query work items and generate plan
-		return {
-			message: `${workItemIds.length} work items queued for plan conversion.`,
-			workItemIds,
-			note: "Use createProjectPlan or updateProjectPlan to generate the actual plan including these work items.",
-		};
-	},
-});
-
-// v3.3: Incremental planning tools
-const addPhaseToPlanTool = tool({
-	description: "Add a new phase to an existing approved plan. The new phase is appended after the last phase.",
-	inputSchema: z.object({
-		projectId: z.string().describe("The project ID"),
-		phase: phaseSchema.describe("The new phase to add"),
-	}),
-	execute: async ({ projectId, phase }) => {
-		const plan = await getLatestPlan(projectId);
-		if (!plan) throw new Error(`No plan found for project ${projectId}`);
-
-		const maxOrder = Math.max(...plan.phases.map((p) => p.order), 0);
-		const result = await buildPlan(projectId, [{ ...phase, order: maxOrder + 1 }]);
-		return { ...result, message: `Phase "${phase.name}" added to plan at order ${maxOrder + 1}.` };
-	},
-});
-
-const addTaskToPhaseTool = tool({
-	description: "Add a task to an existing running or pending phase.",
-	inputSchema: z.object({
-		projectId: z.string().describe("The project ID"),
-		phaseName: z.string().describe("Name of the target phase"),
-		task: z.object({
-			title: z.string(),
-			description: z.string(),
-			assignedRole: z.string(),
-			complexity: z.enum(["S", "M", "L", "XL"]),
-			branch: z.string(),
-			taskType: z.enum(["ai", "integration-test", "run-app"]).default("ai"),
-			targetFiles: z.array(z.string()).default([]),
-			estimatedLines: z.number().int().optional(),
+	// v3.2: Work Item → Plan conversion tool
+	convertWorkItemsToPlan: tool({
+		description:
+			"Convert backlog work items into planned tasks attached to the project's latest plan. Each work item becomes a task under a 'Backlog' phase with an agent/complexity picked from its type and priority.",
+		inputSchema: z.object({
+			projectId: z.string().describe("The project ID"),
+			workItemIds: z.array(z.string()).describe("IDs of work items to convert into tasks"),
 		}),
+		execute: async ({ projectId, workItemIds }) => {
+			const { planWorkItem } = await import("./work-item-planner.js");
+			const planned: Array<{ workItemId: string; taskId: string; title: string }> = [];
+			const failed: Array<{ workItemId: string; error: string }> = [];
+
+			for (const itemId of workItemIds) {
+				try {
+					const result = await planWorkItem(itemId);
+					planned.push({ workItemId: itemId, taskId: result.task.id, title: result.task.title });
+				} catch (err) {
+					failed.push({ workItemId: itemId, error: err instanceof Error ? err.message : String(err) });
+				}
+			}
+
+			return {
+				projectId,
+				message: `${planned.length}/${workItemIds.length} work items converted to tasks.`,
+				planned,
+				failed,
+			};
+		},
 	}),
-	execute: async ({ projectId, phaseName, task }) => {
-		const plan = await getLatestPlan(projectId);
-		if (!plan) throw new Error(`No plan found for project ${projectId}`);
 
-		const phase = plan.phases.find((p) => p.name === phaseName);
-		if (!phase) throw new Error(`Phase "${phaseName}" not found in plan`);
+	// v3.3: Incremental planning tools
+	addPhaseToPlan: tool({
+		description: "Add a new phase to an existing approved plan. The new phase is appended after the last phase.",
+		inputSchema: z.object({
+			projectId: z.string().describe("The project ID"),
+			phase: phaseSchema.describe("The new phase to add"),
+		}),
+		execute: async ({ projectId, phase }) => {
+			const plan = await getLatestPlan(projectId);
+			if (!plan) throw new Error(`No plan found for project ${projectId}`);
 
-		return {
-			message: `Task "${task.title}" queued for addition to phase "${phaseName}".`,
-			phaseId: phase.id,
-			task,
-		};
-	},
-});
-
-const replanUnfinishedTasksTool = tool({
-	description: "Re-plan unfinished tasks (queued/failed) while preserving all completed work. Use this when the current plan needs reorganization.",
-	inputSchema: z.object({
-		projectId: z.string().describe("The project ID"),
-		reason: z.string().describe("Why re-planning is needed"),
+			const maxOrder = Math.max(...plan.phases.map((p) => p.order), 0);
+			const result = await buildPlan(projectId, [{ ...phase, order: maxOrder + 1 }]);
+			return { ...result, message: `Phase "${phase.name}" added to plan at order ${maxOrder + 1}.` };
+		},
 	}),
-	execute: async ({ projectId, reason }) => {
-		const tasks = await listProjectTasks(projectId);
-		const unfinished = tasks.filter((t) => t.status !== "done");
-		const completed = tasks.filter((t) => t.status === "done");
 
-		return {
-			message: `Found ${unfinished.length} unfinished tasks and ${completed.length} completed tasks. Generate a new plan for the unfinished work.`,
-			completedTasks: completed.map((t) => ({ title: t.title, agent: t.assignedAgent })),
-			unfinishedTasks: unfinished.map((t) => ({ title: t.title, status: t.status, agent: t.assignedAgent })),
-			reason,
-			note: "Create an updated plan using createProjectPlan that covers only the unfinished work.",
-		};
-	},
-});
+	addTaskToPhase: tool({
+		description: "Add a task to an existing running or pending phase.",
+		inputSchema: z.object({
+			projectId: z.string().describe("The project ID"),
+			phaseName: z.string().describe("Name of the target phase"),
+			task: z.object({
+				title: z.string(),
+				description: z.string(),
+				assignedRole: z.string(),
+				complexity: z.enum(["S", "M", "L", "XL"]),
+				branch: z.string(),
+				taskType: z.enum(["ai", "integration-test", "run-app"]).default("ai"),
+				targetFiles: z.array(z.string()).default([]),
+				estimatedLines: z.number().int().optional(),
+			}),
+		}),
+		execute: async ({ projectId, phaseName, task }) => {
+			const plan = await getLatestPlan(projectId);
+			if (!plan) throw new Error(`No plan found for project ${projectId}`);
+
+			const phase = plan.phases.find((p) => p.name === phaseName);
+			if (!phase) throw new Error(`Phase "${phaseName}" not found in plan`);
+
+			return {
+				message: `Task "${task.title}" queued for addition to phase "${phaseName}".`,
+				phaseId: phase.id,
+				task,
+			};
+		},
+	}),
+
+	replanUnfinishedTasks: tool({
+		description:
+			"Re-plan unfinished tasks (queued/failed) while preserving all completed work. Use this when the current plan needs reorganization.",
+		inputSchema: z.object({
+			projectId: z.string().describe("The project ID"),
+			reason: z.string().describe("Why re-planning is needed"),
+		}),
+		execute: async ({ projectId, reason }) => {
+			const tasks = await listProjectTasks(projectId);
+			const unfinished = tasks.filter((t) => t.status !== "done");
+			const completed = tasks.filter((t) => t.status === "done");
+
+			return {
+				message: `Found ${unfinished.length} unfinished tasks and ${completed.length} completed tasks. Generate a new plan for the unfinished work.`,
+				completedTasks: completed.map((t) => ({ title: t.title, agent: t.assignedAgent })),
+				unfinishedTasks: unfinished.map((t) => ({ title: t.title, status: t.status, agent: t.assignedAgent })),
+				reason,
+				note: "Create an updated plan using createProjectPlan that covers only the unfinished work.",
+			};
+		},
+	}),
+};
