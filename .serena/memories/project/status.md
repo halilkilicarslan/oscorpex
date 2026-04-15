@@ -1,10 +1,10 @@
 # Oscorpex — Status
 
-## Current: v3.0-v3.2 Stabilization (2026-04-15)
+## Current: v3.0–v3.3 Stabilization (2026-04-15)
 
 v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Şu an milestone bazlı gerçek implementasyon.
 
-### Session 2026-04-15 — v3.0 B1+B2+B3 + v3.2 Stabilization
+### Session 2026-04-15 — v3.0 B1+B2+B3 + v3.1 + v3.2 + v3.3
 
 **v3.0 B1 — Real Interactive Planner** (commit `b3b282a`, pushed)
 - `askuser-json` fenced block pattern (plan-json/team-json ile uyumlu)
@@ -35,17 +35,37 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Şu an milestone bazlı ge
 - pmToolkit'e wire: convertWorkItemsToPlan, addPhaseToPlan, addTaskToPhase, replanUnfinishedTasks
 - 9 unit test (work-item-planner.test.ts)
 
+**v3.1 Edge Hooks** (commit `aa79e73` + tooltips `a051847`, pushed)
+- `edge-hooks.ts` (yeni): non-DAG edge runtime handlers
+  - `applyPostCompletionHooks`: notification / mentoring / handoff doc check
+  - `taskNeedsApprovalFromEdges`: incoming approval edges gate startTask
+  - `outputHasDocumentation`: md/README/doc keyword detection
+- task-engine: `markTaskDone` → non-blocking hook fire; `startTask` → approval edge gate
+- Edge legend tooltips (TeamBuilder, TeamBuilderPage, TeamTemplatePreview): Türkçe EDGE_DESCRIPTIONS
+- 16 unit test (edge-hooks.test.ts)
+
+**v3.3 Incremental Planner** (commit `1b6bc9f`, pushed)
+- `incremental-planner.ts` (yeni): live plan mutation without new plan version
+  - `appendPhaseToPlan`: max order+1, event emit, bestEffortRefresh
+  - `appendTaskToPhase`: real createTask + role→agentId resolve
+  - `replanUnfinishedTasks`: queued/assigned/failed → failed `[replanned]` prefix, done preserved
+- PM toolkit 3 tool rewired (was: buildPlan wrapper / stub return / info-only)
+- 14 unit test (incremental-planner.test.ts)
+
 ### Test Durumu
-- Backend: 302/302 passing, `pnpm typecheck` 0 hata
+- Backend: 332/332 passing, `pnpm typecheck` 0 hata
 - Frontend: 1 yeni test dosyası (TaskDetailModal)
 
 ### Plan Kaynağı
 `.planning/architecture/V3_ROADMAP.md` — v3.0-v3.9 tüm milestone'lar.
 
 ### Sıradaki Adımlar
-- **v3.1** — Edge types stabilization (12 tip, metadata, execution-time handler'lar)
-- **v3.3** — Incremental Planning (addTaskToPhase gerçek DB persistence + pipeline refresh eksik)
 - **v3.4** — Context Assembly + Model Routing (token tasarrufu %40-60)
+- **v3.5** — Project Lifecycle (maintenance/archived states, hotfix trigger)
+- **v3.6** — Agent Communication & Ceremonies (standup/retro)
+- **v3.7** — Governance/Policy engine
+- **v3.8** — Human Interaction & Agent Chat
+- **v3.9** — Sprints & Plugin Architecture
 
 ## Previous: v3.0-v3.9 Full Platform Upgrade
 

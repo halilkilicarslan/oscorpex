@@ -683,9 +683,11 @@ CREATE INDEX IF NOT EXISTS idx_work_items_sprint        ON work_items(sprint_id)
 CREATE INDEX IF NOT EXISTS idx_ctx_snapshots_project    ON project_context_snapshots(project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ctx_snapshots_kind ON project_context_snapshots(project_id, kind);
 CREATE INDEX IF NOT EXISTS idx_conv_compactions_project ON conversation_compactions(project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_conv_compactions_channel ON conversation_compactions(project_id, channel);
 CREATE INDEX IF NOT EXISTS idx_memory_facts_project     ON memory_facts(project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_facts_key  ON memory_facts(project_id, scope, key);
 CREATE INDEX IF NOT EXISTS idx_model_routing_scope      ON model_routing_policies(scope);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_model_routing_unique ON model_routing_policies(scope, task_type, risk_level);
 
 -- v3.9: Sprint indexes
 CREATE INDEX IF NOT EXISTS idx_sprints_project          ON sprints(project_id);

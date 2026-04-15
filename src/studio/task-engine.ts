@@ -25,6 +25,7 @@ import {
 import { applyPostCompletionHooks, taskNeedsApprovalFromEdges } from "./edge-hooks.js";
 import { eventBus } from "./event-bus.js";
 import { recordAgentStep } from "./memory-bridge.js";
+import { updateWorkingMemory } from "./memory-manager.js";
 import { queryOne } from "./pg.js";
 import type { Phase, ProjectAgent, Task, TaskOutput } from "./types.js";
 
@@ -475,6 +476,11 @@ class TaskEngine {
 		// v3.1: Execution-time edge hooks — notification, mentoring, handoff doc check
 		applyPostCompletionHooks(projectId, updated, output).catch((err) => {
 			console.warn("[task-engine] applyPostCompletionHooks failed:", err);
+		});
+
+		// v3.4: Refresh working memory snapshot for downstream context packets
+		updateWorkingMemory(projectId).catch((err) => {
+			console.warn("[task-engine] updateWorkingMemory failed:", err);
 		});
 
 		// v3.0: Sub-task rollup — if this task has a parent, check if all siblings are done

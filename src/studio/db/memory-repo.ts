@@ -2,6 +2,7 @@
 // Oscorpex — Memory Repository: Context Snapshots, Facts, Routing Policies
 // ---------------------------------------------------------------------------
 
+import { randomUUID } from "node:crypto";
 import { execute, getPool, query, queryOne } from "../pg.js";
 import { now, rowToMemoryFact, rowToContextSnapshot, rowToConversationCompaction } from "./helpers.js";
 import type { MemoryFact, ProjectContextSnapshot, ConversationCompaction, ModelRoutingPolicy } from "../types.js";
@@ -19,21 +20,21 @@ export async function upsertContextSnapshot(
 	const ts = now();
 	await execute(
 		`
-    INSERT INTO context_snapshots (project_id, kind, summary_json, source_version, updated_at)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO project_context_snapshots (id, project_id, kind, summary_json, source_version, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT (project_id, kind) DO UPDATE
       SET summary_json = EXCLUDED.summary_json,
           source_version = EXCLUDED.source_version,
           updated_at = EXCLUDED.updated_at
     `,
-		[projectId, kind, JSON.stringify(summaryJson), sourceVersion, ts],
+		[randomUUID(), projectId, kind, JSON.stringify(summaryJson), sourceVersion, ts],
 	);
 	return { projectId, kind, summaryJson, sourceVersion, updatedAt: ts };
 }
 
 export async function getContextSnapshot(projectId: string, kind: string): Promise<ProjectContextSnapshot | null> {
 	const row = await queryOne<any>(
-		"SELECT * FROM context_snapshots WHERE project_id = $1 AND kind = $2",
+		"SELECT * FROM project_context_snapshots WHERE project_id = $1 AND kind = $2",
 		[projectId, kind],
 	);
 	return row ? rowToContextSnapshot(row) : null;
@@ -41,7 +42,7 @@ export async function getContextSnapshot(projectId: string, kind: string): Promi
 
 export async function getContextSnapshots(projectId: string): Promise<ProjectContextSnapshot[]> {
 	const rows = await query<any>(
-		"SELECT * FROM context_snapshots WHERE project_id = $1 ORDER BY kind",
+		"SELECT * FROM project_context_snapshots WHERE project_id = $1 ORDER BY kind",
 		[projectId],
 	);
 	return rows.map(rowToContextSnapshot);
@@ -60,14 +61,14 @@ export async function upsertConversationCompaction(
 	const ts = now();
 	await execute(
 		`
-    INSERT INTO conversation_compactions (project_id, channel, last_message_id, summary, updated_at)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO conversation_compactions (id, project_id, channel, last_message_id, summary, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT (project_id, channel) DO UPDATE
       SET last_message_id = EXCLUDED.last_message_id,
           summary = EXCLUDED.summary,
           updated_at = EXCLUDED.updated_at
     `,
-		[projectId, channel, lastMessageId, summary, ts],
+		[randomUUID(), projectId, channel, lastMessageId, summary, ts],
 	);
 	return { projectId, channel, lastMessageId, summary, updatedAt: ts };
 }
@@ -98,15 +99,15 @@ export async function upsertMemoryFact(
 	const ts = now();
 	await execute(
 		`
-    INSERT INTO memory_facts (project_id, scope, key, value, confidence, source, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    INSERT INTO memory_facts (id, project_id, scope, key, value, confidence, source, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     ON CONFLICT (project_id, scope, key) DO UPDATE
       SET value = EXCLUDED.value,
           confidence = EXCLUDED.confidence,
           source = EXCLUDED.source,
           updated_at = EXCLUDED.updated_at
     `,
-		[projectId, scope, key, value, confidence, source, ts],
+		[randomUUID(), projectId, scope, key, value, confidence, source, ts],
 	);
 	return { projectId, scope, key, value, confidence, source, updatedAt: ts };
 }
@@ -158,8 +159,8 @@ export async function upsertRoutingPolicy(data: {
 	const ts = now();
 	await execute(
 		`
-    INSERT INTO model_routing_policies (scope, task_type, risk_level, provider, model, effort, fallback_chain, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    INSERT INTO model_routing_policies (id, scope, task_type, risk_level, provider, model, effort, fallback_chain, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     ON CONFLICT (scope, task_type, risk_level) DO UPDATE
       SET provider = EXCLUDED.provider,
           model = EXCLUDED.model,
@@ -167,7 +168,7 @@ export async function upsertRoutingPolicy(data: {
           fallback_chain = EXCLUDED.fallback_chain,
           updated_at = EXCLUDED.updated_at
     `,
-		[data.scope, data.taskType, data.riskLevel, data.provider, data.model, data.effort, JSON.stringify(data.fallbackChain), ts],
+		[randomUUID(), data.scope, data.taskType, data.riskLevel, data.provider, data.model, data.effort, JSON.stringify(data.fallbackChain), ts],
 	);
 }
 
