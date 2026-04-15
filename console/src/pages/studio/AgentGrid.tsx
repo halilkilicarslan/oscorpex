@@ -287,7 +287,7 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
       {(viewMode === 'org' || viewMode === 'pipeline') && (
         <OrgChart
           projectId={projectId}
-          initialView={viewMode === 'pipeline' ? 'pipeline' : 'hierarchy'}
+          initialView={viewMode === 'pipeline' ? 'pipeline' : 'graph'}
         />
       )}
 

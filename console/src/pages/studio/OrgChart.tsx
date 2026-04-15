@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
-import { Loader2, GitBranch, ArrowRight } from 'lucide-react';
+import { Loader2, GitBranch, ArrowRight, Network } from 'lucide-react';
 import {
   fetchOrgStructure,
   type OrgNode,
@@ -7,6 +7,7 @@ import {
   roleLabel,
 } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
+import TeamGraphView from './TeamGraphView';
 
 // ---------------------------------------------------------------------------
 // Hierarchy tree node
@@ -123,13 +124,13 @@ function PipelineView({ pipeline }: { pipeline: PipelineAgent[] }) {
 
 interface OrgChartProps {
   projectId: string;
-  initialView?: 'hierarchy' | 'pipeline';
+  initialView?: 'graph' | 'hierarchy' | 'pipeline';
 }
 
-export default function OrgChart({ projectId, initialView = 'hierarchy' }: OrgChartProps) {
+export default function OrgChart({ projectId, initialView = 'graph' }: OrgChartProps) {
   const [tree, setTree] = useState<OrgNode[]>([]);
   const [pipeline, setPipeline] = useState<PipelineAgent[]>([]);
-  const [view, setView] = useState<'hierarchy' | 'pipeline'>(initialView);
+  const [view, setView] = useState<'graph' | 'hierarchy' | 'pipeline'>(initialView);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -173,6 +174,17 @@ export default function OrgChart({ projectId, initialView = 'hierarchy' }: OrgCh
       <div className="flex items-center gap-2 px-6 pt-4 pb-2 border-b border-[#1a1a1a]">
         <div className="flex items-center bg-[#0a0a0a] border border-[#262626] rounded-lg p-0.5">
           <button
+            onClick={() => setView('graph')}
+            className={`px-3 py-1 rounded text-[11px] font-medium transition-colors ${
+              view === 'graph'
+                ? 'bg-[#1f1f1f] text-[#fafafa]'
+                : 'text-[#525252] hover:text-[#a3a3a3]'
+            }`}
+          >
+            <Network size={13} className="inline mr-1" />
+            Graph
+          </button>
+          <button
             onClick={() => setView('hierarchy')}
             className={`px-3 py-1 rounded text-[11px] font-medium transition-colors ${
               view === 'hierarchy'
@@ -197,7 +209,11 @@ export default function OrgChart({ projectId, initialView = 'hierarchy' }: OrgCh
 
       {/* Chart area */}
       <div className="flex-1 overflow-auto p-6">
-        {view === 'hierarchy' ? (
+        {view === 'graph' ? (
+          <div className="h-[600px]">
+            <TeamGraphView projectId={projectId} collapsible={false} fill />
+          </div>
+        ) : view === 'hierarchy' ? (
           tree.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <GitBranch size={32} className="text-[#333] mb-3" />
