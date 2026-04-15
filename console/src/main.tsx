@@ -13,6 +13,7 @@ const StudioHomePage = lazy(() => import('./pages/studio/StudioHomePage'));
 const ProjectPage = lazy(() => import('./pages/studio/ProjectPage'));
 const ProvidersPage = lazy(() => import('./pages/studio/ProvidersPage'));
 const TeamBuilderPage = lazy(() => import('./pages/studio/TeamBuilderPage'));
+const CLIUsageMonitorPage = lazy(() => import('./pages/studio/CLIUsageMonitorPage'));
 const LogsPage = lazy(() => import('./pages/LogsPage'));
 const PromptsPage = lazy(() => import('./pages/PromptsPage'));
 const AlertsPage = lazy(() => import('./pages/AlertsPage'));
@@ -55,6 +56,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/studio" element={<StudioHomePage />} />
             <Route path="/studio/teams" element={<TeamBuilderPage />} />
             <Route path="/studio/providers" element={<ProvidersPage />} />
+            <Route path="/studio/cli-monitor" element={<CLIUsageMonitorPage />} />
             <Route path="/studio/:projectId" element={<ProjectPage />} />
           </Route>
         </Routes>

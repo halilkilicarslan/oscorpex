@@ -246,7 +246,10 @@ export interface ContainerConfig {
 
 // ---- AI Providers ----------------------------------------------------------
 
-export type AIProviderType = "openai" | "anthropic" | "google" | "ollama" | "custom";
+export type AIProviderType = "openai" | "anthropic" | "google" | "ollama" | "custom" | "cli";
+
+/** CLI subtype for type="cli" providers. Each CLI uses its own auth (no api key). */
+export type CliTool = "claude" | "codex" | "gemini";
 
 export interface AIProvider {
 	id: string;
@@ -259,6 +262,8 @@ export interface AIProvider {
 	isActive: boolean;
 	/** Fallback zincirindeki sıra. 0 = primary (default), küçük değer = daha önce denenir. */
 	fallbackOrder: number;
+	/** Only for type="cli": which CLI to spawn (claude/codex/gemini). */
+	cliTool?: CliTool;
 	createdAt: string;
 	updatedAt: string;
 }

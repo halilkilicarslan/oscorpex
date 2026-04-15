@@ -106,8 +106,12 @@ CREATE TABLE IF NOT EXISTS ai_providers (
   is_active      INTEGER NOT NULL DEFAULT 1,
   created_at     TEXT NOT NULL,
   updated_at     TEXT NOT NULL,
-  fallback_order INTEGER NOT NULL DEFAULT 0
+  fallback_order INTEGER NOT NULL DEFAULT 0,
+  cli_tool       TEXT
 );
+
+-- Idempotent migration for existing DBs
+ALTER TABLE ai_providers ADD COLUMN IF NOT EXISTS cli_tool TEXT;
 
 CREATE TABLE IF NOT EXISTS team_templates (
   id          TEXT PRIMARY KEY,
@@ -237,6 +241,32 @@ CREATE TABLE IF NOT EXISTS token_usage (
 -- Migration: add cache token columns to existing token_usage tables
 ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS cache_creation_tokens INTEGER DEFAULT 0;
 ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS cache_read_tokens INTEGER DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS cli_probe_settings (
+  provider_id              TEXT PRIMARY KEY,
+  enabled                  INTEGER NOT NULL DEFAULT 0,
+  allow_auth_file_read     INTEGER NOT NULL DEFAULT 0,
+  allow_network_probe      INTEGER NOT NULL DEFAULT 0,
+  refresh_interval_sec     INTEGER NOT NULL DEFAULT 300,
+  updated_at               TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cli_usage_snapshots (
+  id            TEXT PRIMARY KEY,
+  provider_id   TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  captured_at   TEXT NOT NULL,
+  source        TEXT NOT NULL DEFAULT 'unavailable',
+  confidence    TEXT NOT NULL DEFAULT 'low'
+);
+
+CREATE TABLE IF NOT EXISTS cli_probe_events (
+  id          TEXT PRIMARY KEY,
+  provider_id TEXT NOT NULL,
+  status      TEXT NOT NULL,
+  message     TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL
+);
 
 -- Migration: add dependencies column to existing team_templates tables
 ALTER TABLE team_templates ADD COLUMN IF NOT EXISTS dependencies TEXT NOT NULL DEFAULT '[]';
@@ -666,6 +696,9 @@ CREATE INDEX IF NOT EXISTS idx_agent_runs_project     ON agent_runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_agent_runs_agent       ON agent_runs(agent_id);
 CREATE INDEX IF NOT EXISTS idx_token_usage_project    ON token_usage(project_id);
 CREATE INDEX IF NOT EXISTS idx_token_usage_task       ON token_usage(task_id);
+CREATE INDEX IF NOT EXISTS idx_cli_usage_snapshots_provider ON cli_usage_snapshots(provider_id);
+CREATE INDEX IF NOT EXISTS idx_cli_usage_snapshots_captured ON cli_usage_snapshots(captured_at);
+CREATE INDEX IF NOT EXISTS idx_cli_probe_events_provider    ON cli_probe_events(provider_id);
 CREATE INDEX IF NOT EXISTS idx_sonar_scans_project    ON sonar_scans(project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_settings_unique ON project_settings(project_id, category, key);
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);

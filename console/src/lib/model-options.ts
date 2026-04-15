@@ -2,7 +2,7 @@
 // Oscorpex — Shared model option lists
 // ---------------------------------------------------------------------------
 
-export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom';
+export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom' | 'cli';
 
 export const MODEL_OPTIONS: Record<AIProviderType, string[]> = {
   openai: [
@@ -42,6 +42,7 @@ export const MODEL_OPTIONS: Record<AIProviderType, string[]> = {
     'qwen2.5-coder',
   ],
   custom: [],
+  cli: ['sonnet', 'opus', 'haiku', 'gpt-5-codex', 'gemini-2.0-flash'],
 };
 
 // Get all available models grouped by active provider type.

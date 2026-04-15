@@ -7,6 +7,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI, openai } from "@ai-sdk/openai";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
+import { CliLanguageModel, defaultModelForCliTool } from "./cli-language-model.js";
 import { getDefaultProvider, getFallbackChain, getRawProviderApiKey } from "./db.js";
 import type { AIProvider } from "./types.js";
 
@@ -134,6 +135,8 @@ function defaultModelForType(type: string): string {
 			return "gemini-1.5-flash";
 		case "ollama":
 			return "llama3.2";
+		case "cli":
+			return "sonnet";
 		default:
 			return "gpt-4o-mini";
 	}
@@ -188,6 +191,11 @@ async function buildModelFromProvider(provider: AIProvider): Promise<LanguageMod
 				return createOpenAI({ baseURL, apiKey })(modelName);
 			}
 			return createOpenAI({ apiKey })(modelName);
+		}
+		case "cli": {
+			const cliTool = provider.cliTool ?? "claude";
+			const effectiveModel = provider.model?.trim() || defaultModelForCliTool(cliTool);
+			return new CliLanguageModel(cliTool, effectiveModel);
 		}
 		default:
 			return openai("gpt-4o-mini");

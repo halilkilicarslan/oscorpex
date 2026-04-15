@@ -177,6 +177,7 @@ export function rowToProvider(row: any, masked = false): AIProvider {
 		isActive: Boolean(row.is_active),
 		// fallback_order kolonu sonradan migration ile eklendi; null gelebilir
 		fallbackOrder: row.fallback_order ?? 0,
+		cliTool: row.cli_tool ?? undefined,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};
