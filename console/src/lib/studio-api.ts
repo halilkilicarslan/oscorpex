@@ -487,6 +487,10 @@ export async function fetchProjectAgents(projectId: string): Promise<ProjectAgen
   return json(await fetch(`${BASE}/projects/${projectId}/team`));
 }
 
+export async function fetchProjectDependencies(projectId: string): Promise<AgentDependency[]> {
+  return json(await fetch(`${BASE}/projects/${projectId}/dependencies`));
+}
+
 export async function fetchAvatars(gender?: Gender): Promise<AvatarOption[]> {
   const query = gender ? `?gender=${gender}` : '';
   return json(await fetch(`${BASE}/avatars${query}`));

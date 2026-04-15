@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import TerminalSheet from './TerminalSheet';
 import TaskDetailModal from './TaskDetailModal';
+import TeamGraphView from './TeamGraphView';
 import AgentAvatarImg from '../../components/AgentAvatar';
 import {
   startPipeline,
@@ -52,6 +53,7 @@ const ROLE_COLORS: Record<string, string> = {
   reviewer: '#ef4444',
   devops: '#0ea5e9',
 };
+
 
 // Pipeline durum renkleri
 const PIPELINE_STATUS_COLORS: Record<string, string> = {
@@ -656,31 +658,34 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
   // ---- Boş durum: Pipeline henüz başlatılmamış ----------------------------
   if (!pipelineState) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <div className="w-14 h-14 rounded-2xl bg-[#111111] border border-[#262626] flex items-center justify-center mb-4">
-          <GitBranch size={24} className="text-[#525252]" />
-        </div>
-        <h3 className="text-[15px] font-semibold text-[#a3a3a3] mb-1">Pipeline Başlatılmamış</h3>
-        <p className="text-[12px] text-[#525252] max-w-xs mb-6">
-          Pipeline'ı başlatarak ajan ekibinizi otomatik çalıştırabilir ve aşamaları takip edebilirsiniz.
-        </p>
-        {error && (
-          <p className="text-[11px] text-[#ef4444] mb-4 bg-[#ef4444]/10 px-3 py-1.5 rounded-lg">
-            {error}
+      <div className="flex flex-col h-full">
+        <TeamGraphView projectId={projectId} />
+        <div className="flex flex-col items-center justify-center flex-1 text-center p-8">
+          <div className="w-14 h-14 rounded-2xl bg-[#111111] border border-[#262626] flex items-center justify-center mb-4">
+            <GitBranch size={24} className="text-[#525252]" />
+          </div>
+          <h3 className="text-[15px] font-semibold text-[#a3a3a3] mb-1">Pipeline Başlatılmamış</h3>
+          <p className="text-[12px] text-[#525252] max-w-xs mb-6">
+            Pipeline'ı başlatarak ajan ekibinizi otomatik çalıştırabilir ve aşamaları takip edebilirsiniz.
           </p>
-        )}
-        <button
-          onClick={handleStart}
-          disabled={actionLoading}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#0a0a0a] text-[13px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {actionLoading ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Play size={14} />
+          {error && (
+            <p className="text-[11px] text-[#ef4444] mb-4 bg-[#ef4444]/10 px-3 py-1.5 rounded-lg">
+              {error}
+            </p>
           )}
-          Pipeline Başlat
-        </button>
+          <button
+            onClick={handleStart}
+            disabled={actionLoading}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#0a0a0a] text-[13px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {actionLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Play size={14} />
+            )}
+            Pipeline Başlat
+          </button>
+        </div>
       </div>
     );
   }
@@ -786,6 +791,9 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
 
       {/* ---- Ana içerik ------------------------------------------------------ */}
       <div className="flex-1 overflow-auto p-5 flex flex-col gap-5">
+
+        {/* ---- Takım dependency graph -------------------------------------- */}
+        <TeamGraphView projectId={projectId} />
 
         {/* ---- Yatay pipeline akışı ---------------------------------------- */}
         <div className="flex items-center gap-0 overflow-x-auto pb-2">

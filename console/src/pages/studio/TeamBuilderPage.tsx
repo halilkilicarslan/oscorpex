@@ -45,6 +45,7 @@ import {
 } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
 import PresetAgentSheet from './PresetAgentSheet';
+import EdgeInfoPanel from './EdgeInfoPanel';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -348,6 +349,7 @@ function FlowCanvas({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initEdges);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
   const [pendingConnection, setPendingConnection] = useState<{ source: string; target: string; x: number; y: number } | null>(null);
+  const [selectedEdgeInfo, setSelectedEdgeInfo] = useState<{ type: string; fromLabel?: string; toLabel?: string } | null>(null);
   const { screenToFlowPosition } = useReactFlow();
 
   const placedRoles = useMemo(() => new Set(nodes.map((n) => n.id)), [nodes]);
@@ -453,6 +455,17 @@ function FlowCanvas({
             const data = node.data as BuilderNodeData | undefined;
             if (data?.preset && onAgentClick) onAgentClick(data.preset);
           }}
+          onEdgeClick={(_, edge) => {
+            const type = (edge.data as { type?: string } | undefined)?.type ?? 'workflow';
+            const fromPreset = (nodes.find((n) => n.id === edge.source)?.data as BuilderNodeData | undefined)?.preset;
+            const toPreset = (nodes.find((n) => n.id === edge.target)?.data as BuilderNodeData | undefined)?.preset;
+            setSelectedEdgeInfo({
+              type,
+              fromLabel: fromPreset?.name ?? fromPreset?.role ?? edge.source,
+              toLabel: toPreset?.name ?? toPreset?.role ?? edge.target,
+            });
+          }}
+          onPaneClick={() => setSelectedEdgeInfo(null)}
           nodeTypes={nodeTypes}
           fitView
           className="bg-[#0a0a0a]"
@@ -474,6 +487,10 @@ function FlowCanvas({
             onSelect={handleEdgeTypeSelect}
             onCancel={() => setPendingConnection(null)}
           />
+        )}
+
+        {selectedEdgeInfo && (
+          <EdgeInfoPanel edge={selectedEdgeInfo} onClose={() => setSelectedEdgeInfo(null)} />
         )}
       </div>
     </div>
