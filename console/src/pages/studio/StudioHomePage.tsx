@@ -814,21 +814,27 @@ function CreateProjectModal({ onClose, onCreate }: {
                       <div className="rounded-2xl border border-[#1f1f1f] bg-[#0c0c0c] p-4">
                         <div className="text-[11px] font-medium text-[#a3a3a3] mb-3">Conversation</div>
                         <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
-                          {architectMessages.map((message, index) => (
-                            <div key={`${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                              <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-6 ${
-                                message.role === 'user'
-                                  ? 'bg-[#1f3d2a] text-[#e5e7eb]'
-                                  : 'bg-[#151515] border border-[#262626] text-[#d4d4d8]'
-                              }`}>
-                                {message.content}
+                          {architectMessages.map((message, index) => {
+                            const displayContent = message.role === 'assistant'
+                              ? message.content.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').trim()
+                              : message.content;
+                            if (!displayContent) return null;
+                            return (
+                              <div key={`${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-6 whitespace-pre-wrap ${
+                                  message.role === 'user'
+                                    ? 'bg-[#1f3d2a] text-[#e5e7eb]'
+                                    : 'bg-[#151515] border border-[#262626] text-[#d4d4d8]'
+                                }`}>
+                                  {displayContent}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                           {architectStreaming && (
                             <div className="flex justify-start">
                               <div className="max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-6 bg-[#151515] border border-[#262626] text-[#d4d4d8] whitespace-pre-wrap">
-                                {architectStreamText || 'Thinking...'}
+                                {architectStreamText.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').trim() || 'Thinking...'}
                               </div>
                             </div>
                           )}
