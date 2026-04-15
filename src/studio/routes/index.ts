@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { seedPresetAgents, seedTeamTemplates } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { budgetGuard } from "../middleware/policy-middleware.js";
+import { notifyPlugins } from "../plugin-registry.js";
 import { sendWebhookNotification } from "../webhook-sender.js";
 
 import { agentRoutes } from "./agent-routes.js";
@@ -19,6 +20,7 @@ import { pipelineRoutes } from "./pipeline-routes.js";
 import { projectRoutes } from "./project-routes.js";
 import { providerRoutes } from "./provider-routes.js";
 import { runtimeRoutes } from "./runtime-routes.js";
+import { sprintRoutes } from "./sprint-routes.js";
 import { taskRoutes } from "./task-routes.js";
 import { teamRoutes } from "./team-routes.js";
 import { workItemRoutes } from "./work-item-routes.js";
@@ -38,6 +40,13 @@ eventBus.on("task:completed", (event) => {
 		agentId: event.agentId ?? "",
 		...payload,
 	}).catch((err) => console.warn("[webhook] task_completed gonderilemedi:", err));
+
+	// v3.9: Notify plugins (non-blocking)
+	notifyPlugins("onTaskComplete", {
+		projectId: event.projectId,
+		taskId: event.taskId ?? "",
+		agentId: event.agentId ?? "",
+	}).catch((err) => console.warn("[plugin-registry] onTaskComplete failed:", err));
 });
 
 eventBus.on("task:failed", (event) => {
@@ -55,6 +64,30 @@ eventBus.on("pipeline:completed", (event) => {
 	sendWebhookNotification(event.projectId, "pipeline_completed", {
 		...(event.payload as Record<string, unknown>),
 	}).catch((err) => console.warn("[webhook] pipeline_completed gonderilemedi:", err));
+
+	// v3.9: Notify plugins (non-blocking)
+	const payload = event.payload as Record<string, unknown>;
+	notifyPlugins("onPipelineComplete", {
+		projectId: event.projectId,
+		status: String(payload.status ?? "completed"),
+	}).catch((err) => console.warn("[plugin-registry] onPipelineComplete failed:", err));
+});
+
+eventBus.on("work_item:created", (event) => {
+	const payload = event.payload as Record<string, unknown>;
+	notifyPlugins("onWorkItemCreated", {
+		projectId: event.projectId,
+		itemId: String(payload.itemId ?? payload.id ?? ""),
+		type: String(payload.type ?? "feature"),
+	}).catch((err) => console.warn("[plugin-registry] onWorkItemCreated failed:", err));
+});
+
+eventBus.on("phase:completed", (event) => {
+	const payload = event.payload as Record<string, unknown>;
+	notifyPlugins("onPhaseComplete", {
+		projectId: event.projectId,
+		phaseId: String(payload.phaseId ?? ""),
+	}).catch((err) => console.warn("[plugin-registry] onPhaseComplete failed:", err));
 });
 
 eventBus.on("budget:warning", (event) => {
@@ -91,5 +124,6 @@ studio.route("/", providerRoutes);
 studio.route("/", workItemRoutes);
 studio.route("/", lifecycleRoutes);
 studio.route("/", ceremonyRoutes);
+studio.route("/", sprintRoutes);
 
 export { studio as studioRoutes };
