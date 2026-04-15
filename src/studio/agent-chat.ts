@@ -3,6 +3,8 @@
 // Conversational interface for interacting with individual project agents
 // ---------------------------------------------------------------------------
 
+import { generateText } from "ai";
+import { getAIModelWithFallback } from "./ai-provider-factory.js";
 import { getProject, getProjectAgent, insertChatMessage } from "./db.js";
 import type { ProjectAgent } from "./types.js";
 
@@ -77,8 +79,7 @@ export async function chatWithAgent(
 		`Tech Stack: ${(project.techStack ?? []).join(", ") || "N/A"}`,
 	].join("\n");
 
-	// Build the prompt (available for logging / future AI integration)
-	const _prompt = buildAgentChatPrompt(agent, projectSummary, message);
+	const prompt = buildAgentChatPrompt(agent, projectSummary, message);
 
 	// Persist user message
 	await insertChatMessage({
@@ -87,8 +88,22 @@ export async function chatWithAgent(
 		content: message,
 	});
 
-	// Placeholder response — AI integration point (replace with actual call)
-	const response = buildPlaceholderResponse(agent, message);
+	let response: string;
+	try {
+		response = await getAIModelWithFallback(async (model, info) => {
+			const result = await generateText({
+				model,
+				prompt,
+				maxOutputTokens: 600,
+			});
+			console.log(`[agent-chat] AI reply via ${info.modelName} (${info.providerType}) — ${result.text.length} chars`);
+			return result.text.trim();
+		});
+	} catch (err) {
+		const errMsg = err instanceof Error ? err.message : String(err);
+		console.warn(`[agent-chat] AI call failed, falling back to placeholder: ${errMsg}`);
+		response = buildPlaceholderResponse(agent, message);
+	}
 
 	// Persist agent response
 	await insertChatMessage({
