@@ -12,10 +12,12 @@ import {
   type TeamTemplate,
 } from '../../lib/studio-api';
 import AgentCard from './AgentCard';
+import AgentChat from './AgentChat';
 import AgentDetailModal from './AgentDetailModal';
 import AgentFormModal from './AgentFormModal';
 import OrgChart from './OrgChart';
 import TeamTemplatePreview from './TeamTemplatePreview';
+import { X } from 'lucide-react';
 
 type RuntimeStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
 
@@ -82,6 +84,7 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
 
   // Modal state
   const [detailAgent, setDetailAgent] = useState<ProjectAgent | null>(null);
+  const [chatAgent, setChatAgent] = useState<ProjectAgent | null>(null);
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
   const [editTarget, setEditTarget] = useState<ProjectAgent | undefined>(undefined);
 
@@ -315,6 +318,7 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
                 onClick={() => setDetailAgent(agent)}
                 onEdit={() => handleOpenEdit(agent)}
                 onDelete={() => handleDelete(agent)}
+                onChat={() => setChatAgent(agent)}
               />
             ))}
           </div>
@@ -339,6 +343,33 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
           onClose={() => { setFormMode(null); setEditTarget(undefined); }}
           onSave={handleFormSave}
         />
+      )}
+
+      {/* Chat Modal */}
+      {chatAgent && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setChatAgent(null)}
+        >
+          <div
+            className="bg-[#0a0a0a] border border-[#262626] rounded-xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setChatAgent(null)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors z-10"
+              aria-label="Kapat"
+            >
+              <X size={14} />
+            </button>
+            <AgentChat
+              projectId={projectId}
+              agentId={chatAgent.id}
+              agentName={chatAgent.name}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

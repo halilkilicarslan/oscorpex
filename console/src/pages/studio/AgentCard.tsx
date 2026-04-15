@@ -9,6 +9,7 @@ import {
   Trash2,
   Clock,
   ChevronDown,
+  MessageSquare,
 } from 'lucide-react';
 import type { ProjectAgent } from '../../lib/studio-api';
 import AgentAvatar from '../../components/AgentAvatar';
@@ -73,6 +74,7 @@ export default function AgentCard({
   onClick,
   onEdit,
   onDelete,
+  onChat,
 }: {
   agent: ProjectAgent;
   projectId: string;
@@ -82,6 +84,7 @@ export default function AgentCard({
   onClick?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onChat?: () => void;
 }) {
   const [showTerminal, setShowTerminal]     = useState(false);
   const [actionLoading, setActionLoading]   = useState(false);
@@ -256,6 +259,17 @@ export default function AgentCard({
           className="flex items-center gap-1.5"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Sohbet */}
+          {onChat && (
+            <button
+              onClick={onChat}
+              className="p-1.5 rounded-lg text-[#525252] hover:text-[#22c55e] hover:bg-[#22c55e]/10 transition-colors"
+              title="Ajan ile sohbet et"
+            >
+              <MessageSquare size={13} />
+            </button>
+          )}
+
           {/* Düzenle */}
           {onEdit && (
             <button
