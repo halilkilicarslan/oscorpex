@@ -21,42 +21,14 @@ import {
   type DependencyType,
 } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
+import { EDGE_STYLES, EDGE_LABELS, TEAM_COLOR_MAP } from './team-graph-shared';
 
-// ---------------------------------------------------------------------------
-// Color & dependency config (mirrors backend seedDefaultDependencies)
-// ---------------------------------------------------------------------------
-
+// Legacy alias (eski rol adları hâlâ bazı template'lerde olabilir)
 const COLOR_MAP: Record<string, string> = {
-  'product-owner': '#f59e0b',
-  'scrum-master': '#06b6d4',
-  'tech-lead': '#3b82f6',
-  'business-analyst': '#8b5cf6',
-  'design-lead': '#f472b6',
-  'frontend-dev': '#ec4899',
-  'backend-dev': '#22c55e',
-  'frontend-qa': '#a855f7',
-  'backend-qa': '#a855f7',
-  'frontend-reviewer': '#ef4444',
-  'backend-reviewer': '#ef4444',
-  devops: '#0ea5e9',
-  // legacy
+  ...TEAM_COLOR_MAP,
   pm: '#f59e0b', designer: '#f472b6', architect: '#3b82f6',
   frontend: '#ec4899', backend: '#22c55e', coder: '#06b6d4',
   qa: '#a855f7', reviewer: '#ef4444',
-};
-
-const EDGE_STYLES: Record<DependencyType, { stroke: string; strokeDasharray?: string; animated?: boolean }> = {
-  hierarchy: { stroke: '#525252', strokeDasharray: '5 5' },
-  workflow: { stroke: '#3b82f6' },
-  review: { stroke: '#a855f7', strokeDasharray: '8 4', animated: true },
-  gate: { stroke: '#f59e0b' },
-};
-
-const EDGE_LABELS: Record<DependencyType, string> = {
-  hierarchy: 'Reports To',
-  workflow: 'Workflow',
-  review: 'Review',
-  gate: 'Gate',
 };
 
 /** Standard dependency template — same as backend seedDefaultDependencies */

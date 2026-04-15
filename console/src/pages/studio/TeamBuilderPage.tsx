@@ -670,7 +670,7 @@ export default function TeamBuilderPage() {
   const [showNameModal, setShowNameModal] = useState<'new' | 'edit' | null>(null);
 
   // Pending canvas state (roles + deps) while naming
-  const [pendingCanvas, setPendingCanvas] = useState<{ roles: string[]; deps: { from: string; to: string; type: string }[] } | null>(null);
+  const [pendingCanvas, setPendingCanvas] = useState<{ roles: string[]; deps: { from: string; to: string; type: DependencyType }[] } | null>(null);
 
   // Right-side sheet: selected preset agent
   const [sheetAgent, setSheetAgent] = useState<AgentConfig | null>(null);
@@ -706,7 +706,7 @@ export default function TeamBuilderPage() {
 
   const handleSave = useCallback((roles: string[], deps: { from: string; to: string; type: string }[]) => {
     if (roles.length === 0) return;
-    setPendingCanvas({ roles, deps });
+    setPendingCanvas({ roles, deps: deps as { from: string; to: string; type: DependencyType }[] });
     setShowNameModal(selected ? 'edit' : 'new');
   }, [selected]);
 

@@ -35,24 +35,7 @@ import {
   type DependencyType,
 } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
-
-// ---------------------------------------------------------------------------
-// Edge stil sabitleri
-// ---------------------------------------------------------------------------
-
-const EDGE_STYLES: Record<DependencyType, { stroke: string; strokeDasharray?: string; animated?: boolean }> = {
-  hierarchy: { stroke: '#525252', strokeDasharray: '5 5' },
-  workflow:  { stroke: '#3b82f6' },
-  review:   { stroke: '#a855f7', strokeDasharray: '8 4', animated: true },
-  gate:     { stroke: '#f59e0b' },
-};
-
-const EDGE_LABELS: Record<DependencyType, string> = {
-  hierarchy: 'Reports To',
-  workflow:  'Workflow',
-  review:    'Review',
-  gate:      'Gate',
-};
+import { EDGE_STYLES, EDGE_LABELS } from './team-graph-shared';
 
 // ---------------------------------------------------------------------------
 // Custom Agent Node

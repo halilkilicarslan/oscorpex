@@ -87,7 +87,7 @@ export interface TeamTemplate {
   name: string;
   description: string;
   roles: string[];
-  dependencies: { from: string; to: string; type: string }[];
+  dependencies: { from: string; to: string; type: DependencyType }[];
   createdAt: string;
 }
 
@@ -461,7 +461,7 @@ export interface CustomTeamTemplate {
   name: string;
   description: string;
   roles: string[];
-  dependencies: { from: string; to: string; type: string }[];
+  dependencies: { from: string; to: string; type: DependencyType }[];
   createdAt: string;
 }
 
@@ -469,11 +469,11 @@ export async function fetchCustomTeams(): Promise<CustomTeamTemplate[]> {
   return json(await fetch(`${BASE}/custom-teams`));
 }
 
-export async function createCustomTeam(data: { name: string; description?: string; roles: string[]; dependencies: { from: string; to: string; type: string }[] }): Promise<CustomTeamTemplate> {
+export async function createCustomTeam(data: { name: string; description?: string; roles: string[]; dependencies: { from: string; to: string; type: DependencyType }[] }): Promise<CustomTeamTemplate> {
   return json(await fetch(`${BASE}/custom-teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
 }
 
-export async function updateCustomTeam(id: string, data: Partial<{ name: string; description: string; roles: string[]; dependencies: { from: string; to: string; type: string }[] }>): Promise<CustomTeamTemplate> {
+export async function updateCustomTeam(id: string, data: Partial<{ name: string; description: string; roles: string[]; dependencies: { from: string; to: string; type: DependencyType }[] }>): Promise<CustomTeamTemplate> {
   return json(await fetch(`${BASE}/custom-teams/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
 }
 
@@ -2122,54 +2122,70 @@ export interface ProjectReport {
 // --- Work Items (v3.2) ---
 export async function fetchWorkItems(projectId: string, filters?: Record<string, string>): Promise<WorkItem[]> {
   const params = new URLSearchParams(filters);
-  return json(`${BASE}/projects/${projectId}/work-items?${params}`);
+  return json(await fetch(`${BASE}/projects/${projectId}/work-items?${params}`));
 }
 
 export async function createWorkItem(projectId: string, data: Partial<WorkItem>): Promise<WorkItem> {
-  return json(`${BASE}/projects/${projectId}/work-items`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  return json(await fetch(`${BASE}/projects/${projectId}/work-items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }));
 }
 
 export async function updateWorkItem(projectId: string, itemId: string, data: Partial<WorkItem>): Promise<WorkItem> {
-  return json(`${BASE}/projects/${projectId}/work-items/${itemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  return json(await fetch(`${BASE}/projects/${projectId}/work-items/${itemId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }));
 }
 
 export async function deleteWorkItem(projectId: string, itemId: string): Promise<void> {
   await fetch(`${BASE}/projects/${projectId}/work-items/${itemId}`, { method: 'DELETE' });
 }
 
-export async function convertWorkItemToPlan(projectId: string, itemId: string): Promise<any> {
-  return json(`${BASE}/projects/${projectId}/work-items/${itemId}/plan`, { method: 'POST' });
+export async function convertWorkItemToPlan(projectId: string, itemId: string): Promise<unknown> {
+  return json(await fetch(`${BASE}/projects/${projectId}/work-items/${itemId}/plan`, { method: 'POST' }));
 }
 
 // --- Sub-tasks (v3.0) ---
 export async function fetchSubTasks(projectId: string, taskId: string): Promise<Task[]> {
-  return json(`${BASE}/projects/${projectId}/tasks/${taskId}/subtasks`);
+  return json(await fetch(`${BASE}/projects/${projectId}/tasks/${taskId}/subtasks`));
 }
 
 // --- Sprints (v3.9) ---
 export async function fetchSprints(projectId: string): Promise<Sprint[]> {
-  return json(`${BASE}/projects/${projectId}/sprints`);
+  return json(await fetch(`${BASE}/projects/${projectId}/sprints`));
 }
 
 export async function createSprint(projectId: string, data: { name: string; goal?: string; startDate: string; endDate: string }): Promise<Sprint> {
-  return json(`${BASE}/projects/${projectId}/sprints`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  return json(await fetch(`${BASE}/projects/${projectId}/sprints`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }));
 }
 
 // --- Ceremonies (v3.6) ---
 export async function runStandup(projectId: string): Promise<StandupReport[]> {
-  return json(`${BASE}/projects/${projectId}/ceremonies/standup`, { method: 'POST' });
+  return json(await fetch(`${BASE}/projects/${projectId}/ceremonies/standup`, { method: 'POST' }));
 }
 
 export async function runRetrospective(projectId: string): Promise<RetrospectiveReport> {
-  return json(`${BASE}/projects/${projectId}/ceremonies/retro`, { method: 'POST' });
+  return json(await fetch(`${BASE}/projects/${projectId}/ceremonies/retro`, { method: 'POST' }));
 }
 
 // --- Agent Chat (v3.8) ---
 export async function chatWithAgent(projectId: string, agentId: string, message: string): Promise<{ response: string }> {
-  return json(`${BASE}/projects/${projectId}/agents/${agentId}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) });
+  return json(await fetch(`${BASE}/projects/${projectId}/agents/${agentId}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  }));
 }
 
 // --- Reports (v3.5) ---
 export async function fetchProjectReport(projectId: string): Promise<ProjectReport> {
-  return json(`${BASE}/projects/${projectId}/report`);
+  return json(await fetch(`${BASE}/projects/${projectId}/report`));
 }
