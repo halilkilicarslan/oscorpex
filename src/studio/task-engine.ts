@@ -26,6 +26,7 @@ import { applyPostCompletionHooks, taskNeedsApprovalFromEdges } from "./edge-hoo
 import { eventBus } from "./event-bus.js";
 import { recordAgentStep } from "./memory-bridge.js";
 import { updateWorkingMemory } from "./memory-manager.js";
+import { evaluatePolicies } from "./policy-engine.js";
 import { queryOne } from "./pg.js";
 import type { Phase, ProjectAgent, Task, TaskOutput } from "./types.js";
 
@@ -185,6 +186,37 @@ class TaskEngine {
 		}
 
 		const projectId = await this.getProjectIdForTask(task);
+
+		// v3.7: Policy enforcement — governance rules can block or warn before execution.
+		try {
+			const policyResult = await evaluatePolicies(projectId, task);
+			if (!policyResult.allowed) {
+				const message = policyResult.violations.join("; ");
+				const blocked = (await updateTask(taskId, {
+					status: "failed",
+					error: `Policy violation: ${message}`,
+				}))!;
+				eventBus.emit({
+					projectId,
+					type: "task:failed",
+					agentId: task.assignedAgent,
+					taskId,
+					payload: {
+						title: task.title,
+						error: `Policy violation: ${message}`,
+						policyBlocked: true,
+						violations: policyResult.violations,
+					},
+				});
+				console.warn(`[task-engine] Task ${taskId} blocked by policy: ${message}`);
+				return blocked;
+			}
+			if (policyResult.violations.length > 0) {
+				console.warn(`[task-engine] Task ${taskId} policy warnings: ${policyResult.violations.join("; ")}`);
+			}
+		} catch (err) {
+			console.warn("[task-engine] evaluatePolicies failed (non-blocking):", err);
+		}
 
 		// Human-in-the-Loop: Onay kontrolü — budget kontrolünden önce yapılır
 		// v3.1: Incoming "approval" edge on the agent also forces human approval
