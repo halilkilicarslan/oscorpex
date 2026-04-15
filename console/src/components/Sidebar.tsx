@@ -19,6 +19,7 @@ import {
   Code2,
   Settings,
   Users,
+  Terminal,
 } from 'lucide-react';
 
 interface NavItem {
@@ -73,6 +74,7 @@ const sections: NavSection[] = [
       { to: '/studio', label: 'Projects', icon: <Code2 size={18} />, badge: 'New' },
       { to: '/studio/teams', label: 'Team Builder', icon: <Users size={18} /> },
       { to: '/studio/providers', label: 'Providers', icon: <Settings size={18} /> },
+      { to: '/studio/cli-monitor', label: 'CLI Monitor', icon: <Terminal size={18} /> },
     ],
   },
 ];

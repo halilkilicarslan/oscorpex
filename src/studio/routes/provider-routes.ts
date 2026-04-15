@@ -52,6 +52,7 @@ providerRoutes.post("/providers", async (c) => {
 		baseUrl?: string;
 		model?: string;
 		isActive?: boolean;
+		cliTool?: string;
 	};
 
 	if (!body.name?.trim()) {
@@ -65,6 +66,7 @@ providerRoutes.post("/providers", async (c) => {
 		baseUrl: body.baseUrl ?? "",
 		model: body.model ?? "",
 		isActive: body.isActive !== false,
+		cliTool: body.cliTool as any,
 	});
 
 	return c.json(provider, 201);
@@ -101,6 +103,7 @@ providerRoutes.put("/providers/:id", async (c) => {
 		baseUrl?: string;
 		model?: string;
 		isActive?: boolean;
+		cliTool?: string;
 	};
 
 	const provider = await updateProvider(c.req.param("id"), {
@@ -110,6 +113,7 @@ providerRoutes.put("/providers/:id", async (c) => {
 		baseUrl: body.baseUrl,
 		model: body.model,
 		isActive: body.isActive,
+		cliTool: body.cliTool as any,
 	});
 
 	if (!provider) return c.json({ error: "Provider not found" }, 404);

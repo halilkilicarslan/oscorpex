@@ -30,6 +30,7 @@ import {
   updateFallbackOrder,
   type AIProvider,
   type AIProviderType,
+  type CliTool,
 } from '../../lib/studio-api';
 import { MODEL_OPTIONS } from '../../lib/model-options';
 
@@ -80,6 +81,13 @@ const PROVIDER_META: Record<AIProviderType, ProviderMeta> = {
     defaultModel: '',
     models: MODEL_OPTIONS.custom,
     color: 'text-[#a3a3a3]',
+  },
+  cli: {
+    label: 'CLI (local)',
+    defaultBaseUrl: '',
+    defaultModel: 'sonnet',
+    models: MODEL_OPTIONS.cli,
+    color: 'text-[#22c55e]',
   },
 };
 
@@ -291,6 +299,7 @@ interface FormState {
   baseUrl: string;
   model: string;
   isActive: boolean;
+  cliTool: CliTool;
 }
 
 const EMPTY_FORM: FormState = {
@@ -300,6 +309,7 @@ const EMPTY_FORM: FormState = {
   baseUrl: '',
   model: 'gpt-4o-mini',
   isActive: true,
+  cliTool: 'claude',
 };
 
 function ProviderModal({
@@ -322,6 +332,7 @@ function ProviderModal({
         baseUrl: provider.baseUrl,
         model: provider.model,
         isActive: provider.isActive,
+        cliTool: provider.cliTool ?? 'claude',
       };
     }
     return { ...EMPTY_FORM };
@@ -365,6 +376,7 @@ function ProviderModal({
           baseUrl: form.baseUrl,
           model: form.model,
           isActive: form.isActive,
+          cliTool: form.type === 'cli' ? form.cliTool : undefined,
         });
       } else {
         saved = await createProvider({
@@ -374,6 +386,7 @@ function ProviderModal({
           baseUrl: form.baseUrl,
           model: form.model,
           isActive: form.isActive,
+          cliTool: form.type === 'cli' ? form.cliTool : undefined,
         });
       }
       onSaved(saved);
@@ -433,10 +446,33 @@ function ProviderModal({
               <option value="google">Google</option>
               <option value="ollama">Ollama (local)</option>
               <option value="custom">Custom</option>
+              <option value="cli">CLI (local, no API key)</option>
             </select>
           </div>
 
-          {/* API Key */}
+          {/* CLI Tool sub-selector (only when type=cli) */}
+          {form.type === 'cli' && (
+            <div>
+              <label className="text-[12px] text-[#737373] font-medium block mb-1.5">
+                CLI Tool <span className="text-[#ef4444]">*</span>
+              </label>
+              <select
+                value={form.cliTool}
+                onChange={(e) => set('cliTool', e.target.value as CliTool)}
+                className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none appearance-none"
+              >
+                <option value="claude">Claude (claude CLI)</option>
+                <option value="codex">Codex (codex CLI)</option>
+                <option value="gemini">Gemini (gemini CLI)</option>
+              </select>
+              <p className="text-[11px] text-[#525252] mt-1.5">
+                Uses your locally installed CLI — no API key needed. Ensure the binary is in PATH.
+              </p>
+            </div>
+          )}
+
+          {/* API Key — hidden for CLI type */}
+          {form.type !== 'cli' && (
           <div>
             <label className="text-[12px] text-[#737373] font-medium block mb-1.5">
               API Key
@@ -461,8 +497,10 @@ function ProviderModal({
               </button>
             </div>
           </div>
+          )}
 
-          {/* Base URL */}
+          {/* Base URL — hidden for CLI type */}
+          {form.type !== 'cli' && (
           <div>
             <label className="text-[12px] text-[#737373] font-medium block mb-1.5">
               Base URL
@@ -481,6 +519,7 @@ function ProviderModal({
               className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
             />
           </div>
+          )}
 
           {/* Model */}
           <div>

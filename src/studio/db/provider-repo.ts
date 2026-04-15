@@ -13,7 +13,9 @@ import { now, rowToProvider } from "./helpers.js";
 // ---------------------------------------------------------------------------
 
 export async function createProvider(
-	data: Pick<AIProvider, "name" | "type" | "apiKey" | "baseUrl" | "model" | "isActive">,
+	data: Pick<AIProvider, "name" | "type" | "apiKey" | "baseUrl" | "model" | "isActive"> & {
+		cliTool?: AIProvider["cliTool"];
+	},
 ): Promise<AIProvider> {
 	const id = randomUUID();
 	const ts = now();
@@ -27,10 +29,22 @@ export async function createProvider(
 
 	await execute(
 		`
-    INSERT INTO ai_providers (id, name, type, api_key, base_url, model, is_default, is_active, created_at, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    INSERT INTO ai_providers (id, name, type, api_key, base_url, model, is_default, is_active, created_at, updated_at, cli_tool)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
   `,
-		[id, data.name, data.type, encryptedKey, data.baseUrl, data.model, isDefault, data.isActive ? 1 : 0, ts, ts],
+		[
+			id,
+			data.name,
+			data.type,
+			encryptedKey,
+			data.baseUrl,
+			data.model,
+			isDefault,
+			data.isActive ? 1 : 0,
+			ts,
+			ts,
+			data.cliTool ?? null,
+		],
 	);
 
 	return (await getProvider(id))!;
@@ -48,7 +62,7 @@ export async function listProviders(): Promise<AIProvider[]> {
 
 export async function updateProvider(
 	id: string,
-	data: Partial<Pick<AIProvider, "name" | "type" | "apiKey" | "baseUrl" | "model" | "isActive">>,
+	data: Partial<Pick<AIProvider, "name" | "type" | "apiKey" | "baseUrl" | "model" | "isActive" | "cliTool">>,
 ): Promise<AIProvider | undefined> {
 	const fields: string[] = [];
 	const values: any[] = [];
@@ -78,6 +92,10 @@ export async function updateProvider(
 	if (data.isActive !== undefined) {
 		fields.push(`is_active = $${idx++}`);
 		values.push(data.isActive ? 1 : 0);
+	}
+	if (data.cliTool !== undefined) {
+		fields.push(`cli_tool = $${idx++}`);
+		values.push(data.cliTool ?? null);
 	}
 
 	if (fields.length === 0) return getProvider(id);

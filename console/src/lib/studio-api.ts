@@ -1200,9 +1200,141 @@ export async function fetchPlannerProviders(): Promise<PlannerCLIProviderInfo[]>
   return json(await fetch(`${BASE}/planner/providers`));
 }
 
+// ---- CLI Usage Observatory -------------------------------------------------
+
+export type CLIProviderId = 'claude' | 'codex' | 'gemini' | 'aider';
+export type QuotaStatus = 'healthy' | 'warning' | 'critical' | 'depleted' | 'unknown';
+
+export interface ProviderProbePermission {
+  enabled: boolean;
+  allowAuthFileRead: boolean;
+  allowNetworkProbe: boolean;
+  refreshIntervalSec: number;
+}
+
+export interface UsageQuota {
+  type: 'session' | 'weekly' | 'daily' | 'model_specific' | 'credits';
+  label: string;
+  percentRemaining?: number;
+  percentUsed?: number;
+  resetsAt?: string;
+  resetText?: string;
+  dollarRemaining?: number;
+  status: QuotaStatus;
+}
+
+export interface GlobalUsageSnapshot {
+  quotas: UsageQuota[];
+  dailyUsage?: { tokens: number; costUsd: number; sessionCount: number; workingTimeMs: number };
+  weeklyUsage?: { tokens: number; costUsd: number };
+  accountTier?: string;
+  accountEmail?: string;
+  source: 'cli_usage' | 'cli_cost' | 'local_jsonl' | 'provider_api' | 'unavailable';
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface OscorpexUsageSnapshot {
+  todayTokens: number;
+  weekTokens: number;
+  todayCostUsd: number;
+  weekCostUsd: number;
+  runCount: number;
+  failureCount: number;
+  projectBreakdown: Array<{ projectId: string; projectName: string; tokens: number; costUsd: number }>;
+}
+
+export interface UsageAttribution {
+  comparable: boolean;
+  oscorpexSharePercent?: number;
+  externalSharePercent?: number;
+  reason?: string;
+}
+
+export interface CLIUsageTrendPoint {
+  providerId: CLIProviderId;
+  capturedAt: string;
+  source: GlobalUsageSnapshot['source'];
+  confidence: GlobalUsageSnapshot['confidence'];
+  worstStatus: QuotaStatus;
+  lowestPercentRemaining?: number;
+}
+
+export interface CLIProbeEvent {
+  id: string;
+  providerId: CLIProviderId;
+  status: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface CLIUsageSnapshot {
+  providerId: CLIProviderId;
+  label: string;
+  installed: boolean;
+  binaryPath?: string;
+  version?: string;
+  authStatus: 'connected' | 'missing' | 'expired' | 'unknown' | 'not_supported';
+  global: GlobalUsageSnapshot | null;
+  oscorpex: OscorpexUsageSnapshot;
+  attribution: UsageAttribution | null;
+  permissions: ProviderProbePermission;
+  lastCheckedAt: string;
+  errors: string[];
+}
+
+export async function fetchCLIUsageProviders(): Promise<CLIUsageSnapshot[]> {
+  return json(await fetch(`${BASE}/cli-usage/providers`));
+}
+
+export async function refreshCLIUsageProviders(): Promise<CLIUsageSnapshot[]> {
+  return json(await fetch(`${BASE}/cli-usage/refresh`, { method: 'POST' }));
+}
+
+export async function fetchCLIUsageSnapshots(): Promise<CLIUsageSnapshot[]> {
+  return json(await fetch(`${BASE}/cli-usage/snapshots`));
+}
+
+export async function fetchCLIUsageHistory(providerId?: CLIProviderId, limit = 100): Promise<CLIUsageTrendPoint[]> {
+  const params = new URLSearchParams();
+  if (providerId) params.set('providerId', providerId);
+  params.set('limit', String(limit));
+  return json(await fetch(`${BASE}/cli-usage/history?${params}`));
+}
+
+export async function fetchCLIProbeEvents(providerId?: CLIProviderId, limit = 50): Promise<CLIProbeEvent[]> {
+  const params = new URLSearchParams();
+  if (providerId) params.set('providerId', providerId);
+  params.set('limit', String(limit));
+  return json(await fetch(`${BASE}/cli-usage/events?${params}`));
+}
+
+export async function fetchCLIUsageProvider(providerId: CLIProviderId): Promise<CLIUsageSnapshot> {
+  return json(await fetch(`${BASE}/cli-usage/providers/${providerId}`));
+}
+
+export async function refreshCLIUsageProvider(providerId: CLIProviderId): Promise<CLIUsageSnapshot> {
+  return json(await fetch(`${BASE}/cli-usage/providers/${providerId}/refresh`, { method: 'POST' }));
+}
+
+export async function updateCLIUsageSettings(
+  providerId: CLIProviderId,
+  settings: Partial<ProviderProbePermission>,
+): Promise<ProviderProbePermission> {
+  return json(await fetch(`${BASE}/cli-usage/providers/${providerId}/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  }));
+}
+
+export async function fetchOscorpexCLIUsage(): Promise<Record<CLIProviderId, OscorpexUsageSnapshot>> {
+  return json(await fetch(`${BASE}/cli-usage/oscorpex`));
+}
+
 // ---- AI Providers ---------------------------------------------------------
 
-export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom';
+export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom' | 'cli';
+export type CliTool = 'claude' | 'codex' | 'gemini';
 
 export interface AIProvider {
   id: string;
@@ -1215,6 +1347,8 @@ export interface AIProvider {
   isActive: boolean;
   /** Fallback zincirindeki sıra; küçük değer = daha önce denenir */
   fallbackOrder: number;
+  /** Only for type='cli': which local CLI to spawn (claude/codex/gemini). */
+  cliTool?: CliTool;
   createdAt: string;
   updatedAt: string;
 }
@@ -1249,7 +1383,7 @@ export async function updateFallbackOrder(orderedIds: string[]): Promise<AIProvi
 // ayri bir endpoint ile guncellenir.
 export type ProviderCreateInput = Pick<
   AIProvider,
-  'name' | 'type' | 'apiKey' | 'baseUrl' | 'model' | 'isActive'
+  'name' | 'type' | 'apiKey' | 'baseUrl' | 'model' | 'isActive' | 'cliTool'
 >;
 
 export async function createProvider(
