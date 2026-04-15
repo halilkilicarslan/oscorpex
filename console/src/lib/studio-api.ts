@@ -2254,3 +2254,30 @@ export async function chatWithAgent(projectId: string, agentId: string, message:
 export async function fetchProjectReport(projectId: string): Promise<ProjectReport> {
   return json(await fetch(`${BASE}/projects/${projectId}/report`));
 }
+
+// --- Lifecycle (v3.5) ---
+export interface LifecycleInfo {
+  projectId: string;
+  currentStatus: string;
+  allowedTransitions: string[];
+}
+
+export async function fetchLifecycle(projectId: string): Promise<LifecycleInfo> {
+  return json(await fetch(`${BASE}/projects/${projectId}/lifecycle`));
+}
+
+export async function transitionProjectStatus(projectId: string, to: string): Promise<{ projectId: string; status: string }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/lifecycle/transition`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to }),
+  }));
+}
+
+export async function createHotfix(projectId: string, description: string): Promise<{ projectId: string; taskId: string }> {
+  return json(await fetch(`${BASE}/projects/${projectId}/hotfix`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description }),
+  }));
+}

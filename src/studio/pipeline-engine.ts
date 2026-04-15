@@ -31,6 +31,7 @@ import { eventBus } from "./event-bus.js";
 import { executionEngine } from "./execution-engine.js";
 import { gitManager } from "./git-manager.js";
 import { GitHubIntegration } from "./github-integration.js";
+import { transitionProject } from "./lifecycle-manager.js";
 import { decrypt, isEncrypted } from "./secret-vault.js";
 import { taskEngine } from "./task-engine.js";
 import type {
@@ -616,11 +617,16 @@ class PipelineEngine {
 			console.warn("[pipeline-engine] Auto PR oluşturulamadı:", err);
 		});
 
-		// v3.5: Lifecycle transition — pipeline completion triggers maintenance readiness
-		eventBus.emit({
-			projectId,
-			type: "lifecycle:transition" as any,
-			payload: { from: "running", to: "completed", trigger: "pipeline_completed" },
+		// v3.5: Lifecycle transition — pipeline completion flips project.status to "completed"
+		// so it can enter maintenance on hotfix or be archived. Best-effort: if project is
+		// not in a valid starting state (e.g. paused), fall back to a notification event.
+		transitionProject(projectId, "completed").catch((err) => {
+			console.warn("[pipeline-engine] lifecycle transition → completed failed:", err);
+			eventBus.emit({
+				projectId,
+				type: "lifecycle:transition" as any,
+				payload: { to: "completed", trigger: "pipeline_completed", skipped: true, error: String(err) },
+			});
 		});
 	}
 

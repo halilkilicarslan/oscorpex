@@ -13,6 +13,7 @@ import { agentRoutes } from "./agent-routes.js";
 import { analyticsRoutes } from "./analytics-routes.js";
 import { gitFileRoutes } from "./git-file-routes.js";
 import { integrationRoutes } from "./integration-routes.js";
+import { lifecycleRoutes } from "./lifecycle-routes.js";
 import { pipelineRoutes } from "./pipeline-routes.js";
 import { projectRoutes } from "./project-routes.js";
 import { providerRoutes } from "./provider-routes.js";
@@ -87,5 +88,6 @@ studio.route("/", runtimeRoutes);
 studio.route("/", integrationRoutes);
 studio.route("/", providerRoutes);
 studio.route("/", workItemRoutes);
+studio.route("/", lifecycleRoutes);
 
 export { studio as studioRoutes };
