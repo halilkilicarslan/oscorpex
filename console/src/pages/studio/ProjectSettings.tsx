@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useState, useCallback } from 'react';
-import { Loader2, Save, CheckCircle2, AlertCircle, TrendingUp, Plus, Trash2, Zap, Globe } from 'lucide-react';
+import { Loader2, Save, CheckCircle2, AlertCircle, TrendingUp, Plus, Trash2, Zap, Globe, Shield, Lock, Edit2, X } from 'lucide-react';
 import {
   fetchProjectSettings,
   saveProjectSettings,
@@ -13,11 +13,15 @@ import {
   updateWebhook,
   deleteWebhook,
   testWebhook,
+  fetchCustomPolicyRules,
+  saveCustomPolicyRules,
   type SettingsMap,
   type ProjectCostSummary,
   type Webhook,
   type WebhookType,
   type WebhookEventType,
+  type PolicyRule,
+  type PolicyAction,
 } from '../../lib/studio-api';
 
 // ---------------------------------------------------------------------------
@@ -833,6 +837,395 @@ function WebhookSection({ projectId }: { projectId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Policy Section (v3.7) — Built-in + custom governance rules
+// ---------------------------------------------------------------------------
+
+const POLICY_ACTIONS: { value: PolicyAction; label: string; color: string }[] = [
+  { value: 'block', label: 'Block', color: 'text-[#f87171] border-[#7f1d1d] bg-[#450a0a]/40' },
+  { value: 'warn', label: 'Warn', color: 'text-[#fbbf24] border-[#78350f] bg-[#451a03]/40' },
+  { value: 'require_approval', label: 'Require Approval', color: 'text-[#60a5fa] border-[#1e3a8a] bg-[#0c1e3f]/40' },
+];
+
+type ConditionPattern = 'complexity' | 'title_contains' | 'branch' | 'description_contains';
+
+const CONDITION_PATTERNS: { value: ConditionPattern; label: string; placeholder: string }[] = [
+  { value: 'complexity',           label: 'complexity ==',      placeholder: 'S | M | L | XL' },
+  { value: 'title_contains',       label: 'title contains',     placeholder: 'auth, migration...' },
+  { value: 'branch',               label: 'branch ==',          placeholder: 'main, develop...' },
+  { value: 'description_contains', label: 'description contains', placeholder: 'security, hotfix...' },
+];
+
+const BUILTIN_RULES_INFO: { id: string; name: string; description: string; setting: string }[] = [
+  {
+    id: 'max_cost_per_task',
+    name: 'Max cost per task',
+    description: 'Tek bir gorevin toplam maliyeti butce tavanini asarsa bloklar.',
+    setting: 'budget.maxCostUsd > 0 iken aktif',
+  },
+  {
+    id: 'require_approval_for_large',
+    name: 'Require approval for large tasks',
+    description: 'Complexity L veya XL olan tum gorevler onay ister.',
+    setting: 'Daima aktif',
+  },
+  {
+    id: 'multi_reviewer',
+    name: 'Multi-reviewer for sensitive files',
+    description: 'Hassas dosyalara dokunan gorevlerde birden fazla reviewer uyarisi.',
+    setting: 'Daima aktif (warn)',
+  },
+];
+
+function parseCondition(condition: string): { pattern: ConditionPattern; value: string } {
+  const trimmed = condition.trim();
+  const complexityMatch = trimmed.match(/^complexity\s*==\s*(.+)$/i);
+  if (complexityMatch) return { pattern: 'complexity', value: complexityMatch[1].trim() };
+  const titleMatch = trimmed.match(/^title\s+contains\s+(.+)$/i);
+  if (titleMatch) return { pattern: 'title_contains', value: titleMatch[1].trim() };
+  const branchMatch = trimmed.match(/^branch\s*==\s*(.+)$/i);
+  if (branchMatch) return { pattern: 'branch', value: branchMatch[1].trim() };
+  const descMatch = trimmed.match(/^description\s+contains\s+(.+)$/i);
+  if (descMatch) return { pattern: 'description_contains', value: descMatch[1].trim() };
+  return { pattern: 'complexity', value: '' };
+}
+
+function buildCondition(pattern: ConditionPattern, value: string): string {
+  const v = value.trim();
+  switch (pattern) {
+    case 'complexity':           return `complexity == ${v}`;
+    case 'title_contains':       return `title contains ${v}`;
+    case 'branch':               return `branch == ${v}`;
+    case 'description_contains': return `description contains ${v}`;
+  }
+}
+
+interface PolicyRuleModalProps {
+  projectId: string;
+  initial: PolicyRule | null;
+  onClose: () => void;
+  onSave: (rule: PolicyRule) => void;
+}
+
+function PolicyRuleModal({ projectId, initial, onClose, onSave }: PolicyRuleModalProps) {
+  const parsed = initial ? parseCondition(initial.condition) : { pattern: 'complexity' as ConditionPattern, value: '' };
+  const [name, setName]       = useState(initial?.name ?? '');
+  const [pattern, setPattern] = useState<ConditionPattern>(parsed.pattern);
+  const [value, setValue]     = useState(parsed.value);
+  const [action, setAction]   = useState<PolicyAction>((initial?.action as PolicyAction) ?? 'warn');
+  const [enabled, setEnabled] = useState(initial?.enabled ?? true);
+  const [error, setError]     = useState<string | null>(null);
+
+  const handleSave = () => {
+    if (!name.trim()) { setError('Kural adi zorunludur'); return; }
+    if (!value.trim()) { setError('Kosul degeri zorunludur'); return; }
+    const rule: PolicyRule = {
+      id: initial?.id ?? `custom-${Date.now()}`,
+      projectId,
+      name: name.trim(),
+      condition: buildCondition(pattern, value),
+      action,
+      enabled,
+    };
+    onSave(rule);
+  };
+
+  const placeholder = CONDITION_PATTERNS.find((p) => p.value === pattern)?.placeholder ?? '';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-md bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
+          <h3 className="text-[12px] font-semibold text-[#fafafa]">
+            {initial ? 'Kurali Duzenle' : 'Yeni Kural'}
+          </h3>
+          <button onClick={onClose} className="text-[#525252] hover:text-[#a3a3a3]">
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-3">
+          {error && (
+            <div className="flex items-center gap-2 px-2 py-1.5 bg-[#450a0a]/40 border border-[#7f1d1d] rounded text-[10px] text-[#f87171]">
+              <AlertCircle size={10} />
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-[10px] text-[#a3a3a3] mb-1">Kural Adi</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ornegin: Security-sensitive path gate"
+              className="w-full px-2.5 py-1.5 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] placeholder-[#404040] focus:outline-none focus:border-[#22c55e]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-[#a3a3a3] mb-1">Kosul</label>
+            <div className="flex gap-2">
+              <select
+                value={pattern}
+                onChange={(e) => setPattern(e.target.value as ConditionPattern)}
+                className="px-2 py-1.5 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] focus:outline-none focus:border-[#22c55e]"
+              >
+                {CONDITION_PATTERNS.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder={placeholder}
+                className="flex-1 px-2.5 py-1.5 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] placeholder-[#404040] focus:outline-none focus:border-[#22c55e]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-[#a3a3a3] mb-1">Aksiyon</label>
+            <div className="flex gap-1.5">
+              {POLICY_ACTIONS.map((a) => (
+                <button
+                  key={a.value}
+                  onClick={() => setAction(a.value)}
+                  className={`flex-1 px-2 py-1.5 text-[10px] border rounded transition-colors ${
+                    action === a.value
+                      ? a.color
+                      : 'text-[#525252] border-[#262626] hover:border-[#404040]'
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] text-[#a3a3a3]">Aktif</label>
+            <Toggle value={enabled} onChange={setEnabled} />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[#1a1a1a]">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-[10px] text-[#a3a3a3] hover:text-[#fafafa] transition-colors"
+          >
+            Iptal
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-3 py-1.5 text-[10px] bg-[#22c55e] text-black font-medium rounded hover:bg-[#16a34a] transition-colors"
+          >
+            Kaydet
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function actionBadgeClass(action: string): string {
+  const found = POLICY_ACTIONS.find((a) => a.value === action);
+  return found?.color ?? 'text-[#a3a3a3] border-[#262626] bg-[#0a0a0a]';
+}
+
+function PolicySection({ projectId }: { projectId: string }) {
+  const [rules, setRules]         = useState<PolicyRule[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [saving, setSaving]       = useState(false);
+  const [saved, setSaved]         = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editTarget, setEditTarget] = useState<PolicyRule | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchCustomPolicyRules(projectId);
+      setRules(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Policy yuklenemedi');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const persist = async (next: PolicyRule[]) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await saveCustomPolicyRules(projectId, next);
+      setRules(next);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kaydedilemedi');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveRule = (rule: PolicyRule) => {
+    const idx = rules.findIndex((r) => r.id === rule.id);
+    const next = idx >= 0 ? rules.map((r) => (r.id === rule.id ? rule : r)) : [...rules, rule];
+    setShowModal(false);
+    setEditTarget(null);
+    void persist(next);
+  };
+
+  const handleToggle = (rule: PolicyRule) => {
+    void persist(rules.map((r) => (r.id === rule.id ? { ...r, enabled: !r.enabled } : r)));
+  };
+
+  const handleDelete = (rule: PolicyRule) => {
+    if (!confirm(`"${rule.name}" kuralini sil?`)) return;
+    void persist(rules.filter((r) => r.id !== rule.id));
+  };
+
+  const handleAdd = () => {
+    setEditTarget(null);
+    setShowModal(true);
+  };
+
+  const handleEdit = (rule: PolicyRule) => {
+    setEditTarget(rule);
+    setShowModal(true);
+  };
+
+  return (
+    <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
+      {/* Baslik */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
+        <Shield size={14} className="text-[#22c55e]" />
+        <h3 className="text-[12px] font-semibold text-[#fafafa]">Policy Rules</h3>
+        <span className="ml-auto flex items-center gap-3">
+          {saving && <Loader2 size={12} className="animate-spin text-[#525252]" />}
+          {saved && (
+            <span className="flex items-center gap-1 text-[10px] text-[#22c55e]">
+              <CheckCircle2 size={10} />
+              Kaydedildi
+            </span>
+          )}
+          <button
+            onClick={handleAdd}
+            className="flex items-center gap-1 text-[10px] text-[#525252] hover:text-[#a3a3a3] transition-colors"
+          >
+            <Plus size={10} />
+            Kural Ekle
+          </button>
+        </span>
+      </div>
+
+      {/* Aciklama */}
+      <div className="px-4 py-2">
+        <p className="text-[10px] text-[#525252]">
+          Gorev baslatilmadan once kosullari degerlendirir; bloklama, uyari veya onay isteyebilir.
+          Yerlesik kurallar daima aktiftir; kendi ozel kurallarinizi ekleyebilirsiniz.
+        </p>
+      </div>
+
+      {error && (
+        <div className="mx-4 mb-2 flex items-center gap-2 px-2 py-1.5 bg-[#450a0a]/40 border border-[#7f1d1d] rounded text-[10px] text-[#f87171]">
+          <AlertCircle size={10} />
+          {error}
+        </div>
+      )}
+
+      {/* Built-in rules */}
+      <div className="px-4 pb-3">
+        <div className="text-[9px] uppercase tracking-wider text-[#525252] mb-1.5">
+          Yerlesik Kurallar
+        </div>
+        <div className="space-y-1.5">
+          {BUILTIN_RULES_INFO.map((r) => (
+            <div
+              key={r.id}
+              className="flex items-start gap-2 px-3 py-2 bg-[#0a0a0a] border border-[#1a1a1a] rounded"
+            >
+              <Lock size={11} className="text-[#525252] mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-[#fafafa] font-medium">{r.name}</span>
+                  <span className="text-[9px] text-[#525252]">({r.setting})</span>
+                </div>
+                <div className="text-[10px] text-[#a3a3a3] mt-0.5">{r.description}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Custom rules */}
+      <div className="px-4 pb-4">
+        <div className="text-[9px] uppercase tracking-wider text-[#525252] mb-1.5">
+          Ozel Kurallar
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-4">
+            <Loader2 size={14} className="animate-spin text-[#525252]" />
+          </div>
+        ) : rules.length === 0 ? (
+          <div className="text-center py-4 text-[10px] text-[#525252] bg-[#0a0a0a] border border-[#1a1a1a] rounded">
+            Henuz ozel kural yok. &quot;Kural Ekle&quot; butonuna tiklayin.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {rules.map((r) => (
+              <div
+                key={r.id}
+                className={`flex items-center gap-2 px-3 py-2 bg-[#0a0a0a] border border-[#1a1a1a] rounded ${!r.enabled ? 'opacity-50' : ''}`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] text-[#fafafa] font-medium">{r.name}</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 border rounded ${actionBadgeClass(r.action)}`}>
+                      {r.action}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-[#a3a3a3] mt-0.5 font-mono">{r.condition}</div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Toggle value={r.enabled} onChange={() => handleToggle(r)} />
+                  <button
+                    onClick={() => handleEdit(r)}
+                    className="p-1 text-[#525252] hover:text-[#a3a3a3] transition-colors"
+                    title="Duzenle"
+                  >
+                    <Edit2 size={11} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(r)}
+                    className="p-1 text-[#525252] hover:text-[#f87171] transition-colors"
+                    title="Sil"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showModal && (
+        <PolicyRuleModal
+          projectId={projectId}
+          initial={editTarget}
+          onClose={() => { setShowModal(false); setEditTarget(null); }}
+          onSave={handleSaveRule}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
@@ -977,6 +1370,9 @@ export default function ProjectSettings({ projectId }: Props) {
 
       {/* Webhooks Bolumu */}
       <WebhookSection projectId={projectId} />
+
+      {/* Policy Rules (v3.7) */}
+      <PolicySection projectId={projectId} />
     </div>
   );
 }
