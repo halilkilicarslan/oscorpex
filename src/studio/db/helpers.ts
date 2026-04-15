@@ -43,6 +43,9 @@ import type {
 	WorkItemSource,
 	WorkItemStatus,
 	WorkItemType,
+	IntakeQuestion,
+	IntakeQuestionCategory,
+	IntakeQuestionStatus,
 } from "../types.js";
 
 // ---------------------------------------------------------------------------
@@ -266,6 +269,28 @@ export function rowToWorkItem(row: any): WorkItem {
 		sprintId: row.sprint_id ?? undefined,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
+	};
+}
+
+export function rowToIntakeQuestion(row: any): IntakeQuestion {
+	let options: string[] = [];
+	try {
+		const parsed = row.options ? JSON.parse(row.options) : [];
+		if (Array.isArray(parsed)) options = parsed.map((o) => String(o));
+	} catch {
+		options = [];
+	}
+	return {
+		id: row.id,
+		projectId: row.project_id,
+		question: row.question,
+		options,
+		category: (row.category as IntakeQuestionCategory) ?? "general",
+		status: (row.status as IntakeQuestionStatus) ?? "pending",
+		answer: row.answer ?? undefined,
+		planVersion: row.plan_version ?? undefined,
+		createdAt: row.created_at,
+		answeredAt: row.answered_at ?? undefined,
 	};
 }
 

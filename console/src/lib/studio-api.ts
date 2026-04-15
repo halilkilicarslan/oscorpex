@@ -582,6 +582,68 @@ export async function fetchChatHistory(projectId: string): Promise<ChatMessage[]
   return json(await fetch(`${BASE}/projects/${projectId}/chat/history`));
 }
 
+// ---------------------------------------------------------------------------
+// v3.0 B1 — Interactive Planner: Intake Questions
+// ---------------------------------------------------------------------------
+
+export type IntakeQuestionStatus = 'pending' | 'answered' | 'skipped';
+
+export type IntakeQuestionCategory =
+  | 'scope'
+  | 'functional'
+  | 'nonfunctional'
+  | 'priority'
+  | 'technical'
+  | 'general';
+
+export interface IntakeQuestion {
+  id: string;
+  projectId: string;
+  question: string;
+  options: string[];
+  category: IntakeQuestionCategory;
+  status: IntakeQuestionStatus;
+  answer?: string;
+  planVersion?: number;
+  createdAt: string;
+  answeredAt?: string;
+}
+
+export async function fetchIntakeQuestions(
+  projectId: string,
+  status?: IntakeQuestionStatus,
+): Promise<IntakeQuestion[]> {
+  const url = status
+    ? `${BASE}/projects/${projectId}/intake-questions?status=${status}`
+    : `${BASE}/projects/${projectId}/intake-questions`;
+  return json(await fetch(url));
+}
+
+export async function answerIntakeQuestion(
+  projectId: string,
+  questionId: string,
+  answer: string,
+): Promise<IntakeQuestion> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/intake-questions/${questionId}/answer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answer }),
+    }),
+  );
+}
+
+export async function skipIntakeQuestion(
+  projectId: string,
+  questionId: string,
+): Promise<IntakeQuestion> {
+  return json(
+    await fetch(`${BASE}/projects/${projectId}/intake-questions/${questionId}/skip`, {
+      method: 'POST',
+    }),
+  );
+}
+
 export type PlannerCLIProvider = 'claude-code' | 'codex' | 'gemini';
 
 export interface PlannerCLIProviderInfo {

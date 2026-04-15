@@ -555,6 +555,33 @@ export interface WorkItem {
 	updatedAt: string;
 }
 
+// ---------------------------------------------------------------------------
+// v3.0 B1 — Interactive Planner: Intake Question
+// ---------------------------------------------------------------------------
+
+export type IntakeQuestionStatus = "pending" | "answered" | "skipped";
+
+export type IntakeQuestionCategory =
+	| "scope"
+	| "functional"
+	| "nonfunctional"
+	| "priority"
+	| "technical"
+	| "general";
+
+export interface IntakeQuestion {
+	id: string;
+	projectId: string;
+	question: string;
+	options: string[];
+	category: IntakeQuestionCategory;
+	status: IntakeQuestionStatus;
+	answer?: string;
+	planVersion?: number;
+	createdAt: string;
+	answeredAt?: string;
+}
+
 // ---- Sprints (v3.9) --------------------------------------------------------
 
 export type SprintStatus = "planned" | "active" | "completed" | "cancelled";

@@ -20,6 +20,8 @@ export * from "./seed.js";
 export * from "./work-item-repo.js";
 // v3.4: Memory Architecture
 export * from "./memory-repo.js";
+// v3.0 B1: Interactive Planner intake questions
+export * from "./intake-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";
