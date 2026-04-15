@@ -454,6 +454,8 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
           task={detailTask}
           agents={agents}
           projectId={projectId}
+          allTasks={tasks}
+          onNavigateTask={(t) => setDetailTask(t)}
           onClose={() => setDetailTask(null)}
           onRefresh={load}
         />

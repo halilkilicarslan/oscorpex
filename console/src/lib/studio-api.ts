@@ -64,7 +64,10 @@ export interface Task {
   requiresApproval?: boolean;
   approvalStatus?: 'pending' | 'approved' | 'rejected' | null;
   approvalRejectionReason?: string;
+  // v3.0: Micro-task decomposition
   parentTaskId?: string;
+  targetFiles?: string[];
+  estimatedLines?: number;
 }
 
 export interface AgentConfig {

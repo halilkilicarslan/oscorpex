@@ -17,6 +17,9 @@ import {
   ThumbsUp,
   ThumbsDown,
   RefreshCw,
+  Target,
+  Layers,
+  CornerDownRight,
 } from 'lucide-react';
 import { roleLabel, approveTask, rejectTask, retryTask, type Task, type ProjectAgent } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
@@ -88,11 +91,23 @@ interface TaskDetailModalProps {
   task: Task;
   agents?: ProjectAgent[];
   projectId: string;
+  /** Tüm proje task'ları — parent/sub-task ilişkisi çözümlemek için. */
+  allTasks?: Task[];
+  /** Sub-task veya parent kartına tıklanırsa modal'ı o task'a geçir. */
+  onNavigateTask?: (task: Task) => void;
   onClose: () => void;
   onRefresh?: () => void;
 }
 
-export default function TaskDetailModal({ task, agents = [], projectId, onClose, onRefresh }: TaskDetailModalProps) {
+export default function TaskDetailModal({
+  task,
+  agents = [],
+  projectId,
+  allTasks = [],
+  onNavigateTask,
+  onClose,
+  onRefresh,
+}: TaskDetailModalProps) {
   const [actionLoading, setActionLoading] = useState(false);
 
   const handleApprove = async () => {
@@ -139,6 +154,13 @@ export default function TaskDetailModal({ task, agents = [], projectId, onClose,
   const reviewerAgent = task.reviewerAgentId
     ? agents.find((a) => a.id === task.reviewerAgentId)
     : null;
+
+  // v3.0: Sub-task & parent ilişkisi
+  const subTasks = allTasks.filter((t) => t.parentTaskId === task.id);
+  const parentTask = task.parentTaskId
+    ? allTasks.find((t) => t.id === task.parentTaskId)
+    : undefined;
+  const doneSubTasks = subTasks.filter((st) => st.status === 'done').length;
 
   return (
     <div
@@ -197,6 +219,110 @@ export default function TaskDetailModal({ task, agents = [], projectId, onClose,
                 {task.description}
               </p>
             </Section>
+          )}
+
+          {/* v3.0: Parent task göstergesi (sub-task ise) */}
+          {parentTask && (
+            <Section title="Parent Task">
+              <button
+                type="button"
+                onClick={() => onNavigateTask?.(parentTask)}
+                disabled={!onNavigateTask}
+                className="flex items-center gap-2 w-full text-left p-2.5 rounded-lg bg-[#3b82f6]/5 border border-[#3b82f6]/20 hover:bg-[#3b82f6]/10 transition-colors disabled:cursor-default disabled:hover:bg-[#3b82f6]/5"
+              >
+                <CornerDownRight size={12} className="text-[#3b82f6] shrink-0" />
+                <span className="flex-1 min-w-0 text-[12px] text-[#e5e5e5] font-medium truncate">
+                  {parentTask.title}
+                </span>
+                <span
+                  className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                    STATUS_COLOR[parentTask.status]
+                  }`}
+                >
+                  {STATUS_LABEL[parentTask.status]}
+                </span>
+                <span
+                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                    COMPLEXITY_COLORS[parentTask.complexity] ?? ''
+                  }`}
+                >
+                  {parentTask.complexity}
+                </span>
+              </button>
+            </Section>
+          )}
+
+          {/* v3.0: Sub-tasks listesi (parent ise) */}
+          {subTasks.length > 0 && (
+            <Section
+              title={
+                <span className="flex items-center gap-1.5">
+                  <Layers size={11} className="text-[#3b82f6]" />
+                  Sub-tasks ({doneSubTasks}/{subTasks.length})
+                </span>
+              }
+            >
+              <div className="flex flex-col gap-1.5">
+                {subTasks.map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => onNavigateTask?.(st)}
+                    disabled={!onNavigateTask}
+                    className="flex items-center gap-2 text-left p-2 rounded-lg bg-[#1a1a1a] border border-[#262626] hover:bg-[#222] transition-colors disabled:cursor-default disabled:hover:bg-[#1a1a1a]"
+                  >
+                    <span className="shrink-0">{STATUS_ICON[st.status]}</span>
+                    <span className="flex-1 min-w-0 text-[11px] text-[#e5e5e5] truncate">
+                      {st.title}
+                    </span>
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                        COMPLEXITY_COLORS[st.complexity] ?? ''
+                      }`}
+                    >
+                      {st.complexity}
+                    </span>
+                    {st.estimatedLines != null && (
+                      <span className="text-[9px] text-[#525252] font-mono shrink-0">
+                        ~{st.estimatedLines}L
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* v3.0: Target files & estimated lines (decompose sırasında belirlenmiş) */}
+          {((task.targetFiles && task.targetFiles.length > 0) || task.estimatedLines != null) && (
+            <div className="grid grid-cols-1 gap-4">
+              {task.targetFiles && task.targetFiles.length > 0 && (
+                <Section
+                  title={
+                    <span className="flex items-center gap-1.5">
+                      <Target size={11} className="text-[#a855f7]" />
+                      Hedef Dosyalar
+                    </span>
+                  }
+                >
+                  <div className="flex flex-col gap-1">
+                    {task.targetFiles.map((f) => (
+                      <div key={f} className="flex items-center gap-1.5">
+                        <FileText size={10} className="text-[#a855f7] shrink-0" />
+                        <span className="text-[11px] text-[#a3a3a3] font-mono truncate">{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+              {task.estimatedLines != null && (
+                <Section title="Tahmini Satır">
+                  <span className="text-[11px] text-[#a3a3a3] font-mono">
+                    ~{task.estimatedLines} satır
+                  </span>
+                </Section>
+              )}
+            </div>
           )}
 
           {/* Agent & Review info */}
@@ -472,7 +598,7 @@ export default function TaskDetailModal({ task, agents = [], projectId, onClose,
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
       <span className="text-[10px] font-semibold text-[#525252] uppercase tracking-wide mb-1.5 block">

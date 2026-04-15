@@ -871,6 +871,8 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
           task={detailTask}
           agents={pipelineState?.stages.flatMap((s) => s.agents) ?? []}
           projectId={projectId}
+          allTasks={pipelineState?.stages.flatMap((s) => s.tasks) ?? []}
+          onNavigateTask={(t) => setDetailTask(t)}
           onClose={() => setDetailTask(null)}
           onRefresh={fetchStatus}
         />
