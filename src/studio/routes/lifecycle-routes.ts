@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import { getProject } from "../db.js";
 import { getValidTransitions, transitionProject, triggerHotfix } from "../lifecycle-manager.js";
-import { generateProjectReport } from "../report-generator.js";
+import { generateProjectReport, generateStakeholderReport } from "../report-generator.js";
 import type { ProjectStatus } from "../types.js";
 
 const VALID_STATUSES: ProjectStatus[] = [
@@ -34,6 +34,22 @@ lifecycleRoutes.get("/projects/:id/report", async (c) => {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);
 		console.error("[lifecycle-routes] report generation failed:", err);
+		return c.json({ error: msg }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// GET /projects/:id/report/stakeholder — plain-text non-technical summary (v3.8)
+// ---------------------------------------------------------------------------
+lifecycleRoutes.get("/projects/:id/report/stakeholder", async (c) => {
+	const projectId = c.req.param("id");
+	try {
+		const summary = await generateStakeholderReport(projectId);
+		return c.json({ summary });
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		if (msg.includes("not found")) return c.json({ error: msg }, 404);
+		console.error("[lifecycle-routes] stakeholder report failed:", err);
 		return c.json({ error: msg }, 500);
 	}
 });
