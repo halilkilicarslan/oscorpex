@@ -5,7 +5,7 @@
 
 import { type Context, Hono } from "hono";
 import { runRetrospective, runStandup } from "../ceremony-engine.js";
-import { getProject } from "../db.js";
+import { getProject, listProjectAgents } from "../db.js";
 
 export const ceremonyRoutes = new Hono();
 
@@ -24,8 +24,19 @@ async function handleStandup(c: Context) {
 	const projectId = c.req.param("id") ?? "";
 	try {
 		await ensureProjectExists(projectId);
-		const reports = await runStandup(projectId);
-		return c.json(reports);
+		const [reports, agents] = await Promise.all([runStandup(projectId), listProjectAgents(projectId)]);
+		const roleMap = new Map(agents.map((a) => [a.id, a.role] as const));
+		return c.json({
+			runAt: new Date().toISOString(),
+			agents: reports.map((r) => ({
+				agentId: r.agentId,
+				agentName: r.agentName,
+				role: roleMap.get(r.agentId) ?? "",
+				completed: r.completedTasks,
+				inProgress: r.inProgressTasks,
+				blockers: r.blockers,
+			})),
+		});
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);
@@ -46,7 +57,15 @@ async function handleRetrospective(c: Context) {
 	try {
 		await ensureProjectExists(projectId);
 		const report = await runRetrospective(projectId);
-		return c.json(report);
+		return c.json({
+			runAt: new Date().toISOString(),
+			data: {
+				wentWell: report.whatWentWell,
+				couldImprove: report.whatCouldImprove,
+				actionItems: report.actionItems,
+			},
+			agentStats: report.agentStats,
+		});
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);

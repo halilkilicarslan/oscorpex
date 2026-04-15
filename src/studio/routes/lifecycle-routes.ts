@@ -29,7 +29,19 @@ lifecycleRoutes.get("/projects/:id/report", async (c) => {
 	const projectId = c.req.param("id");
 	try {
 		const report = await generateProjectReport(projectId);
-		return c.json(report);
+		return c.json({
+			projectName: report.projectName,
+			status: report.status,
+			summary: {
+				totalTasks: report.totalTasks,
+				completedTasks: report.completedTasks,
+				failedTasks: report.failedTasks,
+				totalCostUsd: report.totalCostUsd,
+				durationMs: report.durationMs,
+			},
+			quality: report.qualityMetrics,
+			topChangedFiles: report.topFileChanges.map((path) => ({ path, changeCount: 1 })),
+		});
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);
