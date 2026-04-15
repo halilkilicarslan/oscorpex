@@ -43,7 +43,7 @@ export async function createWorkItem(data: {
 			data.projectId,
 			data.type,
 			data.title,
-			data.description ?? null,
+			data.description ?? "",
 			priority,
 			data.severity ?? null,
 			JSON.stringify(labels),
