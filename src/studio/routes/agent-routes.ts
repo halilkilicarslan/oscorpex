@@ -106,7 +106,7 @@ agentRoutes.post("/projects/:id/messages", async (c) => {
 		);
 	}
 
-	const msg = sendMessage(
+	const msg = await sendMessage(
 		projectId,
 		body.fromAgentId,
 		body.toAgentId,
@@ -140,6 +140,7 @@ agentRoutes.post("/projects/:id/messages/broadcast", async (c) => {
 
 	const body = (await c.req.json()) as {
 		fromAgentId: string;
+		type?: string;
 		subject: string;
 		content: string;
 		metadata?: Record<string, any>;
@@ -149,7 +150,7 @@ agentRoutes.post("/projects/:id/messages/broadcast", async (c) => {
 		return c.json({ error: "fromAgentId, subject and content are required" }, 400);
 	}
 
-	const sent = await broadcastToTeam(projectId, body.fromAgentId, body.subject, body.content, body.metadata);
+	const sent = await broadcastToTeam(projectId, body.fromAgentId, body.subject, body.content, body.metadata, body.type as any);
 	return c.json({ sent: sent.length, messages: sent }, 201);
 });
 
@@ -194,7 +195,7 @@ agentRoutes.put("/projects/:id/messages/:messageId/read", async (c) => {
 	const project = await getProject(c.req.param("id"));
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
-	const msg = markAsRead(c.req.param("messageId"));
+	const msg = await markAsRead(c.req.param("messageId"));
 	if (!msg) return c.json({ error: "Message not found" }, 404);
 
 	return c.json(msg);
@@ -205,7 +206,7 @@ agentRoutes.put("/projects/:id/messages/:messageId/archive", async (c) => {
 	const project = await getProject(c.req.param("id"));
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
-	const msg = archiveMessage(c.req.param("messageId"));
+	const msg = await archiveMessage(c.req.param("messageId"));
 	if (!msg) return c.json({ error: "Message not found" }, 404);
 
 	return c.json(msg);
