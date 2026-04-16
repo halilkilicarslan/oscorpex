@@ -74,6 +74,19 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek im
 - **PolicySection, ModelRoutingSection, MemorySection**: Zaten tam implementli ve backend'e bağlı (orphaned değil).
 - Backend: 430/430, Frontend: 393/393 passing.
 
+### Session 2026-04-17 — CLI Usage OAuth Probe + Cursor Agent + Aider Removal
+
+- **Claude OAuth API probe** (`02238b5`): `probeClaudeOAuthAPI()` — `~/.claude/.credentials.json` / macOS Keychain / env var üzerinden OAuth token alır, `api.anthropic.com/api/oauth/usage` endpoint'inden quota bilgisi çeker. Token refresh desteği (`platform.claude.com/v1/oauth/token`). Probe chain: OAuth API → Admin API → CLI /usage → CLI /cost → Local JSONL. `parsePercentQuota` artık "N% used" pattern'ini de tanıyor.
+- **Cursor usage probe** (`8e1d80c`): `probeCursor()` — SQLite DB (`~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`) → JWT token → `cursor.com/api/usage-summary`. Aider CLI usage monitoring'den kaldırıldı.
+- **Cursor agent execution** (`c7fce96`): Aider → Cursor değişimi tüm katmanlarda:
+  - `cli-adapter.ts`: `AiderAdapter` → `CursorAdapter` (`cursor agent -p --output-format json --trust --force`)
+  - `cli-language-model.ts`: Cursor case eklendi (binary resolve, invocation, parse)
+  - `agent-runtime.ts`: Cursor command mapping
+  - `types.ts`: `CLITool`/`CliTool` union'larda `"aider"` → `"cursor"`
+  - Frontend: `CLIProviderId`, `CliTool` type'lar, AgentFormModal, PlannerSettingsModal dropdown'ları güncellendi
+  - Test: `cli-adapter.test.ts` Cursor test'leri
+- Backend: 437/437, Frontend: 433/433, typecheck 0 hata.
+
 ### Sıradaki Adımlar
 - v3.x tüm milestone'lar stabilize ve UI tam bağlı
 - Olası iyileştirmeler: yeni policy condition pattern'leri, model_routing_policies tablo temizliği
