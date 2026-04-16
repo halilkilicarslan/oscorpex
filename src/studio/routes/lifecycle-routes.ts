@@ -40,7 +40,7 @@ lifecycleRoutes.get("/projects/:id/report", async (c) => {
 				durationMs: report.durationMs,
 			},
 			quality: report.qualityMetrics,
-			topChangedFiles: report.topFileChanges.map((path) => ({ path, changeCount: 1 })),
+			topChangedFiles: report.topFileChanges,
 		});
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);

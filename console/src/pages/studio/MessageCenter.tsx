@@ -75,6 +75,42 @@ const TYPE_CONFIG: Record<
     text: 'text-[#737373]',
     border: 'border-[#525252]/20',
   },
+  standup: {
+    label: 'Standup',
+    bg: 'bg-cyan-500/10',
+    text: 'text-cyan-400',
+    border: 'border-cyan-500/20',
+  },
+  retrospective: {
+    label: 'Retro',
+    bg: 'bg-indigo-500/10',
+    text: 'text-indigo-400',
+    border: 'border-indigo-500/20',
+  },
+  conflict: {
+    label: 'Çatışma',
+    bg: 'bg-orange-500/10',
+    text: 'text-orange-400',
+    border: 'border-orange-500/20',
+  },
+  help_request: {
+    label: 'Yardım',
+    bg: 'bg-pink-500/10',
+    text: 'text-pink-400',
+    border: 'border-pink-500/20',
+  },
+  pair_session: {
+    label: 'Pair',
+    bg: 'bg-teal-500/10',
+    text: 'text-teal-400',
+    border: 'border-teal-500/20',
+  },
+  handoff_doc: {
+    label: 'Devir',
+    bg: 'bg-amber-500/10',
+    text: 'text-amber-400',
+    border: 'border-amber-500/20',
+  },
 };
 
 // Tüm mesaj türleri listesi
@@ -85,6 +121,12 @@ const MESSAGE_TYPES: AgentMessageType[] = [
   'bug_report',
   'feedback',
   'notification',
+  'standup',
+  'retrospective',
+  'conflict',
+  'help_request',
+  'pair_session',
+  'handoff_doc',
 ];
 
 // ---- Yardımcı Fonksiyonlar -----------------------------------------------
