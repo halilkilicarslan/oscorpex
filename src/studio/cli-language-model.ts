@@ -15,18 +15,18 @@ import type {
 	LanguageModelV3StreamPart,
 	LanguageModelV3StreamResult,
 } from "@ai-sdk/provider";
-import type { CliTool } from "./types.js";
+import type { ProviderCliTool } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Binary resolution
 // ---------------------------------------------------------------------------
 
-function resolveBinary(tool: CliTool): string {
+function resolveBinary(tool: ProviderCliTool): string {
 	const envKey = `${tool.toUpperCase()}_CLI_PATH`;
 	const fromEnv = process.env[envKey];
 	if (fromEnv) return fromEnv;
 
-	const commonPaths: Record<CliTool, string[]> = {
+	const commonPaths: Record<ProviderCliTool, string[]> = {
 		claude: ["/opt/homebrew/bin/claude", "/usr/local/bin/claude", "/usr/bin/claude"],
 		codex: ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/usr/bin/codex"],
 		gemini: ["/opt/homebrew/bin/gemini", "/usr/local/bin/gemini", "/usr/bin/gemini"],
@@ -90,7 +90,7 @@ interface CliInvocation {
 	parseOutput: (stdout: string) => { text: string; inputTokens?: number; outputTokens?: number };
 }
 
-function buildInvocation(tool: CliTool, model: string, system: string): CliInvocation {
+function buildInvocation(tool: ProviderCliTool, model: string, system: string): CliInvocation {
 	const bin = resolveBinary(tool);
 
 	switch (tool) {
@@ -204,7 +204,7 @@ interface CliResult {
 }
 
 async function runCli(
-	tool: CliTool,
+	tool: ProviderCliTool,
 	model: string,
 	system: string,
 	userPrompt: string,
@@ -296,9 +296,9 @@ export class CliLanguageModel implements LanguageModelV3 {
 	readonly modelId: string;
 	readonly supportedUrls = {};
 
-	private readonly cliTool: CliTool;
+	private readonly cliTool: ProviderCliTool;
 
-	constructor(cliTool: CliTool, modelId: string) {
+	constructor(cliTool: ProviderCliTool, modelId: string) {
 		this.cliTool = cliTool;
 		this.modelId = modelId;
 		this.provider = `cli-${cliTool}`;
@@ -370,7 +370,7 @@ export class CliLanguageModel implements LanguageModelV3 {
 // Default model id per CLI tool
 // ---------------------------------------------------------------------------
 
-export function defaultModelForCliTool(tool: CliTool): string {
+export function defaultModelForCliTool(tool: ProviderCliTool): string {
 	switch (tool) {
 		case "claude":
 			return "sonnet";

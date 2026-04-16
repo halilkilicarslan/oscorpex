@@ -30,7 +30,7 @@ import {
   updateFallbackOrder,
   type AIProvider,
   type AIProviderType,
-  type CliTool,
+  type ProviderCliTool,
 } from '../../lib/studio-api';
 import { MODEL_OPTIONS } from '../../lib/model-options';
 
@@ -299,7 +299,7 @@ interface FormState {
   baseUrl: string;
   model: string;
   isActive: boolean;
-  cliTool: CliTool;
+  cliTool: ProviderCliTool;
 }
 
 const EMPTY_FORM: FormState = {
@@ -458,7 +458,7 @@ function ProviderModal({
               </label>
               <select
                 value={form.cliTool}
-                onChange={(e) => set('cliTool', e.target.value as CliTool)}
+                onChange={(e) => set('cliTool', e.target.value as ProviderCliTool)}
                 className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none appearance-none"
               >
                 <option value="claude">Claude (claude CLI)</option>
