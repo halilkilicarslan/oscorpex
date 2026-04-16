@@ -4,9 +4,9 @@
 // token/cost attribution without storing credentials or raw provider payloads.
 // ---------------------------------------------------------------------------
 
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execute, query, queryOne } from "./pg.js";
@@ -609,14 +609,35 @@ function parsePercentQuota(text: string, providerId: CLIProviderId): UsageQuota[
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i].toLowerCase();
 		const window = lines.slice(i, i + 8).join(" ");
-		const pctMatch = window.match(/([0-9]{1,3})%\s+(?:left|remaining)/i);
+		// Match both "N% left|remaining" and "N% used"
+		const pctMatch = window.match(/([0-9]{1,3})%\s+(?:left|remaining|used)/i);
 		if (!pctMatch) continue;
-		const percentRemaining = Math.max(0, Math.min(100, Number.parseInt(pctMatch[1], 10)));
+		const rawVal = Math.max(0, Math.min(100, Number.parseInt(pctMatch[1], 10)));
+		const isUsed = /used/i.test(pctMatch[0]);
+		const percentRemaining = isUsed ? Math.max(0, 100 - rawVal) : rawVal;
 		const resetMatch = window.match(/resets?\s+(?:in\s+)?([^|•\n]+)/i);
-		if (line.includes("weekly")) {
+		if (line.includes("weekly") || line.includes("current week")) {
 			quotas.push({
 				type: "weekly",
 				label: "Weekly",
+				percentRemaining,
+				percentUsed: 100 - percentRemaining,
+				resetText: resetMatch?.[0],
+				status: quotaStatus(percentRemaining),
+			});
+		} else if (line.includes("opus")) {
+			quotas.push({
+				type: "model_specific",
+				label: "Weekly (Opus)",
+				percentRemaining,
+				percentUsed: 100 - percentRemaining,
+				resetText: resetMatch?.[0],
+				status: quotaStatus(percentRemaining),
+			});
+		} else if (line.includes("sonnet")) {
+			quotas.push({
+				type: "model_specific",
+				label: "Weekly (Sonnet)",
 				percentRemaining,
 				percentUsed: 100 - percentRemaining,
 				resetText: resetMatch?.[0],
@@ -631,7 +652,7 @@ function parsePercentQuota(text: string, providerId: CLIProviderId): UsageQuota[
 				resetText: resetMatch?.[0],
 				status: quotaStatus(percentRemaining),
 			});
-		} else if (line.includes("5h") || line.includes("session") || line.includes("limit")) {
+		} else if (line.includes("5h") || line.includes("session") || line.includes("limit") || line.includes("current session")) {
 			quotas.push({
 				type: "session",
 				label: line.includes("5h") ? "5h limit" : "Session",
@@ -747,6 +768,319 @@ function getAnthropicAdminKey(): string | undefined {
 	return process.env.ANTHROPIC_ADMIN_API_KEY || process.env.ANTHROPIC_ADMIN_KEY || process.env.CLAUDE_ADMIN_API_KEY;
 }
 
+// ---------------------------------------------------------------------------
+// Claude OAuth credential loading
+// ---------------------------------------------------------------------------
+
+interface ClaudeOAuthCredentials {
+	accessToken: string;
+	refreshToken?: string;
+	expiresAt?: number; // ms since epoch
+	subscriptionType?: string;
+}
+
+const CLAUDE_OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+const CLAUDE_OAUTH_SCOPES = "user:profile user:inference user:sessions:claude_code";
+const OAUTH_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 min before expiry
+
+let cachedCredentials: { creds: ClaudeOAuthCredentials; loadedAt: number } | null = null;
+const CREDENTIAL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
+
+function loadClaudeOAuthCredentials(): ClaudeOAuthCredentials | null {
+	// Cache check
+	if (cachedCredentials && Date.now() - cachedCredentials.loadedAt < CREDENTIAL_CACHE_TTL_MS) {
+		return cachedCredentials.creds;
+	}
+
+	// 1. File: ~/.claude/.credentials.json
+	const credsPath = join(homedir(), ".claude", ".credentials.json");
+	const fileData = loadJSONFile(credsPath);
+	if (fileData) {
+		const oauth = fileData.claudeAiOauth;
+		if (oauth?.accessToken) {
+			const creds: ClaudeOAuthCredentials = {
+				accessToken: oauth.accessToken,
+				refreshToken: oauth.refreshToken,
+				expiresAt: typeof oauth.expiresAt === "number" ? oauth.expiresAt : undefined,
+				subscriptionType: oauth.subscriptionType,
+			};
+			cachedCredentials = { creds, loadedAt: Date.now() };
+			return creds;
+		}
+	}
+
+	// 2. Keychain (macOS only)
+	if (process.platform === "darwin") {
+		try {
+			const raw = execSync('security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null', {
+				timeout: 5_000,
+				encoding: "utf-8",
+			}).trim();
+			if (raw) {
+				const json = JSON.parse(raw);
+				const oauth = json.claudeAiOauth;
+				if (oauth?.accessToken) {
+					const creds: ClaudeOAuthCredentials = {
+						accessToken: oauth.accessToken,
+						refreshToken: oauth.refreshToken,
+						expiresAt: typeof oauth.expiresAt === "number" ? oauth.expiresAt : undefined,
+						subscriptionType: oauth.subscriptionType,
+					};
+					cachedCredentials = { creds, loadedAt: Date.now() };
+					return creds;
+				}
+			}
+		} catch {
+			// Keychain not available or empty
+		}
+	}
+
+	// 3. Environment fallback (inference-only token, no refresh)
+	const envToken = process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
+	if (envToken) {
+		const creds: ClaudeOAuthCredentials = { accessToken: envToken };
+		cachedCredentials = { creds, loadedAt: Date.now() };
+		return creds;
+	}
+
+	return null;
+}
+
+function claudeOAuthNeedsRefresh(creds: ClaudeOAuthCredentials): boolean {
+	if (!creds.expiresAt) return true; // no expiry info → try refresh
+	return Date.now() + OAUTH_REFRESH_BUFFER_MS >= creds.expiresAt;
+}
+
+async function refreshClaudeOAuthToken(creds: ClaudeOAuthCredentials): Promise<ClaudeOAuthCredentials | null> {
+	if (!creds.refreshToken) return null;
+	try {
+		const res = await fetch("https://platform.claude.com/v1/oauth/token", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				grant_type: "refresh_token",
+				refresh_token: creds.refreshToken,
+				client_id: CLAUDE_OAUTH_CLIENT_ID,
+				scope: CLAUDE_OAUTH_SCOPES,
+			}),
+			signal: AbortSignal.timeout(15_000),
+		});
+		if (!res.ok) {
+			cachedCredentials = null;
+			return null;
+		}
+		const body = (await res.json()) as any;
+		if (!body.access_token) return null;
+
+		const updated: ClaudeOAuthCredentials = {
+			accessToken: body.access_token,
+			refreshToken: body.refresh_token ?? creds.refreshToken,
+			expiresAt: body.expires_in ? Date.now() + body.expires_in * 1000 : creds.expiresAt,
+			subscriptionType: creds.subscriptionType,
+		};
+
+		// Persist updated credentials back to file
+		const credsPath = join(homedir(), ".claude", ".credentials.json");
+		const fileData = loadJSONFile(credsPath);
+		if (fileData) {
+			fileData.claudeAiOauth = {
+				...fileData.claudeAiOauth,
+				accessToken: updated.accessToken,
+				refreshToken: updated.refreshToken,
+				expiresAt: updated.expiresAt,
+			};
+			try {
+				writeFileSync(credsPath, JSON.stringify(fileData, null, 2), "utf-8");
+			} catch {
+				// non-critical — credential file write failed
+			}
+		}
+
+		cachedCredentials = { creds: updated, loadedAt: Date.now() };
+		return updated;
+	} catch {
+		cachedCredentials = null;
+		return null;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Claude OAuth Usage API
+// ---------------------------------------------------------------------------
+
+interface ClaudeOAuthUsageResponse {
+	five_hour?: { utilization?: number; resets_at?: string };
+	seven_day?: { utilization?: number; resets_at?: string };
+	seven_day_sonnet?: { utilization?: number; resets_at?: string };
+	seven_day_opus?: { utilization?: number; resets_at?: string };
+	extra_usage?: { is_enabled?: boolean; used_credits?: number; monthly_limit?: number };
+}
+
+async function probeClaudeOAuthAPI(): Promise<{ global: GlobalUsageSnapshot; authStatus: AuthStatus } | null> {
+	let creds = loadClaudeOAuthCredentials();
+	if (!creds) return null;
+
+	// Refresh if needed
+	if (claudeOAuthNeedsRefresh(creds)) {
+		const refreshed = await refreshClaudeOAuthToken(creds);
+		if (refreshed) {
+			creds = refreshed;
+		} else if (!creds.expiresAt) {
+			// Token has no expiry info and no refresh possible — try anyway
+		} else {
+			return null; // expired and refresh failed
+		}
+	}
+
+	// Fetch usage
+	let res: Response;
+	try {
+		res = await fetch("https://api.anthropic.com/api/oauth/usage", {
+			headers: {
+				Authorization: `Bearer ${creds.accessToken}`,
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				"anthropic-beta": "oauth-2025-04-20",
+				"User-Agent": "Oscorpex CLI Usage Observatory",
+			},
+			signal: AbortSignal.timeout(15_000),
+		});
+	} catch {
+		return null;
+	}
+
+	if (res.status === 401 || res.status === 403) {
+		// Try refresh once on auth failure
+		if (creds.refreshToken) {
+			const refreshed = await refreshClaudeOAuthToken(creds);
+			if (!refreshed) return null;
+			try {
+				res = await fetch("https://api.anthropic.com/api/oauth/usage", {
+					headers: {
+						Authorization: `Bearer ${refreshed.accessToken}`,
+						Accept: "application/json",
+						"Content-Type": "application/json",
+						"anthropic-beta": "oauth-2025-04-20",
+						"User-Agent": "Oscorpex CLI Usage Observatory",
+					},
+					signal: AbortSignal.timeout(15_000),
+				});
+				if (!res.ok) return null;
+			} catch {
+				return null;
+			}
+		} else {
+			return null;
+		}
+	}
+
+	if (!res.ok) return null;
+
+	let body: ClaudeOAuthUsageResponse;
+	try {
+		body = (await res.json()) as ClaudeOAuthUsageResponse;
+	} catch {
+		return null;
+	}
+
+	const quotas: UsageQuota[] = [];
+
+	// 5-hour session quota
+	if (body.five_hour?.utilization != null) {
+		const pctRemaining = Math.max(0, Math.min(100, 100 - body.five_hour.utilization));
+		quotas.push({
+			type: "session",
+			label: "5h session",
+			percentRemaining: pctRemaining,
+			percentUsed: body.five_hour.utilization,
+			resetsAt: body.five_hour.resets_at,
+			resetText: body.five_hour.resets_at ? `Resets ${body.five_hour.resets_at}` : undefined,
+			status: quotaStatus(pctRemaining),
+		});
+	}
+
+	// 7-day weekly quota
+	if (body.seven_day?.utilization != null) {
+		const pctRemaining = Math.max(0, Math.min(100, 100 - body.seven_day.utilization));
+		quotas.push({
+			type: "weekly",
+			label: "Weekly (all models)",
+			percentRemaining: pctRemaining,
+			percentUsed: body.seven_day.utilization,
+			resetsAt: body.seven_day.resets_at,
+			resetText: body.seven_day.resets_at ? `Resets ${body.seven_day.resets_at}` : undefined,
+			status: quotaStatus(pctRemaining),
+		});
+	}
+
+	// Sonnet-specific quota
+	if (body.seven_day_sonnet?.utilization != null) {
+		const pctRemaining = Math.max(0, Math.min(100, 100 - body.seven_day_sonnet.utilization));
+		quotas.push({
+			type: "model_specific",
+			label: "Weekly (Sonnet)",
+			percentRemaining: pctRemaining,
+			percentUsed: body.seven_day_sonnet.utilization,
+			resetsAt: body.seven_day_sonnet.resets_at,
+			resetText: body.seven_day_sonnet.resets_at ? `Resets ${body.seven_day_sonnet.resets_at}` : undefined,
+			status: quotaStatus(pctRemaining),
+		});
+	}
+
+	// Opus-specific quota
+	if (body.seven_day_opus?.utilization != null) {
+		const pctRemaining = Math.max(0, Math.min(100, 100 - body.seven_day_opus.utilization));
+		quotas.push({
+			type: "model_specific",
+			label: "Weekly (Opus)",
+			percentRemaining: pctRemaining,
+			percentUsed: body.seven_day_opus.utilization,
+			resetsAt: body.seven_day_opus.resets_at,
+			resetText: body.seven_day_opus.resets_at ? `Resets ${body.seven_day_opus.resets_at}` : undefined,
+			status: quotaStatus(pctRemaining),
+		});
+	}
+
+	// Extra usage (Pro/Max accounts)
+	if (body.extra_usage?.is_enabled && body.extra_usage.used_credits != null) {
+		const costUsd = body.extra_usage.used_credits / 100;
+		const budgetUsd = body.extra_usage.monthly_limit != null ? body.extra_usage.monthly_limit / 100 : undefined;
+		quotas.push({
+			type: "credits",
+			label: "Extra usage",
+			dollarRemaining: budgetUsd != null ? Math.max(0, budgetUsd - costUsd) : undefined,
+			percentRemaining: budgetUsd ? Math.max(0, Math.min(100, ((budgetUsd - costUsd) / budgetUsd) * 100)) : undefined,
+			percentUsed: budgetUsd ? Math.min(100, (costUsd / budgetUsd) * 100) : undefined,
+			status: budgetUsd ? quotaStatus(Math.max(0, ((budgetUsd - costUsd) / budgetUsd) * 100)) : "unknown",
+		});
+	}
+
+	// Detect account tier
+	const tierMap: Record<string, string> = {
+		claude_max: "Claude Max",
+		max: "Claude Max",
+		claude_pro: "Claude Pro",
+		pro: "Claude Pro",
+		team: "Claude Team",
+		api: "Claude API",
+		claude_api: "Claude API",
+	};
+	const accountTier = creds.subscriptionType
+		? tierMap[creds.subscriptionType.toLowerCase()] ?? creds.subscriptionType
+		: undefined;
+
+	return {
+		global: {
+			quotas,
+			dailyUsage: undefined,
+			accountTier,
+			source: "provider_api",
+			confidence: quotas.length > 0 ? "high" : "medium",
+		},
+		authStatus: "connected",
+	};
+}
+
 function utcDateString(date = new Date()): string {
 	return date.toISOString().slice(0, 10);
 }
@@ -830,6 +1164,24 @@ async function probeClaudeAdminAPI(): Promise<GlobalUsageSnapshot | null> {
 async function probeClaude(def: CLIProviderDef, binaryPath: string, permissions: ProviderProbePermission): Promise<{ global: GlobalUsageSnapshot | null; authStatus: AuthStatus; errors: string[] }> {
 	if (!permissions.enabled) return { global: null, authStatus: "unknown", errors: [] };
 	const errors: string[] = [];
+
+	// Strategy 1: OAuth API (most reliable — structured JSON, no CLI parsing)
+	if (permissions.allowAuthFileRead) {
+		try {
+			const oauthResult = await probeClaudeOAuthAPI();
+			if (oauthResult) {
+				if (permissions.allowAuthFileRead && !oauthResult.global.dailyUsage?.tokens) {
+					oauthResult.global.dailyUsage = summarizeClaudeDailyUsage();
+				}
+				return { global: oauthResult.global, authStatus: oauthResult.authStatus, errors };
+			}
+			errors.push("Claude OAuth credentials not found or expired; falling back to other probes");
+		} catch (err) {
+			errors.push(sanitizeError(err));
+		}
+	}
+
+	// Strategy 2: Admin API (organization-level, requires ANTHROPIC_ADMIN_API_KEY)
 	if (permissions.allowNetworkProbe) {
 		try {
 			const global = await probeClaudeAdminAPI();
@@ -845,6 +1197,7 @@ async function probeClaude(def: CLIProviderDef, binaryPath: string, permissions:
 		}
 	}
 
+	// Strategy 3: CLI /usage (fragile — parses text output)
 	try {
 		const usage = await runCommand(binaryPath, ["/usage", "--allowed-tools", ""], {
 			timeoutMs: 20_000,
@@ -863,6 +1216,7 @@ async function probeClaude(def: CLIProviderDef, binaryPath: string, permissions:
 		errors.push(sanitizeError(err));
 	}
 
+	// Strategy 4: CLI /cost (for API billing accounts)
 	try {
 		const cost = await runCommand(binaryPath, ["/cost", "--allowed-tools", ""], {
 			timeoutMs: 15_000,
@@ -875,6 +1229,23 @@ async function probeClaude(def: CLIProviderDef, binaryPath: string, permissions:
 		}
 	} catch (err) {
 		errors.push(sanitizeError(err));
+	}
+
+	// Strategy 5: Local JSONL only (no global quota info, but at least daily stats)
+	if (permissions.allowAuthFileRead) {
+		const dailyUsage = summarizeClaudeDailyUsage();
+		if (dailyUsage.tokens > 0) {
+			return {
+				global: {
+					quotas: [],
+					dailyUsage,
+					source: "local_jsonl",
+					confidence: "low",
+				},
+				authStatus: "unknown",
+				errors,
+			};
+		}
 	}
 
 	return { global: null, authStatus: "unknown", errors };
@@ -1048,7 +1419,7 @@ export async function getCLIUsageSnapshot(providerId: CLIProviderId, refresh = f
 
 	const errors = [...binary.errors];
 	let global: GlobalUsageSnapshot | null = null;
-	let authStatus: AuthStatus = providerId === "aider" ? "not_supported" : "unknown";
+	let authStatus: AuthStatus = providerId === "aider" || providerId === "cursor" ? "not_supported" : "unknown";
 
 	if (binary.installed && (refresh || permissions.enabled)) {
 		if (providerId === "claude" && binary.binaryPath) {
@@ -1073,10 +1444,17 @@ export async function getCLIUsageSnapshot(providerId: CLIProviderId, refresh = f
 				confidence: "low",
 			};
 			errors.push("Aider quota is delegated to its underlying model provider");
+		} else if (providerId === "cursor") {
+			global = {
+				quotas: [],
+				source: "unavailable",
+				confidence: "low",
+			};
+			errors.push("Cursor usage metrics are only available within the Cursor editor");
 		}
 	}
 
-	if (!permissions.enabled && providerId !== "aider") {
+	if (!permissions.enabled && providerId !== "aider" && providerId !== "cursor") {
 		errors.push("Global quota probe requires provider opt-in");
 	}
 
