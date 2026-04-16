@@ -200,18 +200,21 @@ async function runCli(
 			finish(new Error(`CLI ${tool} timed out after ${timeoutMs}ms`));
 		}, timeoutMs);
 
+		let abortHandler: (() => void) | undefined;
 		if (abortSignal) {
-			abortSignal.addEventListener("abort", () => {
+			abortHandler = () => {
 				proc.kill("SIGTERM");
 				finish(new Error("aborted"));
-			});
+			};
+			abortSignal.addEventListener("abort", abortHandler, { once: true });
 		}
 
+		const MAX_OUTPUT = 80_000;
 		proc.stdout?.on("data", (d) => {
-			stdout += d.toString();
+			if (stdout.length < MAX_OUTPUT) stdout += d.toString();
 		});
 		proc.stderr?.on("data", (d) => {
-			stderr += d.toString();
+			if (stderr.length < MAX_OUTPUT) stderr += d.toString();
 		});
 
 		proc.on("error", (err) => {
@@ -219,6 +222,8 @@ async function runCli(
 		});
 
 		proc.on("close", (code) => {
+			clearTimeout(timer);
+			if (abortSignal && abortHandler) abortSignal.removeEventListener("abort", abortHandler);
 			if (code !== 0) {
 				finish(
 					new Error(

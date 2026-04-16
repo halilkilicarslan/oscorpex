@@ -11,7 +11,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { execute, query, queryOne } from "./pg.js";
 
-export type CLIProviderId = "claude" | "codex" | "gemini" | "aider";
+export type CLIProviderId = "claude" | "codex" | "gemini" | "aider" | "cursor";
 export type QuotaStatus = "healthy" | "warning" | "critical" | "depleted" | "unknown";
 export type AuthStatus = "connected" | "missing" | "expired" | "unknown" | "not_supported";
 export type UsageSource = "cli_usage" | "cli_cost" | "local_jsonl" | "provider_api" | "unavailable";
@@ -158,6 +158,15 @@ const PROVIDERS: CLIProviderDef[] = [
 		modelHints: [],
 		providerHints: [],
 	},
+	{
+		id: "cursor",
+		label: "Cursor CLI",
+		binary: "cursor",
+		versionArgs: ["--version"],
+		cliToolAliases: ["cursor"],
+		modelHints: ["cursor"],
+		providerHints: ["cursor"],
+	},
 ];
 
 const TOKENISH_KEYS = /token|secret|credential|cookie|authorization|access|refresh|api[_-]?key/i;
@@ -198,7 +207,10 @@ function ensureCLIUsageTables(): Promise<void> {
 			await execute("CREATE INDEX IF NOT EXISTS idx_cli_usage_snapshots_provider ON cli_usage_snapshots(provider_id)");
 			await execute("CREATE INDEX IF NOT EXISTS idx_cli_usage_snapshots_captured ON cli_usage_snapshots(captured_at)");
 			await execute("CREATE INDEX IF NOT EXISTS idx_cli_probe_events_provider ON cli_probe_events(provider_id)");
-		})();
+		})().catch((err) => {
+			ensureTablesPromise = null;
+			throw err;
+		});
 	}
 	return ensureTablesPromise;
 }
@@ -213,7 +225,7 @@ function startOfToday(): string {
 	return date.toISOString();
 }
 
-function startOfWeek(): string {
+function sevenDaysAgo(): string {
 	const date = new Date();
 	date.setDate(date.getDate() - 7);
 	return date.toISOString();
@@ -242,16 +254,22 @@ function lowestPercentRemaining(quotas: UsageQuota[]): number | undefined {
 
 function sanitizeError(error: unknown): string {
 	const message = error instanceof Error ? error.message : String(error);
-	return message.replace(/Bearer\s+[A-Za-z0-9._-]+/g, "Bearer [redacted]").slice(0, 400);
+	return message
+		.replace(/Bearer\s+[A-Za-z0-9._-]+/g, "Bearer [redacted]")
+		.replace(/(?:sk-|AIza)[A-Za-z0-9_-]{10,}/g, "[redacted-key]")
+		.replace(/[?&](key|token|api_key|access_token)=[^&\s]+/gi, "?$1=[redacted]")
+		.slice(0, 400);
 }
 
-function assertNoTokenishValues(value: unknown): void {
+function assertNoTokenishValues(value: unknown, seen = new Set<unknown>()): void {
 	if (!value || typeof value !== "object") return;
+	if (seen.has(value)) return;
+	seen.add(value);
 	for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
 		if (TOKENISH_KEYS.test(key)) {
 			throw new Error(`Refusing to persist token-like snapshot key: ${key}`);
 		}
-		if (typeof nested === "object") assertNoTokenishValues(nested);
+		if (typeof nested === "object") assertNoTokenishValues(nested, seen);
 	}
 }
 
@@ -292,6 +310,7 @@ function findInCommonPaths(binary: string): string | undefined {
 }
 
 function locateBinary(binary: string): Promise<string | undefined> {
+	if (!/^[a-zA-Z0-9_-]+$/.test(binary)) return Promise.resolve(undefined);
 	return new Promise((resolve) => {
 		const shell = process.env.SHELL || "/bin/zsh";
 		const proc = spawn(shell, ["-lc", `command -v ${binary}`], {
@@ -429,7 +448,7 @@ async function recordProbeEvent(providerId: CLIProviderId, status: string, messa
 	await execute(
 		"INSERT INTO cli_probe_events (id, provider_id, status, message, created_at) VALUES ($1, $2, $3, $4, $5)",
 		[randomUUID(), providerId, status, message.slice(0, 500), now()],
-	).catch(() => {});
+	).catch((err) => console.warn("[cli-usage] recordProbeEvent failed:", err.message));
 }
 
 async function persistSnapshot(snapshot: CLIUsageSnapshot): Promise<void> {
@@ -513,7 +532,7 @@ export async function getCLIProbeEvents(providerId?: CLIProviderId, limit = 50):
 
 async function getOscorpexUsage(def: CLIProviderDef): Promise<OscorpexUsageSnapshot> {
 	const today = startOfToday();
-	const week = startOfWeek();
+	const week = sevenDaysAgo();
 	const cliAliases = def.cliToolAliases;
 	const modelHints = def.modelHints;
 	const providerHints = def.providerHints;
@@ -528,42 +547,44 @@ async function getOscorpexUsage(def: CLIProviderDef): Promise<OscorpexUsageSnaps
 	const modelPatterns = modelHints.map((hint) => `%${hint}%`);
 	const providerPatterns = providerHints.map((hint) => `%${hint}%`);
 
-	const todayRow = await queryOne<any>(
-		`SELECT COALESCE(SUM(tu.total_tokens),0) AS tokens, COALESCE(SUM(tu.cost_usd),0) AS cost
-		 FROM token_usage tu
-		 LEFT JOIN project_agents pa ON pa.id = tu.agent_id
-		 WHERE tu.created_at >= $1 AND ${usageWhere}`,
-		[today, cliAliases, modelPatterns, providerPatterns],
-	);
-	const weekRow = await queryOne<any>(
-		`SELECT COALESCE(SUM(tu.total_tokens),0) AS tokens, COALESCE(SUM(tu.cost_usd),0) AS cost
-		 FROM token_usage tu
-		 LEFT JOIN project_agents pa ON pa.id = tu.agent_id
-		 WHERE tu.created_at >= $1 AND ${usageWhere}`,
-		[week, cliAliases, modelPatterns, providerPatterns],
-	);
-	const runRow = await queryOne<any>(
-		"SELECT COUNT(*) AS cnt FROM agent_runs WHERE cli_tool = ANY($1) AND created_at >= $2",
-		[cliAliases, week],
-	);
-	const failureRow = await queryOne<any>(
-		`SELECT COUNT(*) AS cnt
-		 FROM events e
-		 LEFT JOIN project_agents pa ON pa.id = e.agent_id
-		 WHERE e.type = 'task:failed' AND e.timestamp >= $1 AND pa.cli_tool = ANY($2)`,
-		[week, cliAliases],
-	);
-	const breakdownRows = await query<any>(
-		`SELECT p.id AS project_id, p.name AS project_name, COALESCE(SUM(tu.total_tokens),0) AS tokens, COALESCE(SUM(tu.cost_usd),0) AS cost
-		 FROM token_usage tu
-		 JOIN projects p ON p.id = tu.project_id
-		 LEFT JOIN project_agents pa ON pa.id = tu.agent_id
-		 WHERE tu.created_at >= $1 AND ${usageWhere}
-		 GROUP BY p.id, p.name
-		 ORDER BY cost DESC
-		 LIMIT 10`,
-		[week, cliAliases, modelPatterns, providerPatterns],
-	);
+	const [todayRow, weekRow, runRow, failureRow, breakdownRows] = await Promise.all([
+		queryOne<any>(
+			`SELECT COALESCE(SUM(tu.total_tokens),0) AS tokens, COALESCE(SUM(tu.cost_usd),0) AS cost
+			 FROM token_usage tu
+			 LEFT JOIN project_agents pa ON pa.id = tu.agent_id
+			 WHERE tu.created_at >= $1 AND ${usageWhere}`,
+			[today, cliAliases, modelPatterns, providerPatterns],
+		),
+		queryOne<any>(
+			`SELECT COALESCE(SUM(tu.total_tokens),0) AS tokens, COALESCE(SUM(tu.cost_usd),0) AS cost
+			 FROM token_usage tu
+			 LEFT JOIN project_agents pa ON pa.id = tu.agent_id
+			 WHERE tu.created_at >= $1 AND ${usageWhere}`,
+			[week, cliAliases, modelPatterns, providerPatterns],
+		),
+		queryOne<any>(
+			"SELECT COUNT(*) AS cnt FROM agent_runs WHERE cli_tool = ANY($1) AND created_at >= $2",
+			[cliAliases, week],
+		),
+		queryOne<any>(
+			`SELECT COUNT(*) AS cnt
+			 FROM events e
+			 LEFT JOIN project_agents pa ON pa.id = e.agent_id
+			 WHERE e.type = 'task:failed' AND e.timestamp >= $1 AND pa.cli_tool = ANY($2)`,
+			[week, cliAliases],
+		),
+		query<any>(
+			`SELECT p.id AS project_id, p.name AS project_name, COALESCE(SUM(tu.total_tokens),0) AS tokens, COALESCE(SUM(tu.cost_usd),0) AS cost
+			 FROM token_usage tu
+			 JOIN projects p ON p.id = tu.project_id
+			 LEFT JOIN project_agents pa ON pa.id = tu.agent_id
+			 WHERE tu.created_at >= $1 AND ${usageWhere}
+			 GROUP BY p.id, p.name
+			 ORDER BY cost DESC
+			 LIMIT 10`,
+			[week, cliAliases, modelPatterns, providerPatterns],
+		),
+	]);
 
 	return {
 		todayTokens: Number.parseInt(todayRow?.tokens ?? "0", 10),
