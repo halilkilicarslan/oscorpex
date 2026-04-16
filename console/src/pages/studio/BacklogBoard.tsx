@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Filter, Bug, Lightbulb, Shield, Zap, Wrench, Loader2, X, ArrowRight, ChevronDown } from 'lucide-react';
+import { Plus, Filter, Bug, Lightbulb, Shield, Zap, Wrench, Loader2, X, ArrowRight, ChevronDown, Trash2 } from 'lucide-react';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
 type WorkItemType = 'feature' | 'bug' | 'defect' | 'security' | 'hotfix' | 'improvement';
-type WorkItemStatus = 'open' | 'planned' | 'in_progress' | 'done';
+type WorkItemStatus = 'open' | 'planned' | 'in_progress' | 'done' | 'closed' | 'wontfix';
 type Priority = 'critical' | 'high' | 'medium' | 'low';
 
 interface WorkItem {
@@ -31,6 +31,8 @@ const COLUMNS: { key: WorkItemStatus; label: string; color: string }[] = [
   { key: 'planned', label: 'Planned', color: 'border-[#3b82f6]' },
   { key: 'in_progress', label: 'In Progress', color: 'border-[#f59e0b]' },
   { key: 'done', label: 'Done', color: 'border-[#22c55e]' },
+  { key: 'closed', label: 'Closed', color: 'border-[#737373]' },
+  { key: 'wontfix', label: "Won't Fix", color: 'border-[#991b1b]' },
 ];
 
 const PRIORITY_COLORS: Record<Priority, string> = {
@@ -153,17 +155,29 @@ function WorkItemCard({
   sprints,
   onConvert,
   onAssignSprint,
+  onStatusChange,
+  onDelete,
 }: {
   item: WorkItem;
   sprints: SprintOption[];
   onConvert: (id: string) => void;
   onAssignSprint: (id: string, sprintId: string | null) => void;
+  onStatusChange: (id: string, status: WorkItemStatus) => void;
+  onDelete: (id: string) => void;
 }) {
   return (
-    <div className="bg-[#111111] border border-[#262626] rounded-lg p-3 hover:border-[#333] transition-colors">
+    <div className="bg-[#111111] border border-[#262626] rounded-lg p-3 hover:border-[#333] transition-colors group">
       <div className="flex items-start gap-2 mb-2">
         <span className="mt-0.5 shrink-0">{TYPE_ICONS[item.type]}</span>
         <p className="text-[12px] text-[#e5e5e5] leading-snug flex-1">{item.title}</p>
+        <button
+          type="button"
+          onClick={() => onDelete(item.id)}
+          className="opacity-0 group-hover:opacity-100 text-[#525252] hover:text-[#f87171] transition-all shrink-0 mt-0.5"
+          title="Sil"
+        >
+          <Trash2 size={11} />
+        </button>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
@@ -180,12 +194,22 @@ function WorkItemCard({
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#1a1a1a] gap-2">
+      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#1a1a1a] flex-wrap">
+        <select
+          value={item.status}
+          onChange={(e) => onStatusChange(item.id, e.target.value as WorkItemStatus)}
+          className="text-[10px] bg-[#0a0a0a] border border-[#262626] rounded px-1.5 py-0.5 text-[#a3a3a3] hover:border-[#333] focus:outline-none focus:border-[#22c55e]"
+          aria-label="Status"
+        >
+          {COLUMNS.map((c) => (
+            <option key={c.key} value={c.key}>{c.label}</option>
+          ))}
+        </select>
         <select
           value={item.sprintId ?? ''}
           onChange={(e) => onAssignSprint(item.id, e.target.value || null)}
           className="text-[10px] bg-[#0a0a0a] border border-[#262626] rounded px-1.5 py-0.5 text-[#a3a3a3] hover:border-[#333] focus:outline-none focus:border-[#22c55e]"
-          aria-label="Assign sprint"
+          aria-label="Sprint"
         >
           <option value="">Sprint yok</option>
           {sprints.map((s) => (
@@ -194,14 +218,16 @@ function WorkItemCard({
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          onClick={() => onConvert(item.id)}
-          className="flex items-center gap-1 text-[10px] text-[#525252] hover:text-[#22c55e] transition-colors"
-        >
-          <ArrowRight size={10} />
-          Convert to Tasks
-        </button>
+        {item.status === 'open' && (
+          <button
+            type="button"
+            onClick={() => onConvert(item.id)}
+            className="flex items-center gap-1 text-[10px] text-[#525252] hover:text-[#22c55e] transition-colors ml-auto"
+          >
+            <ArrowRight size={10} />
+            Convert
+          </button>
+        )}
       </div>
     </div>
   );
@@ -248,11 +274,18 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
 
   const handleConvert = async (itemId: string) => {
     try {
-      await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}/plan`, {
+      const res = await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}/plan`, {
         method: 'POST',
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error ?? 'Convert failed');
+        return;
+      }
       load();
-    } catch {}
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Convert failed');
+    }
   };
 
   const handleAssignSprint = async (itemId: string, sprintId: string | null) => {
@@ -261,6 +294,26 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sprintId }),
+      });
+      load();
+    } catch {}
+  };
+
+  const handleStatusChange = async (itemId: string, status: WorkItemStatus) => {
+    try {
+      await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      load();
+    } catch {}
+  };
+
+  const handleDelete = async (itemId: string) => {
+    try {
+      await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`, {
+        method: 'DELETE',
       });
       load();
     } catch {}
@@ -395,6 +448,8 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
                       sprints={sprints}
                       onConvert={handleConvert}
                       onAssignSprint={handleAssignSprint}
+                      onStatusChange={handleStatusChange}
+                      onDelete={handleDelete}
                     />
                   ))}
                   {colItems.length === 0 && (
