@@ -83,10 +83,11 @@ describe("chatWithAgent", () => {
 			projectId: "p-1",
 			role: "user",
 			content: "How's it going?",
+			agentId: "agent-1",
 		});
 		const secondCall = mockInsert.mock.calls[1][0];
 		expect(secondCall.role).toBe("assistant");
-		expect(secondCall.content).toContain("[Alice]");
+		expect(secondCall.agentId).toBe("agent-1");
 	});
 
 	it("returns a non-empty placeholder response", async () => {

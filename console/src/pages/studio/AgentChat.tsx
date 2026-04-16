@@ -5,7 +5,7 @@ const BASE = import.meta.env.VITE_API_BASE ?? '';
 
 interface ChatMessage {
   id: string;
-  role: 'user' | 'agent';
+  role: 'user' | 'assistant' | 'agent';
   content: string;
   createdAt: string;
 }

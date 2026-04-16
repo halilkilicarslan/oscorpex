@@ -86,6 +86,7 @@ export async function chatWithAgent(
 		projectId,
 		role: "user",
 		content: message,
+		agentId,
 	});
 
 	let response: string;
@@ -105,11 +106,12 @@ export async function chatWithAgent(
 		response = buildPlaceholderResponse(agent, message);
 	}
 
-	// Persist agent response
+	// Persist agent response (no name prefix — UI shows agent identity via avatar)
 	await insertChatMessage({
 		projectId,
 		role: "assistant",
-		content: `[${agent.name}] ${response}`,
+		content: response,
+		agentId,
 	});
 
 	console.log(`[agent-chat] Chat with ${agent.name} (${agentId}) — message length: ${message.length}`);

@@ -37,27 +37,34 @@ export async function listEvents(projectId: string, limit = 100): Promise<Studio
 // ---------------------------------------------------------------------------
 
 export async function insertChatMessage(
-	data: Pick<ChatMessage, "projectId" | "role" | "content">,
+	data: Pick<ChatMessage, "projectId" | "role" | "content"> & { agentId?: string },
 ): Promise<ChatMessage> {
 	const id = randomUUID();
 	const ts = now();
 	await execute(
 		`
-    INSERT INTO chat_messages (id, project_id, role, content, created_at)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO chat_messages (id, project_id, role, content, agent_id, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6)
   `,
-		[id, data.projectId, data.role, data.content, ts],
+		[id, data.projectId, data.role, data.content, data.agentId ?? null, ts],
 	);
-	return { id, ...data, createdAt: ts };
+	return { id, projectId: data.projectId, role: data.role, content: data.content, agentId: data.agentId, createdAt: ts };
 }
 
-export async function listChatMessages(projectId: string): Promise<ChatMessage[]> {
-	const rows = await query<any>("SELECT * FROM chat_messages WHERE project_id = $1 ORDER BY created_at", [projectId]);
+export async function listChatMessages(projectId: string, agentId?: string): Promise<ChatMessage[]> {
+	const conditions = ["project_id = $1"];
+	const values: unknown[] = [projectId];
+	if (agentId) {
+		conditions.push("agent_id = $2");
+		values.push(agentId);
+	}
+	const rows = await query<any>(`SELECT * FROM chat_messages WHERE ${conditions.join(" AND ")} ORDER BY created_at`, values);
 	return rows.map((row) => ({
 		id: row.id,
 		projectId: row.project_id,
 		role: row.role as ChatRole,
 		content: row.content,
+		agentId: row.agent_id ?? undefined,
 		createdAt: row.created_at,
 	}));
 }

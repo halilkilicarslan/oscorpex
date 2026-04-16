@@ -679,7 +679,9 @@ CREATE INDEX IF NOT EXISTS idx_plans_project          ON project_plans(project_i
 CREATE INDEX IF NOT EXISTS idx_phases_plan            ON phases(plan_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_phase            ON tasks(phase_id);
 CREATE INDEX IF NOT EXISTS idx_events_project         ON events(project_id);
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS agent_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_chat_project           ON chat_messages(project_id);
+CREATE INDEX IF NOT EXISTS idx_chat_agent             ON chat_messages(agent_id);
 CREATE INDEX IF NOT EXISTS idx_project_agents_project ON project_agents(project_id);
 CREATE INDEX IF NOT EXISTS idx_agent_messages_project   ON agent_messages(project_id);
 CREATE INDEX IF NOT EXISTS idx_agent_messages_to_agent  ON agent_messages(to_agent_id);

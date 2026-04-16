@@ -223,6 +223,7 @@ export interface ChatMessage {
 	projectId: string;
 	role: ChatRole;
 	content: string;
+	agentId?: string;
 	createdAt: string;
 }
 
