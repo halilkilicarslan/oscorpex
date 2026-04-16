@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  Orbit,
   LayoutGrid,
   BarChart3,
   Activity,
@@ -108,13 +107,11 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="flex items-center justify-between px-3 py-4 border-b border-[#262626]">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[#22c55e]/10 flex items-center justify-center shrink-0">
-            <Orbit size={18} className="text-[#22c55e]" />
+          <div className="w-8 h-8 rounded-lg bg-[#111111] border border-[#262626] flex items-center justify-center shrink-0 overflow-hidden">
+            <img src="/logo-icon.svg" alt="Oscorpex icon" className="w-5 h-5 object-contain brightness-0 invert" />
           </div>
           {!collapsed && (
-            <span className="text-[#fafafa] font-semibold text-sm tracking-tight select-none">
-              Oscorpex
-            </span>
+            <img src="/app-logo.svg" alt="Oscorpex" className="h-5 w-auto brightness-0 invert select-none" />
           )}
         </div>
         <button

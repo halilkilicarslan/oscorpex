@@ -33,13 +33,14 @@ export default function TopBar({ onOpenChat, chatOpen }: TopBarProps) {
     <header className="h-12 shrink-0 flex items-center justify-between px-4 bg-[#0a0a0a] border-b border-[#262626]">
       {/* Left: Org & Project */}
       <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-[#111111] border border-[#262626] flex items-center justify-center overflow-hidden">
+          <img src="/logo-icon.svg" alt="Oscorpex icon" className="w-5 h-5 object-contain brightness-0 invert" />
+        </div>
         <span className="text-[13px] text-[#a3a3a3] font-medium">
           My Organization
         </span>
         <span className="text-[#333] select-none">/</span>
-        <span className="text-[13px] text-[#fafafa] font-medium">
-          Oscorpex
-        </span>
+        <img src="/app-logo.svg" alt="Oscorpex" className="h-4 w-auto brightness-0 invert" />
       </div>
 
       {/* Center: API URL + Connection Status */}
