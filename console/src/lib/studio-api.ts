@@ -156,6 +156,7 @@ export interface ChatMessage {
   projectId: string;
   role: 'user' | 'assistant';
   content: string;
+  agentId?: string;
   createdAt: string;
 }
 

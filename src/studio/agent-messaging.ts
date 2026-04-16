@@ -227,14 +227,15 @@ export async function broadcastToTeam(
 	subject: string,
 	content: string,
 	metadata?: Record<string, any>,
+	type?: MessageType,
 ): Promise<AgentMessage[]> {
 	// Projedeki tüm ajanları getir ve göndereni çıkar
 	const teamMembers = (await listProjectAgents(projectId)).filter((a) => a.id !== fromAgentId);
 
-	// Her takım üyesine ayrı ayrı bildirim mesajı gönder
+	// Her takım üyesine ayrı ayrı mesaj gönder
 	const sent: AgentMessage[] = [];
 	for (const member of teamMembers) {
-		const msg = await sendMessage(projectId, fromAgentId, member.id, "notification", subject, content, metadata);
+		const msg = await sendMessage(projectId, fromAgentId, member.id, type ?? "notification", subject, content, metadata);
 		sent.push(msg);
 	}
 
