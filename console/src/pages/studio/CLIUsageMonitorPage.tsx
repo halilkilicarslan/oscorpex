@@ -324,7 +324,7 @@ export default function CLIUsageMonitorPage() {
             <div className="p-5">
               {activeTab === 'global' && (
                 <div className="space-y-4">
-                  {!selected.permissions.enabled && selected.providerId !== 'aider' && (
+                  {!selected.permissions.enabled && (
                     <div className="rounded-2xl border border-[#f59e0b]/20 bg-[#f59e0b]/10 p-4 text-[12px] text-[#f59e0b]">
                       Global quota probe kapalı. Settings tabından provider bazlı opt-in açılmalı.
                     </div>
