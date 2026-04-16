@@ -216,7 +216,7 @@ describe('PolicySection', () => {
 
 		// The toggle button for the custom rule — find the toggle in the custom rules area
 		// Toggle is rendered as a button inside the rule row
-		const toggleButtons = screen.getAllByRole('button');
+		screen.getAllByRole('button');
 		// Find a toggle near the rule row — the toggle button is inside the rule div
 		// We look for the Toggle component rendered as a button element near My Custom Rule
 		const ruleRow = screen.getByText('My Custom Rule').closest('div');
