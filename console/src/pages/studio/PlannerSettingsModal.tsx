@@ -13,7 +13,7 @@ import {
 const CLI_TOOL_OPTIONS = [
   { value: 'claude-code', label: 'claude-code' },
   { value: 'codex', label: 'codex' },
-  { value: 'aider', label: 'aider' },
+  { value: 'cursor', label: 'cursor' },
   { value: 'none', label: 'none' },
 ];
 
