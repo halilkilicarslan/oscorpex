@@ -59,7 +59,7 @@ Oscorpex is an AI-powered software development platform where users describe an 
 React 19 + Vite + Tailwind 4 + React Router. Dark theme: bg `#0a0a0a`, cards `#111111`, borders `#262626`, accent `#22c55e`.
 
 - **Pages**: `console/src/pages/studio/` — 36 pages (ProjectPage, KanbanBoard, AgentDashboard, PMChat, BacklogBoard, SprintBoard, etc.)
-- **API layer**: `console/src/lib/studio-api.ts` — All types and fetch functions for backend communication
+- **API layer**: `console/src/lib/studio-api/` — Modular API client (17 files: base, types, projects, plans, tasks, agents, chat, pipeline, messaging, analytics, providers, settings, git, app-runner, work-items, misc + barrel index). Original `studio-api.ts` re-exports from `./studio-api/index.js` so all import paths remain unchanged.
 - **Tests**: `console/src/__tests__/` — Testing Library + jsdom
 
 ### Database

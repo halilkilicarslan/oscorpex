@@ -855,13 +855,17 @@ const POLICY_ACTIONS: { value: PolicyAction; label: string; color: string }[] = 
   { value: 'require_approval', label: 'Require Approval', color: 'text-[#60a5fa] border-[#1e3a8a] bg-[#0c1e3f]/40' },
 ];
 
-type ConditionPattern = 'complexity' | 'title_contains' | 'branch' | 'description_contains';
+type ConditionPattern = 'complexity' | 'complexity_gte' | 'title_contains' | 'branch' | 'description_contains' | 'assigned_agent' | 'target_files' | 'retry_count';
 
 const CONDITION_PATTERNS: { value: ConditionPattern; label: string; placeholder: string }[] = [
-  { value: 'complexity',           label: 'complexity ==',      placeholder: 'S | M | L | XL' },
-  { value: 'title_contains',       label: 'title contains',     placeholder: 'auth, migration...' },
-  { value: 'branch',               label: 'branch ==',          placeholder: 'main, develop...' },
-  { value: 'description_contains', label: 'description contains', placeholder: 'security, hotfix...' },
+  { value: 'complexity',           label: 'complexity ==',           placeholder: 'S | M | L | XL' },
+  { value: 'complexity_gte',       label: 'complexity >=',           placeholder: 'M | L | XL' },
+  { value: 'title_contains',       label: 'title contains',          placeholder: 'auth, migration...' },
+  { value: 'branch',               label: 'branch ==',               placeholder: 'main, develop...' },
+  { value: 'description_contains', label: 'description contains',    placeholder: 'security, hotfix...' },
+  { value: 'assigned_agent',       label: 'assigned_agent ==',       placeholder: 'agent-id...' },
+  { value: 'target_files',         label: 'target_files contains',   placeholder: 'src/auth, .env...' },
+  { value: 'retry_count',          label: 'retry_count >=',          placeholder: '2, 3...' },
 ];
 
 const BUILTIN_RULES_INFO: { id: string; name: string; description: string; setting: string }[] = [
@@ -887,6 +891,8 @@ const BUILTIN_RULES_INFO: { id: string; name: string; description: string; setti
 
 function parseCondition(condition: string): { pattern: ConditionPattern; value: string } {
   const trimmed = condition.trim();
+  const complexityGteMatch = trimmed.match(/^complexity\s*>=\s*(.+)$/i);
+  if (complexityGteMatch) return { pattern: 'complexity_gte', value: complexityGteMatch[1].trim() };
   const complexityMatch = trimmed.match(/^complexity\s*==\s*(.+)$/i);
   if (complexityMatch) return { pattern: 'complexity', value: complexityMatch[1].trim() };
   const titleMatch = trimmed.match(/^title\s+contains\s+(.+)$/i);
@@ -895,6 +901,12 @@ function parseCondition(condition: string): { pattern: ConditionPattern; value: 
   if (branchMatch) return { pattern: 'branch', value: branchMatch[1].trim() };
   const descMatch = trimmed.match(/^description\s+contains\s+(.+)$/i);
   if (descMatch) return { pattern: 'description_contains', value: descMatch[1].trim() };
+  const agentMatch = trimmed.match(/^assigned_agent\s*==\s*(.+)$/i);
+  if (agentMatch) return { pattern: 'assigned_agent', value: agentMatch[1].trim() };
+  const filesMatch = trimmed.match(/^target_files\s+contains\s+(.+)$/i);
+  if (filesMatch) return { pattern: 'target_files', value: filesMatch[1].trim() };
+  const retryMatch = trimmed.match(/^retry_count\s*>=\s*(.+)$/i);
+  if (retryMatch) return { pattern: 'retry_count', value: retryMatch[1].trim() };
   return { pattern: 'complexity', value: '' };
 }
 
@@ -902,9 +914,13 @@ function buildCondition(pattern: ConditionPattern, value: string): string {
   const v = value.trim();
   switch (pattern) {
     case 'complexity':           return `complexity == ${v}`;
+    case 'complexity_gte':       return `complexity >= ${v}`;
     case 'title_contains':       return `title contains ${v}`;
     case 'branch':               return `branch == ${v}`;
     case 'description_contains': return `description contains ${v}`;
+    case 'assigned_agent':       return `assigned_agent == ${v}`;
+    case 'target_files':         return `target_files contains ${v}`;
+    case 'retry_count':          return `retry_count >= ${v}`;
   }
 }
 

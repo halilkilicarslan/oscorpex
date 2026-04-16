@@ -190,6 +190,13 @@ function evaluateCustomCondition(condition: string, task: Task): boolean {
 			const val = lower.split("complexity ==")[1].trim().toUpperCase();
 			return task.complexity === val;
 		}
+		if (lower.includes("complexity >=")) {
+			const tiers = ["S", "M", "L", "XL"];
+			const val = lower.split("complexity >=")[1].trim().toUpperCase();
+			const taskIdx = tiers.indexOf(task.complexity ?? "M");
+			const threshIdx = tiers.indexOf(val);
+			return threshIdx >= 0 && taskIdx >= threshIdx;
+		}
 		if (lower.includes("title contains")) {
 			const val = lower.split("title contains")[1].trim();
 			return task.title.toLowerCase().includes(val);
@@ -201,6 +208,19 @@ function evaluateCustomCondition(condition: string, task: Task): boolean {
 		if (lower.includes("description contains")) {
 			const val = lower.split("description contains")[1].trim();
 			return task.description.toLowerCase().includes(val);
+		}
+		if (lower.includes("assigned_agent ==")) {
+			const val = lower.split("assigned_agent ==")[1].trim();
+			return (task.assignedAgent ?? "").toLowerCase() === val;
+		}
+		if (lower.includes("target_files contains")) {
+			const val = lower.split("target_files contains")[1].trim();
+			const files = (task as any).targetFiles ?? [];
+			return Array.isArray(files) && files.some((f: string) => f.toLowerCase().includes(val));
+		}
+		if (lower.includes("retry_count >=")) {
+			const val = parseInt(lower.split("retry_count >=")[1].trim(), 10);
+			return !isNaN(val) && (task.retryCount ?? 0) >= val;
 		}
 
 		return false;
