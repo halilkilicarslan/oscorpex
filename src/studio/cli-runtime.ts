@@ -122,10 +122,9 @@ function resolveClaudeBinary(): string {
 const CLAUDE_BIN = resolveClaudeBinary();
 
 export async function isClaudeCliAvailable(): Promise<boolean> {
-	// Cache TTL: false sonucu 1dk sonra expire olsun, true sonucu kalsın
-	if (cliAvailable !== null) {
-		if (cliAvailable) return true;
-		if (Date.now() - cliCheckedAt < CLI_CACHE_TTL_MS) return false;
+	// Cache TTL: both true and false expire after CLI_CACHE_TTL_MS
+	if (cliAvailable !== null && Date.now() - cliCheckedAt < CLI_CACHE_TTL_MS) {
+		return cliAvailable;
 	}
 
 	console.log(`[cli-runtime] Checking CLI availability: ${CLAUDE_BIN}`);
@@ -143,7 +142,7 @@ export async function isClaudeCliAvailable(): Promise<boolean> {
 
 		const proc = spawn(CLAUDE_BIN, ["--version"], {
 			stdio: ["ignore", "pipe", "pipe"],
-			shell: true,
+			shell: false,
 			env: { ...process.env, PATH: process.env.PATH },
 		});
 
@@ -454,16 +453,22 @@ function processStreamEvent(
 			result.durationMs = res.duration_ms ?? 0;
 			result.totalCostUsd = res.total_cost_usd ?? 0;
 
-			// Extract model usage
+			// Extract model usage — sum across all models
 			if (res.modelUsage) {
+				let totalIn = 0, totalOut = 0, totalCacheCreate = 0, totalCacheRead = 0, totalCost = 0;
 				for (const [modelName, usage] of Object.entries(res.modelUsage)) {
 					result.model = modelName;
-					result.inputTokens = usage.inputTokens ?? 0;
-					result.outputTokens = usage.outputTokens ?? 0;
-					result.cacheCreationTokens = usage.cacheCreationInputTokens ?? 0;
-					result.cacheReadTokens = usage.cacheReadInputTokens ?? 0;
-					result.totalCostUsd = usage.costUSD ?? result.totalCostUsd;
+					totalIn += usage.inputTokens ?? 0;
+					totalOut += usage.outputTokens ?? 0;
+					totalCacheCreate += usage.cacheCreationInputTokens ?? 0;
+					totalCacheRead += usage.cacheReadInputTokens ?? 0;
+					totalCost += usage.costUSD ?? 0;
 				}
+				result.inputTokens = totalIn;
+				result.outputTokens = totalOut;
+				result.cacheCreationTokens = totalCacheCreate;
+				result.cacheReadTokens = totalCacheRead;
+				if (totalCost > 0) result.totalCostUsd = totalCost;
 			}
 
 			const durationSec = (result.durationMs / 1000).toFixed(1);
@@ -578,11 +583,15 @@ export function streamWithCLI(
 					const res = event as CLIResultEvent;
 					costUsd = res.total_cost_usd ?? 0;
 					if (res.modelUsage) {
+						let totalIn = 0, totalOut = 0, totalCost = 0;
 						for (const usage of Object.values(res.modelUsage)) {
-							inputTokens = usage.inputTokens ?? inputTokens;
-							outputTokens = usage.outputTokens ?? outputTokens;
-							costUsd = usage.costUSD ?? costUsd;
+							totalIn += usage.inputTokens ?? 0;
+							totalOut += usage.outputTokens ?? 0;
+							totalCost += usage.costUSD ?? 0;
 						}
+						inputTokens = totalIn;
+						outputTokens = totalOut;
+						if (totalCost > 0) costUsd = totalCost;
 					}
 				}
 			} catch {
