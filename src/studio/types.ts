@@ -612,15 +612,7 @@ export interface ModelRoutingConfig {
 	XL: string;
 }
 
-export interface ModelRoutingPolicy {
-	scope: string;
-	taskType: string;
-	riskLevel: string;
-	provider: string;
-	model: string;
-	effort: string;
-	fallbackChain: string[];
-}
+
 
 // ---- Memory Architecture (v3.4) --------------------------------------------
 

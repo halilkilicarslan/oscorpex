@@ -1,11 +1,11 @@
 // ---------------------------------------------------------------------------
-// Oscorpex — Memory Repository: Context Snapshots, Facts, Routing Policies
+// Oscorpex — Memory Repository: Context Snapshots, Facts
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
 import { execute, getPool, query, queryOne } from "../pg.js";
 import { now, rowToMemoryFact, rowToContextSnapshot, rowToConversationCompaction } from "./helpers.js";
-import type { MemoryFact, ProjectContextSnapshot, ConversationCompaction, ModelRoutingPolicy } from "../types.js";
+import type { MemoryFact, ProjectContextSnapshot, ConversationCompaction } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Context Snapshots
@@ -147,63 +147,14 @@ export async function deleteMemoryFact(projectId: string, scope: string, key: st
 // Model Routing Policies
 // ---------------------------------------------------------------------------
 
-export async function upsertRoutingPolicy(data: {
-	scope: string;
-	taskType: string;
-	riskLevel: string;
-	provider: string;
-	model: string;
-	effort: string;
-	fallbackChain: string[];
-}): Promise<void> {
-	const ts = now();
-	await execute(
-		`
-    INSERT INTO model_routing_policies (id, scope, task_type, risk_level, provider, model, effort, fallback_chain, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    ON CONFLICT (scope, task_type, risk_level) DO UPDATE
-      SET provider = EXCLUDED.provider,
-          model = EXCLUDED.model,
-          effort = EXCLUDED.effort,
-          fallback_chain = EXCLUDED.fallback_chain,
-          updated_at = EXCLUDED.updated_at
-    `,
-		[randomUUID(), data.scope, data.taskType, data.riskLevel, data.provider, data.model, data.effort, JSON.stringify(data.fallbackChain), ts],
-	);
-}
 
-export async function getRoutingPolicies(scope: string): Promise<ModelRoutingPolicy[]> {
-	const rows = await query<any>(
-		"SELECT * FROM model_routing_policies WHERE scope = $1 ORDER BY task_type, risk_level",
-		[scope],
-	);
-	return rows.map(rowToRoutingPolicy);
-}
 
-export async function getRoutingPolicy(
-	scope: string,
-	taskType: string,
-	riskLevel: string,
-): Promise<ModelRoutingPolicy | null> {
-	const row = await queryOne<any>(
-		"SELECT * FROM model_routing_policies WHERE scope = $1 AND task_type = $2 AND risk_level = $3",
-		[scope, taskType, riskLevel],
-	);
-	return row ? rowToRoutingPolicy(row) : null;
-}
+
+
+
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function rowToRoutingPolicy(row: any): ModelRoutingPolicy {
-	return {
-		scope: row.scope,
-		taskType: row.task_type,
-		riskLevel: row.risk_level,
-		provider: row.provider,
-		model: row.model,
-		effort: row.effort,
-		fallbackChain: JSON.parse(row.fallback_chain),
-	};
-}
+

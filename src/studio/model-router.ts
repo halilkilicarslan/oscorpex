@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { getProjectSettings } from "./db.js";
-import type { ModelRoutingPolicy, Task } from "./types.js";
+import type { Task } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Types
