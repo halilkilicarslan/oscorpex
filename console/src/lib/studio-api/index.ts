@@ -1,0 +1,19 @@
+// ---------------------------------------------------------------------------
+// Oscorpex — Studio API barrel export
+// ---------------------------------------------------------------------------
+
+export * from './types.js';
+export * from './projects.js';
+export * from './plans.js';
+export * from './tasks.js';
+export * from './agents.js';
+export * from './chat.js';
+export * from './pipeline.js';
+export * from './messaging.js';
+export * from './analytics.js';
+export * from './providers.js';
+export * from './settings.js';
+export * from './git.js';
+export * from './app-runner.js';
+export * from './work-items.js';
+export * from './misc.js';

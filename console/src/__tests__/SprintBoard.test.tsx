@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SprintBoard from '../pages/studio/SprintBoard';
 
@@ -505,8 +505,8 @@ describe('SprintBoard — work item picker (atama)', () => {
       // PATCH çağrısı yapılmalı
       const calls = (fetchSpy as ReturnType<typeof vi.fn>).mock.calls;
       const patchCall = calls.find(
-        ([url, opts]: [string, RequestInit]) =>
-          String(url).includes('wi-10') && opts?.method === 'PATCH',
+        (args: any[]) =>
+          String(args[0]).includes('wi-10') && args[1]?.method === 'PATCH',
       );
       expect(patchCall).toBeTruthy();
     });
@@ -575,10 +575,10 @@ describe('SprintBoard — item çıkarma (unassign)', () => {
     await waitFor(() => {
       const calls = (fetchSpy as ReturnType<typeof vi.fn>).mock.calls;
       const patchCall = calls.find(
-        ([url, opts]: [string, RequestInit]) =>
-          String(url).includes('/work-items/') &&
-          opts?.method === 'PATCH' &&
-          JSON.parse(opts.body as string).sprintId === null,
+        (args: any[]) =>
+          String(args[0]).includes('/work-items/') &&
+          args[1]?.method === 'PATCH' &&
+          JSON.parse(args[1].body as string).sprintId === null,
       );
       expect(patchCall).toBeTruthy();
     });
@@ -666,8 +666,8 @@ describe('SprintBoard — sprint yaşam döngüsü butonları', () => {
     await waitFor(() => {
       const calls = (fetchSpy as ReturnType<typeof vi.fn>).mock.calls;
       const startCall = calls.find(
-        ([url, opts]: [string, RequestInit]) =>
-          String(url).includes('/start') && opts?.method === 'POST',
+        (args: any[]) =>
+          String(args[0]).includes('/start') && args[1]?.method === 'POST',
       );
       expect(startCall).toBeTruthy();
     });
@@ -686,8 +686,8 @@ describe('SprintBoard — sprint yaşam döngüsü butonları', () => {
     await waitFor(() => {
       const calls = (fetchSpy as ReturnType<typeof vi.fn>).mock.calls;
       const completeCall = calls.find(
-        ([url, opts]: [string, RequestInit]) =>
-          String(url).includes('/complete') && opts?.method === 'POST',
+        (args: any[]) =>
+          String(args[0]).includes('/complete') && args[1]?.method === 'POST',
       );
       expect(completeCall).toBeTruthy();
     });
@@ -706,8 +706,8 @@ describe('SprintBoard — sprint yaşam döngüsü butonları', () => {
     await waitFor(() => {
       const calls = (fetchSpy as ReturnType<typeof vi.fn>).mock.calls;
       const cancelCall = calls.find(
-        ([url, opts]: [string, RequestInit]) =>
-          String(url).includes('/cancel') && opts?.method === 'POST',
+        (args: any[]) =>
+          String(args[0]).includes('/cancel') && args[1]?.method === 'POST',
       );
       expect(cancelCall).toBeTruthy();
     });
@@ -822,14 +822,14 @@ describe('SprintBoard — sprint seçimi', () => {
 
     await waitFor(() => screen.getByRole('combobox'));
     const ilkBurndownCagri = (fetchSpy as ReturnType<typeof vi.fn>).mock.calls.filter(
-      ([url]: [string]) => String(url).includes('/burndown'),
+      (args: any[]) => String(args[0]).includes('/burndown'),
     ).length;
 
     await user.selectOptions(screen.getByRole('combobox'), 'sprint-1');
 
     await waitFor(() => {
       const yeniBurndownCagri = (fetchSpy as ReturnType<typeof vi.fn>).mock.calls.filter(
-        ([url]: [string]) => String(url).includes('/burndown'),
+        (args: any[]) => String(args[0]).includes('/burndown'),
       ).length;
       expect(yeniBurndownCagri).toBeGreaterThan(ilkBurndownCagri);
     });

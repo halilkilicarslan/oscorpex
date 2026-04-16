@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CeremonyPanel from '../pages/studio/CeremonyPanel';
 
@@ -67,16 +67,16 @@ const ORNEK_RETRO_YANITI = {
 // global.fetch mock yardımcısı
 // ---------------------------------------------------------------------------
 
-function fetchOlustur(yanit: unknown, ok = true): ReturnType<typeof vi.fn> {
+function fetchOlustur(yanit: unknown, ok = true): typeof fetch {
 	return vi.fn().mockResolvedValue({
 		ok,
 		json: vi.fn().mockResolvedValue(yanit),
-	});
+	}) as unknown as typeof fetch;
 }
 
 // Fetch'i sonsuz beklemede tut (yükleme durumu testi için)
-function fetchAsla(): ReturnType<typeof vi.fn> {
-	return vi.fn().mockReturnValue(new Promise(() => {}));
+function fetchAsla(): typeof fetch {
+	return vi.fn().mockReturnValue(new Promise(() => {})) as unknown as typeof fetch;
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +224,7 @@ describe('CeremonyPanel — Standup görünümü', () => {
 
 	it('standup verisi yokken "No standup results yet" mesajı gösterilmeli', async () => {
 		// ok:false veya parse edilemeyen yanıt — fetchCeremony null döndürür
-		global.fetch = vi.fn().mockResolvedValue({ ok: false, json: vi.fn() });
+		global.fetch = vi.fn().mockResolvedValue({ ok: false, json: vi.fn() }) as unknown as typeof fetch;
 
 		render(<CeremonyPanel projectId={PROJE_ID} />);
 
@@ -613,7 +613,7 @@ describe('CeremonyPanel — Run Retrospective', () => {
 
 	it('"Run Retrospective" çalışırken buton "Running..." metnini göstermeli ve devre dışı olmalı', async () => {
 		// URL'e göre ayrıştıran genel fetch mock: GET her zaman başarısız, POST asla çözülmez
-		global.fetch = vi.fn().mockImplementation((url: string, opts?: { method?: string }) => {
+		global.fetch = vi.fn().mockImplementation((_url: string, opts?: { method?: string }) => {
 			const method = opts?.method ?? 'GET';
 			if (method === 'POST') {
 				// POST çağrısı asla resolve olmaz → running devam eder
@@ -621,7 +621,7 @@ describe('CeremonyPanel — Run Retrospective', () => {
 			}
 			// GET çağrıları hızlıca ok:false → fetchCeremony null döner, spinner kalkar
 			return Promise.resolve({ ok: false, json: vi.fn() });
-		});
+		}) as unknown as typeof fetch;
 
 		const user = userEvent.setup();
 		render(<CeremonyPanel projectId={PROJE_ID} />);
@@ -711,7 +711,7 @@ describe('CeremonyPanel — hata yönetimi ve parse guard', () => {
 
 	it('fetch exception fırlatınca bileşen çökmemeli (network hatası)', async () => {
 		// fetchCeremony try/catch ile null döndürür
-		global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+		global.fetch = vi.fn().mockRejectedValue(new Error('Network error')) as unknown as typeof fetch;
 
 		expect(() => render(<CeremonyPanel projectId={PROJE_ID} />)).not.toThrow();
 
