@@ -175,6 +175,108 @@ describe("evaluatePolicies — custom rules", () => {
 		expect(result.violations.some((v) => v.includes("No XL"))).toBe(false);
 	});
 
+	it("evaluates 'complexity >= L' condition", async () => {
+		mockSettings.mockResolvedValue({
+			policy: {
+				rules: JSON.stringify({
+					rules: [{ id: "c-10", projectId: "p-1", name: "Block large+", condition: "complexity >= L", action: "block", enabled: true }],
+				}),
+			},
+		});
+		// L matches >= L
+		const resultL = await evaluatePolicies("p-1", makeTask({ complexity: "L", approvalStatus: "approved" }));
+		expect(resultL.allowed).toBe(false);
+		expect(resultL.violations.some((v) => v.includes("Block large+"))).toBe(true);
+	});
+
+	it("'complexity >= L' does not match S or M", async () => {
+		mockSettings.mockResolvedValue({
+			policy: {
+				rules: JSON.stringify({
+					rules: [{ id: "c-10", projectId: "p-1", name: "Block large+", condition: "complexity >= L", action: "block", enabled: true }],
+				}),
+			},
+		});
+		const resultS = await evaluatePolicies("p-1", makeTask({ complexity: "S" }));
+		expect(resultS.violations.some((v) => v.includes("Block large+"))).toBe(false);
+		const resultM = await evaluatePolicies("p-1", makeTask({ complexity: "M" }));
+		expect(resultM.violations.some((v) => v.includes("Block large+"))).toBe(false);
+	});
+
+	it("evaluates 'assigned_agent ==' condition", async () => {
+		mockSettings.mockResolvedValue({
+			policy: {
+				rules: JSON.stringify({
+					rules: [{ id: "c-11", projectId: "p-1", name: "No intern", condition: "assigned_agent == intern-dev", action: "block", enabled: true }],
+				}),
+			},
+		});
+		const result = await evaluatePolicies("p-1", makeTask({ assignedAgent: "intern-dev" }));
+		expect(result.allowed).toBe(false);
+	});
+
+	it("'assigned_agent ==' does not match different agent", async () => {
+		mockSettings.mockResolvedValue({
+			policy: {
+				rules: JSON.stringify({
+					rules: [{ id: "c-11", projectId: "p-1", name: "No intern", condition: "assigned_agent == intern-dev", action: "block", enabled: true }],
+				}),
+			},
+		});
+		const result = await evaluatePolicies("p-1", makeTask({ assignedAgent: "senior-dev" }));
+		expect(result.violations.some((v) => v.includes("No intern"))).toBe(false);
+	});
+
+	it("evaluates 'target_files contains' condition", async () => {
+		mockSettings.mockResolvedValue({
+			policy: {
+				rules: JSON.stringify({
+					rules: [{ id: "c-12", projectId: "p-1", name: "Protect env", condition: "target_files contains .env", action: "block", enabled: true }],
+				}),
+			},
+		});
+		const task = makeTask({ targetFiles: ["src/config.ts", ".env.local"] });
+		const result = await evaluatePolicies("p-1", task);
+		expect(result.allowed).toBe(false);
+	});
+
+	it("'target_files contains' does not match unrelated files", async () => {
+		mockSettings.mockResolvedValue({
+			policy: {
+				rules: JSON.stringify({
+					rules: [{ id: "c-12", projectId: "p-1", name: "Protect env", condition: "target_files contains .env", action: "block", enabled: true }],
+				}),
+			},
+		});
+		const task = makeTask({ targetFiles: ["src/index.ts", "README.md"] });
+		const result = await evaluatePolicies("p-1", task);
+		expect(result.violations.some((v) => v.includes("Protect env"))).toBe(false);
+	});
+
+	it("evaluates 'retry_count >=' condition", async () => {
+		mockSettings.mockResolvedValue({
+			policy: {
+				rules: JSON.stringify({
+					rules: [{ id: "c-13", projectId: "p-1", name: "Too many retries", condition: "retry_count >= 3", action: "block", enabled: true }],
+				}),
+			},
+		});
+		const result = await evaluatePolicies("p-1", makeTask({ retryCount: 4 }));
+		expect(result.allowed).toBe(false);
+	});
+
+	it("'retry_count >=' does not match lower count", async () => {
+		mockSettings.mockResolvedValue({
+			policy: {
+				rules: JSON.stringify({
+					rules: [{ id: "c-13", projectId: "p-1", name: "Too many retries", condition: "retry_count >= 3", action: "block", enabled: true }],
+				}),
+			},
+		});
+		const result = await evaluatePolicies("p-1", makeTask({ retryCount: 1 }));
+		expect(result.violations.some((v) => v.includes("Too many retries"))).toBe(false);
+	});
+
 	it("custom warn-action rule does not block", async () => {
 		mockSettings.mockResolvedValue({
 			policy: {
