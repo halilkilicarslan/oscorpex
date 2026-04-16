@@ -86,6 +86,7 @@ export default function ProjectReport({ projectId }: { projectId: string }) {
     try {
       const res = await fetch(`${BASE}/api/studio/projects/${projectId}/report`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       setReport(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load report');

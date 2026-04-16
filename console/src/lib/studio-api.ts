@@ -1429,7 +1429,14 @@ export type AgentMessageType =
   | 'review_request'
   | 'bug_report'
   | 'feedback'
-  | 'notification';
+  | 'notification'
+  // v3.6: Agent ceremonies & communication
+  | 'standup'
+  | 'retrospective'
+  | 'conflict'
+  | 'help_request'
+  | 'pair_session'
+  | 'handoff_doc';
 
 // Ajan mesajı arayüzü
 export interface AgentMessage {

@@ -23,7 +23,7 @@ export interface ProjectReport {
 		avgRevisions: number;     // average revision cycles across all tasks
 		firstPassRate: number;    // 0–1: tasks completed without any revision
 	};
-	topFileChanges: string[];
+	topFileChanges: { path: string; changeCount: number }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ function calcDurationMs(project: Project, tasks: Task[]): number {
 	return lastCompleted > created ? lastCompleted - created : Date.now() - created;
 }
 
-function extractTopFileChanges(tasks: Task[], limit = 10): string[] {
+function extractTopFileChanges(tasks: Task[], limit = 10): { path: string; changeCount: number }[] {
 	const fileCounts = new Map<string, number>();
 
 	for (const task of tasks) {
@@ -65,7 +65,7 @@ function extractTopFileChanges(tasks: Task[], limit = 10): string[] {
 	return Array.from(fileCounts.entries())
 		.sort((a, b) => b[1] - a[1])
 		.slice(0, limit)
-		.map(([file]) => file);
+		.map(([path, changeCount]) => ({ path, changeCount }));
 }
 
 function calcQualityMetrics(tasks: Task[], events: StudioEvent[]) {
@@ -170,7 +170,7 @@ export async function generateStakeholderReport(projectId: string): Promise<stri
 
 	const filesSummary =
 		report.topFileChanges.length > 0
-			? `Key files changed include: ${report.topFileChanges.slice(0, 5).join(", ")}.`
+			? `Key files changed include: ${report.topFileChanges.slice(0, 5).map((f) => f.path).join(", ")}.`
 			: "No file change data available.";
 
 	const lines = [
