@@ -11,7 +11,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { execute, query, queryOne } from "./pg.js";
 
-export type CLIProviderId = "claude" | "codex" | "gemini" | "aider" | "cursor";
+export type CLIProviderId = "claude" | "codex" | "gemini" | "cursor";
 export type QuotaStatus = "healthy" | "warning" | "critical" | "depleted" | "unknown";
 export type AuthStatus = "connected" | "missing" | "expired" | "unknown" | "not_supported";
 export type UsageSource = "cli_usage" | "cli_cost" | "local_jsonl" | "provider_api" | "unavailable";
@@ -150,17 +150,8 @@ const PROVIDERS: CLIProviderDef[] = [
 		providerHints: ["google"],
 	},
 	{
-		id: "aider",
-		label: "Aider",
-		binary: "aider",
-		versionArgs: ["--version"],
-		cliToolAliases: ["aider"],
-		modelHints: [],
-		providerHints: [],
-	},
-	{
 		id: "cursor",
-		label: "Cursor CLI",
+		label: "Cursor",
 		binary: "cursor",
 		versionArgs: ["--version"],
 		cliToolAliases: ["cursor"],
@@ -1394,6 +1385,134 @@ async function probeGemini(permissions: ProviderProbePermission): Promise<{ glob
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Cursor probe — reads token from SQLite DB, calls cursor.com/api/usage-summary
+// ---------------------------------------------------------------------------
+
+const CURSOR_DB_PATH = join(homedir(), "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb");
+
+function readCursorAccessToken(): string | null {
+	if (!existsSync(CURSOR_DB_PATH)) return null;
+	try {
+		const raw = execSync(
+			`/usr/bin/sqlite3 "${CURSOR_DB_PATH}" "SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'"`,
+			{ timeout: 5_000, encoding: "utf-8" },
+		).trim();
+		return raw || null;
+	} catch {
+		return null;
+	}
+}
+
+function extractUserIdFromJWT(token: string): string | null {
+	const parts = token.split(".");
+	if (parts.length < 2) return null;
+	try {
+		let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+		const remainder = base64.length % 4;
+		if (remainder > 0) base64 += "=".repeat(4 - remainder);
+		const payload = JSON.parse(Buffer.from(base64, "base64").toString("utf-8"));
+		return payload.sub || null;
+	} catch {
+		return null;
+	}
+}
+
+async function probeCursor(permissions: ProviderProbePermission): Promise<{ global: GlobalUsageSnapshot | null; authStatus: AuthStatus; errors: string[] }> {
+	if (!permissions.enabled) return { global: null, authStatus: "unknown", errors: [] };
+	if (!permissions.allowAuthFileRead) return { global: null, authStatus: "unknown", errors: ["Auth file read permission is disabled"] };
+
+	const accessToken = readCursorAccessToken();
+	if (!accessToken) return { global: null, authStatus: "missing", errors: ["Cursor auth token not found (not logged in?)"] };
+
+	const userId = extractUserIdFromJWT(accessToken);
+	if (!userId) return { global: null, authStatus: "expired", errors: ["Cursor JWT token is invalid"] };
+
+	if (!permissions.allowNetworkProbe) return { global: null, authStatus: "connected", errors: ["Network probe is disabled"] };
+
+	try {
+		const cookie = `WorkosCursorSessionToken=${userId}::${accessToken}`;
+		const res = await fetch("https://cursor.com/api/usage-summary", {
+			headers: {
+				Cookie: cookie,
+				"Content-Type": "application/json",
+				"User-Agent": "Oscorpex CLI Usage Observatory",
+			},
+			signal: AbortSignal.timeout(15_000),
+		});
+
+		if (res.status === 401 || res.status === 403) {
+			return { global: null, authStatus: "expired", errors: ["Cursor auth expired or unauthorized"] };
+		}
+		if (!res.ok) return { global: null, authStatus: "connected", errors: [`Cursor usage HTTP ${res.status}`] };
+
+		const body = (await res.json()) as any;
+		const quotas: UsageQuota[] = [];
+
+		// Parse plan usage
+		const planUsage = body.individualUsage?.plan;
+		if (planUsage?.enabled) {
+			const used = Number(planUsage.used ?? 0);
+			const limit = Number(planUsage.limit ?? 0);
+			if (limit > 0) {
+				const pctRemaining = Math.max(0, Math.min(100, ((limit - used) / limit) * 100));
+				quotas.push({
+					type: "session",
+					label: "Monthly requests",
+					percentRemaining: pctRemaining,
+					percentUsed: 100 - pctRemaining,
+					resetText: `${used}/${limit} requests`,
+					status: quotaStatus(pctRemaining),
+				});
+			}
+		}
+
+		// Parse on-demand usage
+		const onDemand = body.individualUsage?.onDemand;
+		if (onDemand?.enabled) {
+			const used = Number(onDemand.used ?? 0);
+			const limit = Number(onDemand.limit ?? 0);
+			if (limit > 0) {
+				const pctRemaining = Math.max(0, Math.min(100, ((limit - used) / limit) * 100));
+				quotas.push({
+					type: "credits",
+					label: "On-demand",
+					percentRemaining: pctRemaining,
+					percentUsed: 100 - pctRemaining,
+					resetText: `${used}/${limit} on-demand`,
+					status: quotaStatus(pctRemaining),
+				});
+			}
+		}
+
+		// Unlimited plans
+		if (body.isUnlimited) {
+			quotas.push({
+				type: "session",
+				label: "Monthly requests",
+				percentRemaining: 100,
+				status: "healthy",
+			});
+		}
+
+		// Account tier
+		const membershipType = body.membershipType ? String(body.membershipType).toUpperCase() : undefined;
+
+		return {
+			global: {
+				quotas,
+				accountTier: membershipType,
+				source: "provider_api",
+				confidence: quotas.length > 0 ? "high" : "low",
+			},
+			authStatus: "connected",
+			errors: quotas.length > 0 ? [] : ["Cursor usage response did not contain quotas"],
+		};
+	} catch (err) {
+		return { global: null, authStatus: "connected", errors: [sanitizeError(err)] };
+	}
+}
+
 function attribution(global: GlobalUsageSnapshot | null, oscorpex: OscorpexUsageSnapshot): UsageAttribution | null {
 	const dailyTokens = global?.dailyUsage?.tokens;
 	if (!dailyTokens || dailyTokens <= 0) {
@@ -1419,7 +1538,7 @@ export async function getCLIUsageSnapshot(providerId: CLIProviderId, refresh = f
 
 	const errors = [...binary.errors];
 	let global: GlobalUsageSnapshot | null = null;
-	let authStatus: AuthStatus = providerId === "aider" || providerId === "cursor" ? "not_supported" : "unknown";
+	let authStatus: AuthStatus = "unknown";
 
 	if (binary.installed && (refresh || permissions.enabled)) {
 		if (providerId === "claude" && binary.binaryPath) {
@@ -1437,24 +1556,15 @@ export async function getCLIUsageSnapshot(providerId: CLIProviderId, refresh = f
 			global = result.global;
 			authStatus = result.authStatus;
 			errors.push(...result.errors);
-		} else if (providerId === "aider") {
-			global = {
-				quotas: [],
-				source: "unavailable",
-				confidence: "low",
-			};
-			errors.push("Aider quota is delegated to its underlying model provider");
 		} else if (providerId === "cursor") {
-			global = {
-				quotas: [],
-				source: "unavailable",
-				confidence: "low",
-			};
-			errors.push("Cursor usage metrics are only available within the Cursor editor");
+			const result = await probeCursor(permissions);
+			global = result.global;
+			authStatus = result.authStatus;
+			errors.push(...result.errors);
 		}
 	}
 
-	if (!permissions.enabled && providerId !== "aider" && providerId !== "cursor") {
+	if (!permissions.enabled) {
 		errors.push("Global quota probe requires provider opt-in");
 	}
 

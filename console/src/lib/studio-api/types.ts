@@ -807,7 +807,7 @@ export type ProviderCreateInput = Pick<
   'name' | 'type' | 'apiKey' | 'baseUrl' | 'model' | 'isActive' | 'cliTool'
 >;
 
-export type CLIProviderId = 'claude' | 'codex' | 'gemini' | 'aider';
+export type CLIProviderId = 'claude' | 'codex' | 'gemini' | 'cursor';
 export type QuotaStatus = 'healthy' | 'warning' | 'critical' | 'depleted' | 'unknown';
 
 export interface ProviderProbePermission {
