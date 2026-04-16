@@ -65,11 +65,18 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek im
 ### Plan Kaynağı
 `.planning/architecture/V3_ROADMAP.md` — v3.0-v3.9 tüm milestone'lar.
 
+### Session 2026-04-16 — UI Validation + Test Coverage + Modularization
+
+- **UI e2e validation**: 8 sayfa doğrulandı (ProjectReport, MessageCenter, KanbanBoard, PMChat, SprintBoard, CeremonyPanel, AgentChat, BacklogBoard)
+- **Frontend test coverage**: 175 yeni test (SprintBoard 50, CeremonyPanel 41, BacklogBoard 43, ProjectReport 41)
+- **studio-api.ts split** (`e3e71f2`): 2543 satır → 17 modüler dosya (`console/src/lib/studio-api/`). Original file barrel re-export. Tüm import path'ler değişmedi.
+- **agent-routes.ts fix** (`82cabba`): 3 eksik await + broadcast type passthrough
+- **PolicySection, ModelRoutingSection, MemorySection**: Zaten tam implementli ve backend'e bağlı (orphaned değil).
+- Backend: 430/430, Frontend: 393/393 passing.
+
 ### Sıradaki Adımlar
-- Milestone stabilization tamamlandı
-- UI doğrulaması: her milestone için frontend sayfaları end-to-end denenmeli (SprintBoard, CeremonyPanel, AgentChat, ProjectReport, BacklogBoard)
-- Policy config UI (ProjectSettings.tsx rule builder) — orphaned frontend hala beklemede
-- Memory/routing config UI — ProjectSettings tokens/model matrisi
+- v3.x tüm milestone'lar stabilize ve UI tam bağlı
+- Olası iyileştirmeler: yeni policy condition pattern'leri, model_routing_policies tablo temizliği
 
 ## Previous: v3.0-v3.9 Full Platform Upgrade
 
