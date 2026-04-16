@@ -61,6 +61,8 @@ const SAMPLE_TASK: Task = {
   dependsOn: [],
   branch: 'feature/frontend',
   retryCount: 0,
+  revisionCount: 0,
+  requiresApproval: false,
 };
 
 describe('studio-api — URL yapisi', () => {

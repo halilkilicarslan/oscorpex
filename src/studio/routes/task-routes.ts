@@ -15,40 +15,55 @@ export const taskRoutes = new Hono();
 // ---- Tasks ----------------------------------------------------------------
 
 taskRoutes.get("/projects/:id/tasks", async (c) => {
-	const tasks = await listProjectTasks(c.req.param("id"));
+	try {
+		const tasks = await listProjectTasks(c.req.param("id"));
 
-	const tasksWithSummary = tasks.map((task) => ({
-		...task,
-		outputSummary: task.output
-			? {
-					filesCreatedCount: task.output.filesCreated.length,
-					filesModifiedCount: task.output.filesModified.length,
-					logLineCount: task.output.logs.length,
-					hasTestResults: task.output.testResults !== undefined,
-				}
-			: null,
-	}));
+		const tasksWithSummary = tasks.map((task) => ({
+			...task,
+			outputSummary: task.output
+				? {
+						filesCreatedCount: task.output.filesCreated.length,
+						filesModifiedCount: task.output.filesModified.length,
+						logLineCount: task.output.logs.length,
+						hasTestResults: task.output.testResults !== undefined,
+					}
+				: null,
+		}));
 
-	return c.json(tasksWithSummary);
+		return c.json(tasksWithSummary);
+	} catch (err) {
+		console.error("[task-routes] list tasks failed:", err);
+		return c.json({ error: "Failed to list tasks" }, 500);
+	}
 });
 
 taskRoutes.get("/projects/:id/tasks/:taskId", async (c) => {
-	const task = await getTask(c.req.param("taskId"));
-	if (!task) return c.json({ error: "Task not found" }, 404);
-	return c.json(task);
+	try {
+		const task = await getTask(c.req.param("taskId"));
+		if (!task) return c.json({ error: "Task not found" }, 404);
+		return c.json(task);
+	} catch (err) {
+		console.error("[task-routes] get task failed:", err);
+		return c.json({ error: "Failed to get task" }, 500);
+	}
 });
 
 taskRoutes.patch("/projects/:id/tasks/:taskId", async (c) => {
-	const body = await c.req.json();
-	if (body.status === "running" && !body.startedAt) {
-		body.startedAt = new Date().toISOString();
+	try {
+		const body = await c.req.json();
+		if (body.status === "running" && !body.startedAt) {
+			body.startedAt = new Date().toISOString();
+		}
+		if (body.status === "done" && !body.completedAt) {
+			body.completedAt = new Date().toISOString();
+		}
+		const task = await updateTask(c.req.param("taskId"), body);
+		if (!task) return c.json({ error: "Task not found" }, 404);
+		return c.json(task);
+	} catch (err) {
+		console.error("[task-routes] update task failed:", err);
+		return c.json({ error: "Failed to update task" }, 500);
 	}
-	if (body.status === "done" && !body.completedAt) {
-		body.completedAt = new Date().toISOString();
-	}
-	const task = await updateTask(c.req.param("taskId"), body);
-	if (!task) return c.json({ error: "Task not found" }, 404);
-	return c.json(task);
 });
 
 taskRoutes.post("/projects/:id/tasks/:taskId/retry", async (c) => {
@@ -114,8 +129,13 @@ taskRoutes.post("/projects/:id/tasks/:taskId/reject", async (c) => {
 
 // GET /projects/:id/approvals — Bekleyen onayları listele
 taskRoutes.get("/projects/:id/approvals", async (c) => {
-	const pendingTasks = await listPendingApprovals(c.req.param("id"));
-	return c.json(pendingTasks);
+	try {
+		const pendingTasks = await listPendingApprovals(c.req.param("id"));
+		return c.json(pendingTasks);
+	} catch (err) {
+		console.error("[task-routes] list approvals failed:", err);
+		return c.json({ error: "Failed to list approvals" }, 500);
+	}
 });
 
 // GET /projects/:id/tasks/:taskId/logs
@@ -146,22 +166,27 @@ taskRoutes.get("/projects/:id/tasks/:taskId/logs", async (c) => {
 
 // GET /projects/:id/tasks/:taskId/output
 taskRoutes.get("/projects/:id/tasks/:taskId/output", async (c) => {
-	const task = await getTask(c.req.param("taskId"));
-	if (!task) return c.json({ error: "Task not found" }, 404);
+	try {
+		const task = await getTask(c.req.param("taskId"));
+		if (!task) return c.json({ error: "Task not found" }, 404);
 
-	if (!task.output) {
+		if (!task.output) {
+			return c.json({
+				taskId: task.id,
+				status: task.status,
+				output: null,
+			});
+		}
+
 		return c.json({
 			taskId: task.id,
 			status: task.status,
-			output: null,
+			output: task.output,
 		});
+	} catch (err) {
+		console.error("[task-routes] get task output failed:", err);
+		return c.json({ error: "Failed to get task output" }, 500);
 	}
-
-	return c.json({
-		taskId: task.id,
-		status: task.status,
-		output: task.output,
-	});
 });
 
 // GET /projects/:id/tasks/:taskId/stream — SSE log stream

@@ -64,7 +64,7 @@ export class CodexAdapter implements CLIAdapter {
 }
 
 // ---------------------------------------------------------------------------
-// AiderAdapter — Aider CLI (skeleton)
+// CursorAdapter — Cursor Agent CLI
 // ---------------------------------------------------------------------------
 
 export class CursorAdapter implements CLIAdapter {

@@ -11,56 +11,76 @@ export const workItemRoutes = new Hono();
 
 // GET /projects/:id/work-items
 workItemRoutes.get("/projects/:id/work-items", async (c) => {
-	const projectId = c.req.param("id");
-	const { type, priority, status, sprint_id, source } = c.req.query();
+	try {
+		const projectId = c.req.param("id");
+		const { type, priority, status, sprint_id, source } = c.req.query();
 
-	const items = await getWorkItems(projectId, {
-		type: type as WorkItemType | undefined,
-		priority: priority as WorkItemPriority | undefined,
-		status: status as WorkItemStatus | undefined,
-		sprintId: sprint_id,
-		source: source as WorkItemSource | undefined,
-	});
+		const items = await getWorkItems(projectId, {
+			type: type as WorkItemType | undefined,
+			priority: priority as WorkItemPriority | undefined,
+			status: status as WorkItemStatus | undefined,
+			sprintId: sprint_id,
+			source: source as WorkItemSource | undefined,
+		});
 
-	return c.json(items);
+		return c.json(items);
+	} catch (err) {
+		console.error("[work-item-routes] list items failed:", err);
+		return c.json({ error: "Failed to list work items" }, 500);
+	}
 });
 
 // POST /projects/:id/work-items
 workItemRoutes.post("/projects/:id/work-items", async (c) => {
-	const projectId = c.req.param("id");
-	const body = await c.req.json<{
-		type: WorkItemType;
-		title: string;
-		description?: string;
-		priority?: WorkItemPriority;
-		severity?: "blocker" | "major" | "minor" | "trivial";
-		labels?: string[];
-		source?: WorkItemSource;
-		sourceAgentId?: string;
-		sourceTaskId?: string;
-	}>();
+	try {
+		const projectId = c.req.param("id");
+		const body = await c.req.json<{
+			type: WorkItemType;
+			title: string;
+			description?: string;
+			priority?: WorkItemPriority;
+			severity?: "blocker" | "major" | "minor" | "trivial";
+			labels?: string[];
+			source?: WorkItemSource;
+			sourceAgentId?: string;
+			sourceTaskId?: string;
+		}>();
 
-	if (!body.type || !body.title) {
-		return c.json({ error: "type and title are required" }, 400);
+		if (!body.type || !body.title) {
+			return c.json({ error: "type and title are required" }, 400);
+		}
+
+		const item = await createWorkItem({ projectId, ...body });
+		return c.json(item, 201);
+	} catch (err) {
+		console.error("[work-item-routes] create item failed:", err);
+		return c.json({ error: "Failed to create work item" }, 500);
 	}
-
-	const item = await createWorkItem({ projectId, ...body });
-	return c.json(item, 201);
 });
 
 // GET /projects/:id/work-items/:itemId
 workItemRoutes.get("/projects/:id/work-items/:itemId", async (c) => {
-	const item = await getWorkItem(c.req.param("itemId"));
-	if (!item) return c.json({ error: "Work item not found" }, 404);
-	return c.json(item);
+	try {
+		const item = await getWorkItem(c.req.param("itemId"));
+		if (!item) return c.json({ error: "Work item not found" }, 404);
+		return c.json(item);
+	} catch (err) {
+		console.error("[work-item-routes] get item failed:", err);
+		return c.json({ error: "Failed to get work item" }, 500);
+	}
 });
 
 // PATCH /projects/:id/work-items/:itemId
 workItemRoutes.patch("/projects/:id/work-items/:itemId", async (c) => {
-	const body = await c.req.json();
-	const item = await updateWorkItem(c.req.param("itemId"), body);
-	if (!item) return c.json({ error: "Work item not found" }, 404);
-	return c.json(item);
+	try {
+		const body = await c.req.json();
+		const item = await updateWorkItem(c.req.param("itemId"), body);
+		if (!item) return c.json({ error: "Work item not found" }, 404);
+		return c.json(item);
+	} catch (err) {
+		console.error("[work-item-routes] update item failed:", err);
+		return c.json({ error: "Failed to update work item" }, 500);
+	}
 });
 
 // DELETE /projects/:id/work-items/:itemId

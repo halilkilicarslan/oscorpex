@@ -4,7 +4,6 @@
 
 import { Hono } from "hono";
 import {
-	recordTokenUsage as _recordTokenUsage,
 	getActivityTimeline,
 	getAgentAnalytics,
 	getAgentCostSummary,

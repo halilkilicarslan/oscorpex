@@ -2,11 +2,14 @@
 // Oscorpex — Shared API Types
 // ---------------------------------------------------------------------------
 
+/** Agent-level CLI tool selection (execution adapter). */
+export type CLITool = 'claude-code' | 'codex' | 'cursor' | 'none';
+
 export interface Project {
   id: string;
   name: string;
   description: string;
-  status: 'planning' | 'approved' | 'running' | 'paused' | 'completed' | 'failed';
+  status: 'planning' | 'approved' | 'running' | 'paused' | 'completed' | 'failed' | 'maintenance' | 'archived';
   techStack: string[];
   repoPath: string;
   createdAt: string;
@@ -54,10 +57,10 @@ export interface Task {
   completedAt?: string;
   reviewStatus?: 'approved' | 'rejected' | null;
   reviewerAgentId?: string;
-  revisionCount?: number;
+  revisionCount: number;
   assignedAgentId?: string;
   // Human-in-the-Loop onay alanları
-  requiresApproval?: boolean;
+  requiresApproval: boolean;
   approvalStatus?: 'pending' | 'approved' | 'rejected' | null;
   approvalRejectionReason?: string;
   // v3.0: Micro-task decomposition
@@ -73,7 +76,7 @@ export interface AgentConfig {
   avatar: string;
   personality: string;
   model: string;
-  cliTool: string;
+  cliTool: CLITool;
   skills: string[];
   systemPrompt: string;
   isPreset: boolean;
@@ -108,7 +111,7 @@ export interface ProjectAgent {
   gender: Gender;
   personality: string;
   model: string;
-  cliTool: string;
+  cliTool: CLITool;
   skills: string[];
   systemPrompt: string;
   createdAt: string;
@@ -634,12 +637,8 @@ export interface SonarLatestScan {
   status?: string;
 }
 
-export interface GitStatus {
-  modified: string[];
-  untracked: string[];
-  staged: string[];
-  deleted: string[];
-}
+/** @deprecated Use GitStatusResult instead. */
+export type GitStatus = GitStatusResult;
 
 export interface GitLogEntry {
   hash: string;

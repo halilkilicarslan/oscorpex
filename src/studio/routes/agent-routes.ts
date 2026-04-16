@@ -5,7 +5,6 @@
 import { Hono } from "hono";
 import { loadAgentLog } from "../agent-log-store.js";
 import {
-	getMessage as _getMessage,
 	archiveMessage,
 	broadcastToTeam,
 	getInbox,

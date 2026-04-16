@@ -16,6 +16,8 @@ import {
   LayoutTemplate,
   ListTodo,
   CheckCircle,
+  Wrench,
+  Archive,
 } from 'lucide-react';
 import {
   fetchProjects,
@@ -55,6 +57,8 @@ const STATUS_STYLES: Record<Project['status'], { color: string; icon: React.Reac
   paused: { color: 'text-[#a855f7]', icon: <Pause size={12} />, label: 'Paused' },
   completed: { color: 'text-[#22c55e]', icon: <CheckCircle2 size={12} />, label: 'Completed' },
   failed: { color: 'text-[#ef4444]', icon: <XCircle size={12} />, label: 'Failed' },
+  maintenance: { color: 'text-[#f97316]', icon: <Wrench size={12} />, label: 'Maintenance' },
+  archived: { color: 'text-[#6b7280]', icon: <Archive size={12} />, label: 'Archived' },
 };
 
 function StatusBadge({ status }: { status: Project['status'] }) {

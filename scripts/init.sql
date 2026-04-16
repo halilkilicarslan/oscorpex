@@ -337,6 +337,7 @@ CREATE TABLE IF NOT EXISTS memory_facts (
   updated_at      TEXT NOT NULL
 );
 
+-- NOTE: Reserved for future use — model routing currently uses project_settings.
 CREATE TABLE IF NOT EXISTS model_routing_policies (
   id              TEXT PRIMARY KEY,
   scope           TEXT NOT NULL DEFAULT 'global',

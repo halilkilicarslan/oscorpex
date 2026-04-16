@@ -29,7 +29,7 @@ const ORNEK_AJAN: ProjectAgent = {
   gender: 'male',
   personality: 'Dikkatlı ve metodolojik',
   model: 'claude-sonnet-4-6',
-  cliTool: 'claude',
+  cliTool: 'claude-code',
   skills: ['React', 'TypeScript', 'CSS', 'Testing', 'GraphQL'],
   systemPrompt: 'Sen bir frontend gelistiricisin',
   createdAt: '2026-01-01T00:00:00Z',
@@ -70,7 +70,7 @@ describe('AgentCard — ajan bilgisi', () => {
       id: 'agent-1',
       agentId: 'agent-1',
       agentName: 'Frontend Gelistirici',
-      cliTool: 'claude',
+      cliTool: 'claude-code',
       status: 'idle',
     });
   });
@@ -137,7 +137,7 @@ describe('AgentCard — durum rozeti', () => {
       id: 'agent-1',
       agentId: 'agent-1',
       agentName: 'Frontend Gelistirici',
-      cliTool: 'claude',
+      cliTool: 'claude-code',
       status: 'idle',
     });
   });
@@ -176,7 +176,7 @@ describe('AgentCard — baslat/durdur butonu', () => {
       id: 'agent-1',
       agentId: 'agent-1',
       agentName: 'Frontend Gelistirici',
-      cliTool: 'claude',
+      cliTool: 'claude-code',
       status: 'idle',
     });
   });
@@ -192,7 +192,7 @@ describe('AgentCard — baslat/durdur butonu', () => {
       id: 'agent-1',
       agentId: 'agent-1',
       agentName: 'Frontend Gelistirici',
-      cliTool: 'claude',
+      cliTool: 'claude-code',
       status: 'running',
     });
     renderAgentCard({ status: 'running' });
@@ -206,7 +206,7 @@ describe('AgentCard — baslat/durdur butonu', () => {
       id: 'agent-1',
       agentId: 'agent-1',
       agentName: 'Frontend Gelistirici',
-      cliTool: 'claude',
+      cliTool: 'claude-code',
       status: 'running',
       pid: 12345,
     });
@@ -240,7 +240,7 @@ describe('AgentCard — baslat/durdur butonu', () => {
       id: 'agent-1',
       agentId: 'agent-1',
       agentName: 'Frontend Gelistirici',
-      cliTool: 'claude',
+      cliTool: 'claude-code',
       status: 'running',
     });
     renderAgentCard({ status: 'running' });
@@ -263,7 +263,7 @@ describe('AgentCard — duzenle ve sil butonlari', () => {
       id: 'agent-1',
       agentId: 'agent-1',
       agentName: 'Frontend Gelistirici',
-      cliTool: 'claude',
+      cliTool: 'claude-code',
       status: 'idle',
     });
   });
@@ -311,7 +311,7 @@ describe('AgentCard — okunmamis mesaj sayaci', () => {
       id: 'agent-1',
       agentId: 'agent-1',
       agentName: 'Frontend Gelistirici',
-      cliTool: 'claude',
+      cliTool: 'claude-code',
       status: 'idle',
     });
   });

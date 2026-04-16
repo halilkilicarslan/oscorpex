@@ -97,7 +97,12 @@ async function saveProjectIntake(
 // ---- Projects CRUD --------------------------------------------------------
 
 projectRoutes.get("/projects", async (c) => {
-	return c.json(await listProjects());
+	try {
+		return c.json(await listProjects());
+	} catch (err) {
+		console.error("[project-routes] list projects failed:", err);
+		return c.json({ error: "Failed to list projects" }, 500);
+	}
 });
 
 projectRoutes.post("/projects", async (c) => {
@@ -618,10 +623,15 @@ ${
 });
 
 projectRoutes.get("/projects/:id/chat/history", async (c) => {
-	const projectId = c.req.param("id");
-	const project = await getProject(projectId);
-	if (!project) return c.json({ error: "Project not found" }, 404);
-	return c.json(await listChatMessages(projectId));
+	try {
+		const projectId = c.req.param("id");
+		const project = await getProject(projectId);
+		if (!project) return c.json({ error: "Project not found" }, 404);
+		return c.json(await listChatMessages(projectId));
+	} catch (err) {
+		console.error("[project-routes] chat history failed:", err);
+		return c.json({ error: "Failed to get chat history" }, 500);
+	}
 });
 
 // ---- Intake Questions (v3.0 B1 — Interactive Planner) --------------------
@@ -680,9 +690,14 @@ projectRoutes.post("/projects/:id/intake-questions/:qid/skip", async (c) => {
 // ---- Plans ----------------------------------------------------------------
 
 projectRoutes.get("/projects/:id/plan", async (c) => {
-	const plan = await getLatestPlan(c.req.param("id"));
-	if (!plan) return c.json({ error: "No plan found" }, 404);
-	return c.json(plan);
+	try {
+		const plan = await getLatestPlan(c.req.param("id"));
+		if (!plan) return c.json({ error: "No plan found" }, 404);
+		return c.json(plan);
+	} catch (err) {
+		console.error("[project-routes] get plan failed:", err);
+		return c.json({ error: "Failed to get plan" }, 500);
+	}
 });
 
 projectRoutes.post("/projects/:id/plan/approve", async (c) => {
@@ -805,10 +820,15 @@ projectRoutes.post("/projects/:id/execute", async (c) => {
 });
 
 projectRoutes.get("/projects/:id/execution/status", async (c) => {
-	const projectId = c.req.param("id");
-	const project = await getProject(projectId);
-	if (!project) return c.json({ error: "Project not found" }, 404);
-	return c.json(executionEngine.getExecutionStatus(projectId));
+	try {
+		const projectId = c.req.param("id");
+		const project = await getProject(projectId);
+		if (!project) return c.json({ error: "Project not found" }, 404);
+		return c.json(executionEngine.getExecutionStatus(projectId));
+	} catch (err) {
+		console.error("[project-routes] execution status failed:", err);
+		return c.json({ error: "Failed to get execution status" }, 500);
+	}
 });
 
 projectRoutes.get("/projects/:id/progress", (c) => {
