@@ -781,7 +781,7 @@ export interface LifecycleInfo {
 }
 
 export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom' | 'cli';
-export type CliTool = 'claude' | 'codex' | 'gemini';
+export type CliTool = 'claude' | 'codex' | 'gemini' | 'cursor';
 
 export interface AIProvider {
   id: string;

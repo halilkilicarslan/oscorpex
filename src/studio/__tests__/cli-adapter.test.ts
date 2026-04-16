@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { AiderAdapter, ClaudeAdapter, CodexAdapter, getAdapter } from "../cli-adapter.js";
+import { CursorAdapter, ClaudeAdapter, CodexAdapter, getAdapter } from "../cli-adapter.js";
 
 vi.mock("../cli-runtime.js", () => ({
 	isClaudeCliAvailable: vi.fn().mockResolvedValue(true),
@@ -70,15 +70,11 @@ describe("CLI Adapter (Faz 4.1)", () => {
 		});
 	});
 
-	describe("AiderAdapter", () => {
-		const adapter = new AiderAdapter();
+	describe("CursorAdapter", () => {
+		const adapter = new CursorAdapter();
 
-		it('should have name "aider"', () => {
-			expect(adapter.name).toBe("aider");
-		});
-
-		it("should not be available", async () => {
-			expect(await adapter.isAvailable()).toBe(false);
+		it('should have name "cursor"', () => {
+			expect(adapter.name).toBe("cursor");
 		});
 	});
 
@@ -91,8 +87,8 @@ describe("CLI Adapter (Faz 4.1)", () => {
 			expect(getAdapter("codex").name).toBe("codex");
 		});
 
-		it('should return AiderAdapter for "aider"', () => {
-			expect(getAdapter("aider").name).toBe("aider");
+		it('should return CursorAdapter for "cursor"', () => {
+			expect(getAdapter("cursor").name).toBe("cursor");
 		});
 
 		it('should fallback to ClaudeAdapter for "none"', () => {

@@ -30,6 +30,7 @@ function resolveBinary(tool: CliTool): string {
 		claude: ["/opt/homebrew/bin/claude", "/usr/local/bin/claude", "/usr/bin/claude"],
 		codex: ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/usr/bin/codex"],
 		gemini: ["/opt/homebrew/bin/gemini", "/usr/local/bin/gemini", "/usr/bin/gemini"],
+		cursor: ["/usr/local/bin/cursor", "/opt/homebrew/bin/cursor"],
 	};
 
 	for (const p of commonPaths[tool] ?? []) {
@@ -108,6 +109,41 @@ function buildInvocation(tool: CliTool, model: string, system: string): CliInvoc
 				"--no-session-persistence",
 			];
 			if (system) args.push("--system-prompt", system);
+			return {
+				bin,
+				args,
+				parseOutput: (stdout) => {
+					try {
+						const obj = JSON.parse(stdout);
+						const text = typeof obj.result === "string"
+							? obj.result
+							: typeof obj.text === "string"
+								? obj.text
+								: stdout;
+						const usage = obj.usage ?? {};
+						return {
+							text,
+							inputTokens: usage.input_tokens,
+							outputTokens: usage.output_tokens,
+						};
+					} catch {
+						return { text: stdout.trim() };
+					}
+				},
+			};
+		}
+		case "cursor": {
+			// cursor agent -p --output-format json --model <model> --trust
+			// prompt body goes on stdin
+			const args = [
+				"agent",
+				"-p",
+				"--output-format",
+				"json",
+				"--trust",
+				"--force",
+			];
+			if (model) args.push("--model", model);
 			return {
 				bin,
 				args,
@@ -342,6 +378,8 @@ export function defaultModelForCliTool(tool: CliTool): string {
 			return "gpt-5-codex";
 		case "gemini":
 			return "gemini-2.0-flash";
+		case "cursor":
+			return "sonnet-4";
 		default:
 			return "sonnet";
 	}

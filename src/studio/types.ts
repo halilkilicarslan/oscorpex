@@ -130,7 +130,7 @@ export type AgentRole =
 	| "security-reviewer"
 	| "docs-writer";
 
-export type CLITool = "claude-code" | "codex" | "aider" | "none";
+export type CLITool = "claude-code" | "codex" | "cursor" | "none";
 
 export interface AgentConfig {
 	id: string;
@@ -250,7 +250,7 @@ export interface ContainerConfig {
 export type AIProviderType = "openai" | "anthropic" | "google" | "ollama" | "custom" | "cli";
 
 /** CLI subtype for type="cli" providers. Each CLI uses its own auth (no api key). */
-export type CliTool = "claude" | "codex" | "gemini";
+export type CliTool = "claude" | "codex" | "gemini" | "cursor";
 
 export interface AIProvider {
 	id: string;

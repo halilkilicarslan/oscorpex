@@ -3,7 +3,7 @@
 // Docker yerine yerel CLI araçlarını alt süreç olarak çalıştırır:
 //   claude-code → `claude`
 //   codex       → `codex`
-//   aider       → `aider`
+//   cursor      → `cursor agent`
 //   custom      → systemPrompt'u komut olarak çalıştırır
 //   none        → hiçbir şey başlatmaz
 // ---------------------------------------------------------------------------
@@ -96,11 +96,11 @@ function buildCommand(
 			}
 			return { cmd: "codex", args: [] };
 
-		case "aider":
+		case "cursor":
 			if (taskPrompt) {
-				return { cmd: "aider", args: ["--message", taskPrompt] };
+				return { cmd: "cursor", args: ["agent", "-p", "--output-format", "json", "--trust", "--force", taskPrompt] };
 			}
-			return { cmd: "aider", args: [] };
+			return { cmd: "cursor", args: ["agent"] };
 
 		case "custom":
 			// systemPrompt komutu ikiye böl: ilk kelime = program, geri kalanı = argümanlar
