@@ -1,6 +1,5 @@
 import type {
   GitStatusResult,
-  GitStatus,
   GitLogEntry,
   RevertResult,
   BranchesResult,
@@ -33,9 +32,8 @@ export async function commitChanges(projectId: string, message: string, files?: 
   });
 }
 
-export async function fetchGitStatus(projectId: string): Promise<GitStatus> {
-  return json(`${API}/projects/${projectId}/git/status`);
-}
+/** @deprecated Use getGitStatus instead. */
+export const fetchGitStatus = getGitStatus;
 
 export async function fetchGitDiff(projectId: string, ref?: string): Promise<{ diff: string }> {
   const q = ref ? `?ref=${encodeURIComponent(ref)}` : '';

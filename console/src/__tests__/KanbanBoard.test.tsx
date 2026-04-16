@@ -46,6 +46,8 @@ const ORNEK_GOREVLER: Task[] = [
     dependsOn: [],
     branch: 'feature/login',
     retryCount: 0,
+    revisionCount: 0,
+    requiresApproval: false,
   },
   {
     id: 'task-2',
@@ -59,6 +61,8 @@ const ORNEK_GOREVLER: Task[] = [
     branch: 'feature/api',
     retryCount: 0,
     startedAt: '2026-01-15T10:00:00Z',
+    revisionCount: 0,
+    requiresApproval: false,
   },
   {
     id: 'task-3',
@@ -77,6 +81,8 @@ const ORNEK_GOREVLER: Task[] = [
       filesModified: [],
       logs: [],
     },
+    revisionCount: 0,
+    requiresApproval: false,
   },
   {
     id: 'task-4',
@@ -89,6 +95,8 @@ const ORNEK_GOREVLER: Task[] = [
     dependsOn: ['task-3'],
     branch: 'feature/tests',
     retryCount: 2,
+    revisionCount: 0,
+    requiresApproval: false,
   },
 ];
 

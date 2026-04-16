@@ -69,7 +69,7 @@ import { useNotifications } from '../../hooks/useNotifications';
 type BoardView = 'kanban' | 'pipeline';
 
 // Sekme türü tanımı — settings sekmesi eklendi
-type Tab = 'chat' | 'team' | 'board' | 'preview' | 'files' | 'events' | 'messages' | 'dashboard' | 'logs' | 'diff' | 'settings' | 'backlog' | 'sprint' | 'ceremonies' | 'report' | 'agent-chat';
+type Tab = 'chat' | 'team' | 'board' | 'preview' | 'files' | 'events' | 'messages' | 'dashboard' | 'logs' | 'diff' | 'settings' | 'backlog' | 'sprint' | 'ceremonies' | 'report';
 
 // Sabit sekme listesi (messages badge'i dinamik olarak eklenir)
 const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [

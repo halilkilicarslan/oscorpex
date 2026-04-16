@@ -90,7 +90,7 @@ const ORNEK_AJANLAR: ProjectAgent[] = [
     gender: 'male',
     personality: 'Dikkatli',
     model: 'claude-sonnet-4-6',
-    cliTool: 'claude',
+    cliTool: 'claude-code',
     skills: ['React'],
     systemPrompt: 'Frontend gelistirici',
     createdAt: '2026-01-01T00:00:00Z',

@@ -23,15 +23,20 @@ export const providerRoutes = new Hono();
 // ---- Config status --------------------------------------------------------
 
 providerRoutes.get("/config/status", async (c) => {
-	const defaultProvider = await getDefaultProvider();
-	const plannerAvailable = await isAnyPlannerCLIAvailable();
+	try {
+		const defaultProvider = await getDefaultProvider();
+		const plannerAvailable = await isAnyPlannerCLIAvailable();
 
-	return c.json({
-		openaiConfigured: !!process.env.OPENAI_API_KEY,
-		providerConfigured: isAnyProviderConfigured(),
-		providerName: defaultProvider?.name,
-		plannerAvailable,
-	});
+		return c.json({
+			openaiConfigured: !!process.env.OPENAI_API_KEY,
+			providerConfigured: isAnyProviderConfigured(),
+			providerName: defaultProvider?.name,
+			plannerAvailable,
+		});
+	} catch (err) {
+		console.error("[provider-routes] config status failed:", err);
+		return c.json({ error: "Failed to get config status" }, 500);
+	}
 });
 
 providerRoutes.get("/planner/providers", async (c) => {
@@ -41,7 +46,12 @@ providerRoutes.get("/planner/providers", async (c) => {
 // ---- AI Providers ---------------------------------------------------------
 
 providerRoutes.get("/providers", async (c) => {
-	return c.json(await listProviders());
+	try {
+		return c.json(await listProviders());
+	} catch (err) {
+		console.error("[provider-routes] list providers failed:", err);
+		return c.json({ error: "Failed to list providers" }, 500);
+	}
 });
 
 providerRoutes.post("/providers", async (c) => {
@@ -75,7 +85,12 @@ providerRoutes.post("/providers", async (c) => {
 // NOTE: fallback-chain must be before /:id to avoid Hono matching "fallback-chain" as an ID
 
 providerRoutes.get("/providers/fallback-chain", async (c) => {
-	return c.json(await getFallbackChain());
+	try {
+		return c.json(await getFallbackChain());
+	} catch (err) {
+		console.error("[provider-routes] get fallback chain failed:", err);
+		return c.json({ error: "Failed to get fallback chain" }, 500);
+	}
 });
 
 providerRoutes.put("/providers/fallback-chain", async (c) => {

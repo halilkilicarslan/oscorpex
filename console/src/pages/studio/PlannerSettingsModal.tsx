@@ -8,6 +8,7 @@ import {
   type PlannerCLIProviderInfo,
   type PlannerChatModel,
   type ProjectAgent,
+  type CLITool,
 } from '../../lib/studio-api';
 
 const CLI_TOOL_OPTIONS = [
@@ -323,7 +324,7 @@ export default function PlannerSettingsModal({
                   </div>
                   <div>
                     <label className={labelClass}>CLI Tool</label>
-                    <select value={cliTool} onChange={(e) => setCliTool(e.target.value)} className={inputClass}>
+                    <select value={cliTool} onChange={(e) => setCliTool(e.target.value as CLITool)} className={inputClass}>
                       {CLI_TOOL_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
