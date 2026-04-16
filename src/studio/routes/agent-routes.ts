@@ -446,7 +446,8 @@ agentRoutes.get("/docker/status", async (c) => {
 
 agentRoutes.get("/projects/:id/agents/:agentId/chat", async (c) => {
 	const projectId = c.req.param("id");
-	const messages = await listChatMessages(projectId);
+	const agentId = c.req.param("agentId");
+	const messages = await listChatMessages(projectId, agentId);
 	return c.json({ messages });
 });
 
