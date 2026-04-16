@@ -130,7 +130,9 @@ export type AgentRole =
 	| "security-reviewer"
 	| "docs-writer";
 
-export type CLITool = "claude-code" | "codex" | "cursor" | "none";
+export type AgentCliTool = "claude-code" | "codex" | "cursor" | "none";
+/** @deprecated Use AgentCliTool instead. */
+export type CLITool = AgentCliTool;
 
 export interface AgentConfig {
 	id: string;
@@ -140,7 +142,7 @@ export interface AgentConfig {
 	gender: "male" | "female";
 	personality: string;
 	model: string;
-	cliTool: CLITool;
+	cliTool: AgentCliTool;
 	skills: string[];
 	systemPrompt: string;
 	isPreset: boolean;
@@ -250,7 +252,9 @@ export interface ContainerConfig {
 export type AIProviderType = "openai" | "anthropic" | "google" | "ollama" | "custom" | "cli";
 
 /** CLI subtype for type="cli" providers. Each CLI uses its own auth (no api key). */
-export type CliTool = "claude" | "codex" | "gemini" | "cursor";
+export type ProviderCliTool = "claude" | "codex" | "gemini" | "cursor";
+/** @deprecated Use ProviderCliTool instead. */
+export type CliTool = ProviderCliTool;
 
 export interface AIProvider {
 	id: string;
@@ -264,7 +268,7 @@ export interface AIProvider {
 	/** Fallback zincirindeki sıra. 0 = primary (default), küçük değer = daha önce denenir. */
 	fallbackOrder: number;
 	/** Only for type="cli": which CLI to spawn (claude/codex/gemini). */
-	cliTool?: CliTool;
+	cliTool?: ProviderCliTool;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -281,7 +285,7 @@ export interface ProjectAgent {
 	gender: "male" | "female";
 	personality: string;
 	model: string;
-	cliTool: CLITool;
+	cliTool: AgentCliTool;
 	skills: string[];
 	systemPrompt: string;
 	createdAt: string;
@@ -603,14 +607,6 @@ export interface Sprint {
 	createdAt: string;
 }
 
-// ---- Model Routing (v3.4) --------------------------------------------------
-
-export interface ModelRoutingConfig {
-	S: string;
-	M: string;
-	L: string;
-	XL: string;
-}
 
 
 

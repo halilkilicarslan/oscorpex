@@ -3,7 +3,9 @@
 // ---------------------------------------------------------------------------
 
 /** Agent-level CLI tool selection (execution adapter). */
-export type CLITool = 'claude-code' | 'codex' | 'cursor' | 'none';
+export type AgentCliTool = 'claude-code' | 'codex' | 'cursor' | 'none';
+/** @deprecated Use AgentCliTool instead. */
+export type CLITool = AgentCliTool;
 
 export interface Project {
   id: string;
@@ -76,7 +78,7 @@ export interface AgentConfig {
   avatar: string;
   personality: string;
   model: string;
-  cliTool: CLITool;
+  cliTool: AgentCliTool;
   skills: string[];
   systemPrompt: string;
   isPreset: boolean;
@@ -111,7 +113,7 @@ export interface ProjectAgent {
   gender: Gender;
   personality: string;
   model: string;
-  cliTool: CLITool;
+  cliTool: AgentCliTool;
   skills: string[];
   systemPrompt: string;
   createdAt: string;
@@ -780,7 +782,9 @@ export interface LifecycleInfo {
 }
 
 export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'ollama' | 'custom' | 'cli';
-export type CliTool = 'claude' | 'codex' | 'gemini' | 'cursor';
+export type ProviderCliTool = 'claude' | 'codex' | 'gemini' | 'cursor';
+/** @deprecated Use ProviderCliTool instead. */
+export type CliTool = ProviderCliTool;
 
 export interface AIProvider {
   id: string;
@@ -794,7 +798,7 @@ export interface AIProvider {
   /** Fallback zincirindeki sıra; küçük değer = daha önce denenir */
   fallbackOrder: number;
   /** Only for type='cli': which local CLI to spawn (claude/codex/gemini). */
-  cliTool?: CliTool;
+  cliTool?: ProviderCliTool;
   createdAt: string;
   updatedAt: string;
 }

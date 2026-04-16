@@ -337,19 +337,6 @@ CREATE TABLE IF NOT EXISTS memory_facts (
   updated_at      TEXT NOT NULL
 );
 
--- NOTE: Reserved for future use — model routing currently uses project_settings.
-CREATE TABLE IF NOT EXISTS model_routing_policies (
-  id              TEXT PRIMARY KEY,
-  scope           TEXT NOT NULL DEFAULT 'global',
-  task_type       TEXT NOT NULL DEFAULT '*',
-  risk_level      TEXT NOT NULL DEFAULT '*',
-  provider        TEXT NOT NULL DEFAULT '',
-  model           TEXT NOT NULL DEFAULT '',
-  effort          TEXT NOT NULL DEFAULT 'medium',
-  fallback_chain  TEXT NOT NULL DEFAULT '[]',
-  updated_at      TEXT NOT NULL
-);
-
 -- ---------------------------------------------------------------------------
 -- v3.7 Migration: Audit fields on events
 -- ---------------------------------------------------------------------------
@@ -722,9 +709,6 @@ CREATE INDEX IF NOT EXISTS idx_conv_compactions_project ON conversation_compacti
 CREATE UNIQUE INDEX IF NOT EXISTS idx_conv_compactions_channel ON conversation_compactions(project_id, channel);
 CREATE INDEX IF NOT EXISTS idx_memory_facts_project     ON memory_facts(project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_facts_key  ON memory_facts(project_id, scope, key);
-CREATE INDEX IF NOT EXISTS idx_model_routing_scope      ON model_routing_policies(scope);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_model_routing_unique ON model_routing_policies(scope, task_type, risk_level);
-
 -- v3.9: Sprint indexes
 CREATE INDEX IF NOT EXISTS idx_sprints_project          ON sprints(project_id);
 

@@ -5,7 +5,7 @@
 
 import type { CLIExecutionResult } from "./cli-runtime.js";
 import { executeWithCLI, isClaudeCliAvailable } from "./cli-runtime.js";
-import type { CLITool } from "./types.js";
+import type { AgentCliTool } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Adapter interface
@@ -177,7 +177,7 @@ const adapters: Record<string, CLIAdapter> = {
 	cursor: new CursorAdapter(),
 };
 
-export function getAdapter(cliTool: CLITool): CLIAdapter {
+export function getAdapter(cliTool: AgentCliTool): CLIAdapter {
 	const adapter = adapters[cliTool];
 	if (!adapter) {
 		// Bilinmeyen veya 'none' → default olarak Claude kullan

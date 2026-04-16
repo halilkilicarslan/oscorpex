@@ -11,7 +11,7 @@ import {
   type ProjectAgent,
   type AvatarOption,
   type Gender,
-  type CLITool,
+  type AgentCliTool,
 } from '../../lib/studio-api';
 import { getModelsFromProviders } from '../../lib/model-options';
 import AgentAvatar from '../../components/AgentAvatar';
@@ -360,7 +360,7 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
               <div className="relative">
                 <select
                   value={cliTool}
-                  onChange={(e) => setCliTool(e.target.value as CLITool)}
+                  onChange={(e) => setCliTool(e.target.value as AgentCliTool)}
                   className={selectClass}
                 >
                   {CLI_TOOL_OPTIONS.map((opt) => (
