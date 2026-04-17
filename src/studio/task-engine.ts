@@ -37,7 +37,6 @@ import type { Phase, ProjectAgent, Task, TaskOutput } from "./types.js";
 const APPROVAL_KEYWORDS = [
 	"deploy",
 	"database migration",
-	"delete",
 	"drop",
 	"truncate",
 	"migration",

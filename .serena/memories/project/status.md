@@ -135,9 +135,55 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek im
 **Toplam**: 8 yeni dosya, 10 değiştirilen dosya, 52 yeni test
 - Backend: 489/489, Frontend: 433/433, typecheck 0 hata
 
+### Session 2026-04-17e — Context-Mode Deep Integration + E2E Tests
+
+**v4.0 Deep Integration** (commit `4e2c85f`, pushed)
+- `context-packet.ts`: FTS search augments completed task section (70% FTS, 30% summaries)
+- `context-builder.ts`: RAG+FTS hybrid — pgvector first, then tsvector fills remaining budget
+- `prompt-budget.ts`: contextSections tracking in PromptSizeReport + telemetry payload
+- `context-store.ts`: recordSearchMetrics (context_search_stats table)
+- `context-sandbox.ts`: configurable thresholds via project_settings
+- 7 files changed, +151/-55
+
+**E2E Pipeline Tests** (commit `5e2fd32`, pushed)
+- `e2e-pipeline.test.ts`: 10 tests, 515 lines, real DB + mock CLI boundary
+- Scenarios: single/multi-phase, review loop, auto-retry, dependency ordering, project completion
+- Mock: `cli-adapter.ts` → `getAdapter().execute()`
+
+**Test counts**: Backend 499/499, Frontend 433/433, typecheck 0 hata.
+
+### Session 2026-04-17f — v4.1 Features (DiffViewer, Agent Dashboard v2, RAG Observability)
+
+**v4.1 Triple Feature** (commit `5f324fe`, pushed)
+- 19 files changed, +1407 lines, 3 new tables, 3 new repos, 4 new components
+
+**Feature 1: DiffViewer UI**
+- `task_diffs` table (ON DELETE CASCADE): stores per-file unified diffs for completed tasks
+- `diff-capture.ts`: captures git diffs for filesCreated/filesModified after task completion
+- `db/diff-repo.ts`: CRUD + batch insert + summary query
+- `task-engine.ts`: non-blocking `captureTaskDiffs()` in markTaskDone
+- `task-routes.ts`: GET /tasks/:taskId/diffs endpoint
+- Frontend: `TaskDiffViewer.tsx` component integrated into TaskDetailModal (collapsible file diffs, +/- coloring)
+
+**Feature 2: Agent Dashboard v2**
+- `agent_daily_stats` table (UNIQUE project+agent+date): aggregated daily metrics per agent
+- `db/agent-stats-repo.ts`: upsert daily stat, heat map query, performance timeline, agent comparison
+- `task-engine.ts`: non-blocking `upsertAgentDailyStat()` in markTaskDone
+- `analytics-routes.ts`: 3 new endpoints (agents/heatmap, agents/:agentId/timeline, agents/comparison)
+- Frontend: `AgentHeatMap.tsx` component (heat map grid + comparison table), integrated into AgentDashboard
+
+**Feature 3: RAG Observability**
+- `context_search_log` table: per-query search tracking (query text, result count, top rank, latency, filters)
+- `db/search-log-repo.ts`: insert log + getSearchObservability (stats, hourly breakdown, recent searches)
+- `context-store.ts`: per-query `insertSearchLog()` call in searchContext with latency measurement
+- `analytics-routes.ts`: GET /analytics/context/observability endpoint
+- Frontend: `SearchObservability.tsx` component (4 stat cards, hit rate bar, hourly chart, recent searches table), integrated into ProjectReport
+
+**Test counts**: Backend 499/499, Frontend 433/433, typecheck 0 hata.
+
 ### Sıradaki Adımlar
-- v4.0 tüm fazlar tamamlandı, context-mode native entegrasyon aktif
-- Olası iyileştirmeler: search tracking metrics, A/B test threshold tuning
+- v4.0-v4.1 tamamlandı (context-mode + DiffViewer + Agent Dashboard v2 + RAG Observability)
+- Potansiyel: Webhook notifications, Frontend Performance
 
 ## Previous: v3.0-v3.9 Full Platform Upgrade
 
