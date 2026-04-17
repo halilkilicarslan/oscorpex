@@ -35,6 +35,28 @@ export async function fetchPlatformStats(): Promise<PlatformStats> {
   return json(`${API}/platform/stats`);
 }
 
+export interface PlatformAnalytics {
+  totals: {
+    totalProjects: number; totalTasks: number; tasksDone: number; tasksFailed: number;
+    taskDoneRate: number; failureRate: number; uniqueAgents: number; avgTaskMin: number;
+    totalCostUsd: number; cacheRate: number; totalEvents: number; totalErrors: number;
+    errorRate: number; activeDays: number;
+  };
+  agentUsage: { agent: string; role: string; count: number }[];
+  dailyActivity: { date: string; events: number; errors: number; completions: number }[];
+  hourlyPattern: { hour: number; count: number }[];
+  projectActivity: { projectName: string; projectId: string; status: string; events: number; activeDays: number }[];
+  fileActivity: { file: string; count: number }[];
+  complexityDistribution: { complexity: string; count: number }[];
+  eventTypes: { type: string; count: number }[];
+  errorRates: { projectName: string; projectId: string; errors: number; total: number; errorRate: number }[];
+  costByModel: { model: string; calls: number; cost: number; tokens: number }[];
+}
+
+export async function fetchPlatformAnalytics(): Promise<PlatformAnalytics> {
+  return json(`${API}/platform/analytics`);
+}
+
 export async function fetchProjects(): Promise<Project[]> {
   return json(`${API}/projects`);
 }
