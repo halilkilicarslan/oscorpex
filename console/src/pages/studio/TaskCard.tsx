@@ -80,6 +80,7 @@ export default function TaskCard({
   const isFailed = task.status === 'failed';
   const isAwaitingApproval = task.status === 'waiting_approval';
   const hasError = isFailed && Boolean(task.error);
+  const wasRejected = task.reviewStatus === 'rejected' || task.revisionCount > 0;
 
   return (
     <div
@@ -87,7 +88,9 @@ export default function TaskCard({
         'bg-[#111111] border rounded-lg p-3 hover:border-[#333] transition-colors group',
         isAwaitingApproval
           ? 'border-[#f59e0b]/40 hover:border-[#f59e0b]/70'
-          : 'border-[#262626]',
+          : wasRejected
+            ? 'border-[#ef4444]/30 hover:border-[#ef4444]/50'
+            : 'border-[#262626]',
         onClick ? 'cursor-pointer' : '',
       ].join(' ')}
       onClick={onClick}
@@ -98,6 +101,16 @@ export default function TaskCard({
           <ShieldAlert size={11} className="text-[#f59e0b]" />
           <span className="text-[9px] font-semibold text-[#f59e0b] uppercase tracking-wide">
             Awaiting Approval
+          </span>
+        </div>
+      )}
+
+      {/* Review rejected / revision badge */}
+      {wasRejected && !isAwaitingApproval && (
+        <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-[#ef4444]/15">
+          <RotateCcw size={11} className="text-[#f97316]" />
+          <span className="text-[9px] font-semibold text-[#f97316] uppercase tracking-wide">
+            {task.reviewStatus === 'rejected' ? 'Review Rejected' : `Revision #${task.revisionCount}`}
           </span>
         </div>
       )}
