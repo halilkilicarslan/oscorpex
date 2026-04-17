@@ -764,3 +764,63 @@ CREATE TABLE IF NOT EXISTS intake_questions (
 
 CREATE INDEX IF NOT EXISTS idx_intake_project ON intake_questions(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_intake_created ON intake_questions(project_id, created_at);
+
+-- ---------------------------------------------------------------------------
+-- v4.0: Context Store — FTS engine (tsvector + optional pg_trgm)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS context_sources (
+  id              TEXT PRIMARY KEY,
+  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  label           TEXT NOT NULL,
+  chunk_count     INTEGER NOT NULL DEFAULT 0,
+  code_chunk_count INTEGER NOT NULL DEFAULT 0,
+  indexed_at      TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ctx_sources_project_label ON context_sources(project_id, label);
+CREATE INDEX IF NOT EXISTS idx_ctx_sources_project ON context_sources(project_id);
+
+CREATE TABLE IF NOT EXISTS context_chunks (
+  id              SERIAL PRIMARY KEY,
+  source_id       TEXT NOT NULL REFERENCES context_sources(id) ON DELETE CASCADE,
+  title           TEXT NOT NULL,
+  content         TEXT NOT NULL,
+  content_type    TEXT NOT NULL DEFAULT 'prose',
+  tsv             tsvector GENERATED ALWAYS AS (
+    setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+    setweight(to_tsvector('english', coalesce(content, '')), 'B')
+  ) STORED
+);
+
+CREATE INDEX IF NOT EXISTS idx_ctx_chunks_fts ON context_chunks USING GIN(tsv);
+CREATE INDEX IF NOT EXISTS idx_ctx_chunks_source ON context_chunks(source_id);
+
+-- pg_trgm trigram index (optional — graceful fallback if extension unavailable)
+DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  CREATE INDEX IF NOT EXISTS idx_ctx_chunks_trgm ON context_chunks USING GIN(content gin_trgm_ops);
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'pg_trgm not available — trigram search disabled, tsvector-only mode';
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- v4.0: Context Session Events — crash recovery + session tracking
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS context_events (
+  id              SERIAL PRIMARY KEY,
+  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  task_id         TEXT,
+  agent_id        TEXT,
+  session_key     TEXT NOT NULL,
+  type            TEXT NOT NULL,
+  category        TEXT NOT NULL,
+  priority        INTEGER NOT NULL DEFAULT 2,
+  data            TEXT NOT NULL,
+  data_hash       TEXT NOT NULL,
+  created_at      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ctx_events_session ON context_events(session_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ctx_events_dedup ON context_events(session_key, type, data_hash);

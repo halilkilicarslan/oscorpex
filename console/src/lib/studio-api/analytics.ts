@@ -26,3 +26,29 @@ export async function fetchProjectCosts(projectId: string): Promise<ProjectCostS
 export async function fetchCostBreakdown(projectId: string): Promise<CostBreakdownEntry[]> {
   return json(`${API}/projects/${projectId}/costs/breakdown`);
 }
+
+export interface ContextMetricsResponse {
+  metrics: {
+    totalSources: number;
+    totalChunks: number;
+    codeChunks: number;
+    proseChunks: number;
+    searchCalls: number;
+    searchHits: number;
+    totalEvents: number;
+    eventsByCategory: Record<string, number>;
+    estimatedTokensIndexed: number;
+  };
+  perTask: Array<{
+    taskId: string;
+    taskTitle: string;
+    sourceLabel: string;
+    chunkCount: number;
+    codeChunkCount: number;
+    indexedAt: string;
+  }>;
+}
+
+export async function fetchContextMetrics(projectId: string): Promise<ContextMetricsResponse> {
+  return json(`${API}/projects/${projectId}/analytics/context`);
+}

@@ -5,6 +5,7 @@
 
 import { Hono } from "hono";
 import { seedPresetAgents, seedTeamTemplates } from "../db.js";
+import { initContextSession } from "../context-session.js";
 import { eventBus } from "../event-bus.js";
 import { budgetGuard } from "../middleware/policy-middleware.js";
 import { notifyPlugins } from "../plugin-registry.js";
@@ -30,6 +31,9 @@ import { workItemRoutes } from "./work-item-routes.js";
 // Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();
 seedTeamTemplates();
+
+// v4.0: Context session event bridge — crash recovery tracking
+initContextSession(eventBus);
 
 // ---------------------------------------------------------------------------
 // Webhook Event Entegrasyonu — global event listener

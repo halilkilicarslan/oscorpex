@@ -3,6 +3,15 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ProjectReport from '../pages/studio/ProjectReport';
 
+// v4.0: fetchContextMetrics mock — report fetch'i etkilememesi için
+vi.mock('../lib/studio-api/analytics.js', async (importOriginal) => {
+	const actual = await importOriginal() as Record<string, unknown>;
+	return {
+		...actual,
+		fetchContextMetrics: vi.fn().mockResolvedValue(null),
+	};
+});
+
 // global.fetch'i mockla — bileşen raw fetch() kullanıyor, studio-api değil
 const mockFetch = vi.fn();
 global.fetch = mockFetch as unknown as typeof fetch;

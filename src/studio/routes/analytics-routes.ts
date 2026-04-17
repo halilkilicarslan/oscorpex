@@ -282,3 +282,26 @@ analyticsRoutes.put("/projects/:id/settings/:category", async (c) => {
 	await setProjectSettings(projectId, category, body);
 	return c.json({ ok: true });
 });
+
+// ---------------------------------------------------------------------------
+// v4.0: Context Analytics
+// ---------------------------------------------------------------------------
+
+analyticsRoutes.get("/projects/:id/analytics/context", async (c) => {
+	try {
+		const { getContextMetrics, getPerTaskContextMetrics } = await import("../context-analytics.js");
+		const projectId = c.req.param("id");
+		const project = await getProject(projectId);
+		if (!project) return c.json({ error: "Project not found" }, 404);
+
+		const [metrics, perTask] = await Promise.all([
+			getContextMetrics(projectId),
+			getPerTaskContextMetrics(projectId),
+		]);
+
+		return c.json({ metrics, perTask });
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		return c.json({ error: msg }, 500);
+	}
+});

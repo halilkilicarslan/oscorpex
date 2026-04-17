@@ -22,6 +22,8 @@ export * from "./work-item-repo.js";
 export * from "./memory-repo.js";
 // v3.0 B1: Interactive Planner intake questions
 export * from "./intake-repo.js";
+// v4.0: Context Store
+export * from "./context-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";
