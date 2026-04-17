@@ -11,6 +11,7 @@ import {
 	listProjectAgents,
 	listProjectTasks,
 } from "./db.js";
+import { searchContext } from "./context-store.js";
 import { eventBus } from "./event-bus.js";
 import type { ContextPacketOptions, ProjectAgent, Task } from "./types.js";
 
@@ -213,15 +214,45 @@ async function assembleExecutionContext(
 		sections["targetFiles"] = filesSection.tokens;
 	}
 
-	// Completed task summaries (last 10 from same project, excluding current)
+	// Completed task context — FTS search augmented with task summaries
 	const completed = allTasks
 		.filter((t) => t.id !== taskId && t.status === "done")
 		.slice(-10);
-	if (completed.length > 0) {
-		const completedBody = completed.map((t) => `- ${summarizeTask(t)}`).join("\n");
+
+	// Try FTS search for relevant completed task context
+	let ftsCompletedBody = "";
+	try {
+		const descSnippet = (task.description ?? "").slice(0, 200);
+		const ftsResults = await searchContext({
+			projectId,
+			queries: [task.title, descSnippet].filter(Boolean),
+			limit: 5,
+			maxTokens: Math.floor(SECTION_BUDGETS.completedTasks * 0.7),
+		});
+		if (ftsResults.length > 0) {
+			const ftsLines: string[] = [];
+			for (const r of ftsResults) {
+				ftsLines.push(`**${r.title}** (${r.source})`);
+				ftsLines.push(r.content);
+				ftsLines.push("");
+			}
+			ftsCompletedBody = ftsLines.join("\n");
+		}
+	} catch {
+		// FTS unavailable — fall through to simple summaries
+	}
+
+	if (ftsCompletedBody || completed.length > 0) {
+		const bodyParts: string[] = [];
+		if (ftsCompletedBody) {
+			bodyParts.push("### Relevant Context (FTS)", "", ftsCompletedBody);
+		}
+		if (completed.length > 0) {
+			bodyParts.push("### Task Summaries", "", completed.map((t) => `- ${summarizeTask(t)}`).join("\n"));
+		}
 		const completedSection = buildSection(
 			"Recently Completed Tasks",
-			completedBody,
+			bodyParts.join("\n"),
 			SECTION_BUDGETS.completedTasks,
 		);
 		parts.push(completedSection.text);

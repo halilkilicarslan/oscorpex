@@ -84,13 +84,19 @@ export async function getContextMetrics(projectId: string): Promise<ContextMetri
 		eventsByCategory[row.category] = Number(row.cnt);
 	}
 
+	// Search tracking
+	const searchRow = await queryOne<{ search_calls: string; search_hits: string }>(
+		"SELECT search_calls, search_hits FROM context_search_stats WHERE project_id = $1",
+		[projectId],
+	);
+
 	return {
 		totalSources: sources.length,
 		totalChunks,
 		codeChunks,
 		proseChunks: totalChunks - codeChunks,
-		searchCalls: 0,
-		searchHits: 0,
+		searchCalls: Number(searchRow?.search_calls ?? 0),
+		searchHits: Number(searchRow?.search_hits ?? 0),
 		totalEvents,
 		eventsByCategory,
 		estimatedTokensIndexed: Math.ceil(totalBytes / BYTES_PER_TOKEN),

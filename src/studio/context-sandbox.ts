@@ -5,24 +5,40 @@
 // ---------------------------------------------------------------------------
 
 import { searchContext, indexContent } from "./context-store.js";
-import { listProjectTasks } from "./db.js";
+import { listProjectTasks, getProjectSetting } from "./db.js";
 import type { Task, TaskOutput, ContextSearchResult } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Threshold Logic
 // ---------------------------------------------------------------------------
 
-const INLINE_THRESHOLD = 20_000; // <20KB: return as-is
-const COMPACT_THRESHOLD = 100_000; // 20-100KB: compact reference
+const DEFAULT_INLINE_THRESHOLD = 20_000; // <20KB: return as-is
+const DEFAULT_COMPACT_THRESHOLD = 100_000; // 20-100KB: compact reference
 // >100KB: force FTS index
 
 export type OutputStrategy = "inline" | "compact" | "index";
 
-export function classifyOutput(output: string): OutputStrategy {
+export function classifyOutput(output: string, inlineThreshold = DEFAULT_INLINE_THRESHOLD, compactThreshold = DEFAULT_COMPACT_THRESHOLD): OutputStrategy {
 	const bytes = Buffer.byteLength(output, "utf-8");
-	if (bytes < INLINE_THRESHOLD) return "inline";
-	if (bytes < COMPACT_THRESHOLD) return "compact";
+	if (bytes < inlineThreshold) return "inline";
+	if (bytes < compactThreshold) return "compact";
 	return "index";
+}
+
+/** Read thresholds from project settings, falling back to defaults. */
+export async function getOutputThresholds(projectId: string): Promise<{ inline: number; compact: number }> {
+	try {
+		const [inlineVal, compactVal] = await Promise.all([
+			getProjectSetting(projectId, "context", "inline_threshold"),
+			getProjectSetting(projectId, "context", "compact_threshold"),
+		]);
+		return {
+			inline: inlineVal ? Number.parseInt(inlineVal, 10) || DEFAULT_INLINE_THRESHOLD : DEFAULT_INLINE_THRESHOLD,
+			compact: compactVal ? Number.parseInt(compactVal, 10) || DEFAULT_COMPACT_THRESHOLD : DEFAULT_COMPACT_THRESHOLD,
+		};
+	} catch {
+		return { inline: DEFAULT_INLINE_THRESHOLD, compact: DEFAULT_COMPACT_THRESHOLD };
+	}
 }
 
 // ---------------------------------------------------------------------------
