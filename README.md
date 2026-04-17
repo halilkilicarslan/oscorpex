@@ -2,32 +2,54 @@
 
 AI-powered software development platform — describe your idea, let AI agents build it.
 
-Oscorpex is a full-stack development studio that orchestrates a team of 12 specialized AI agents (Scrum methodology) to plan, build, test, review, and deploy software projects autonomously.
+Oscorpex is a full-stack development studio that orchestrates a team of 12 specialized AI agents (Scrum methodology) to plan, build, test, review, and deploy software projects autonomously through a DAG pipeline.
 
 ## Features
 
-- **12-Agent Scrum Team** — PM, Designer, Architect, Frontend Dev, Backend Dev, QA, Code Reviewer, DevOps, and more
-- **DAG Pipeline Engine** — dependency-aware task execution with automatic stage ordering
-- **Review Loop** — iterative code review cycle between reviewers and developers
+### Core Engine
+- **12-Agent Scrum Team** — PM, Designer, Architect, Frontend Dev, Backend Dev, QA, Code Reviewer, Security Analyst, DevOps, Tech Lead, Scrum Master, UX Researcher
+- **DAG Pipeline Engine** — Kahn's algorithm-based dependency resolution with 12 edge types, phase progression, and automatic wave dispatch
+- **Review Loop** — iterative code review cycle with rejection → revision → re-review, escalation/fallback edges
+- **Task Decomposition** — AI Scrum Master auto-decomposes L/XL tasks into micro-tasks with dependency graphs
+- **Model Routing** — complexity-based model selection (S→Haiku, M→Sonnet, L→Sonnet, XL→Opus) with auto-tier bump on retry/rejection
+- **Rate Limit Detection** — auto-pauses pipeline on CLI quota exhaustion, resumes when limit resets
+
+### AI Features
+- **Interactive Planner** — PM agent conducts intake Q&A, generates phased plans with task dependencies
+- **Incremental Planning** — append phases/tasks to live plans, replan unfinished work without creating new plan versions
+- **Token Saving Engine** — Claude cache optimization achieving 90%+ cost reduction via cache_read_tokens
+- **Context Packet Assembly** — token-efficient prompt builder with mode-based context (planner/execution/review)
+- **Working Memory** — per-agent persistent memory updated after each task completion
+- **Agent Scoring** — configurable performance scoring (first-pass rate, speed, cost efficiency)
+
+### Development Tools
 - **Live Preview** — real-time iframe preview of running applications with service switching
 - **Runtime Analyzer** — auto-detects 15+ frameworks, databases, environment variables, and ports
 - **Smart App Runner** — 3-strategy app launch (config / runtime analysis / Docker Compose fallback)
 - **DB Provisioner** — Docker-based database provisioning with auto port conflict resolution
-- **Kanban Board** — visual task management with drag-and-drop
-- **Agent Messaging** — inter-agent communication with threads and broadcast
-- **Webhook Integration** — event-driven notifications to external services
 - **Git Management** — automatic version control with meaningful commits
+- **CLI Monitor** — real-time CLI usage observatory (Claude, Codex, Cursor, Gemini probes)
+
+### Project Management
+- **Kanban Board** — visual task management with drag-and-drop and status filters
+- **Sprint Board** — sprint lifecycle management with burndown charts and velocity tracking
+- **Backlog Board** — work-item backlog with priority management and auto bug creation on review escalation
+- **Ceremony Engine** — standup and retrospective automation
+- **Agent Messaging** — inter-agent communication with threads, broadcast, and mentions
+- **Policy Engine** — configurable task policies (block/warn/non-blocking) evaluated at task start
+- **Diff Viewer** — side-by-side code diff visualization for generated changes
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Node.js, Hono, PostgreSQL (pg + pgvector) |
-| Frontend | React 18, Vite, Tailwind CSS |
-| AI Execution | Claude CLI (no AI SDK in execution path) |
+| Backend | Node.js, Hono, PostgreSQL |
+| Frontend | React 19, Vite, Tailwind CSS 4 |
+| AI Execution | Claude CLI, Codex CLI, Cursor (multi-provider) |
+| AI Framework | VoltAgent |
 | Terminal | xterm.js v6 |
 | Git | simple-git |
-| Testing | Vitest (374 tests) |
+| Testing | Vitest (870+ tests — 437 backend, 433 frontend) |
 | Package Manager | pnpm |
 
 ## Getting Started
@@ -37,7 +59,7 @@ Oscorpex is a full-stack development studio that orchestrates a team of 12 speci
 - Node.js 20+
 - pnpm
 - Claude CLI (for AI agent execution)
-- Docker (for PostgreSQL + pgvector)
+- Docker (for PostgreSQL)
 
 ### Installation
 
@@ -56,22 +78,25 @@ cp .env.example .env
 ### Development
 
 ```bash
-# Start backend (port 3141)
+# Start backend (port 4242, studio API at /api/studio)
 pnpm dev
 
 # Start frontend (port 5173)
-cd console
-pnpm dev
+cd console && pnpm dev
 ```
 
 ### Testing
 
 ```bash
-# Run all tests
+# Backend tests
 pnpm test
 
 # Frontend tests
-cd console && pnpm test
+cd console && pnpm test:run
+
+# Typecheck
+pnpm typecheck
+cd console && pnpm tsc -b
 ```
 
 ## Architecture
@@ -79,39 +104,46 @@ cd console && pnpm test
 ```
 src/
   studio/
-    routes.ts             # 100+ API endpoints + preview proxy
-    execution-engine.ts   # Task orchestrator + CLI execution
-    pipeline-engine.ts    # DAG-based pipeline with review loop
-    task-engine.ts        # Task lifecycle management
-    app-runner.ts         # 3-strategy app launch
-    runtime-analyzer.ts   # Framework/DB/port detection
-    db-provisioner.ts     # Docker DB provisioning
-    db.ts                 # SQLite schema (16 tables)
-    pm-agent.ts           # AI Planner system prompt + tools
-    agent-runtime.ts      # CLI process spawn, SSE streaming
-    agent-log-store.ts    # File-based agent output persistence
-    git-manager.ts        # Git operations
-    webhook-sender.ts     # Event notifications
+    execution-engine.ts    # Task orchestrator + CLI execution + rate limit detection
+    pipeline-engine.ts     # DAG pipeline with Kahn's algorithm + phase progression
+    task-engine.ts         # Task lifecycle, review loop, retry, approval gates
+    pm-agent.ts            # AI Planner — intake Q&A, phased plan generation
+    task-decomposer.ts     # AI Scrum Master — L/XL task micro-decomposition
+    model-router.ts        # Complexity-based model selection + tier auto-bump
+    context-packet.ts      # Token-efficient prompt assembly
+    cli-runtime.ts         # CLI process spawn, streaming, rate limit detection
+    cli-adapter.ts         # Multi-provider adapter (Claude, Codex, Cursor)
+    cli-usage.ts           # CLI usage observatory (OAuth/quota probes)
+    app-runner.ts          # 3-strategy app launch + port management
+    runtime-analyzer.ts    # Framework/DB/port auto-detection
+    db-provisioner.ts      # Docker DB provisioning
+    team-architect.ts      # AI-powered team composition from templates
+    event-bus.ts           # Event sourcing for state transitions
+    git-manager.ts         # Git operations
+    routes/                # 17 Hono sub-routers (modular)
+    db/                    # 18 repository modules (modular)
 
 console/
   src/
-    pages/studio/         # Studio UI (20+ pages)
-    components/           # Shared components
-    lib/studio-api.ts     # API client
-    hooks/                # WebSocket, notifications
+    pages/studio/          # 41 studio pages
+    components/            # Shared components (AgentAvatar, etc.)
+    lib/studio-api/        # 17 modular API client files
+    hooks/                 # WebSocket, notifications
 ```
 
 ## Database
 
-PostgreSQL + pgvector. 30+ tables: `projects`, `project_plans`, `phases`, `tasks`, `agent_configs`, `project_agents`, `team_templates`, `events`, `chat_messages`, `ai_providers`, `agent_messages`, `pipeline_runs`, `agent_runs`, `agent_dependencies`, `agent_capabilities`, `project_settings`
+PostgreSQL with 30+ tables including: `projects`, `project_plans`, `phases`, `tasks`, `project_agents`, `agent_configs`, `team_templates`, `events`, `chat_messages`, `ai_providers`, `agent_messages`, `agent_dependencies`, `agent_capabilities`, `project_settings`, `work_items`, `sprints`, `token_usage`, `agent_daily_stats`, `pipeline_runs`, `agent_runs`, `working_memory`
+
+All migrations use `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` for idempotency. Schema applied at startup via `db-bootstrap.ts`.
 
 ## How It Works
 
 1. **Describe** your project idea through the PM chat interface
-2. **Plan** — AI Planner breaks it down into phases and tasks with dependencies
-3. **Execute** — Pipeline engine dispatches tasks to specialized agents via DAG ordering
-4. **Review** — Code reviewers evaluate output, reject/approve with iterative revision loop
-5. **Preview** — Live preview of your running application in the browser
+2. **Plan** — AI Planner conducts intake questions, then generates phased plans with task dependencies and agent assignments
+3. **Execute** — Pipeline engine dispatches tasks to specialized agents via DAG wave ordering, with complexity-based model routing
+4. **Review** — Code reviewers evaluate output with iterative revision loops; rejected tasks get auto-retried with tier-bumped models
+5. **Preview** — Live preview of your running application with runtime analysis and auto-configuration
 
 ## License
 
