@@ -121,7 +121,7 @@ projectRoutes.get("/platform/stats", async (c) => {
 			queryOne<any>(`
 				SELECT
 					COALESCE(SUM(cost_usd), 0) AS total_cost,
-					COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,
+					COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens), 0) AS total_tokens,
 					COALESCE(SUM(cache_read_tokens), 0) AS cache_read,
 					COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation,
 					COUNT(DISTINCT agent_id) AS active_agents
@@ -133,7 +133,10 @@ projectRoutes.get("/platform/stats", async (c) => {
 			`),
 			query<any>(`
 				SELECT t.id, t.title, t.status, t.assigned_agent, t.complexity, t.completed_at, p.name AS project_name
-				FROM tasks t JOIN projects p ON p.id = t.project_id
+				FROM tasks t
+				JOIN phases ph ON ph.id = t.phase_id
+				JOIN project_plans pp ON pp.id = ph.plan_id
+				JOIN projects p ON p.id = pp.project_id
 				WHERE t.status = 'done'
 				ORDER BY t.completed_at DESC NULLS LAST LIMIT 8
 			`),
