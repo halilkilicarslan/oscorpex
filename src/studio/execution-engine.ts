@@ -262,6 +262,27 @@ class ExecutionEngine {
 					);
 					Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch(() => {});
 				}
+
+				// Recover orphaned running tasks — stuck in "running" with no active CLI process
+				// These arise when revision re-execution fails silently (fire-and-forget .catch)
+				for (const task of phase.tasks ?? []) {
+					if (task.status === "running" && !this._dispatchingTasks.has(task.id) && !this._activeControllers.has(`${project.id}:${task.id}`)) {
+						console.log(`[execution-engine] Recovery: orphaned running task "${task.title}" → queued`);
+						await updateTask(task.id, { status: "queued", startedAt: undefined });
+						hasRecovered = true;
+					}
+				}
+			}
+
+			// Re-dispatch if orphaned running tasks were recovered
+			if (hasRecovered) {
+				for (const phase of phases) {
+					if (phase.status !== "running") continue;
+					const ready = await taskEngine.getReadyTasks(phase.id);
+					if (ready.length > 0) {
+						Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch(() => {});
+					}
+				}
 			}
 		}
 	}
@@ -1126,8 +1147,12 @@ class ExecutionEngine {
 					await taskEngine.restartRevision(originalTaskId!);
 					const freshTask = await getTask(originalTaskId!);
 					if (freshTask) {
-						this.executeTask(projectId, freshTask).catch((e) => {
+						this.executeTask(projectId, freshTask).catch(async (e) => {
 							console.error(`[execution-engine] Revision re-execution failed:`, e);
+							try {
+								const msg = e instanceof Error ? e.message : String(e);
+								await taskEngine.failTask(originalTaskId!, `Revision re-execution failed: ${msg}`);
+							} catch { /* task zaten fail olmuş olabilir */ }
 						});
 					}
 				}

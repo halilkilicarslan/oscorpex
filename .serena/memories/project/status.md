@@ -87,9 +87,23 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek im
   - Test: `cli-adapter.test.ts` Cursor test'leri
 - Backend: 437/437, Frontend: 433/433, typecheck 0 hata.
 
+### Session 2026-04-17b — Comprehensive Audit + Type Cleanup
+
+- **Audit commit** (`62440ac`): Frontend type safety, dead code removal (872 LOC), 16 route handler try/catch, test fixtures
+- **Type rename** (`b3f84ff`): `CLITool` → `AgentCliTool`, `CliTool` → `ProviderCliTool`, orphaned `model_routing_policies` table removed
+- Backend: 437/437, Frontend: 433/433, typecheck 0 hata.
+
+### Session 2026-04-17c — Critical Bug Fixes (revision stuck, phase deps, review badge)
+
+- **Revision stuck fix** (`execution-engine.ts`): fire-and-forget `.catch()` in review-reject → revision re-execution now calls `failTask()` on error, preventing permanent "running" stuck state
+- **Orphaned running task recovery** (`execution-engine.ts`): `recoverStuckTasks()` now detects running tasks with no active CLI process (`_dispatchingTasks` + `_activeControllers` check) and resets to queued
+- **Phase dependency bug** (`pm-agent.ts:buildPlan`): was creating ALL phases with `dependsOn: []` — ignored `dependsOnPhaseOrders` field from planner output. Fixed: resolves phase order→ID mapping and updates phase records
+- **PM prompt update** (`pm-agent.ts:PM_SYSTEM_PROMPT`): added explicit `dependsOnPhaseOrders` guidance, examples, and CRITICAL warning about parallel phase execution
+- **Review rejected badge** (`TaskCard.tsx`): red border (`border-[#ef4444]/30`) + orange RotateCcw badge showing "Review Rejected" or "Revision #N" for tasks with `reviewStatus === 'rejected'` or `revisionCount > 0`
+
 ### Sıradaki Adımlar
 - v3.x tüm milestone'lar stabilize ve UI tam bağlı
-- Olası iyileştirmeler: yeni policy condition pattern'leri, model_routing_policies tablo temizliği
+- Olası iyileştirmeler: yeni policy condition pattern'leri
 
 ## Previous: v3.0-v3.9 Full Platform Upgrade
 

@@ -209,11 +209,11 @@ In addition to normal AI coding tasks (taskType: "ai"), you can use these specia
 - **integration-test**: Automated smoke test that starts the backend/frontend, runs HTTP health checks and API tests, then shuts down. Use this as a final verification phase after all coding is done.
 - **run-app**: Starts the application (backend + frontend) and keeps it running so the user can interact with it. Use this as the very last phase.
 
-**Recommended plan structure:**
-1. Foundation phase (setup, config)
-2. Core feature phases (coding tasks)
-3. Integration Test phase (taskType: "integration-test") — depends on all coding phases
-4. Run Application phase (taskType: "run-app") — depends on integration test phase
+**Recommended plan structure (with phase dependencies):**
+1. Foundation phase (setup, config) — dependsOnPhaseOrders: []
+2. Core feature phases (coding tasks) — dependsOnPhaseOrders: [1]
+3. Integration Test phase (taskType: "integration-test") — dependsOnPhaseOrders: [all coding phase orders]
+4. Run Application phase (taskType: "run-app") — dependsOnPhaseOrders: [integration test order]
 
 ## Task Assignment Rules
 **You MUST use the exact role names from the [Your Team] section below.**
@@ -244,6 +244,15 @@ The team section marks each agent with a tag:
 ## Plan Output Format
 When creating or updating a plan, output the JSON inside a \\\`\\\`\\\`plan-json code block. The system will parse it and create the plan in the database automatically.
 
+**CRITICAL: Phase Dependencies**
+Each phase MUST declare \`dependsOnPhaseOrders\` — an array of phase order numbers that must complete before this phase can start.
+- Foundation (order 1) has no dependencies: \`dependsOnPhaseOrders: []\`
+- Coding phases depend on Foundation: \`dependsOnPhaseOrders: [1]\`
+- Testing phase depends on all coding phases: \`dependsOnPhaseOrders: [1, 2, 3]\`
+- Integration Test depends on Testing: \`dependsOnPhaseOrders: [4]\`
+- Run Application depends on Integration Test: \`dependsOnPhaseOrders: [5]\`
+Without proper phase dependencies, ALL phases run in parallel — causing broken builds and wasted resources.
+
 Example:
 \\\`\\\`\\\`plan-json
 {
@@ -252,6 +261,7 @@ Example:
     {
       "name": "Foundation",
       "order": 1,
+      "dependsOnPhaseOrders": [],
       "tasks": [
         {
           "title": "Project setup",
@@ -264,6 +274,12 @@ Example:
           "estimatedLines": 15
         }
       ]
+    },
+    {
+      "name": "Core Features",
+      "order": 2,
+      "dependsOnPhaseOrders": [1],
+      "tasks": []
     }
   ]
 }
@@ -351,6 +367,7 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 	const plan = await createPlan(projectId);
 	const titleToId = new Map<string, string>();
 
+	// First pass: create all phases (dependsOn initially empty)
 	const createdPhases = await Promise.all(
 		phases.map(async (p) => {
 			const phase = await createPhase({
@@ -362,6 +379,20 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 			return { input: p, created: phase };
 		}),
 	);
+
+	// Second pass: resolve phase-level dependencies (order → id)
+	const orderToPhaseId = new Map<number, string>();
+	for (const { input, created } of createdPhases) {
+		orderToPhaseId.set(input.order, created.id);
+	}
+	for (const { input, created } of createdPhases) {
+		const depIds = (input.dependsOnPhaseOrders ?? [])
+			.map((order: number) => orderToPhaseId.get(order))
+			.filter((id: string | undefined): id is string => !!id);
+		if (depIds.length > 0) {
+			await execute("UPDATE phases SET depends_on = $1 WHERE id = $2", [JSON.stringify(depIds), created.id]);
+		}
+	}
 
 	// --- PM Planning Task: create auto-completed task for the PM agent ---
 	// PM is the agent with the lowest pipelineOrder (typically 0)
@@ -443,7 +474,10 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 		try {
 			const lines: string[] = [`# Project Plan — ${project.name}`, "", `**Version:** ${plan.version}`, ""];
 			for (const { input } of createdPhases) {
-				lines.push(`## Phase ${input.order}: ${input.name}`, "");
+				const depOrders = (input.dependsOnPhaseOrders ?? []).length > 0
+					? ` (depends on phase ${input.dependsOnPhaseOrders.join(", ")})`
+					: "";
+				lines.push(`## Phase ${input.order}: ${input.name}${depOrders}`, "");
 				for (const t of input.tasks) {
 					const deps = t.dependsOnTaskTitles.length > 0 ? ` (depends on: ${t.dependsOnTaskTitles.join(", ")})` : "";
 					lines.push(`- **[${t.complexity}] ${t.title}** — ${t.assignedRole}${deps}`);
