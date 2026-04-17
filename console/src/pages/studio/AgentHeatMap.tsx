@@ -7,9 +7,11 @@ import { Loader2, Target, BarChart3 } from "lucide-react";
 import {
 	fetchAgentHeatMap,
 	fetchAgentComparison,
+	roleLabel,
 	type AgentHeatMapCell,
 	type AgentComparisonEntry,
 } from "../../lib/studio-api";
+import AgentAvatarImg from "../../components/AgentAvatar";
 
 // ---------------------------------------------------------------------------
 // Heat Map Grid
@@ -124,11 +126,11 @@ function ComparisonTable({ data }: { data: AgentComparisonEntry[] }) {
 						<tr key={a.agentId} className="border-b border-[#1a1a1a] hover:bg-[#111111]">
 							<td className="py-2 pr-3">
 								<div className="flex items-center gap-2">
-									<span className="text-base">{a.avatar}</span>
+									<AgentAvatarImg avatar={a.avatar} name={a.agentName} size="xs" />
 									<span className="text-[#e4e4e7] truncate max-w-[100px]">{a.agentName}</span>
 								</div>
 							</td>
-							<td className="py-2 px-2 text-[#a3a3a3]">{a.role}</td>
+							<td className="py-2 px-2 text-[#a3a3a3]">{roleLabel(a.role)}</td>
 							<td className="py-2 px-2 text-center">
 								<span className={`font-medium ${a.score >= 70 ? "text-[#22c55e]" : a.score >= 40 ? "text-[#f59e0b]" : "text-[#ef4444]"}`}>
 									{a.score}
