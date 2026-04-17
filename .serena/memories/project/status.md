@@ -101,9 +101,43 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek im
 - **PM prompt update** (`pm-agent.ts:PM_SYSTEM_PROMPT`): added explicit `dependsOnPhaseOrders` guidance, examples, and CRITICAL warning about parallel phase execution
 - **Review rejected badge** (`TaskCard.tsx`): red border (`border-[#ef4444]/30`) + orange RotateCcw badge showing "Review Rejected" or "Revision #N" for tasks with `reviewStatus === 'rejected'` or `revisionCount > 0`
 
+### Session 2026-04-17d — Context-Mode Native Integration (v4.0 Faz 1-4)
+
+**Faz 1: Context Store** — FTS engine
+- `context-store.ts`: 3 chunking algoritması (markdown heading split, JSON recursive key-path, plain-text paragraph/fixed-size)
+- `db/context-repo.ts`: `context_sources` + `context_chunks` tabloları, RRF search (tsvector + pg_trgm), batch chunk insert
+- `init.sql`: tsvector GIN index, opsiyonel pg_trgm trigram index (DO block fallback)
+- `types.ts`: ContextSource, ContextChunk, ContextSearchOptions, ContextSearchResult, ContextContentType, ContextMatchLayer
+- `db/helpers.ts`: rowToContextSource, rowToContextChunk
+- 21 test
+
+**Faz 2: Output Sandboxing** — Token tasarrufu
+- `context-sandbox.ts`: `classifyOutput()` threshold (inline<20KB, compact<100KB, index), `indexTaskOutput()`, `compactCrossAgentContext()` FTS-backed compact refs
+- `task-engine.ts`: markTaskDone → non-blocking `indexTaskOutput()` 
+- `execution-engine.ts`: buildTaskPrompt — raw 50-dosya listing kaldırıldı → `compactCrossAgentContext()` (FTS search + fallback raw listing)
+- 13 test
+
+**Faz 3: Session Events** — Crash recovery
+- `context-session.ts`: `trackEvent()` (MD5 dedup, priority eviction max 500/session), `initContextSession()` (10 event-bus bridge), `buildResumeSnapshot()` + `formatResumeSnapshot()`
+- `db/context-repo.ts` extended: context_events CRUD (insert, get, isDuplicate, count, evict, cleanup)
+- `routes/index.ts`: `initContextSession(eventBus)` çağrısı
+- `execution-engine.ts`: retry/revision'da resume snapshot inject
+- `init.sql`: context_events tablosu (session_key, dedup index)
+- 13 test
+
+**Faz 4: Context Analytics** — Observability
+- `context-analytics.ts`: `getContextMetrics()` (sources, chunks, events, tokens), `getPerTaskContextMetrics()`
+- `routes/analytics-routes.ts`: GET /projects/:id/analytics/context
+- `console/src/lib/studio-api/analytics.ts`: `fetchContextMetrics()` + ContextMetricsResponse
+- `console/src/pages/studio/ProjectReport.tsx`: "Context Efficiency" section (4 stat card + per-task breakdown)
+- 5 test
+
+**Toplam**: 8 yeni dosya, 10 değiştirilen dosya, 52 yeni test
+- Backend: 489/489, Frontend: 433/433, typecheck 0 hata
+
 ### Sıradaki Adımlar
-- v3.x tüm milestone'lar stabilize ve UI tam bağlı
-- Olası iyileştirmeler: yeni policy condition pattern'leri
+- v4.0 tüm fazlar tamamlandı, context-mode native entegrasyon aktif
+- Olası iyileştirmeler: search tracking metrics, A/B test threshold tuning
 
 ## Previous: v3.0-v3.9 Full Platform Upgrade
 

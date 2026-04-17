@@ -22,6 +22,7 @@ import {
 	updateProject,
 	updateTask,
 } from "./db.js";
+import { indexTaskOutput } from "./context-sandbox.js";
 import { applyPostCompletionHooks, taskNeedsApprovalFromEdges } from "./edge-hooks.js";
 import { eventBus } from "./event-bus.js";
 import { recordAgentStep } from "./memory-bridge.js";
@@ -513,6 +514,11 @@ class TaskEngine {
 		// v3.4: Refresh working memory snapshot for downstream context packets
 		updateWorkingMemory(projectId).catch((err) => {
 			console.warn("[task-engine] updateWorkingMemory failed:", err);
+		});
+
+		// v4.0: Index task output for FTS cross-agent context
+		indexTaskOutput(projectId, taskId, task.title, output).catch((err) => {
+			console.warn("[task-engine] indexTaskOutput failed:", err);
 		});
 
 		// v3.0: Sub-task rollup — if this task has a parent, check if all siblings are done

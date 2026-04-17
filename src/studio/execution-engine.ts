@@ -13,6 +13,8 @@ import { getAdapter } from "./cli-adapter.js";
 import { executeWithCLI, isClaudeCliAvailable, resolveFilePaths } from "./cli-runtime.js";
 import { buildPolicyPromptSection, getDefaultPolicy } from "./command-policy.js";
 import { buildRAGContext, formatRAGContext } from "./context-builder.js";
+import { compactCrossAgentContext } from "./context-sandbox.js";
+import { buildResumeSnapshot, formatResumeSnapshot } from "./context-session.js";
 import {
 	getAgentConfig,
 	getLatestPlan,
@@ -743,19 +745,6 @@ class ExecutionEngine {
 		// stay within budget.
 		const safeDescription = capText(task.description ?? "", PROMPT_LIMITS.taskDescription);
 
-		// --- Code Context: gather files from completed tasks in this project ---
-		const completedTasks = (await listProjectTasks(project.id)).filter(
-			(t) => t.status === "done" && t.output && t.id !== task.id,
-		);
-
-		const contextFiles = new Map<string, { agent: string; task: string }>();
-		for (const ct of completedTasks) {
-			const allFiles = [...(ct.output?.filesCreated ?? []), ...(ct.output?.filesModified ?? [])];
-			for (const f of allFiles) {
-				contextFiles.set(f, { agent: ct.assignedAgent, task: ct.title });
-			}
-		}
-
 		const lines: string[] = [
 			`# Task: ${task.title}`,
 			"",
@@ -766,22 +755,20 @@ class ExecutionEngine {
 			"",
 		];
 
-		// Add code context section if there are completed tasks
-		if (contextFiles.size > 0) {
-			lines.push(
-				`## Code Context (files created/modified by other agents)`,
-				"",
-				"The following files already exist in the project. Read them with readFile before making changes to ensure consistency:",
-				"",
-			);
-			const sorted = [...contextFiles.entries()].sort(([a], [b]) => a.localeCompare(b));
-			for (const [filePath, info] of sorted.slice(0, 50)) {
-				lines.push(`- \`${filePath}\` (by ${info.agent}: ${info.task})`);
+		// v4.0: FTS-backed compact cross-agent context (replaces raw file listing)
+		try {
+			const compact = await compactCrossAgentContext({
+				projectId: project.id,
+				taskTitle: task.title,
+				taskDescription: safeDescription,
+				maxTokens: 3000,
+				maxFiles: 10,
+			});
+			if (compact.prompt) {
+				lines.push(compact.prompt, "");
 			}
-			if (contextFiles.size > 50) {
-				lines.push(`- ... and ${contextFiles.size - 50} more files`);
-			}
-			lines.push("");
+		} catch (err) {
+			console.warn("[execution-engine] compactCrossAgentContext failed (non-blocking):", err);
 		}
 
 		// RAG Context: retrieve relevant code snippets from the project's vector store
@@ -795,14 +782,17 @@ class ExecutionEngine {
 			console.warn("[execution-engine] RAG context fetch failed (non-blocking):", err);
 		}
 
-		// Add completed task summaries for cross-agent awareness
-		if (completedTasks.length > 0) {
-			lines.push(`## Completed Tasks (${completedTasks.length})`, "");
-			for (const ct of completedTasks.slice(-10)) {
-				const fileCount = (ct.output?.filesCreated?.length ?? 0) + (ct.output?.filesModified?.length ?? 0);
-				lines.push(`- **${ct.title}** (${ct.assignedAgent}) — ${fileCount} files`);
+		// v4.0: Inject resume snapshot for retried/revised tasks
+		if (task.retryCount > 0 || task.revisionCount > 0) {
+			try {
+				const sessionKey = `${project.id}:${task.id}`;
+				const snapshot = await buildResumeSnapshot(sessionKey);
+				if (snapshot.eventCount > 0) {
+					lines.push(formatResumeSnapshot(snapshot), "");
+				}
+			} catch (err) {
+				console.warn("[execution-engine] Resume snapshot failed (non-blocking):", err);
 			}
-			lines.push("");
 		}
 
 		// Self-healing: inject previous error so agent can fix it

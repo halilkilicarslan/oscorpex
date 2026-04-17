@@ -26,6 +26,10 @@
 | report-generator.ts | v3.8 | Project + stakeholder report generation |
 | sprint-manager.ts | v3.9 | Sprint CRUD + lifecycle + burndown + velocity |
 | plugin-registry.ts | v3.9 | In-memory plugin hook system (onTaskComplete, onPipelineComplete, etc.) |
+| context-store.ts | v4.0 | FTS content indexing + search (markdown/JSON/plain chunking, RRF tsvector+pg_trgm) |
+| context-sandbox.ts | v4.0 | Output sandboxing (threshold logic, compact cross-agent context, task output indexer) |
+| context-session.ts | v4.0 | Session event tracking (dedup, eviction, event-bus bridge, resume snapshot builder) |
+| context-analytics.ts | v4.0 | Context savings metrics + per-task breakdown |
 
 ## Backend Modules (src/studio/)
 | Module | Purpose |
@@ -95,7 +99,7 @@ URL structure unchanged — all mounted at `/api/studio`. External imports still
 
 All repos use shared `getPool()` from `src/studio/pg.ts`. External imports still use `./db.js` (shim).
 
-## DB Tables (22+)
+## DB Tables (25+)
 projects, project_plans, phases, tasks, agent_configs, project_agents,
 team_templates, events, chat_messages, ai_providers,
 agent_messages, pipeline_runs, agent_runs,
@@ -103,7 +107,8 @@ agent_dependencies, agent_capabilities, project_settings,
 token_usage (with cache_creation_tokens, cache_read_tokens),
 work_items (v3.2), sprints (v3.9),
 project_context_snapshots (v3.4), conversation_compactions (v3.4),
-memory_facts (v3.4), model_routing_policies (v3.4)
+memory_facts (v3.4), model_routing_policies (v3.4),
+context_sources (v4.0), context_chunks (v4.0), context_events (v4.0)
 
 v3.0 column additions: tasks.parent_task_id, tasks.target_files, tasks.estimated_lines,
 agent_dependencies.metadata, events.actor, events.action_detail

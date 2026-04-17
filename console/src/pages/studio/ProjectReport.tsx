@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, RefreshCw, CheckCircle2, XCircle, DollarSign, Activity, TrendingUp, FileText, Clock } from 'lucide-react';
+import { Loader2, RefreshCw, CheckCircle2, XCircle, DollarSign, Activity, TrendingUp, FileText, Clock, Database, Code2, FileSearch } from 'lucide-react';
+import { fetchContextMetrics, type ContextMetricsResponse } from '../../lib/studio-api/analytics.js';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
@@ -75,6 +76,7 @@ function MetricRow({ label, value, bar, color = '#22c55e' }: MetricRowProps) {
 
 export default function ProjectReport({ projectId }: { projectId: string }) {
   const [report, setReport] = useState<ReportData | null>(null);
+  const [ctxMetrics, setCtxMetrics] = useState<ContextMetricsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,10 +86,16 @@ export default function ProjectReport({ projectId }: { projectId: string }) {
     else setRefreshing(true);
     setError(null);
     try {
-      const res = await fetch(`${BASE}/api/studio/projects/${projectId}/report`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setReport(data);
+      const [reportRes, ctxRes] = await Promise.all([
+        fetch(`${BASE}/api/studio/projects/${projectId}/report`).then(async (r) => {
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+          return d as ReportData;
+        }),
+        fetchContextMetrics(projectId).then((r) => r?.metrics ? r : null).catch(() => null),
+      ]);
+      setReport(reportRes);
+      setCtxMetrics(ctxRes);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load report');
     } finally {
@@ -259,6 +267,65 @@ export default function ProjectReport({ projectId }: { projectId: string }) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Context Efficiency (v4.0) */}
+      {ctxMetrics?.metrics && ctxMetrics.metrics.totalChunks > 0 && (
+        <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
+            <Database size={14} className="text-[#a78bfa]" />
+            <h3 className="text-[12px] font-semibold text-[#fafafa]">Context Efficiency</h3>
+            <span className="ml-auto text-[10px] text-[#525252]">
+              {ctxMetrics.metrics.totalSources} sources indexed
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#1a1a1a]">
+            <div className="bg-[#111111] p-3">
+              <p className="text-[10px] text-[#525252] uppercase tracking-wider">Total Chunks</p>
+              <p className="text-[18px] font-bold text-[#fafafa] mt-1">{ctxMetrics.metrics.totalChunks}</p>
+            </div>
+            <div className="bg-[#111111] p-3">
+              <div className="flex items-center gap-1">
+                <Code2 size={10} className="text-[#60a5fa]" />
+                <p className="text-[10px] text-[#525252] uppercase tracking-wider">Code Chunks</p>
+              </div>
+              <p className="text-[18px] font-bold text-[#fafafa] mt-1">{ctxMetrics.metrics.codeChunks}</p>
+            </div>
+            <div className="bg-[#111111] p-3">
+              <div className="flex items-center gap-1">
+                <FileSearch size={10} className="text-[#22c55e]" />
+                <p className="text-[10px] text-[#525252] uppercase tracking-wider">Tokens Indexed</p>
+              </div>
+              <p className="text-[18px] font-bold text-[#fafafa] mt-1">
+                {ctxMetrics.metrics.estimatedTokensIndexed.toLocaleString()}
+              </p>
+            </div>
+            <div className="bg-[#111111] p-3">
+              <p className="text-[10px] text-[#525252] uppercase tracking-wider">Session Events</p>
+              <p className="text-[18px] font-bold text-[#fafafa] mt-1">{ctxMetrics.metrics.totalEvents}</p>
+            </div>
+          </div>
+
+          {ctxMetrics.perTask.length > 0 && (
+            <div className="border-t border-[#1a1a1a]">
+              <div className="px-4 py-2">
+                <p className="text-[10px] text-[#525252] uppercase tracking-wider">Indexed Tasks</p>
+              </div>
+              {ctxMetrics.perTask.slice(0, 10).map((t) => (
+                <div
+                  key={t.sourceLabel}
+                  className="flex items-center gap-3 px-4 py-2 border-t border-[#1a1a1a] hover:bg-[#141414] transition-colors"
+                >
+                  <span className="text-[11px] text-[#a3a3a3] flex-1 truncate">{t.taskTitle}</span>
+                  <span className="text-[10px] text-[#525252] shrink-0">
+                    {t.chunkCount} chunks ({t.codeChunkCount} code)
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

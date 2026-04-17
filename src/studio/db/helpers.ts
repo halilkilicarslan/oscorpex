@@ -17,6 +17,9 @@ import type {
 	CapabilityScopeType,
 	ChatMessage,
 	ChatRole,
+	ContextChunk,
+	ContextContentType,
+	ContextSource,
 	ConversationCompaction,
 	DependencyType,
 	EventType,
@@ -337,6 +340,27 @@ export function rowToConversationCompaction(row: any): ConversationCompaction {
 		lastMessageId: row.last_message_id,
 		summary: row.summary,
 		updatedAt: row.updated_at,
+	};
+}
+
+export function rowToContextSource(row: any): ContextSource {
+	return {
+		id: row.id,
+		projectId: row.project_id,
+		label: row.label,
+		chunkCount: row.chunk_count,
+		codeChunkCount: row.code_chunk_count,
+		indexedAt: row.indexed_at,
+	};
+}
+
+export function rowToContextChunk(row: any): ContextChunk {
+	return {
+		id: row.id,
+		sourceId: row.source_id,
+		title: row.title,
+		content: row.content,
+		contentType: row.content_type as ContextContentType,
 	};
 }
 
