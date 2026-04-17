@@ -313,16 +313,31 @@ export function executeWithCLI(opts: {
 					// Non-JSON line — log as-is
 					if (line.trim()) {
 						termLog(line.trim());
+						// Check for rate-limit messages in non-JSON stdout
+						if (!rateLimitDetected && RATE_LIMIT_RX.test(line)) {
+							rateLimitDetected = true;
+							termLog(`[${agentName}] Rate limit algılandi — pipeline duraklatilacak.`);
+							settle(new Error(`Rate limit: ${line.trim().slice(0, 300)}`));
+						}
 					}
 				}
 			}
 		});
+
+		// Rate-limit detection from stderr
+		let rateLimitDetected = false;
+		const RATE_LIMIT_RX = /you[''\u2019]ve hit your limit|rate limit|resets?\s+\d{1,2}[:.]\d{2}\s*(am|pm)|too many requests|quota exceeded/i;
 
 		// Process stderr
 		proc.stderr!.on("data", (chunk: Buffer) => {
 			const text = chunk.toString().trim();
 			if (text) {
 				termLog(`[${agentName}][stderr] ${text}`);
+				if (RATE_LIMIT_RX.test(text)) {
+					rateLimitDetected = true;
+					termLog(`[${agentName}] Rate limit algılandi — pipeline duraklatilacak.`);
+					settle(new Error(`Rate limit: ${text.slice(0, 300)}`));
+				}
 			}
 		});
 
@@ -337,6 +352,16 @@ export function executeWithCLI(opts: {
 					processStreamEvent(event, result, termLog, agentName);
 				} catch {
 					if (buffer.trim()) termLog(buffer.trim());
+				}
+			}
+
+			// Check if accumulated logs contain rate-limit messages
+			if (!rateLimitDetected && !settled) {
+				const allLogs = result.logs.join("\n");
+				if (RATE_LIMIT_RX.test(allLogs)) {
+					rateLimitDetected = true;
+					settle(new Error(`Rate limit: ${allLogs.match(RATE_LIMIT_RX)?.[0] ?? "limit reached"}`));
+					return;
 				}
 			}
 
