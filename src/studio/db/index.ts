@@ -2,6 +2,7 @@
 // Oscorpex — DB module index: re-export all domain repos (backward compat)
 // ---------------------------------------------------------------------------
 
+export { query, queryOne, execute, withTransaction } from "../pg.js";
 export * from "./helpers.js";
 export * from "./project-repo.js";
 export * from "./task-repo.js";

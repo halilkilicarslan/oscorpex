@@ -19,6 +19,7 @@ import {
   Settings,
   Users,
   Terminal,
+  Gauge,
 } from 'lucide-react';
 
 interface NavItem {
@@ -70,7 +71,8 @@ const sections: NavSection[] = [
   {
     title: 'OSCORPEX',
     items: [
-      { to: '/studio', label: 'Projects', icon: <Code2 size={18} />, badge: 'New' },
+      { to: '/studio/dashboard', label: 'Dashboard', icon: <Gauge size={18} />, badge: 'New' },
+      { to: '/studio', label: 'Projects', icon: <Code2 size={18} /> },
       { to: '/studio/teams', label: 'Team Builder', icon: <Users size={18} /> },
       { to: '/studio/providers', label: 'Providers', icon: <Settings size={18} /> },
       { to: '/studio/cli-monitor', label: 'CLI Monitor', icon: <Terminal size={18} /> },

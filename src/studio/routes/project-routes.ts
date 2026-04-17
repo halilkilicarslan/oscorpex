@@ -28,6 +28,8 @@ import {
 	listProjectAgents,
 	listProjects,
 	listTeamTemplates,
+	query,
+	queryOne,
 	setProjectSettings,
 	skipIntakeQuestion,
 	updatePlanStatus,
@@ -93,6 +95,99 @@ async function saveProjectIntake(
 		await setProjectSettings(projectId, "intake", intakeEntries);
 	}
 }
+
+// ---- Platform Overview Dashboard ------------------------------------------
+
+projectRoutes.get("/platform/stats", async (c) => {
+	try {
+		const [projectStats, taskStats, costStats, recentProjects, recentTasks] = await Promise.all([
+			queryOne<any>(`
+				SELECT
+					COUNT(*) AS total,
+					COUNT(*) FILTER (WHERE status = 'active' OR status = 'planning' OR status = 'executing') AS active,
+					COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+					COUNT(*) FILTER (WHERE status = 'failed') AS failed
+				FROM projects
+			`),
+			queryOne<any>(`
+				SELECT
+					COUNT(*) AS total,
+					COUNT(*) FILTER (WHERE status = 'done') AS done,
+					COUNT(*) FILTER (WHERE status = 'running') AS running,
+					COUNT(*) FILTER (WHERE status = 'failed') AS failed,
+					COUNT(*) FILTER (WHERE status = 'queued' OR status = 'assigned') AS queued
+				FROM tasks
+			`),
+			queryOne<any>(`
+				SELECT
+					COALESCE(SUM(cost_usd), 0) AS total_cost,
+					COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,
+					COALESCE(SUM(cache_read_tokens), 0) AS cache_read,
+					COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation,
+					COUNT(DISTINCT agent_id) AS active_agents
+				FROM token_usage
+			`),
+			query<any>(`
+				SELECT id, name, status, description, created_at, updated_at
+				FROM projects ORDER BY updated_at DESC LIMIT 5
+			`),
+			query<any>(`
+				SELECT t.id, t.title, t.status, t.assigned_agent, t.complexity, t.completed_at, p.name AS project_name
+				FROM tasks t JOIN projects p ON p.id = t.project_id
+				WHERE t.status = 'done'
+				ORDER BY t.completed_at DESC NULLS LAST LIMIT 8
+			`),
+		]);
+
+		const totalTokens = Number(costStats?.total_tokens ?? 0);
+		const cacheRead = Number(costStats?.cache_read ?? 0);
+		const cacheRate = totalTokens > 0 ? cacheRead / totalTokens : 0;
+
+		return c.json({
+			projects: {
+				total: Number(projectStats?.total ?? 0),
+				active: Number(projectStats?.active ?? 0),
+				completed: Number(projectStats?.completed ?? 0),
+				failed: Number(projectStats?.failed ?? 0),
+			},
+			tasks: {
+				total: Number(taskStats?.total ?? 0),
+				done: Number(taskStats?.done ?? 0),
+				running: Number(taskStats?.running ?? 0),
+				failed: Number(taskStats?.failed ?? 0),
+				queued: Number(taskStats?.queued ?? 0),
+			},
+			cost: {
+				totalUsd: Math.round(Number(costStats?.total_cost ?? 0) * 100) / 100,
+				totalTokens,
+				cacheReadTokens: cacheRead,
+				cacheCreationTokens: Number(costStats?.cache_creation ?? 0),
+				cacheRate: Math.round(cacheRate * 1000) / 10,
+				activeAgents: Number(costStats?.active_agents ?? 0),
+			},
+			recentProjects: recentProjects.map((r: any) => ({
+				id: r.id,
+				name: r.name,
+				status: r.status,
+				description: r.description,
+				createdAt: r.created_at,
+				updatedAt: r.updated_at,
+			})),
+			recentTasks: recentTasks.map((r: any) => ({
+				id: r.id,
+				title: r.title,
+				status: r.status,
+				assignedAgent: r.assigned_agent,
+				complexity: r.complexity,
+				completedAt: r.completed_at,
+				projectName: r.project_name,
+			})),
+		});
+	} catch (err) {
+		console.error("[project-routes] platform stats failed:", err);
+		return c.json({ error: "Failed to get platform stats" }, 500);
+	}
+});
 
 // ---- Projects CRUD --------------------------------------------------------
 

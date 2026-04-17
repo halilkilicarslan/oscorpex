@@ -1,6 +1,40 @@
 import type { Project, ProjectTemplateInfo } from './types.js';
 import { API, json } from './base.js';
 
+export interface PlatformStats {
+  projects: { total: number; active: number; completed: number; failed: number };
+  tasks: { total: number; done: number; running: number; failed: number; queued: number };
+  cost: {
+    totalUsd: number;
+    totalTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+    cacheRate: number;
+    activeAgents: number;
+  };
+  recentProjects: {
+    id: string;
+    name: string;
+    status: string;
+    description: string;
+    createdAt: string;
+    updatedAt: string;
+  }[];
+  recentTasks: {
+    id: string;
+    title: string;
+    status: string;
+    assignedAgent: string;
+    complexity: string;
+    completedAt: string;
+    projectName: string;
+  }[];
+}
+
+export async function fetchPlatformStats(): Promise<PlatformStats> {
+  return json(`${API}/platform/stats`);
+}
+
 export async function fetchProjects(): Promise<Project[]> {
   return json(`${API}/projects`);
 }
