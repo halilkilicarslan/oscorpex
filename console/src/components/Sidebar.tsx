@@ -72,6 +72,7 @@ const sections: NavSection[] = [
     title: 'OSCORPEX',
     items: [
       { to: '/studio/dashboard', label: 'Dashboard', icon: <Gauge size={18} />, badge: 'New' },
+      { to: '/studio/insights', label: 'Insights', icon: <Brain size={18} />, badge: 'New' },
       { to: '/studio', label: 'Projects', icon: <Code2 size={18} /> },
       { to: '/studio/teams', label: 'Team Builder', icon: <Users size={18} /> },
       { to: '/studio/providers', label: 'Providers', icon: <Settings size={18} /> },
