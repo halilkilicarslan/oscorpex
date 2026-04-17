@@ -39,6 +39,7 @@ import {
   roleLabel,
 } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
+import { AgentHeatMap } from './AgentHeatMap';
 
 // ---------------------------------------------------------------------------
 // Yardımcı fonksiyonlar
@@ -828,6 +829,12 @@ export default function AgentDashboard({ projectId }: Props) {
             ))}
           </div>
         )}
+
+        {/* v4.1: Agent Heat Map + Comparison */}
+        <div className="bg-[#0e0e0e] border border-[#1f1f1f] rounded-xl p-4">
+          <h3 className="text-[13px] font-semibold text-[#fafafa] mb-3">Agent Performans Analizi</h3>
+          <AgentHeatMap projectId={projectId} />
+        </div>
       </div>
     </div>
   );

@@ -52,3 +52,82 @@ export interface ContextMetricsResponse {
 export async function fetchContextMetrics(projectId: string): Promise<ContextMetricsResponse> {
   return json(`${API}/projects/${projectId}/analytics/context`);
 }
+
+// ---------------------------------------------------------------------------
+// v4.1: Agent Dashboard v2
+// ---------------------------------------------------------------------------
+
+export interface AgentHeatMapCell {
+  agentId: string;
+  agentName: string;
+  date: string;
+  value: number;
+}
+
+export interface AgentPerformancePoint {
+  date: string;
+  tasksCompleted: number;
+  tasksFailed: number;
+  tokensUsed: number;
+  costUsd: number;
+  avgTaskTimeMs: number;
+}
+
+export interface AgentComparisonEntry {
+  agentId: string;
+  agentName: string;
+  role: string;
+  avatar: string;
+  score: number;
+  tasksCompleted: number;
+  avgTaskTimeMs: number;
+  firstPassRate: number;
+  costPerTask: number;
+}
+
+export async function fetchAgentHeatMap(projectId: string, days = 14): Promise<AgentHeatMapCell[]> {
+  const res = await json<{ data: AgentHeatMapCell[] }>(`${API}/projects/${projectId}/analytics/agents/heatmap?days=${days}`);
+  return res.data;
+}
+
+export async function fetchAgentTimeline(projectId: string, agentId: string, days = 14): Promise<AgentPerformancePoint[]> {
+  const res = await json<{ data: AgentPerformancePoint[] }>(`${API}/projects/${projectId}/analytics/agents/${agentId}/timeline?days=${days}`);
+  return res.data;
+}
+
+export async function fetchAgentComparison(projectId: string): Promise<AgentComparisonEntry[]> {
+  const res = await json<{ data: AgentComparisonEntry[] }>(`${API}/projects/${projectId}/analytics/agents/comparison`);
+  return res.data;
+}
+
+// ---------------------------------------------------------------------------
+// v4.1: RAG Observability
+// ---------------------------------------------------------------------------
+
+export interface SearchLogEntry {
+  id: string;
+  projectId: string;
+  queryText: string;
+  resultCount: number;
+  topRank: number | null;
+  latencyMs: number;
+  sourceFilter: string | null;
+  contentType: string | null;
+  createdAt: string;
+}
+
+export interface SearchObservabilityData {
+  totalSearches: number;
+  totalHits: number;
+  totalMisses: number;
+  hitRate: number;
+  avgLatencyMs: number;
+  avgResultCount: number;
+  avgTopRank: number;
+  recentSearches: SearchLogEntry[];
+  hourlyBreakdown: Array<{ hour: string; searches: number; hits: number; avgLatency: number }>;
+}
+
+export async function fetchSearchObservability(projectId: string, days = 7): Promise<SearchObservabilityData> {
+  return json(`${API}/projects/${projectId}/analytics/context/observability?days=${days}`);
+}

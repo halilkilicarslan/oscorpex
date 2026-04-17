@@ -7,11 +7,15 @@ import {
 	getActivityTimeline,
 	getAgentAnalytics,
 	getAgentCostSummary,
+	getAgentComparison,
+	getAgentHeatMap,
+	getAgentPerformanceTimeline,
 	getProject,
 	getProjectAnalytics,
 	getProjectCostBreakdown,
 	getProjectCostSummary,
 	getProjectSettingsMap,
+	getSearchObservability,
 	listProjectAgents,
 	listTokenUsage,
 } from "../db.js";
@@ -303,5 +307,65 @@ analyticsRoutes.get("/projects/:id/analytics/context", async (c) => {
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		return c.json({ error: msg }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// v4.1: Agent Dashboard v2 — Heat Map, Timeline, Comparison
+// ---------------------------------------------------------------------------
+
+// GET /projects/:id/analytics/agents/heatmap
+analyticsRoutes.get("/projects/:id/analytics/agents/heatmap", async (c) => {
+	try {
+		const projectId = c.req.param("id");
+		const days = Number(c.req.query("days") ?? "14");
+		const data = await getAgentHeatMap(projectId, days);
+		return c.json({ data });
+	} catch (err) {
+		console.error("[analytics] agent heatmap failed:", err);
+		return c.json({ error: "Failed to get agent heatmap" }, 500);
+	}
+});
+
+// GET /projects/:id/analytics/agents/:agentId/timeline
+analyticsRoutes.get("/projects/:id/analytics/agents/:agentId/timeline", async (c) => {
+	try {
+		const projectId = c.req.param("id");
+		const agentId = c.req.param("agentId");
+		const days = Number(c.req.query("days") ?? "14");
+		const data = await getAgentPerformanceTimeline(projectId, agentId, days);
+		return c.json({ data });
+	} catch (err) {
+		console.error("[analytics] agent timeline failed:", err);
+		return c.json({ error: "Failed to get agent timeline" }, 500);
+	}
+});
+
+// GET /projects/:id/analytics/agents/comparison
+analyticsRoutes.get("/projects/:id/analytics/agents/comparison", async (c) => {
+	try {
+		const projectId = c.req.param("id");
+		const data = await getAgentComparison(projectId);
+		return c.json({ data });
+	} catch (err) {
+		console.error("[analytics] agent comparison failed:", err);
+		return c.json({ error: "Failed to get agent comparison" }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// v4.1: RAG Observability — Search quality dashboard
+// ---------------------------------------------------------------------------
+
+// GET /projects/:id/analytics/context/observability
+analyticsRoutes.get("/projects/:id/analytics/context/observability", async (c) => {
+	try {
+		const projectId = c.req.param("id");
+		const days = Number(c.req.query("days") ?? "7");
+		const data = await getSearchObservability(projectId, days);
+		return c.json(data);
+	} catch (err) {
+		console.error("[analytics] search observability failed:", err);
+		return c.json({ error: "Failed to get search observability" }, 500);
 	}
 });

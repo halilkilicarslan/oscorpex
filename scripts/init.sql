@@ -831,3 +831,72 @@ CREATE TABLE IF NOT EXISTS context_search_stats (
   search_calls    INTEGER NOT NULL DEFAULT 0,
   search_hits     INTEGER NOT NULL DEFAULT 0
 );
+
+-- v4.1: Task file diffs (DiffViewer)
+CREATE TABLE IF NOT EXISTS task_diffs (
+  id              TEXT PRIMARY KEY,
+  task_id         TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  file_path       TEXT NOT NULL,
+  diff_content    TEXT NOT NULL,
+  diff_type       TEXT NOT NULL CHECK (diff_type IN ('created', 'modified', 'deleted')),
+  lines_added     INTEGER NOT NULL DEFAULT 0,
+  lines_removed   INTEGER NOT NULL DEFAULT 0,
+  created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_diffs_task ON task_diffs(task_id);
+
+-- v4.1: Context search log (RAG Observability)
+CREATE TABLE IF NOT EXISTS context_search_log (
+  id              TEXT PRIMARY KEY,
+  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  query_text      TEXT NOT NULL,
+  result_count    INTEGER NOT NULL DEFAULT 0,
+  top_rank        REAL,
+  latency_ms      INTEGER NOT NULL DEFAULT 0,
+  source_filter   TEXT,
+  content_type    TEXT,
+  created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ctx_search_log_project ON context_search_log(project_id, created_at DESC);
+
+-- v4.1: Agent daily stats (Agent Dashboard v2 heat map)
+CREATE TABLE IF NOT EXISTS agent_daily_stats (
+  id              TEXT PRIMARY KEY,
+  project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  agent_id        TEXT NOT NULL,
+  stat_date       TEXT NOT NULL,
+  tasks_completed INTEGER NOT NULL DEFAULT 0,
+  tasks_failed    INTEGER NOT NULL DEFAULT 0,
+  tokens_used     INTEGER NOT NULL DEFAULT 0,
+  cost_usd        REAL NOT NULL DEFAULT 0,
+  avg_task_time_ms INTEGER NOT NULL DEFAULT 0,
+  created_at      TEXT NOT NULL,
+  UNIQUE(project_id, agent_id, stat_date)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_daily_stats_lookup ON agent_daily_stats(project_id, stat_date);
+
+-- v4.1: Fix FK constraints to CASCADE (idempotent migration)
+DO $$
+BEGIN
+  -- task_diffs: ensure ON DELETE CASCADE
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'task_diffs_task_id_fkey' AND confdeltype != 'c'
+  ) THEN
+    ALTER TABLE task_diffs DROP CONSTRAINT task_diffs_task_id_fkey;
+    ALTER TABLE task_diffs ADD CONSTRAINT task_diffs_task_id_fkey FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE;
+  END IF;
+  -- context_search_log: ensure ON DELETE CASCADE
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'context_search_log_project_id_fkey' AND confdeltype != 'c'
+  ) THEN
+    ALTER TABLE context_search_log DROP CONSTRAINT context_search_log_project_id_fkey;
+    ALTER TABLE context_search_log ADD CONSTRAINT context_search_log_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+  END IF;
+  -- agent_daily_stats: ensure ON DELETE CASCADE
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'agent_daily_stats_project_id_fkey' AND confdeltype != 'c'
+  ) THEN
+    ALTER TABLE agent_daily_stats DROP CONSTRAINT agent_daily_stats_project_id_fkey;
+    ALTER TABLE agent_daily_stats ADD CONSTRAINT agent_daily_stats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+  END IF;
+END $$;

@@ -23,6 +23,8 @@ import {
 	updateTask,
 } from "./db.js";
 import { indexTaskOutput } from "./context-sandbox.js";
+import { captureTaskDiffs } from "./diff-capture.js";
+import { upsertAgentDailyStat } from "./db.js";
 import { applyPostCompletionHooks, taskNeedsApprovalFromEdges } from "./edge-hooks.js";
 import { eventBus } from "./event-bus.js";
 import { recordAgentStep } from "./memory-bridge.js";
@@ -521,6 +523,25 @@ class TaskEngine {
 			console.warn("[task-engine] indexTaskOutput failed:", err);
 		});
 
+		// v4.1: Capture file diffs for DiffViewer
+		let proj = await getProject(projectId);
+		if (proj?.repoPath) {
+			captureTaskDiffs(taskId, proj.repoPath, output).catch((err) => {
+				console.warn("[task-engine] captureTaskDiffs failed:", err);
+			});
+		}
+
+		// v4.1: Update agent daily stats for heat map / timeline
+		const today = new Date().toISOString().slice(0, 10);
+		const agentId = task.assignedAgentId || task.assignedAgent;
+		const taskTimeMs = task.startedAt ? Date.now() - new Date(task.startedAt).getTime() : 0;
+		upsertAgentDailyStat(projectId, agentId, today, {
+			tasksCompleted: 1,
+			avgTaskTimeMs: taskTimeMs,
+		}).catch((err) => {
+			console.warn("[task-engine] upsertAgentDailyStat failed:", err);
+		});
+
 		// v3.0: Sub-task rollup — if this task has a parent, check if all siblings are done
 		if (task.parentTaskId) {
 			try {
@@ -553,7 +574,7 @@ class TaskEngine {
 		this.notifyCompleted(taskId, projectId);
 
 		// Record to memory tables for Memory page
-		const proj = await getProject(projectId);
+		if (!proj) proj = await getProject(projectId);
 		if (proj) {
 			const agents = await listProjectAgents(projectId);
 			const agent = agents.find((a) => a.id === task.assignedAgentId);

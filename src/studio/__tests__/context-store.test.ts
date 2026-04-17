@@ -35,6 +35,7 @@ vi.mock("../db.js", () => ({
 	listContextSources: vi.fn().mockResolvedValue([]),
 	deleteContextSource: vi.fn().mockResolvedValue(undefined),
 	cleanupStaleSources: vi.fn().mockResolvedValue(2),
+	insertSearchLog: vi.fn().mockResolvedValue(undefined),
 }));
 
 // ---------------------------------------------------------------------------
