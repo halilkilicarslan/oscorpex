@@ -14,14 +14,15 @@ export default function TopBar({ onOpenChat, chatOpen }: TopBarProps) {
   const checkConnection = useCallback(async () => {
     setChecking(true);
     try {
-      const res = await fetch('/agents', { signal: AbortSignal.timeout(3000) });
+      const base = apiUrl.replace(/\/+$/, '');
+      const res = await fetch(`${base}/agents`, { signal: AbortSignal.timeout(3000) });
       setConnected(res.ok);
     } catch {
       setConnected(false);
     } finally {
       setChecking(false);
     }
-  }, []);
+  }, [apiUrl]);
 
   useEffect(() => {
     checkConnection();
@@ -37,7 +38,7 @@ export default function TopBar({ onOpenChat, chatOpen }: TopBarProps) {
           <img src="/logo-icon.svg" alt="Oscorpex icon" className="w-5 h-5 object-contain brightness-0 invert" />
         </div>
         <span className="text-[13px] text-[#a3a3a3] font-medium">
-          My Organization
+          Workspace
         </span>
         <span className="text-[#333] select-none">/</span>
         <img src="/app-logo.svg" alt="Oscorpex" className="h-4 w-auto brightness-0 invert" />
@@ -88,7 +89,7 @@ export default function TopBar({ onOpenChat, chatOpen }: TopBarProps) {
           AI Playground
         </button>
         <a
-          href="https://github.com/voltagent/voltagent"
+          href="https://github.com/oscorpex/oscorpex"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] text-[#a3a3a3] hover:text-[#fafafa] bg-[#1f1f1f] hover:bg-[#262626] transition-colors"
@@ -96,7 +97,7 @@ export default function TopBar({ onOpenChat, chatOpen }: TopBarProps) {
           <ExternalLink size={14} />
         </a>
         <div className="w-7 h-7 rounded-full bg-[#22c55e]/20 flex items-center justify-center text-[11px] font-bold text-[#22c55e]">
-          D
+          U
         </div>
       </div>
     </header>

@@ -213,12 +213,12 @@ export default function TerminalSheet({
               {isRunning ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  <span className="text-[11px]">Agent çıktısı bekleniyor...</span>
+                  <span className="text-[11px]">Waiting for agent output...</span>
                 </>
               ) : (
                 <>
                   <Terminal size={16} />
-                  <span className="text-[11px]">Henüz terminal çıktısı yok</span>
+                  <span className="text-[11px]">No terminal output yet</span>
                 </>
               )}
             </div>

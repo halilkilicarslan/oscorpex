@@ -159,10 +159,10 @@ export function SearchObservability({ projectId }: { projectId: string }) {
 	return (
 		<div className="space-y-4">
 			<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-				<StatCard icon={Search} label="Toplam Arama" value={data.totalSearches} color="text-[#3b82f6]" />
+				<StatCard icon={Search} label="Total Searches" value={data.totalSearches} color="text-[#3b82f6]" />
 				<StatCard icon={Target} label="Hit Rate" value={`${Math.round(data.hitRate * 100)}%`} sub={`${data.totalHits} hit / ${data.totalMisses} miss`} color="text-[#22c55e]" />
-				<StatCard icon={Clock} label="Ort. Gecikme" value={`${data.avgLatencyMs}ms`} color="text-[#f59e0b]" />
-				<StatCard icon={Zap} label="Ort. Sonuc" value={data.avgResultCount} sub={`Rank: ${data.avgTopRank}`} color="text-[#a855f7]" />
+				<StatCard icon={Clock} label="Avg Latency" value={`${data.avgLatencyMs}ms`} color="text-[#f59e0b]" />
+				<StatCard icon={Zap} label="Avg Results" value={data.avgResultCount} sub={`Rank: ${data.avgTopRank}`} color="text-[#a855f7]" />
 			</div>
 
 			<div className="bg-[#111111] border border-[#1f1f1f] rounded-lg p-3">

@@ -35,6 +35,9 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border-light); border-radius: 3px; }
 
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
 .chat-markdown p { margin-bottom: 0.5rem; }
 .chat-markdown ul, .chat-markdown ol { margin-left: 1.5rem; margin-bottom: 0.5rem; }
 .chat-markdown li { margin-bottom: 0.25rem; }

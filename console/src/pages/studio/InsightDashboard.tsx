@@ -38,10 +38,10 @@ interface Insight {
 }
 
 const SEV_STYLES = {
-	positive: { border: "border-[#22c55e]/30", bg: "bg-[#22c55e]/5", badge: "bg-[#22c55e]/15 text-[#22c55e]", label: "Harika" },
-	warning: { border: "border-[#f59e0b]/30", bg: "bg-[#f59e0b]/5", badge: "bg-[#f59e0b]/15 text-[#f59e0b]", label: "Dikkat" },
-	critical: { border: "border-[#ef4444]/30", bg: "bg-[#ef4444]/5", badge: "bg-[#ef4444]/15 text-[#ef4444]", label: "Duzelt" },
-	neutral: { border: "border-[#3b82f6]/30", bg: "bg-[#3b82f6]/5", badge: "bg-[#3b82f6]/15 text-[#3b82f6]", label: "Bilgi" },
+	positive: { border: "border-[#22c55e]/30", bg: "bg-[#22c55e]/5", badge: "bg-[#22c55e]/15 text-[#22c55e]", label: "Great" },
+	warning: { border: "border-[#f59e0b]/30", bg: "bg-[#f59e0b]/5", badge: "bg-[#f59e0b]/15 text-[#f59e0b]", label: "Warning" },
+	critical: { border: "border-[#ef4444]/30", bg: "bg-[#ef4444]/5", badge: "bg-[#ef4444]/15 text-[#ef4444]", label: "Fix Now" },
+	neutral: { border: "border-[#3b82f6]/30", bg: "bg-[#3b82f6]/5", badge: "bg-[#3b82f6]/15 text-[#3b82f6]", label: "Info" },
 };
 
 function generateInsights(d: PlatformAnalytics): Insight[] {
@@ -53,18 +53,18 @@ function generateInsights(d: PlatformAnalytics): Insight[] {
 		if (t.failureRate > 15) {
 			ins.push({
 				icon: <AlertTriangle size={16} className="text-[#ef4444]" />, severity: "critical",
-				metric: `%${t.failureRate} basarisizlik orani`,
-				evidence: `${t.tasksFailed} task ${t.totalTasks} task icinde basarisiz oldu.`,
-				action: "Task complexity'leri kuculterek veya review loop'u ayarlayarak basarisizliklari azaltin.",
-				roi: `${t.tasksFailed} basarisiz task'in yeniden calistirilma maliyetini dusurur.`,
+				metric: `${t.failureRate}% failure rate`,
+				evidence: `${t.tasksFailed} out of ${t.totalTasks} tasks failed.`,
+				action: "Reduce task complexity or tune review loops to lower failure rates.",
+				roi: `Saves re-run costs for ${t.tasksFailed} failed tasks.`,
 			});
 		} else if (t.failureRate < 5) {
 			ins.push({
 				icon: <CheckCircle size={16} className="text-[#22c55e]" />, severity: "positive",
-				metric: `Sadece %${t.failureRate} basarisizlik orani`,
-				evidence: `${t.tasksDone} task basariyla tamamlandi. Neredeyse her task ilk seferde calisti.`,
-				action: "Bu basariyi surdurmeye devam edin.",
-				roi: "Dusuk hata orani = daha az yeniden calistirma = daha az maliyet.",
+				metric: `Only ${t.failureRate}% failure rate`,
+				evidence: `${t.tasksDone} tasks completed successfully. Almost every task passed on the first run.`,
+				action: "Keep up the great work.",
+				roi: "Low failure rate = fewer re-runs = lower costs.",
 			});
 		}
 	}
@@ -74,18 +74,18 @@ function generateInsights(d: PlatformAnalytics): Insight[] {
 		if (t.cacheRate > 80) {
 			ins.push({
 				icon: <Zap size={16} className="text-[#22c55e]" />, severity: "positive",
-				metric: `%${t.cacheRate} cache hit — mukemmel token tasarrufu`,
-				evidence: `Token'larin buyuk cogunlugu cache'den okunuyor. Maliyet optimizasyonu ideal.`,
-				action: "Bu pattern'i koruyun. Context packet sistemi dogru calisiyor.",
-				roi: "Cache sayesinde %90+ maliyet tasarrufu saglanabiliyor.",
+				metric: `${t.cacheRate}% cache hit — excellent token savings`,
+				evidence: `Most tokens are served from cache. Cost optimization is ideal.`,
+				action: "Keep this pattern. The context packet system is working correctly.",
+				roi: "Cache enables 90%+ cost savings.",
 			});
 		} else if (t.cacheRate < 40) {
 			ins.push({
 				icon: <Brain size={16} className="text-[#f59e0b]" />, severity: "warning",
-				metric: `Sadece %${t.cacheRate} cache hit`,
-				evidence: `Token'larin cogu dogrudan API'ye gidiyor. Cache kullanimi dusuk.`,
-				action: "Task'lari benzer dosyalar uzerinde gruplamak cache hit oranini artirabilir.",
-				roi: "Her %10 cache artisi yaklasik %8 maliyet dusurur.",
+				metric: `Only ${t.cacheRate}% cache hit`,
+				evidence: `Most tokens go directly to the API. Cache usage is low.`,
+				action: "Group tasks on similar files to increase cache hit rate.",
+				roi: "Every 10% cache increase reduces costs by ~8%.",
 			});
 		}
 	}
@@ -95,18 +95,18 @@ function generateInsights(d: PlatformAnalytics): Insight[] {
 		if (t.errorRate > 10) {
 			ins.push({
 				icon: <Shield size={16} className="text-[#ef4444]" />, severity: "critical",
-				metric: `%${t.errorRate} event hata orani`,
-				evidence: `${t.totalErrors} hata ${t.totalEvents} event icinde. Cok fazla basarisiz event var.`,
-				action: "Tekrarlayan hata pattern'lerini inceleyip root cause'u cozun.",
-				roi: `Bu hatalari duzeltmek tahmini ${Math.round(t.totalErrors * 0.5)} dakika kazandirir.`,
+				metric: `${t.errorRate}% event error rate`,
+				evidence: `${t.totalErrors} errors in ${t.totalEvents} events. Too many failed events.`,
+				action: "Investigate recurring error patterns and resolve root causes.",
+				roi: `Fixing these errors saves an estimated ${Math.round(t.totalErrors * 0.5)} minutes.`,
 			});
 		} else if (t.errorRate < 3) {
 			ins.push({
 				icon: <Shield size={16} className="text-[#22c55e]" />, severity: "positive",
-				metric: `Sadece %${t.errorRate} hata orani — cok temiz`,
-				evidence: `${t.totalErrors} hata ${t.totalEvents} event icinde. Neredeyse her sey ilk denemede calisiyor.`,
-				action: "Bu kaliteyi koruyun.",
-				roi: "Temiz calisma = daha az debug zamani = daha hizli sonuc.",
+				metric: `Only ${t.errorRate}% error rate — very clean`,
+				evidence: `${t.totalErrors} errors in ${t.totalEvents} events. Almost everything works on the first try.`,
+				action: "Maintain this quality level.",
+				roi: "Clean runs = less debug time = faster results.",
 			});
 		}
 	}
@@ -115,10 +115,10 @@ function generateInsights(d: PlatformAnalytics): Insight[] {
 	if (t.uniqueAgents >= 6 && t.totalProjects >= 1) {
 		ins.push({
 			icon: <Users size={16} className="text-[#3b82f6]" />, severity: "positive",
-			metric: `${t.uniqueAgents} farkli agent aktif`,
-			evidence: `Scrum takimi tam kapasiteyle calisiyor. Her agent kendi uzmanlik alaninda gorev aliyor.`,
-			action: "Agent skorlarini takip edip dusuk performansli agent'lari optimize edin.",
-			roi: "Uzmanlasmis agent'lar genel basari oranini %15-20 artirabilir.",
+			metric: `${t.uniqueAgents} different agents active`,
+			evidence: `The Scrum team is running at full capacity. Each agent handles tasks in its area of expertise.`,
+			action: "Track agent scores and optimize low-performing agents.",
+			roi: "Specialized agents can improve overall success rate by 15-20%.",
 		});
 	}
 
@@ -127,18 +127,18 @@ function generateInsights(d: PlatformAnalytics): Insight[] {
 		if (t.avgTaskMin > 10) {
 			ins.push({
 				icon: <Clock size={16} className="text-[#f59e0b]" />, severity: "warning",
-				metric: `Ortalama task suresi ${t.avgTaskMin}dk`,
-				evidence: `Task'lar ortalama ${t.avgTaskMin} dakikada tamamlaniyor. Bu biraz yuksek olabilir.`,
-				action: "XL task'lari micro-task'lara decompose ederek paralel calistirmayi deneyin.",
-				roi: "Task decomposition ile toplam sure %30-40 dusurulebilir.",
+				metric: `Average task duration ${t.avgTaskMin}min`,
+				evidence: `Tasks take ${t.avgTaskMin} minutes on average. This may be a bit high.`,
+				action: "Try decomposing XL tasks into micro-tasks for parallel execution.",
+				roi: "Task decomposition can reduce total time by 30-40%.",
 			});
 		} else if (t.avgTaskMin < 4 && t.totalTasks >= 5) {
 			ins.push({
 				icon: <Zap size={16} className="text-[#22c55e]" />, severity: "positive",
-				metric: `Ortalama ${t.avgTaskMin}dk — cok hizli task tamamlama`,
-				evidence: `Task'lar hizla tamamlaniyor. Model routing ve complexity sizing dogru calisiyor.`,
-				action: "Bu hiz seviyesini koruyun.",
-				roi: "Hizli task tamamlama = daha az CLI kullanim suresi = daha az maliyet.",
+				metric: `Average ${t.avgTaskMin}min — very fast task completion`,
+				evidence: `Tasks complete quickly. Model routing and complexity sizing are working well.`,
+				action: "Maintain this speed level.",
+				roi: "Fast task completion = less CLI usage time = lower costs.",
 			});
 		}
 	}
@@ -181,11 +181,11 @@ function InsightCard({ icon, severity, metric, evidence, action, roi }: Insight)
 			<p className="text-[10px] text-[#a3a3a3] mb-3">{evidence}</p>
 			<div className="grid grid-cols-2 gap-2">
 				<div className="rounded-lg bg-[#0a0a0a]/40 p-2.5">
-					<p className="text-[8px] font-bold uppercase tracking-wider text-[#737373] mb-0.5">Ne Yapilmali</p>
+					<p className="text-[8px] font-bold uppercase tracking-wider text-[#737373] mb-0.5">Action</p>
 					<p className="text-[10px] text-[#e4e4e7]">{action}</p>
 				</div>
 				<div className="rounded-lg bg-[#0a0a0a]/40 p-2.5">
-					<p className="text-[8px] font-bold uppercase tracking-wider text-[#737373] mb-0.5">Neden Onemli</p>
+					<p className="text-[8px] font-bold uppercase tracking-wider text-[#737373] mb-0.5">Impact</p>
 					<p className="text-[10px] text-[#e4e4e7]">{roi}</p>
 				</div>
 			</div>
@@ -259,7 +259,7 @@ export default function InsightDashboard() {
 		try {
 			setData(await fetchPlatformAnalytics());
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Veriler yuklenemedi");
+			setError(e instanceof Error ? e.message : "Failed to load data");
 		} finally {
 			setLoading(false);
 		}
@@ -279,8 +279,8 @@ export default function InsightDashboard() {
 		return (
 			<div className="flex flex-col items-center justify-center py-32 gap-3">
 				<AlertTriangle size={20} className="text-[#ef4444]" />
-				<p className="text-[12px] text-[#737373]">{error ?? "Bilinmeyen hata"}</p>
-				<button type="button" onClick={load} className="text-[11px] text-[#22c55e] hover:underline">Tekrar dene</button>
+				<p className="text-[12px] text-[#737373]">{error ?? "Unknown error"}</p>
+				<button type="button" onClick={load} className="text-[11px] text-[#22c55e] hover:underline">Retry</button>
 			</div>
 		);
 	}
@@ -294,26 +294,26 @@ export default function InsightDashboard() {
 	const totalAgentTasks = data.agentUsage.reduce((a, b) => a + b.count, 0);
 
 	return (
-		<div className="space-y-5">
+		<div className="space-y-5 p-6">
 			{/* Header */}
 			<div>
 				<h1 className="text-[16px] font-semibold text-[#fafafa]">Insight Dashboard</h1>
 				<p className="text-[11px] text-[#525252] mt-0.5">
-					Kisisel analizler · {t.totalProjects} proje · {t.totalEvents} event · {t.activeDays} aktif gun
+					Personal analytics · {t.totalProjects} projects · {t.totalEvents} events · {t.activeDays} active days
 				</p>
 			</div>
 
 			{/* KPI Strip */}
 			<div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-				<StatCard label="Projeler" value={t.totalProjects} sub={`${t.activeDays} aktif gun`}
+				<StatCard label="Projects" value={t.totalProjects} sub={`${t.activeDays} active days`}
 					icon={<FolderOpen size={14} />} color="#3b82f6" />
-				<StatCard label="Task Basari" value={`%${t.taskDoneRate}`} sub={`${t.tasksDone} tamamlandi / ${t.totalTasks}`}
+				<StatCard label="Task Success" value={`${t.taskDoneRate}%`} sub={`${t.tasksDone} done / ${t.totalTasks}`}
 					icon={<TrendingUp size={14} />} color="#22c55e" />
-				<StatCard label="Cache Hit" value={`%${t.cacheRate}`} sub={`$${t.totalCostUsd} toplam maliyet`}
+				<StatCard label="Cache Hit" value={`${t.cacheRate}%`} sub={`$${t.totalCostUsd} total cost`}
 					icon={<Zap size={14} />} color="#a78bfa" />
-				<StatCard label="Hata Orani" value={`%${t.errorRate}`} sub={`${t.totalErrors} hata`}
+				<StatCard label="Error Rate" value={`${t.errorRate}%`} sub={`${t.totalErrors} errors`}
 					icon={<Shield size={14} />} color={t.errorRate > 10 ? "#ef4444" : "#22c55e"} />
-				<StatCard label="Ort. Task" value={`${t.avgTaskMin}dk`} sub={`${t.uniqueAgents} agent`}
+				<StatCard label="Avg Task" value={`${t.avgTaskMin}m`} sub={`${t.uniqueAgents} agents`}
 					icon={<Clock size={14} />} color="#06b6d4" />
 			</div>
 
@@ -322,7 +322,7 @@ export default function InsightDashboard() {
 				<div>
 					<div className="flex items-center gap-2 mb-3">
 						<Lightbulb size={14} className="text-[#f59e0b]" />
-						<h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#737373]">Insights & Aksiyonlar</h3>
+						<h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#737373]">Insights & Actions</h3>
 						<span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#262626] text-[#a3a3a3]">{insights.length}</span>
 					</div>
 					<div className="grid gap-3 md:grid-cols-2">
@@ -339,12 +339,12 @@ export default function InsightDashboard() {
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
 					<div className="flex items-center gap-2 mb-3">
 						<Users size={14} className="text-[#3b82f6]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Agent Kullanimi</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Agent Usage</h3>
 					</div>
 					<div className="grid grid-cols-3 gap-4 mb-4">
-						<Mini label="Toplam Task" value={totalAgentTasks} />
-						<Mini label="En Aktif" value={topAgent?.agent || "-"} color="text-[#3b82f6]" />
-						<Mini label="Agent Sayisi" value={data.agentUsage.length} color="text-[#a78bfa]" />
+						<Mini label="Total Tasks" value={totalAgentTasks} />
+						<Mini label="Most Active" value={topAgent?.agent || "-"} color="text-[#3b82f6]" />
+						<Mini label="Agent Count" value={data.agentUsage.length} color="text-[#a78bfa]" />
 					</div>
 					<div className="space-y-2">
 						{data.agentUsage.slice(0, 8).map((a, i) => (
@@ -357,14 +357,14 @@ export default function InsightDashboard() {
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
 					<div className="flex items-center gap-2 mb-3">
 						<Cpu size={14} className="text-[#a78bfa]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Model Kullanimi</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Model Usage</h3>
 					</div>
 					{data.costByModel.length > 0 ? (
 						<>
 							<div className="grid grid-cols-3 gap-4 mb-4">
-								<Mini label="Model Sayisi" value={data.costByModel.length} />
-								<Mini label="En Cok" value={data.costByModel[0]?.model?.split("-").slice(-2).join("-") || "-"} color="text-[#a78bfa]" />
-								<Mini label="Toplam" value={`$${t.totalCostUsd}`} color="text-[#f59e0b]" />
+								<Mini label="Models" value={data.costByModel.length} />
+								<Mini label="Top Model" value={data.costByModel[0]?.model?.split("-").slice(-2).join("-") || "-"} color="text-[#a78bfa]" />
+								<Mini label="Total Cost" value={`$${t.totalCostUsd}`} color="text-[#f59e0b]" />
 							</div>
 							<RatioBar items={data.costByModel.map((m, i) => ({
 								label: m.model, value: m.calls, color: COLORS[i % COLORS.length],
@@ -381,7 +381,7 @@ export default function InsightDashboard() {
 								))}
 							</div>
 						</>
-					) : <p className="text-[11px] text-[#525252] text-center py-8">Henuz model verisi yok</p>}
+					) : <p className="text-[11px] text-[#525252] text-center py-8">No model data yet</p>}
 				</div>
 			</div>
 
@@ -391,12 +391,12 @@ export default function InsightDashboard() {
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
 					<div className="flex items-center gap-2 mb-3">
 						<Activity size={14} className="text-[#3b82f6]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Gunluk Aktivite</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Daily Activity</h3>
 					</div>
 					<div className="grid grid-cols-3 gap-4 mb-4">
-						<Mini label="Toplam" value={t.totalEvents} />
-						<Mini label="Aktif Gun" value={t.activeDays} color="text-[#3b82f6]" />
-						<Mini label="Gun/Event" value={t.activeDays > 0 ? Math.round(t.totalEvents / t.activeDays) : 0} color="text-[#22c55e]" />
+						<Mini label="Total" value={t.totalEvents} />
+						<Mini label="Active Days" value={t.activeDays} color="text-[#3b82f6]" />
+						<Mini label="Events/Day" value={t.activeDays > 0 ? Math.round(t.totalEvents / t.activeDays) : 0} color="text-[#22c55e]" />
 					</div>
 					{data.dailyActivity.length > 0 && (
 						<div className="space-y-1.5 pt-2 border-t border-[#1a1a1a]">
@@ -421,10 +421,10 @@ export default function InsightDashboard() {
 							})}
 							<div className="flex gap-4 mt-2">
 								<span className="text-[9px] text-[#737373] flex items-center gap-1">
-									<span className="w-2 h-2 rounded-sm bg-[#22c55e]/80" /> Tamamlanan
+									<span className="w-2 h-2 rounded-sm bg-[#22c55e]/80" /> Completed
 								</span>
 								<span className="text-[9px] text-[#737373] flex items-center gap-1">
-									<span className="w-2 h-2 rounded-sm bg-[#ef4444]/60" /> Hatalar
+									<span className="w-2 h-2 rounded-sm bg-[#ef4444]/60" /> Errors
 								</span>
 							</div>
 						</div>
@@ -435,12 +435,12 @@ export default function InsightDashboard() {
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
 					<div className="flex items-center gap-2 mb-3">
 						<Clock size={14} className="text-[#06b6d4]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Aktivite Saatleri</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Activity Hours</h3>
 					</div>
 					<div className="grid grid-cols-3 gap-4 mb-4">
-						<Mini label="Pik Saat" value={peakHour ? `${String(peakHour.hour).padStart(2, "0")}:00` : "-"} color="text-[#06b6d4]" />
-						<Mini label="Pik Event" value={peakHour?.count || 0} />
-						<Mini label="Aktif Saat" value={data.hourlyPattern.filter((h) => h.count > 0).length} />
+						<Mini label="Peak Hour" value={peakHour ? `${String(peakHour.hour).padStart(2, "0")}:00` : "-"} color="text-[#06b6d4]" />
+						<Mini label="Peak Events" value={peakHour?.count || 0} />
+						<Mini label="Active Hours" value={data.hourlyPattern.filter((h) => h.count > 0).length} />
 					</div>
 					<div className="pt-2 border-t border-[#1a1a1a]">
 						<div className="grid grid-cols-12 gap-1">
@@ -474,12 +474,12 @@ export default function InsightDashboard() {
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
 					<div className="flex items-center gap-2 mb-3">
 						<FolderOpen size={14} className="text-[#22c55e]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Proje Odagi</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Project Focus</h3>
 					</div>
 					<div className="grid grid-cols-3 gap-4 mb-4">
-						<Mini label="Projeler" value={t.totalProjects} />
-						<Mini label="En Aktif" value={topProject?.projectName || "-"} color="text-[#22c55e]" />
-						<Mini label="Event" value={topProject?.events || 0} />
+						<Mini label="Projects" value={t.totalProjects} />
+						<Mini label="Most Active" value={topProject?.projectName || "-"} color="text-[#22c55e]" />
+						<Mini label="Events" value={topProject?.events || 0} />
 					</div>
 					<div className="space-y-2.5 pt-2 border-t border-[#1a1a1a]">
 						{data.projectActivity.slice(0, 6).map((p, i) => {
@@ -507,9 +507,9 @@ export default function InsightDashboard() {
 						<h3 className="text-[12px] font-semibold text-[#fafafa]">Hot Files</h3>
 					</div>
 					<div className="grid grid-cols-3 gap-4 mb-4">
-						<Mini label="Dosyalar" value={data.fileActivity.length} />
-						<Mini label="En Cok" value={topFile?.file?.split("/").pop() || "-"} color="text-[#f59e0b]" />
-						<Mini label="Hit" value={topFile?.count || 0} />
+						<Mini label="Files" value={data.fileActivity.length} />
+						<Mini label="Top File" value={topFile?.file?.split("/").pop() || "-"} color="text-[#f59e0b]" />
+						<Mini label="Hits" value={topFile?.count || 0} />
 					</div>
 					<div className="space-y-1 pt-2 border-t border-[#1a1a1a]">
 						{data.fileActivity.slice(0, 10).map((f, i) => {
@@ -526,7 +526,7 @@ export default function InsightDashboard() {
 							);
 						})}
 						{data.fileActivity.length === 0 && (
-							<p className="text-[10px] text-[#525252] text-center py-6">Henuz dosya verisi yok</p>
+							<p className="text-[10px] text-[#525252] text-center py-6">No file data yet</p>
 						)}
 					</div>
 				</div>
@@ -538,7 +538,7 @@ export default function InsightDashboard() {
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
 					<div className="flex items-center gap-2 mb-3">
 						<BarChart3 size={14} className="text-[#3b82f6]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Complexity Dagilimi</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Complexity Distribution</h3>
 					</div>
 					{data.complexityDistribution.length > 0 ? (
 						<RatioBar items={data.complexityDistribution.map((c) => ({
@@ -546,14 +546,14 @@ export default function InsightDashboard() {
 							value: c.count,
 							color: c.complexity === "S" ? "#22c55e" : c.complexity === "M" ? "#3b82f6" : c.complexity === "L" ? "#f59e0b" : "#ef4444",
 						}))} />
-					) : <p className="text-[10px] text-[#525252] text-center py-6">Veri yok</p>}
+					) : <p className="text-[10px] text-[#525252] text-center py-6">No data</p>}
 				</div>
 
 				{/* Event Types */}
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
 					<div className="flex items-center gap-2 mb-3">
 						<Activity size={14} className="text-[#a78bfa]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Event Tipleri</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Event Types</h3>
 					</div>
 					<div className="space-y-1.5">
 						{data.eventTypes.slice(0, 8).map((e, i) => (

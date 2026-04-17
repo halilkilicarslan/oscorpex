@@ -300,7 +300,7 @@ function AgentRow({ agent }: AgentRowProps) {
       {/* Maliyet */}
       <div className="w-16 text-center shrink-0">
         <p className="text-[12px] font-medium text-[#a78bfa]">${(agent.costUsd ?? 0).toFixed(2)}</p>
-        <p className="text-[9px] text-[#525252]">Maliyet</p>
+        <p className="text-[9px] text-[#525252]">Cost</p>
       </div>
 
       {/* Mesaj sayilari */}
@@ -409,7 +409,7 @@ export default function AgentDashboard({ projectId }: Props) {
           onClick={() => load()}
           className="text-[12px] text-[#525252] hover:text-[#a3a3a3] underline transition-colors"
         >
-          Tekrar dene
+          Retry
         </button>
       </div>
     );
@@ -440,8 +440,8 @@ export default function AgentDashboard({ projectId }: Props) {
       {/* Baslik ve yenile butonu */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-[15px] font-semibold text-[#fafafa]">Proje Paneli</h2>
-          <p className="text-[11px] text-[#525252] mt-0.5">Ajan performansi ve proje metrikleri</p>
+          <h2 className="text-[15px] font-semibold text-[#fafafa]">Project Dashboard</h2>
+          <p className="text-[11px] text-[#525252] mt-0.5">Agent performance and project metrics</p>
         </div>
         <button
           onClick={() => load(true)}
@@ -449,44 +449,44 @@ export default function AgentDashboard({ projectId }: Props) {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-[#737373] hover:text-[#a3a3a3] hover:bg-[#141414] border border-[#262626] transition-colors disabled:opacity-50"
         >
           <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
-          Yenile
+          Refresh
         </button>
       </div>
 
       {/* Ozet kartlar */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard
-          label="Toplam Gorev"
+          label="Total Tasks"
           value={overview?.totalTasks ?? 0}
-          sub={`${overview?.inProgressTasks ?? 0} devam ediyor`}
+          sub={`${overview?.inProgressTasks ?? 0} in progress`}
           icon={<Activity size={16} />}
           accent="#22c55e"
         />
         <StatCard
-          label="Tamamlanma Orani"
-          value={`%${completionRate}`}
+          label="Completion Rate"
+          value={`${completionRate}%`}
           sub={`${overview?.completedTasks ?? 0} / ${overview?.totalTasks ?? 0}`}
           icon={<TrendingUp size={16} />}
           accent="#3b82f6"
         />
         <StatCard
-          label="Aktif Ajan"
+          label="Active Agents"
           value={activeAgents}
-          sub={`${agents.length} toplam`}
+          sub={`${agents.length} total`}
           icon={<Zap size={16} />}
           accent="#f59e0b"
         />
         <StatCard
-          label="Pipeline Calistirma"
+          label="Pipeline Runs"
           value={overview?.pipelineRunCount ?? 0}
           sub={overview?.pipelineRunCount
-            ? `%${overview.pipelineSuccessRate} basarili`
+            ? `${overview.pipelineSuccessRate}% success`
             : undefined}
           icon={<GitBranch size={16} />}
           accent="#a855f7"
         />
         <StatCard
-          label="Toplam Maliyet"
+          label="Total Cost"
           value={costs?.totalCostUsd != null ? `$${costs.totalCostUsd.toFixed(4)}` : '$0'}
           sub={costs?.totalTokens ? `${(costs.totalTokens / 1000).toFixed(1)}K token` : undefined}
           icon={<DollarSign size={16} />}
@@ -500,7 +500,7 @@ export default function AgentDashboard({ projectId }: Props) {
         <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle2 size={14} className="text-[#22c55e]" />
-            <h3 className="text-[12px] font-semibold text-[#fafafa]">Ajan Basi Gorev Dagilimi</h3>
+            <h3 className="text-[12px] font-semibold text-[#fafafa]">Tasks Per Agent</h3>
           </div>
           <BarChart items={barItems} maxValue={maxBarVal} />
         </div>
@@ -509,17 +509,17 @@ export default function AgentDashboard({ projectId }: Props) {
         <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
           <div className="flex items-center gap-2 mb-4">
             <Clock size={14} className="text-[#3b82f6]" />
-            <h3 className="text-[12px] font-semibold text-[#fafafa]">Son 7 Gun Aktivite</h3>
+            <h3 className="text-[12px] font-semibold text-[#fafafa]">Last 7 Days Activity</h3>
           </div>
           <TimelineChart data={timeline} />
           <div className="flex items-center gap-4 mt-3">
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
-              <span className="text-[10px] text-[#525252]">Tamamlanan gorevler</span>
+              <span className="text-[10px] text-[#525252]">Completed tasks</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-[#3b82f6]" />
-              <span className="text-[10px] text-[#525252]">Ajan calistirilmalari</span>
+              <span className="text-[10px] text-[#525252]">Agent runs</span>
             </div>
           </div>
         </div>
@@ -529,46 +529,46 @@ export default function AgentDashboard({ projectId }: Props) {
       {(overview?.avgCompletionTimeMs !== null || (overview?.pipelineRunCount ?? 0) > 0) && (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Ort. Tamamlanma</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Avg Completion</span>
             <span className="text-[18px] font-bold text-[#fafafa]">
               {formatDuration(overview?.avgCompletionTimeMs ?? null)}
             </span>
-            <span className="text-[10px] text-[#525252]">Gorev basi</span>
+            <span className="text-[10px] text-[#525252]">Per task</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Toplam Hata</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Total Failures</span>
             <span className="text-[18px] font-bold text-[#ef4444]">
               {overview?.totalFailures ?? 0}
             </span>
-            <span className="text-[10px] text-[#525252]">Retry dahil tum hatalar</span>
+            <span className="text-[10px] text-[#525252]">Including retries</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Aktif Hata</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Blocked Tasks</span>
             <span className="text-[18px] font-bold text-[#ef4444]">
               {overview?.blockedTasks ?? 0}
             </span>
-            <span className="text-[10px] text-[#525252]">Mudahale gerekiyor</span>
+            <span className="text-[10px] text-[#525252]">Needs attention</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Review Red</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Review Rejects</span>
             <span className="text-[18px] font-bold text-[#f97316]">
               {overview?.totalReviewRejections ?? 0}
             </span>
-            <span className="text-[10px] text-[#525252]">Kod reddedildi</span>
+            <span className="text-[10px] text-[#525252]">Code rejected</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Pipeline Basarisi</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Pipeline Success</span>
             <span className="text-[18px] font-bold text-[#a855f7]">
-              %{overview?.pipelineSuccessRate ?? 0}
+              {overview?.pipelineSuccessRate ?? 0}%
             </span>
-            <span className="text-[10px] text-[#525252]">{overview?.pipelineRunCount ?? 0} calistirma</span>
+            <span className="text-[10px] text-[#525252]">{overview?.pipelineRunCount ?? 0} runs</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider">Devam Eden</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider">In Progress</span>
             <span className="text-[18px] font-bold text-[#f59e0b]">
               {overview?.inProgressTasks ?? 0}
             </span>
-            <span className="text-[10px] text-[#525252]">Gorev islemde</span>
+            <span className="text-[10px] text-[#525252]">Tasks running</span>
           </div>
           {agents.length > 0 && (() => {
             const scored = agents.filter(a => a.tasksAssigned > 0);
@@ -577,11 +577,11 @@ export default function AgentDashboard({ projectId }: Props) {
               : 0;
             return (
               <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
-                <span className="text-[10px] text-[#525252] uppercase tracking-wider">Takim Skoru</span>
+                <span className="text-[10px] text-[#525252] uppercase tracking-wider">Team Score</span>
                 <span className="text-[18px] font-bold" style={{ color: scoreColor(avgScore) }}>
                   {avgScore}
                 </span>
-                <span className="text-[10px] text-[#525252]">{scored.length} ajan ortalamasi</span>
+                <span className="text-[10px] text-[#525252]">{scored.length} agents avg</span>
               </div>
             );
           })()}
@@ -593,19 +593,19 @@ export default function AgentDashboard({ projectId }: Props) {
         <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
             <DollarSign size={14} className="text-[#10b981]" />
-            <h3 className="text-[12px] font-semibold text-[#fafafa]">Maliyet Dagilimi</h3>
+            <h3 className="text-[12px] font-semibold text-[#fafafa]">Cost Breakdown</h3>
             <span className="ml-auto text-[10px] text-[#525252]">
-              Toplam: ${costs?.totalCostUsd?.toFixed(4) ?? '0'}
+              Total: ${costs?.totalCostUsd?.toFixed(4) ?? '0'}
             </span>
           </div>
           <div className="flex items-center gap-3 px-4 py-2 bg-[#0d0d0d]">
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-48 shrink-0">Ajan</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-48 shrink-0">Agent</span>
             <span className="text-[10px] text-[#525252] uppercase tracking-wider w-28 shrink-0">Model</span>
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Gorev</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Tasks</span>
             <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Input</span>
             <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Output</span>
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Toplam</span>
-            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Maliyet</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Total</span>
+            <span className="text-[10px] text-[#525252] uppercase tracking-wider w-20 text-right">Cost</span>
           </div>
           {costBreakdown.map((entry, i) => (
             <div
@@ -800,29 +800,29 @@ export default function AgentDashboard({ projectId }: Props) {
       <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
           <Activity size={14} className="text-[#22c55e]" />
-          <h3 className="text-[12px] font-semibold text-[#fafafa]">Ajan Performansi</h3>
-          <span className="ml-auto text-[10px] text-[#525252]">{agents.length} ajan</span>
+          <h3 className="text-[12px] font-semibold text-[#fafafa]">Agent Performance</h3>
+          <span className="ml-auto text-[10px] text-[#525252]">{agents.length} agents</span>
         </div>
 
         {agents.length === 0 ? (
           <div className="flex items-center justify-center py-10 text-[12px] text-[#525252]">
-            Bu projeye henuz ajan atanmamis
+            No agents assigned to this project yet
           </div>
         ) : (
           <div>
             {/* Tablo baslik satiri */}
             <div className="flex items-center gap-3 px-4 py-2 bg-[#0d0d0d]">
-              <span className="text-[10px] text-[#525252] uppercase tracking-wider w-44 shrink-0">Ajan</span>
+              <span className="text-[10px] text-[#525252] uppercase tracking-wider w-44 shrink-0">Agent</span>
               <div className="flex gap-4">
-                <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Atanan</span>
-                <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Biten</span>
-                <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Hata</span>
+                <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Assigned</span>
+                <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Done</span>
+                <span className="text-[10px] text-[#525252] uppercase tracking-wider w-14 text-center">Failed</span>
               </div>
-              <span className="flex-1 text-[10px] text-[#525252] uppercase tracking-wider">Basari</span>
-              <span className="w-16 text-center text-[10px] text-[#525252] uppercase tracking-wider shrink-0">Run</span>
-              <span className="w-16 text-center text-[10px] text-[#525252] uppercase tracking-wider shrink-0">Sure</span>
-              <span className="w-20 text-center text-[10px] text-[#525252] uppercase tracking-wider shrink-0">Mesaj</span>
-              <span className="w-16 text-center text-[10px] text-[#525252] uppercase tracking-wider shrink-0">Durum</span>
+              <span className="flex-1 text-[10px] text-[#525252] uppercase tracking-wider">Success</span>
+              <span className="w-16 text-center text-[10px] text-[#525252] uppercase tracking-wider shrink-0">Runs</span>
+              <span className="w-16 text-center text-[10px] text-[#525252] uppercase tracking-wider shrink-0">Time</span>
+              <span className="w-20 text-center text-[10px] text-[#525252] uppercase tracking-wider shrink-0">Messages</span>
+              <span className="w-16 text-center text-[10px] text-[#525252] uppercase tracking-wider shrink-0">Status</span>
             </div>
             {agents.map((agent) => (
               <AgentRow key={agent.agentId} agent={agent} />

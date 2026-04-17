@@ -105,7 +105,7 @@ export default function PlatformDashboard() {
 		try {
 			setStats(await fetchPlatformStats());
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Veriler yuklenemedi");
+			setError(e instanceof Error ? e.message : "Veriler yüklenemedi");
 		} finally {
 			setLoading(false);
 		}
@@ -129,7 +129,7 @@ export default function PlatformDashboard() {
 				<AlertTriangle size={20} className="text-[#ef4444]" />
 				<p className="text-[12px] text-[#737373]">{error ?? "Bilinmeyen hata"}</p>
 				<button type="button" onClick={load} className="text-[11px] text-[#22c55e] hover:underline">
-					Tekrar dene
+					Retry
 				</button>
 			</div>
 		);
@@ -155,12 +155,12 @@ export default function PlatformDashboard() {
 	};
 
 	return (
-		<div className="space-y-5">
+		<div className="space-y-5 p-6">
 			{/* Header */}
 			<div className="flex items-center justify-between">
 				<div>
 					<h1 className="text-[16px] font-semibold text-[#fafafa]">Platform Dashboard</h1>
-					<p className="text-[11px] text-[#525252] mt-0.5">Tum projelerin genel ozeti</p>
+					<p className="text-[11px] text-[#525252] mt-0.5">Overview of all projects</p>
 				</div>
 				<button
 					type="button"
@@ -168,7 +168,7 @@ export default function PlatformDashboard() {
 					className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20 hover:bg-[#22c55e]/20 transition-colors"
 				>
 					<FolderKanban size={12} />
-					Projeler
+					Projects
 					<ChevronRight size={12} />
 				</button>
 			</div>
@@ -176,21 +176,21 @@ export default function PlatformDashboard() {
 			{/* Stat Cards */}
 			<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
 				<StatCard
-					label="Projeler"
+					label="Projects"
 					value={projects.total}
-					sub={`${projects.active} aktif · ${projects.completed} tamamlandi`}
+					sub={`${projects.active} active · ${projects.completed} completed`}
 					icon={<FolderKanban size={16} style={{ color: "#3b82f6" }} />}
 					color="#3b82f6"
 				/>
 				<StatCard
-					label="Tasklar"
+					label="Tasks"
 					value={tasks.total}
-					sub={`${tasks.done} tamamlandi · ${tasks.running} calisiyor`}
+					sub={`${tasks.done} done · ${tasks.running} running`}
 					icon={<CheckCircle2 size={16} style={{ color: "#22c55e" }} />}
 					color="#22c55e"
 				/>
 				<StatCard
-					label="Toplam Maliyet"
+					label="Total Cost"
 					value={`$${cost.totalUsd.toFixed(2)}`}
 					sub={`${formatTokens(cost.totalTokens)} token · ${cost.activeAgents} agent`}
 					icon={<DollarSign size={16} style={{ color: "#f59e0b" }} />}
@@ -198,7 +198,7 @@ export default function PlatformDashboard() {
 				/>
 				<StatCard
 					label="Cache Hit"
-					value={`%${cost.cacheRate}`}
+					value={`${cost.cacheRate}%`}
 					sub={`${formatTokens(cost.cacheReadTokens)} cache read`}
 					icon={<Zap size={16} style={{ color: "#a78bfa" }} />}
 					color="#a78bfa"
@@ -211,16 +211,16 @@ export default function PlatformDashboard() {
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4 space-y-3">
 					<div className="flex items-center gap-2">
 						<TrendingUp size={14} className="text-[#22c55e]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Task Tamamlanma</h3>
-						<span className="ml-auto text-[18px] font-semibold text-[#22c55e]">%{taskDoneRate}</span>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Task Completion</h3>
+						<span className="ml-auto text-[18px] font-semibold text-[#22c55e]">{taskDoneRate}%</span>
 					</div>
 					<MiniBar value={tasks.done} max={tasks.total} color="#22c55e" />
 					<div className="grid grid-cols-4 gap-2 text-center">
 						{[
-							{ label: "Tamamlandi", val: tasks.done, color: "#22c55e" },
-							{ label: "Calisiyor", val: tasks.running, color: "#f59e0b" },
-							{ label: "Kuyrukta", val: tasks.queued, color: "#3b82f6" },
-							{ label: "Basarisiz", val: tasks.failed, color: "#ef4444" },
+							{ label: "Done", val: tasks.done, color: "#22c55e" },
+							{ label: "Running", val: tasks.running, color: "#f59e0b" },
+							{ label: "Queued", val: tasks.queued, color: "#3b82f6" },
+							{ label: "Failed", val: tasks.failed, color: "#ef4444" },
 						].map((s) => (
 							<div key={s.label}>
 								<p className="text-[16px] font-semibold" style={{ color: s.color }}>
@@ -236,7 +236,7 @@ export default function PlatformDashboard() {
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4 space-y-3">
 					<div className="flex items-center gap-2">
 						<Database size={14} className="text-[#a78bfa]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Token Kullanimi</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Token Usage</h3>
 					</div>
 					<div className="space-y-2">
 						{[
@@ -277,10 +277,10 @@ export default function PlatformDashboard() {
 				<div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
 					<div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
 						<FolderKanban size={14} className="text-[#3b82f6]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Son Projeler</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Recent Projects</h3>
 					</div>
 					{recentProjects.length === 0 ? (
-						<p className="text-[11px] text-[#525252] text-center py-6">Henuz proje yok</p>
+						<p className="text-[11px] text-[#525252] text-center py-6">No projects yet</p>
 					) : (
 						<div className="divide-y divide-[#1a1a1a]">
 							{recentProjects.map((p) => (
@@ -307,10 +307,10 @@ export default function PlatformDashboard() {
 				<div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
 					<div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
 						<Activity size={14} className="text-[#22c55e]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Son Tamamlanan Tasklar</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Recently Completed Tasks</h3>
 					</div>
 					{recentTasks.length === 0 ? (
-						<p className="text-[11px] text-[#525252] text-center py-6">Henuz tamamlanan task yok</p>
+						<p className="text-[11px] text-[#525252] text-center py-6">No completed tasks yet</p>
 					) : (
 						<div className="divide-y divide-[#1a1a1a]">
 							{recentTasks.map((t) => (

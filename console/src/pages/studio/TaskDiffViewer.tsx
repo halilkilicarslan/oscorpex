@@ -38,7 +38,7 @@ function DiffLine({ line }: { line: string }) {
 
 const TYPE_ICON: Record<string, typeof FileCode> = { created: FilePlus, modified: FileCode, deleted: FileMinus };
 const TYPE_COLOR: Record<string, string> = { created: "text-[#22c55e]", modified: "text-[#f59e0b]", deleted: "text-[#ef4444]" };
-const TYPE_LABEL: Record<string, string> = { created: "Yeni", modified: "Degistirildi", deleted: "Silindi" };
+const TYPE_LABEL: Record<string, string> = { created: "New", modified: "Modified", deleted: "Deleted" };
 
 function FileDiffCard({ diff }: { diff: TaskDiff }) {
 	const [expanded, setExpanded] = useState(false);

@@ -58,19 +58,19 @@ const TYPE_CONFIG: Record<
     border: 'border-yellow-500/20',
   },
   bug_report: {
-    label: 'Hata',
+    label: 'Bug',
     bg: 'bg-red-500/10',
     text: 'text-red-400',
     border: 'border-red-500/20',
   },
   feedback: {
-    label: 'Geri Bildirim',
+    label: 'Feedback',
     bg: 'bg-purple-500/10',
     text: 'text-purple-400',
     border: 'border-purple-500/20',
   },
   notification: {
-    label: 'Bildirim',
+    label: 'Notification',
     bg: 'bg-[#525252]/10',
     text: 'text-[#737373]',
     border: 'border-[#525252]/20',
