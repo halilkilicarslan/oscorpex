@@ -13,6 +13,7 @@ import {
 	getLatestPlan,
 	getProject,
 	getProjectCostSummary,
+	getProjectSetting,
 	getProjectSettingsMap,
 	getTask,
 	listAgentDependencies,
@@ -33,8 +34,8 @@ import { evaluatePolicies } from "./policy-engine.js";
 import { queryOne } from "./pg.js";
 import type { Phase, ProjectAgent, Task, TaskOutput } from "./types.js";
 
-// Onay gerektiren task keyword'leri — büyük/küçük harf duyarsız kontrol
-const APPROVAL_KEYWORDS = [
+// Default onay keyword'leri — proje bazlı override yoksa bunlar kullanılır
+const DEFAULT_APPROVAL_KEYWORDS = [
 	"deploy",
 	"database migration",
 	"drop",
@@ -45,15 +46,31 @@ const APPROVAL_KEYWORDS = [
 ];
 
 /**
+ * Proje bazlı approval keyword'lerini döner.
+ * project_settings category="approval" key="keywords" JSON array.
+ * Yoksa DEFAULT_APPROVAL_KEYWORDS kullanılır.
+ */
+async function getApprovalKeywords(projectId: string): Promise<string[]> {
+	const raw = await getProjectSetting(projectId, "approval", "keywords");
+	if (!raw) return DEFAULT_APPROVAL_KEYWORDS;
+	try {
+		const parsed = JSON.parse(raw);
+		if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+		return DEFAULT_APPROVAL_KEYWORDS;
+	} catch {
+		return DEFAULT_APPROVAL_KEYWORDS;
+	}
+}
+
+/**
  * Task'ın onay gerektirip gerektirmediğini belirler.
  * XL complexity veya kritik keyword içeren task'lar onay gerektirir.
  */
-function shouldRequireApproval(task: Pick<Task, "title" | "description" | "complexity">): boolean {
-	// XL complexity her zaman onay gerektirir
+async function shouldRequireApproval(projectId: string, task: Pick<Task, "title" | "description" | "complexity">): Promise<boolean> {
 	if (task.complexity === "XL") return true;
-	// Başlık veya açıklamada kritik keyword var mı kontrol et
+	const keywords = await getApprovalKeywords(projectId);
 	const searchText = `${task.title} ${task.description}`.toLowerCase();
-	return APPROVAL_KEYWORDS.some((kw) => searchText.includes(kw));
+	return keywords.some((kw) => searchText.includes(kw));
 }
 
 // Max review döngüsü — aşılırsa tech-lead'e eskalasyon
@@ -223,7 +240,7 @@ class TaskEngine {
 		// Human-in-the-Loop: Onay kontrolü — budget kontrolünden önce yapılır
 		// v3.1: Incoming "approval" edge on the agent also forces human approval
 		const edgeRequiresApproval = await taskNeedsApprovalFromEdges(projectId, task);
-		const needsApproval = task.requiresApproval || shouldRequireApproval(task) || edgeRequiresApproval;
+		const needsApproval = task.requiresApproval || await shouldRequireApproval(projectId, task) || edgeRequiresApproval;
 		const alreadyApproved = task.approvalStatus === "approved";
 		if (needsApproval && !alreadyApproved) {
 			// Task'ı waiting_approval durumuna al ve kullanıcıdan onay iste
