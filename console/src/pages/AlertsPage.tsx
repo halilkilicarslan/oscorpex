@@ -491,7 +491,7 @@ export default function AlertsPage() {
             <div className="flex-shrink-0 mx-4 my-3 rounded-lg border border-[#262626] bg-[#111111] overflow-hidden">
               <div className="px-4 py-3 border-b border-[#262626] flex items-center justify-between">
                 <span className="text-xs font-medium text-[#fafafa]">
-                  {editingRule ? 'Kuralı Düzenle' : 'Yeni Kural Oluştur'}
+                  {editingRule ? 'Edit Rule' : 'Create New Rule'}
                 </span>
                 <button onClick={closeForm} className="text-[#525252] hover:text-[#a3a3a3]">
                   <X className="w-3.5 h-3.5" />
@@ -624,7 +624,7 @@ export default function AlertsPage() {
                     disabled={formLoading}
                     className="px-4 py-1.5 text-xs bg-[#22c55e] text-[#0a0a0a] font-medium rounded-md hover:bg-[#16a34a] disabled:opacity-50 transition-colors"
                   >
-                    {formLoading ? 'Kaydediliyor...' : editingRule ? 'Güncelle' : 'Oluştur'}
+                    {formLoading ? 'Saving...' : editingRule ? 'Update' : 'Create'}
                   </button>
                   <button
                     type="button"
@@ -723,7 +723,7 @@ export default function AlertsPage() {
                           {/* Edit */}
                           <button
                             onClick={() => openEdit(rule)}
-                            title="Düzenle"
+                            title="Edit"
                             className="p-1.5 rounded-md hover:bg-[#1c1c1c] text-[#525252] hover:text-[#a3a3a3] transition-colors"
                           >
                             <Settings className="w-3.5 h-3.5" />
@@ -731,7 +731,7 @@ export default function AlertsPage() {
                           {/* Delete */}
                           <button
                             onClick={() => void deleteRule(rule.id)}
-                            title="Sil"
+                            title="Delete"
                             className="p-1.5 rounded-md hover:bg-[#450a0a] text-[#525252] hover:text-[#ef4444] transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -762,7 +762,7 @@ export default function AlertsPage() {
                 }}
                 className="px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded-md text-[#a3a3a3] focus:outline-none focus:border-[#3f3f46]"
               >
-                <option value="ALL">Tümü</option>
+                <option value="ALL">All</option>
                 <option value="triggered">Triggered</option>
                 <option value="acknowledged">Acknowledged</option>
                 <option value="resolved">Resolved</option>

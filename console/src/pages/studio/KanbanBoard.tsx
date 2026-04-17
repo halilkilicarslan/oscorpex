@@ -37,11 +37,11 @@ const PIPELINE_STATUS_COLORS: Record<string, string> = {
 };
 
 const PIPELINE_STATUS_LABELS: Record<string, string> = {
-  idle: 'Beklemede',
-  running: 'Calisiyor',
-  paused: 'Duraklatildi',
-  completed: 'Tamamlandi',
-  failed: 'Hata',
+  idle: 'Idle',
+  running: 'Running',
+  paused: 'Paused',
+  completed: 'Completed',
+  failed: 'Failed',
 };
 
 // Pipeline auto-start durum cubugu
@@ -59,7 +59,7 @@ function PipelineAutoStartBadge({ status }: { status: AutoStartStatus }) {
       <span className={`font-medium ${colorClass}`}>{label}</span>
       {status.pipeline.totalStages > 0 && (
         <span className="text-[#525252] ml-auto">
-          Asama {status.pipeline.currentStage + 1} / {status.pipeline.totalStages}
+          Stage {status.pipeline.currentStage + 1} / {status.pipeline.totalStages}
         </span>
       )}
     </div>
@@ -128,24 +128,24 @@ function RejectModal({ taskTitle, onConfirm, onCancel }: RejectModalProps) {
         {/* Baslik */}
         <div className="flex items-center gap-2 mb-3">
           <XCircle size={16} className="text-[#ef4444]" />
-          <h2 className="text-[13px] font-semibold text-[#e5e5e5]">Task'ı Reddet</h2>
+          <h2 className="text-[13px] font-semibold text-[#e5e5e5]">Reject Task</h2>
         </div>
 
         {/* Task adi */}
         <p className="text-[11px] text-[#737373] mb-3 leading-snug">
-          <span className="text-[#a3a3a3] font-medium">"{taskTitle}"</span> task'ini reddetmek istiyorsunuz.
+          You are about to reject <span className="text-[#a3a3a3] font-medium">"{taskTitle}"</span>.
         </p>
 
         {/* Red sebebi */}
         <label className="block text-[11px] text-[#737373] mb-1.5">
-          Red sebebi (isteğe bağlı)
+          Rejection reason (optional)
         </label>
         <textarea
           // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Neden reddediyorsunuz?"
+          placeholder="Why are you rejecting this task?"
           rows={3}
           className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-2 text-[12px] text-[#e5e5e5] placeholder-[#3a3a3a] resize-none focus:outline-none focus:border-[#ef4444]/50 transition-colors"
         />
@@ -157,7 +157,7 @@ function RejectModal({ taskTitle, onConfirm, onCancel }: RejectModalProps) {
             onClick={onCancel}
             className="px-3 py-1.5 text-[11px] text-[#737373] hover:text-[#a3a3a3] transition-colors"
           >
-            Vazgec
+            Cancel
           </button>
           <button
             type="button"
@@ -165,7 +165,7 @@ function RejectModal({ taskTitle, onConfirm, onCancel }: RejectModalProps) {
             className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium bg-[#ef4444]/10 border border-[#ef4444]/30 text-[#ef4444] hover:bg-[#ef4444]/20 rounded-lg transition-colors"
           >
             <XCircle size={12} />
-            Reddet
+            Reject
           </button>
         </div>
       </div>

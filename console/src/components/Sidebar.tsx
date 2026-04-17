@@ -46,7 +46,7 @@ const sections: NavSection[] = [
   {
     title: 'OBSERVABILITY',
     items: [
-      { to: '/dashboard', label: 'Dashboard', icon: <BarChart3 size={18} /> },
+      { to: '/dashboard', label: 'Overview', icon: <BarChart3 size={18} /> },
       { to: '/traces', label: 'Traces', icon: <Activity size={18} /> },
       { to: '/logs', label: 'Logs', icon: <FileText size={18} /> },
       { to: '/feedbacks', label: 'Feedbacks', icon: <MessageSquareMore size={18} /> },
@@ -70,6 +70,7 @@ const sections: NavSection[] = [
   },
   {
     title: 'OSCORPEX',
+    collapsible: true,
     items: [
       { to: '/studio/dashboard', label: 'Dashboard', icon: <Gauge size={18} />, badge: 'New' },
       { to: '/studio/insights', label: 'Insights', icon: <Brain size={18} />, badge: 'New' },
@@ -95,6 +96,7 @@ export default function Sidebar() {
     'AI FEATURES': true,
     OBSERVABILITY: true,
     AUTOMATION: true,
+    OSCORPEX: true,
   });
 
   const toggleSection = (title: string) => {
@@ -163,7 +165,7 @@ export default function Sidebar() {
                 <NavLink
                   key={to}
                   to={to}
-                  end={to === '/' || to === '/studio'}
+                  end={to === '/' || to.startsWith('/studio')}
                   title={collapsed ? label : undefined}
                   className={({ isActive }) =>
                     [
@@ -207,7 +209,7 @@ export default function Sidebar() {
         )}
 
         <a
-          href="https://voltagent.dev/docs/"
+          href="https://github.com/oscorpex/oscorpex"
           target="_blank"
           rel="noopener noreferrer"
           className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] text-[#a3a3a3] hover:text-[#fafafa] hover:bg-[#141414] transition-colors ${

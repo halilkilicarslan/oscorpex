@@ -58,7 +58,7 @@ function PipelineToast({
         type="button"
         onClick={onClose}
         className="shrink-0 opacity-60 hover:opacity-100 transition-opacity ml-1"
-        aria-label="Kapat"
+        aria-label="Close"
       >
         &times;
       </button>

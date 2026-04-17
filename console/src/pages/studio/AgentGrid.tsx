@@ -359,7 +359,7 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
               type="button"
               onClick={() => setChatAgent(null)}
               className="absolute top-4 right-4 p-1.5 rounded-lg text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors z-10"
-              aria-label="Kapat"
+              aria-label="Close"
             >
               <X size={14} />
             </button>

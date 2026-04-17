@@ -164,7 +164,7 @@ export default function PlannerSettingsModal({
       });
       onAgentSaved(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Planner ajanı güncellenemedi');
+      setError(err instanceof Error ? err.message : 'Failed to update planner agent');
     } finally {
       setSavingAgent(false);
     }
@@ -186,7 +186,7 @@ export default function PlannerSettingsModal({
             <div>
               <h2 className="text-[16px] font-semibold text-[#fafafa]">Planner Settings</h2>
               <p className="text-[12px] text-[#525252]">
-                Planner provider / model seç ve planner ajanını düzenle
+                Select planner provider / model and edit planner agent
               </p>
             </div>
           </div>
@@ -277,7 +277,7 @@ export default function PlannerSettingsModal({
                   className="inline-flex items-center gap-2 rounded-xl bg-[#22c55e] px-4 py-2.5 text-[12px] font-medium text-[#0a0a0a] transition-colors hover:bg-[#16a34a] disabled:opacity-50"
                 >
                   {savingPlanner ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  Planner Ayarlarını Kaydet
+                  Save Planner Settings
                 </button>
               </div>
             </section>
@@ -288,14 +288,14 @@ export default function PlannerSettingsModal({
                 <div>
                   <h3 className="text-[14px] font-semibold text-[#fafafa]">Planner Agent</h3>
                   <p className="text-[12px] text-[#525252]">
-                    Planner ajanının tüm bilgileri burada düzenlenebilir.
+                    Edit all planner agent details here.
                   </p>
                 </div>
               </div>
 
               {!plannerAgent ? (
                 <div className="rounded-xl border border-[#262626] bg-[#111111] px-4 py-3 text-[12px] text-[#737373]">
-                  Bu projede planner ajanı bulunamadı.
+                  No planner agent found for this project.
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
@@ -379,7 +379,7 @@ export default function PlannerSettingsModal({
                       className="inline-flex items-center gap-2 rounded-xl bg-[#1f1f1f] px-4 py-2.5 text-[12px] font-medium text-[#fafafa] transition-colors hover:bg-[#262626] disabled:opacity-50"
                     >
                       {savingAgent ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                      Planner Agent Bilgilerini Kaydet
+                      Save Planner Agent Details
                     </button>
                   </div>
                 </div>
