@@ -62,6 +62,38 @@ export async function saveCustomPolicyRules(
   });
 }
 
+const DEFAULT_APPROVAL_KEYWORDS = [
+  'deploy',
+  'database migration',
+  'drop',
+  'truncate',
+  'migration',
+  'seed',
+  'production',
+];
+
+export async function fetchApprovalKeywords(projectId: string): Promise<string[]> {
+  const settings = await fetchProjectSettings(projectId);
+  const raw = settings?.approval?.keywords;
+  if (!raw) return DEFAULT_APPROVAL_KEYWORDS;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    return DEFAULT_APPROVAL_KEYWORDS;
+  } catch {
+    return DEFAULT_APPROVAL_KEYWORDS;
+  }
+}
+
+export async function saveApprovalKeywords(
+  projectId: string,
+  keywords: string[],
+): Promise<{ ok: boolean }> {
+  return saveProjectSettings(projectId, 'approval', {
+    keywords: JSON.stringify(keywords),
+  });
+}
+
 export async function fetchMemoryContext(projectId: string): Promise<string> {
   const data = await json<{ text: string }>(`${API}/projects/${projectId}/memory/context`);
   return data.text;
