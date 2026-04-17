@@ -42,6 +42,23 @@ import { runIntegrationTest } from "./task-runners.js";
 import type { AgentConfig, Project, Task, TaskOutput } from "./types.js";
 
 // ---------------------------------------------------------------------------
+// Rate-limit detection
+// ---------------------------------------------------------------------------
+
+const RATE_LIMIT_PATTERNS = [
+	/you['']ve hit your limit/i,
+	/rate limit/i,
+	/resets?\s+\d{1,2}[:.]\d{2}\s*(am|pm)/i,
+	/too many requests/i,
+	/429/,
+	/quota exceeded/i,
+];
+
+function isRateLimitError(message: string): boolean {
+	return RATE_LIMIT_PATTERNS.some((rx) => rx.test(message));
+}
+
+// ---------------------------------------------------------------------------
 // Timeout configuration
 // ---------------------------------------------------------------------------
 
@@ -660,6 +677,31 @@ class ExecutionEngine {
 			const isTimeout = err instanceof TaskTimeoutError;
 			const errorMsg = err instanceof Error ? err.message : String(err);
 			console.error(`[execution-engine] Task failed: "${task.title}" — ${errorMsg}`);
+
+			// --- Rate-limit guard: pause pipeline instead of failing the task ---
+			if (isRateLimitError(errorMsg)) {
+				console.warn(`[execution-engine] Rate limit detected — pausing pipeline for ${projectId}`);
+
+				// Reset task back to queued so it can resume later
+				await updateTask(task.id, { status: "queued" } as any);
+
+				eventBus.emit({
+					projectId,
+					type: "pipeline:rate_limited" as any,
+					agentId: agent.id,
+					taskId: task.id,
+					payload: { message: errorMsg, taskTitle: task.title },
+				});
+
+				// Pause the pipeline — stops all running tasks
+				try {
+					const { pipelineEngine } = await import("./pipeline-engine.js");
+					await pipelineEngine.pausePipeline(projectId);
+				} catch (pauseErr) {
+					console.error("[execution-engine] Failed to pause pipeline after rate limit:", pauseErr);
+				}
+				return; // Don't fail/retry — just stop
+			}
 
 			if (isTimeout) {
 				// Emit a dedicated timeout event before the generic error event
