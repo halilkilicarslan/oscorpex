@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, RefreshCw, CheckCircle2, XCircle, DollarSign, Activity, TrendingUp, FileText, Clock, Database, Code2, FileSearch } from 'lucide-react';
 import { fetchContextMetrics, type ContextMetricsResponse } from '../../lib/studio-api/analytics.js';
+import { SearchObservability } from './SearchObservability';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
@@ -328,6 +329,17 @@ export default function ProjectReport({ projectId }: { projectId: string }) {
           )}
         </div>
       )}
+
+      {/* v4.1: RAG Observability */}
+      <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
+          <FileSearch size={14} className="text-[#22c55e]" />
+          <h3 className="text-[12px] font-semibold text-[#fafafa]">Arama Kalitesi (RAG Observability)</h3>
+        </div>
+        <div className="p-4">
+          <SearchObservability projectId={projectId} />
+        </div>
+      </div>
     </div>
   );
 }

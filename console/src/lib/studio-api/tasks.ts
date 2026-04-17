@@ -75,3 +75,31 @@ export async function fetchPendingApprovals(projectId: string): Promise<Task[]> 
 export async function fetchSubTasks(projectId: string, taskId: string): Promise<Task[]> {
   return json(`${API}/projects/${projectId}/tasks/${taskId}/subtasks`);
 }
+
+// --- Task Diffs (v4.1) ---
+export interface TaskDiff {
+  id: string;
+  taskId: string;
+  filePath: string;
+  diffContent: string;
+  diffType: 'created' | 'modified' | 'deleted';
+  linesAdded: number;
+  linesRemoved: number;
+  createdAt: string;
+}
+
+export interface TaskDiffSummary {
+  totalFiles: number;
+  linesAdded: number;
+  linesRemoved: number;
+}
+
+export interface TaskDiffsResponse {
+  taskId: string;
+  summary: TaskDiffSummary;
+  diffs: TaskDiff[];
+}
+
+export async function fetchTaskDiffs(projectId: string, taskId: string): Promise<TaskDiffsResponse> {
+  return json(`${API}/projects/${projectId}/tasks/${taskId}/diffs`);
+}

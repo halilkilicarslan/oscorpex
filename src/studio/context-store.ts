@@ -12,6 +12,7 @@ import {
 	listContextSources,
 	deleteContextSource,
 	cleanupStaleSources,
+	insertSearchLog,
 } from "./db.js";
 import { execute } from "./pg.js";
 import type {
@@ -352,16 +353,22 @@ export async function indexContent(
 
 export async function searchContext(opts: ContextSearchOptions): Promise<ContextSearchResult[]> {
 	const { projectId, queries, limit = DEFAULT_SEARCH_LIMIT, maxTokens = DEFAULT_MAX_TOKENS } = opts;
+	const searchStart = Date.now();
 
 	// Merge results from all queries via RRF
 	const allResults: ContextSearchResult[] = [];
 	for (const q of queries) {
+		const qStart = Date.now();
 		const results = await searchChunks(projectId, q, {
 			limit,
 			source: opts.source,
 			contentType: opts.contentType,
 		});
 		allResults.push(...results);
+
+		// v4.1: Log individual query for observability
+		const topRank = results.length > 0 ? Math.max(...results.map((r) => r.rank)) : null;
+		insertSearchLog(projectId, q, results.length, topRank, Date.now() - qStart, opts.source, opts.contentType).catch(() => {});
 	}
 
 	// Deduplicate by title+source, keep highest rank

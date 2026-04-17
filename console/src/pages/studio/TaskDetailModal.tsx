@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { roleLabel, approveTask, rejectTask, retryTask, type Task, type ProjectAgent } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
+import { TaskDiffViewer } from './TaskDiffViewer';
 
 const STATUS_ICON: Record<Task['status'], React.ReactNode> = {
   queued: <Clock size={14} className="text-[#525252]" />,
@@ -543,6 +544,13 @@ export default function TaskDetailModal({
                       </div>
                     ))}
                   </div>
+                </Section>
+              )}
+
+              {/* v4.1: File Diffs */}
+              {task.status === 'done' && (task.output.filesCreated.length > 0 || task.output.filesModified.length > 0) && (
+                <Section title="Dosya Degisiklikleri">
+                  <TaskDiffViewer projectId={projectId} taskId={task.id} />
                 </Section>
               )}
             </>

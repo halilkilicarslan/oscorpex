@@ -5,7 +5,7 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { containerManager } from "../container-manager.js";
-import { appendTaskLogs, getProject, getTask, listPendingApprovals, listProjectTasks, updateTask } from "../db.js";
+import { appendTaskLogs, getProject, getTask, getTaskDiffs, getTaskDiffSummary, listPendingApprovals, listProjectTasks, updateTask } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { executionEngine } from "../execution-engine.js";
 import { taskEngine } from "../task-engine.js";
@@ -186,6 +186,23 @@ taskRoutes.get("/projects/:id/tasks/:taskId/output", async (c) => {
 	} catch (err) {
 		console.error("[task-routes] get task output failed:", err);
 		return c.json({ error: "Failed to get task output" }, 500);
+	}
+});
+
+// GET /projects/:id/tasks/:taskId/diffs — File diffs for DiffViewer
+taskRoutes.get("/projects/:id/tasks/:taskId/diffs", async (c) => {
+	try {
+		const taskId = c.req.param("taskId");
+		const task = await getTask(taskId);
+		if (!task) return c.json({ error: "Task not found" }, 404);
+
+		const diffs = await getTaskDiffs(taskId);
+		const summary = await getTaskDiffSummary(taskId);
+
+		return c.json({ taskId, summary, diffs });
+	} catch (err) {
+		console.error("[task-routes] get task diffs failed:", err);
+		return c.json({ error: "Failed to get task diffs" }, 500);
 	}
 });
 

@@ -24,6 +24,10 @@ export * from "./memory-repo.js";
 export * from "./intake-repo.js";
 // v4.0: Context Store
 export * from "./context-repo.js";
+// v4.1: DiffViewer, Search Log, Agent Stats
+export * from "./diff-repo.js";
+export * from "./search-log-repo.js";
+export * from "./agent-stats-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";
