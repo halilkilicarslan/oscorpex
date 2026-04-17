@@ -899,4 +899,25 @@ BEGIN
     ALTER TABLE agent_daily_stats DROP CONSTRAINT agent_daily_stats_project_id_fkey;
     ALTER TABLE agent_daily_stats ADD CONSTRAINT agent_daily_stats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
   END IF;
+  -- agent_messages: ensure ON DELETE CASCADE
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'agent_messages_project_id_fkey' AND confdeltype != 'c'
+  ) THEN
+    ALTER TABLE agent_messages DROP CONSTRAINT agent_messages_project_id_fkey;
+    ALTER TABLE agent_messages ADD CONSTRAINT agent_messages_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+  END IF;
+  -- agent_runs: ensure ON DELETE CASCADE
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'agent_runs_project_id_fkey' AND confdeltype != 'c'
+  ) THEN
+    ALTER TABLE agent_runs DROP CONSTRAINT agent_runs_project_id_fkey;
+    ALTER TABLE agent_runs ADD CONSTRAINT agent_runs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+  END IF;
+  -- context_search_stats: ensure ON DELETE CASCADE
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'context_search_stats_project_id_fkey' AND confdeltype != 'c'
+  ) THEN
+    ALTER TABLE context_search_stats DROP CONSTRAINT context_search_stats_project_id_fkey;
+    ALTER TABLE context_search_stats ADD CONSTRAINT context_search_stats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+  END IF;
 END $$;
