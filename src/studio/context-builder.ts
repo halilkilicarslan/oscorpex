@@ -5,6 +5,7 @@
 
 import { execute, query, queryOne } from "./pg.js";
 import { searchSimilar } from "./vector-store.js";
+import { searchContext } from "./context-store.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -111,57 +112,67 @@ async function buildRAGContext(
 	maxChunks = 5,
 	maxTokens = 4000,
 ): Promise<RAGContext | null> {
-	// 1. Locate the KB for this project
-	const kb = await findProjectKB(projectId);
-	if (!kb) {
-		return null;
-	}
-
-	// 2. Build search query from task metadata
 	const descriptionSnippet = (taskDescription ?? "").slice(0, 200);
 	const searchQuery = [taskTitle, descriptionSnippet].filter(Boolean).join(" — ");
 
-	// 3. Retrieve candidates from the vector store
-	const candidates = await searchSimilar(kb.kbId, searchQuery, maxChunks);
-
-	// 4. Filter by relevance threshold
-	const RELEVANCE_THRESHOLD = 0.3;
-	const filtered = candidates.filter((c) => c.score >= RELEVANCE_THRESHOLD);
-
-	if (filtered.length === 0) {
-		return null;
-	}
-
-	// 5. Build chunks with token budget enforcement (rough estimate: 1 token ≈ 4 chars)
 	const relevantChunks: RAGContext["relevantChunks"] = [];
 	let usedTokens = 0;
 
-	for (const hit of filtered) {
-		const chunkTokens = Math.ceil(hit.content.length / 4);
-		// Resolve human-readable source label from metadata
-		const meta = hit.metadata as Record<string, unknown> | undefined;
-		const source = String(meta?.source ?? meta?.filename ?? "unknown");
+	// 1. Try pgvector RAG from project KB
+	const kb = await findProjectKB(projectId);
+	if (kb) {
+		const candidates = await searchSimilar(kb.kbId, searchQuery, maxChunks);
+		const RELEVANCE_THRESHOLD = 0.3;
+		const filtered = candidates.filter((c) => c.score >= RELEVANCE_THRESHOLD);
 
-		if (usedTokens + chunkTokens > maxTokens) {
-			// Truncate the chunk so we stay within budget
-			const allowedChars = (maxTokens - usedTokens) * 4;
-			if (allowedChars <= 0) break;
+		for (const hit of filtered) {
+			const chunkTokens = Math.ceil(hit.content.length / 4);
+			const meta = hit.metadata as Record<string, unknown> | undefined;
+			const source = String(meta?.source ?? meta?.filename ?? "unknown");
 
-			relevantChunks.push({
-				content: hit.content.slice(0, allowedChars),
-				source,
-				score: hit.score,
-			});
-			usedTokens = maxTokens;
-			break;
+			if (usedTokens + chunkTokens > maxTokens) {
+				const allowedChars = (maxTokens - usedTokens) * 4;
+				if (allowedChars <= 0) break;
+				relevantChunks.push({ content: hit.content.slice(0, allowedChars), source, score: hit.score });
+				usedTokens = maxTokens;
+				break;
+			}
+
+			relevantChunks.push({ content: hit.content, source, score: hit.score });
+			usedTokens += chunkTokens;
 		}
+	}
 
-		relevantChunks.push({
-			content: hit.content,
-			source,
-			score: hit.score,
-		});
-		usedTokens += chunkTokens;
+	// 2. FTS fallback/augment — fill remaining budget with tsvector search
+	if (usedTokens < maxTokens) {
+		try {
+			const ftsResults = await searchContext({
+				projectId,
+				queries: [taskTitle, descriptionSnippet].filter(Boolean),
+				limit: maxChunks,
+				maxTokens: maxTokens - usedTokens,
+			});
+
+			for (const r of ftsResults) {
+				// Avoid duplicates — skip if content already present from RAG
+				const isDupe = relevantChunks.some(
+					(rc) => rc.source === r.source && rc.content.slice(0, 100) === r.content.slice(0, 100),
+				);
+				if (isDupe) continue;
+
+				const chunkTokens = Math.ceil(r.content.length / 4);
+				if (usedTokens + chunkTokens > maxTokens) break;
+
+				relevantChunks.push({ content: r.content, source: r.source, score: r.rank });
+				usedTokens += chunkTokens;
+			}
+		} catch {
+			// FTS unavailable — non-blocking
+		}
+	}
+
+	if (relevantChunks.length === 0) {
+		return null;
 	}
 
 	return {

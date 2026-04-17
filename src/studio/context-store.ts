@@ -13,6 +13,7 @@ import {
 	deleteContextSource,
 	cleanupStaleSources,
 } from "./db.js";
+import { execute } from "./pg.js";
 import type {
 	ContextContentType,
 	ContextSearchOptions,
@@ -386,7 +387,27 @@ export async function searchContext(opts: ContextSearchOptions): Promise<Context
 		if (results.length >= limit) break;
 	}
 
+	// Track search call + hits (non-blocking)
+	recordSearchMetrics(projectId, results.length).catch(() => {});
+
 	return results;
+}
+
+// ---------------------------------------------------------------------------
+// Search Tracking
+// ---------------------------------------------------------------------------
+
+async function recordSearchMetrics(projectId: string, hitCount: number): Promise<void> {
+	await execute(
+		`
+		INSERT INTO context_search_stats (project_id, search_calls, search_hits)
+		VALUES ($1, 1, $2)
+		ON CONFLICT (project_id)
+		DO UPDATE SET search_calls = context_search_stats.search_calls + 1,
+		             search_hits = context_search_stats.search_hits + EXCLUDED.search_hits
+		`,
+		[projectId, hitCount],
+	);
 }
 
 // ---------------------------------------------------------------------------

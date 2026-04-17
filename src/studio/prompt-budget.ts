@@ -25,6 +25,8 @@ export interface PromptSizeReport {
 	truncated: boolean;
 	overLimit: boolean;
 	warn: boolean;
+	/** Breakdown of context section sizes (chars) — set by caller if available */
+	contextSections?: Record<string, number>;
 }
 
 /** Rough token estimate from char count. */
@@ -44,7 +46,7 @@ export function capText(text: string, maxChars: number, marker = "\n…[truncate
  */
 export function enforcePromptBudget(
 	prompt: string,
-	ctx: { projectId: string; taskId?: string; agentId?: string },
+	ctx: { projectId: string; taskId?: string; agentId?: string; contextSections?: Record<string, number> },
 ): { prompt: string; report: PromptSizeReport } {
 	const chars = prompt.length;
 	const estimatedTokens = estimateTokens(chars);
@@ -75,6 +77,7 @@ export function enforcePromptBudget(
 		truncated,
 		overLimit,
 		warn,
+		contextSections: ctx.contextSections,
 	};
 
 	// Emit telemetry so analytics/observability can pick it up
@@ -90,6 +93,7 @@ export function enforcePromptBudget(
 			overLimit: report.overLimit,
 			warn: report.warn,
 			limit: PROMPT_LIMITS.totalPrompt,
+			...(report.contextSections ? { contextSections: report.contextSections } : {}),
 		},
 	});
 

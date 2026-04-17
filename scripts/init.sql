@@ -824,3 +824,10 @@ CREATE TABLE IF NOT EXISTS context_events (
 
 CREATE INDEX IF NOT EXISTS idx_ctx_events_session ON context_events(session_key, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ctx_events_dedup ON context_events(session_key, type, data_hash);
+
+-- v4.0: Context search tracking
+CREATE TABLE IF NOT EXISTS context_search_stats (
+  project_id      TEXT PRIMARY KEY REFERENCES projects(id),
+  search_calls    INTEGER NOT NULL DEFAULT 0,
+  search_hits     INTEGER NOT NULL DEFAULT 0
+);
