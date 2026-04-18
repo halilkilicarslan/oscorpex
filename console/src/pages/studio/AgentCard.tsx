@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { memo, useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import {
   Play,
   Square,
@@ -23,7 +23,18 @@ import {
   type AgentRunHistory,
   roleLabel,
 } from '../../lib/studio-api';
-import AgentTerminal from './AgentTerminal';
+
+// xterm is a heavy dependency (~500KB) — lazy load so it only downloads when
+// a user actually opens the embedded terminal on a running agent.
+const AgentTerminal = lazy(() => import('./AgentTerminal'));
+
+function TerminalLoader() {
+	return (
+		<div className="flex items-center justify-center h-full bg-[#0d0d0d]">
+			<div className="w-5 h-5 rounded-full border-2 border-[#262626] border-t-[#22c55e] animate-spin" />
+		</div>
+	);
+}
 
 // Çalışma zamanı durum tipi — AgentProcessInfo ile uyumlu genişletilmiş küme
 type RuntimeStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'stopped' | 'error';
@@ -65,7 +76,7 @@ function relativeTime(iso?: string): string {
   return `${hr}sa önce`;
 }
 
-export default function AgentCard({
+function AgentCard({
   agent,
   projectId,
   status: externalStatus,
@@ -440,17 +451,21 @@ export default function AgentCard({
               <ChevronUp size={12} />
             </button>
           </div>
-          {/* Terminal bileşeni */}
+          {/* Terminal bileşeni — xterm chunk yalnızca ilk açılışta indirilir */}
           <div className="h-[250px]">
-            <AgentTerminal
-              projectId={projectId}
-              agentId={agent.id}
-              agentName={agent.name}
-              agentAvatar={agent.avatar}
-            />
+            <Suspense fallback={<TerminalLoader />}>
+              <AgentTerminal
+                projectId={projectId}
+                agentId={agent.id}
+                agentName={agent.name}
+                agentAvatar={agent.avatar}
+              />
+            </Suspense>
           </div>
         </div>
       )}
     </div>
   );
 }
+
+export default memo(AgentCard);

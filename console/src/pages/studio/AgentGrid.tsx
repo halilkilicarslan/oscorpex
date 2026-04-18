@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Loader2, Users, Plus, LayoutGrid, Network, ArrowRight, BookTemplate } from 'lucide-react';
 import {
   fetchProjectAgents,
@@ -15,9 +15,20 @@ import AgentCard from './AgentCard';
 import AgentChat from './AgentChat';
 import AgentDetailModal from './AgentDetailModal';
 import AgentFormModal from './AgentFormModal';
-import OrgChart from './OrgChart';
-import TeamTemplatePreview from './TeamTemplatePreview';
 import { X } from 'lucide-react';
+
+// @xyflow/react is a heavy dependency (~400KB) — lazy load so the graph chunks
+// are only downloaded when the user switches to Org Chart, Pipeline, or Templates view.
+const OrgChart = lazy(() => import('./OrgChart'));
+const TeamTemplatePreview = lazy(() => import('./TeamTemplatePreview'));
+
+function GraphLoader() {
+	return (
+		<div className="flex items-center justify-center h-64">
+			<div className="w-6 h-6 rounded-full border-2 border-[#262626] border-t-[#22c55e] animate-spin" />
+		</div>
+	);
+}
 
 type RuntimeStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
 
@@ -286,18 +297,22 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
         </button>
       </div>
 
-      {/* Org Chart / Pipeline views */}
+      {/* Org Chart / Pipeline views — @xyflow/react chunk loads on first switch */}
       {(viewMode === 'org' || viewMode === 'pipeline') && (
-        <OrgChart
-          projectId={projectId}
-          initialView={viewMode === 'pipeline' ? 'pipeline' : 'graph'}
-        />
+        <Suspense fallback={<GraphLoader />}>
+          <OrgChart
+            projectId={projectId}
+            initialView={viewMode === 'pipeline' ? 'pipeline' : 'graph'}
+          />
+        </Suspense>
       )}
 
-      {/* Team Templates Preview */}
+      {/* Team Templates Preview — @xyflow/react chunk shared with OrgChart */}
       {viewMode === 'templates' && (
         <div className="flex-1 min-h-[500px]">
-          <TeamTemplatePreview />
+          <Suspense fallback={<GraphLoader />}>
+            <TeamTemplatePreview />
+          </Suspense>
         </div>
       )}
 

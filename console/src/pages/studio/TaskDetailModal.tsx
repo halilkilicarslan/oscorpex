@@ -24,6 +24,7 @@ import {
 import { roleLabel, approveTask, rejectTask, retryTask, type Task, type ProjectAgent } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
 import { TaskDiffViewer } from './TaskDiffViewer';
+import ModalOverlay from './ModalOverlay';
 
 const STATUS_ICON: Record<Task['status'], React.ReactNode> = {
   queued: <Clock size={14} className="text-[#525252]" />,
@@ -164,12 +165,7 @@ export default function TaskDetailModal({
   const doneSubTasks = subTasks.filter((st) => st.status === 'done').length;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <ModalOverlay onClose={onClose} className="backdrop-blur-sm">
       <div className="bg-[#111111] border border-[#262626] rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-[#1f1f1f] shrink-0">
@@ -602,7 +598,7 @@ export default function TaskDetailModal({
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

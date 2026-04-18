@@ -236,8 +236,15 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek im
 - Frontend auth headers: `VITE_API_KEY` injection in studio-api base.ts
 - Backend: 499/499, Frontend: 432/433 (1 pre-existing ProjectReport)
 
+**Phase 3 N+1 Elimination** (commit `9d877dc`, pushed)
+- `getAgentAnalytics` CTE refactor: 108 DB round-trips → 3 bulk queries (analytics-repo.ts)
+- `listPhases` LEFT JOIN: N+1 per-phase task queries → single JOIN query (project-repo.ts)
+- `getProjectIdForTask` LRU cache: 9 call sites hit in-memory Map, cap 500 (task-engine.ts)
+- Batch unread counts: GET /agents/unread-counts + frontend batch (agent-messaging.ts, agent-routes.ts, ProjectPage.tsx, MessageCenter.tsx)
+- Bulk budget status: `getAllAgentCostSummaries` GROUP BY replaces per-agent cost queries (analytics-repo.ts, analytics-routes.ts)
+- Backend: 499/499, Frontend: 432/433 (1 pre-existing ProjectReport)
+
 ### Sıradaki Adımlar
-- Phase 3: N+1 Elimination (batch queries, connection pooling)
 - Phase 4: Frontend Refactor (component splitting, memo optimization)
 - Phase 5: Architecture Improvements (event sourcing, caching layer)
 

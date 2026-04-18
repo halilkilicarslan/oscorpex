@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Filter, Bug, Lightbulb, Shield, Zap, Wrench, Loader2, X, ArrowRight, ChevronDown, Trash2 } from 'lucide-react';
+import ModalOverlay from './ModalOverlay';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
@@ -62,7 +63,7 @@ function NewItemModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (f
   const [form, setForm] = useState<NewItemForm>({ title: '', type: 'feature', priority: 'medium', description: '' });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+    <ModalOverlay onClose={onClose} className="bg-black/70">
       <div className="bg-[#111111] border border-[#262626] rounded-xl p-5 w-[400px] shadow-2xl">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-[13px] font-semibold text-[#fafafa]">New Work Item</h2>
@@ -146,7 +147,7 @@ function NewItemModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (f
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

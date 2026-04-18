@@ -14,6 +14,7 @@ import {
   X,
   Users,
 } from 'lucide-react';
+import ModalOverlay from './ModalOverlay';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
@@ -186,7 +187,7 @@ function CreateSprintModal({ projectId, defaultName, onClose, onCreated }: Creat
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+    <ModalOverlay onClose={onClose}>
       <div className="w-[420px] bg-[#111111] border border-[#262626] rounded-xl shadow-2xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
           <h3 className="text-[13px] font-semibold text-[#fafafa]">New Sprint</h3>
@@ -279,7 +280,7 @@ function CreateSprintModal({ projectId, defaultName, onClose, onCreated }: Creat
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
