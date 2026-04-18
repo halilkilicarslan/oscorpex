@@ -183,6 +183,25 @@ export async function getUnreadCount(projectId: string, agentId: string): Promis
 }
 
 /**
+ * Projedeki tüm ajanların okunmamış mesaj sayılarını tek sorguda döndürür.
+ * Dönüş: agentId → okunmamış mesaj sayısı eşlemesi.
+ */
+export async function getAllUnreadCounts(projectId: string): Promise<Record<string, number>> {
+	const rows = await query<{ to_agent_id: string; count: string }>(
+		`SELECT to_agent_id, COUNT(*) as count
+     FROM agent_messages
+     WHERE project_id = $1 AND status = 'unread'
+     GROUP BY to_agent_id`,
+		[projectId],
+	);
+	const result: Record<string, number> = {};
+	for (const row of rows) {
+		result[row.to_agent_id] = Number(row.count);
+	}
+	return result;
+}
+
+/**
  * Projedeki tüm mesajları listeler.
  * İsteğe bağlı agentId ve status filtreleri uygulanabilir.
  */

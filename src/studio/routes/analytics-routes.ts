@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import {
 	getActivityTimeline,
 	getAgentAnalytics,
-	getAgentCostSummary,
+	getAllAgentCostSummaries,
 	getAgentComparison,
 	getAgentHeatMap,
 	getAgentPerformanceTimeline,
@@ -132,22 +132,25 @@ analyticsRoutes.get("/projects/:id/budget/status", async (c) => {
 	const maxCost = budgetSettings.maxCostUsd ? Number.parseFloat(budgetSettings.maxCostUsd) : null;
 	const agentMaxCost = budgetSettings.agent_max_cost_usd ? Number.parseFloat(budgetSettings.agent_max_cost_usd) : null;
 
-	const projectCost = await getProjectCostSummary(id);
-	const agents = await listProjectAgents(id);
+	const [projectCost, agents, agentCostMap] = await Promise.all([
+		getProjectCostSummary(id),
+		listProjectAgents(id),
+		getAllAgentCostSummaries(id),
+	]);
 
-	const agentBudgets = await Promise.all(
-		agents.map(async (agent) => {
-			const cost = await getAgentCostSummary(id, agent.id);
-			return {
-				agentId: agent.id,
-				agentName: agent.name,
-				role: agent.role,
-				totalCostUsd: cost.totalCostUsd,
-				taskCount: cost.taskCount,
-				budgetExceeded: agentMaxCost ? cost.totalCostUsd >= agentMaxCost : false,
-			};
-		}),
-	);
+	const agentBudgets = agents.map((agent) => {
+		const cost = agentCostMap.get(agent.id);
+		const totalCostUsd = cost?.totalCostUsd ?? 0;
+		const taskCount = cost?.taskCount ?? 0;
+		return {
+			agentId: agent.id,
+			agentName: agent.name,
+			role: agent.role,
+			totalCostUsd,
+			taskCount,
+			budgetExceeded: agentMaxCost ? totalCostUsd >= agentMaxCost : false,
+		};
+	});
 
 	return c.json({
 		projectBudget: {

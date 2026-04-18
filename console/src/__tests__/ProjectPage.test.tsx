@@ -11,6 +11,7 @@ vi.mock('../lib/studio-api', () => ({
   fetchProject: vi.fn(),
   fetchProjectAgents: vi.fn(),
   fetchUnreadCount: vi.fn(),
+  fetchAllUnreadCounts: vi.fn(),
   fetchAppStatus: vi.fn().mockResolvedValue({ running: false, backendUrl: null, frontendUrl: null }),
   startApp: vi.fn().mockResolvedValue({ ok: true }),
   stopApp: vi.fn().mockResolvedValue({ ok: true }),
@@ -116,6 +117,7 @@ describe('ProjectPage — yukleme durumu', () => {
     vi.clearAllMocks();
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
     vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+    vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
   });
 
   it('proje yuklenirken spinner gosterilmeli', () => {
@@ -154,6 +156,7 @@ describe('ProjectPage — proje header', () => {
     vi.mocked(studioApi.fetchProject).mockResolvedValue(ORNEK_PROJE);
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
     vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+    vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
   });
 
   it('proje adi gosterilmeli', async () => {
@@ -216,6 +219,7 @@ describe('ProjectPage — sekme navigasyonu', () => {
     vi.mocked(studioApi.fetchProject).mockResolvedValue(ORNEK_PROJE);
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
     vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+    vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
   });
 
   it('tum sekmeler gosterilmeli', async () => {
@@ -313,6 +317,7 @@ describe('ProjectPage — Board sekmesi kanban/pipeline secimi', () => {
     vi.mocked(studioApi.fetchProject).mockResolvedValue(ORNEK_PROJE);
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
     vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+    vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
   });
 
   it('Board sekmesinde kanban ve pipeline geciş butonlari gosterilmeli', async () => {
@@ -360,6 +365,7 @@ describe('ProjectPage — Messages sekmesi okunmamis rozeti', () => {
   it('okunmamis mesaj varsa Messages sekmesinde rozet gosterilmeli', async () => {
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
     vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 5 });
+    vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({ 'agent-1': 5 });
 
     renderProjectPage();
 
@@ -372,6 +378,7 @@ describe('ProjectPage — Messages sekmesi okunmamis rozeti', () => {
   it('okunmamis mesaj yoksa rozet gosterilmemeli', async () => {
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
     vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+    vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
 
     renderProjectPage();
 
@@ -387,6 +394,7 @@ describe('ProjectPage — Messages sekmesi okunmamis rozeti', () => {
   it('99dan fazla mesaj varsa "99+" gosterilmeli', async () => {
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
     vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 150 });
+    vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({ 'agent-1': 150 });
 
     renderProjectPage();
 
