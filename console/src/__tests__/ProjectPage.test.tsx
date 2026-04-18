@@ -274,7 +274,10 @@ describe('ProjectPage — sekme navigasyonu', () => {
 
     await user.click(screen.getByText('Files'));
 
-    expect(screen.getByTestId('file-explorer')).toBeInTheDocument();
+    // Lazy import resolves asynchronously — waitFor gives Suspense time to settle
+    await waitFor(() => {
+      expect(screen.getByTestId('file-explorer')).toBeInTheDocument();
+    });
   });
 
   it('Events sekmesine tiklaninca EventFeed render edilmeli', async () => {
@@ -285,7 +288,9 @@ describe('ProjectPage — sekme navigasyonu', () => {
 
     await user.click(screen.getByText('Events'));
 
-    expect(screen.getByTestId('event-feed')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('event-feed')).toBeInTheDocument();
+    });
   });
 
   it('Messages sekmesine tiklaninca MessageCenter render edilmeli', async () => {
@@ -296,7 +301,9 @@ describe('ProjectPage — sekme navigasyonu', () => {
 
     await user.click(screen.getByText('Messages'));
 
-    expect(screen.getByTestId('message-center')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('message-center')).toBeInTheDocument();
+    });
   });
 
   it('Dashboard sekmesine tiklaninca AgentDashboard render edilmeli', async () => {
@@ -307,7 +314,9 @@ describe('ProjectPage — sekme navigasyonu', () => {
 
     await user.click(screen.getByText('Dashboard'));
 
-    expect(screen.getByTestId('agent-dashboard')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-dashboard')).toBeInTheDocument();
+    });
   });
 });
 

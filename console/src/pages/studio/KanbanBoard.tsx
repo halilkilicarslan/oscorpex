@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Loader2, Kanban, Zap, AlertCircle, X, ShieldAlert, XCircle } from 'lucide-react';
 import {
   fetchTasks,
@@ -14,6 +14,7 @@ import {
 import TaskCard from './TaskCard';
 import TaskDetailModal from './TaskDetailModal';
 import TerminalSheet from './TerminalSheet';
+import ModalOverlay from './ModalOverlay';
 
 const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
   { key: 'queued', label: 'Queued', color: 'border-[#525252]' },
@@ -123,7 +124,7 @@ function RejectModal({ taskTitle, onConfirm, onCancel }: RejectModalProps) {
   const [reason, setReason] = useState('');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+    <ModalOverlay onClose={onCancel} className="bg-black/70">
       <div className="bg-[#111] border border-[#262626] rounded-xl p-5 w-[360px] shadow-2xl">
         {/* Baslik */}
         <div className="flex items-center gap-2 mb-3">
@@ -169,7 +170,7 @@ function RejectModal({ taskTitle, onConfirm, onCancel }: RejectModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -289,6 +290,37 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
     }
   };
 
+  // Sub-task map: parentTaskId -> sub-task listesi
+  const subTaskMap = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const task of tasks) {
+      if (task.parentTaskId) {
+        if (!map.has(task.parentTaskId)) map.set(task.parentTaskId, []);
+        map.get(task.parentTaskId)!.push(task);
+      }
+    }
+    return map;
+  }, [tasks]);
+
+  // Task'ları status'e göre grupla
+  const grouped = useMemo(() => {
+    const map = new Map<Task['status'], Task[]>();
+    for (const col of COLUMNS) map.set(col.key, []);
+    for (const task of tasks) {
+      const list = map.get(task.status);
+      if (list) list.push(task);
+    }
+    return map;
+  }, [tasks]);
+
+  // Yalnizca task olan veya her zaman görünen sütunlari göster
+  const activeColumns = useMemo(
+    () => COLUMNS.filter(
+      (col) => (grouped.get(col.key)?.length ?? 0) > 0 || ['queued', 'running', 'done'].includes(col.key),
+    ),
+    [grouped],
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -308,28 +340,6 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
       </div>
     );
   }
-
-  // Sub-task map: parentTaskId -> sub-task listesi
-  const subTaskMap = new Map<string, Task[]>();
-  for (const task of tasks) {
-    if (task.parentTaskId) {
-      if (!subTaskMap.has(task.parentTaskId)) subTaskMap.set(task.parentTaskId, []);
-      subTaskMap.get(task.parentTaskId)!.push(task);
-    }
-  }
-
-  // Task'ları status'e göre grupla
-  const grouped = new Map<Task['status'], Task[]>();
-  for (const col of COLUMNS) grouped.set(col.key, []);
-  for (const task of tasks) {
-    const list = grouped.get(task.status);
-    if (list) list.push(task);
-  }
-
-  // Yalnizca task olan veya her zaman görünen sütunlari göster
-  const activeColumns = COLUMNS.filter(
-    (col) => (grouped.get(col.key)?.length ?? 0) > 0 || ['queued', 'running', 'done'].includes(col.key),
-  );
 
   return (
     <>

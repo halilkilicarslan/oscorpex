@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import {
   Clock,
   Loader2,
@@ -36,7 +36,7 @@ const COMPLEXITY_COLORS: Record<string, string> = {
   L: 'bg-[#ef4444]/10 text-[#ef4444]',
 };
 
-export default function TaskCard({
+function TaskCard({
   task,
   agents = [],
   onRetry,
@@ -291,3 +291,5 @@ export default function TaskCard({
     </div>
   );
 }
+
+export default memo(TaskCard);

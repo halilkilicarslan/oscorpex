@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -45,25 +45,38 @@ import {
   type PlannerReasoningEffort,
   type ProjectAgent,
 } from '../../lib/studio-api';
+// Core tabs — always eagerly loaded (user lands on these immediately)
 import PMChat from './PMChat';
 import AgentGrid from './AgentGrid';
 import KanbanBoard from './KanbanBoard';
 import PipelineDashboard from './PipelineDashboard';
-import FileExplorer from './FileExplorer';
-import EventFeed from './EventFeed';
-import MessageCenter from './MessageCenter';
-import AgentDashboard from './AgentDashboard';
-import ProjectSettings from './ProjectSettings';
-import DiffViewer from './DiffViewer';
-import AgentLogViewer from './AgentLogViewer';
-import LivePreview from './LivePreview';
 import PlannerSettingsModal from './PlannerSettingsModal';
-import BacklogBoard from './BacklogBoard';
-import SprintBoard from './SprintBoard';
-import CeremonyPanel from './CeremonyPanel';
-import ProjectReport from './ProjectReport';
 import { useStudioWebSocket } from '../../hooks/useStudioWebSocket';
 import { useNotifications } from '../../hooks/useNotifications';
+
+// Secondary tabs — lazy loaded to reduce initial bundle size.
+// These chunks download on first navigation to each tab.
+const FileExplorer   = lazy(() => import('./FileExplorer'));
+const EventFeed      = lazy(() => import('./EventFeed'));
+const MessageCenter  = lazy(() => import('./MessageCenter'));
+const AgentDashboard = lazy(() => import('./AgentDashboard'));
+const ProjectSettings = lazy(() => import('./ProjectSettings'));
+const DiffViewer     = lazy(() => import('./DiffViewer'));
+const AgentLogViewer = lazy(() => import('./AgentLogViewer'));
+const LivePreview    = lazy(() => import('./LivePreview'));
+const BacklogBoard   = lazy(() => import('./BacklogBoard'));
+const SprintBoard    = lazy(() => import('./SprintBoard'));
+const CeremonyPanel  = lazy(() => import('./CeremonyPanel'));
+const ProjectReport  = lazy(() => import('./ProjectReport'));
+
+// Inline fallback for tab panels — matches the page's dark theme
+function TabLoader() {
+	return (
+		<div className="flex items-center justify-center h-64">
+			<div className="w-6 h-6 rounded-full border-2 border-[#262626] border-t-[#22c55e] animate-spin" />
+		</div>
+	);
+}
 
 // Board sekmesi içindeki görünüm modu — kanban veya pipeline
 type BoardView = 'kanban' | 'pipeline';
@@ -255,6 +268,16 @@ export default function ProjectPage() {
     setReadmeLoading(false);
   };
 
+  // Türetilmiş değerler — Hook kuralı gereği koşullu dönüşlerden önce tanımlanmalı
+  const plannerAgent = useMemo(
+    () => projectAgents.find((agent) => agent.role === 'product-owner' || agent.role === 'pm') ?? null,
+    [projectAgents],
+  );
+  const visibleTabs = useMemo(
+    () => (previewEnabled ? STATIC_TABS : STATIC_TABS.filter((tab) => tab.id !== 'preview')),
+    [previewEnabled],
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -264,10 +287,6 @@ export default function ProjectPage() {
   }
 
   if (!project) return null;
-
-  const plannerAgent =
-    projectAgents.find((agent) => agent.role === 'product-owner' || agent.role === 'pm') ?? null;
-  const visibleTabs = previewEnabled ? STATIC_TABS : STATIC_TABS.filter((tab) => tab.id !== 'preview');
 
   return (
     <div className="flex flex-col h-full">
@@ -449,25 +468,71 @@ export default function ProjectPage() {
           </div>
         )}
         {activeTab === 'preview' && (
-          <LivePreview
-            projectId={projectId!}
-            appStatus={appStatus}
-            onStatusChange={setAppStatus}
-          />
+          <Suspense fallback={<TabLoader />}>
+            <LivePreview
+              projectId={projectId!}
+              appStatus={appStatus}
+              onStatusChange={setAppStatus}
+            />
+          </Suspense>
         )}
-        {activeTab === 'files' && <FileExplorer projectId={projectId!} />}
-        {activeTab === 'events' && <EventFeed projectId={projectId!} />}
+        {activeTab === 'files' && (
+          <Suspense fallback={<TabLoader />}>
+            <FileExplorer projectId={projectId!} />
+          </Suspense>
+        )}
+        {activeTab === 'events' && (
+          <Suspense fallback={<TabLoader />}>
+            <EventFeed projectId={projectId!} />
+          </Suspense>
+        )}
         {/* Mesaj merkezi sekmesi */}
-        {activeTab === 'messages' && <MessageCenter projectId={projectId!} />}
+        {activeTab === 'messages' && (
+          <Suspense fallback={<TabLoader />}>
+            <MessageCenter projectId={projectId!} />
+          </Suspense>
+        )}
         {/* Ajan dashboard sekmesi */}
-        {activeTab === 'dashboard' && <AgentDashboard projectId={projectId!} />}
-        {activeTab === 'logs' && <AgentLogViewer projectId={projectId!} />}
-        {activeTab === 'diff' && <DiffViewer projectId={projectId!} />}
-        {activeTab === 'settings' && <ProjectSettings projectId={projectId!} />}
-        {activeTab === 'backlog' && <BacklogBoard projectId={project.id} />}
-        {activeTab === 'sprint' && <SprintBoard projectId={project.id} />}
-        {activeTab === 'ceremonies' && <CeremonyPanel projectId={project.id} />}
-        {activeTab === 'report' && <ProjectReport projectId={project.id} />}
+        {activeTab === 'dashboard' && (
+          <Suspense fallback={<TabLoader />}>
+            <AgentDashboard projectId={projectId!} />
+          </Suspense>
+        )}
+        {activeTab === 'logs' && (
+          <Suspense fallback={<TabLoader />}>
+            <AgentLogViewer projectId={projectId!} />
+          </Suspense>
+        )}
+        {activeTab === 'diff' && (
+          <Suspense fallback={<TabLoader />}>
+            <DiffViewer projectId={projectId!} />
+          </Suspense>
+        )}
+        {activeTab === 'settings' && (
+          <Suspense fallback={<TabLoader />}>
+            <ProjectSettings projectId={projectId!} />
+          </Suspense>
+        )}
+        {activeTab === 'backlog' && (
+          <Suspense fallback={<TabLoader />}>
+            <BacklogBoard projectId={project.id} />
+          </Suspense>
+        )}
+        {activeTab === 'sprint' && (
+          <Suspense fallback={<TabLoader />}>
+            <SprintBoard projectId={project.id} />
+          </Suspense>
+        )}
+        {activeTab === 'ceremonies' && (
+          <Suspense fallback={<TabLoader />}>
+            <CeremonyPanel projectId={project.id} />
+          </Suspense>
+        )}
+        {activeTab === 'report' && (
+          <Suspense fallback={<TabLoader />}>
+            <ProjectReport projectId={project.id} />
+          </Suspense>
+        )}
       </div>
       {plannerSettingsOpen && (
         <PlannerSettingsModal

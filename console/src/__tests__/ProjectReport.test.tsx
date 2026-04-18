@@ -4,11 +4,31 @@ import userEvent from '@testing-library/user-event';
 import ProjectReport from '../pages/studio/ProjectReport';
 
 // v4.0: fetchContextMetrics mock — report fetch'i etkilememesi için
+// v4.1: fetchSearchObservability mock — SearchObservability bileşeni ayrı bir istek yapar,
+// bu mock sayesinde spinner ProjectReport yüklendikten sonra DOM'da kalmaz.
 vi.mock('../lib/studio-api/analytics.js', async (importOriginal) => {
 	const actual = await importOriginal() as Record<string, unknown>;
 	return {
 		...actual,
 		fetchContextMetrics: vi.fn().mockResolvedValue(null),
+	};
+});
+
+vi.mock('../lib/studio-api', async (importOriginal) => {
+	const actual = await importOriginal() as Record<string, unknown>;
+	return {
+		...actual,
+		fetchSearchObservability: vi.fn().mockResolvedValue({
+			totalSearches: 0,
+			totalHits: 0,
+			totalMisses: 0,
+			hitRate: 0,
+			avgLatencyMs: 0,
+			avgResultCount: 0,
+			avgTopRank: 0,
+			hourlyBreakdown: [],
+			recentSearches: [],
+		}),
 	};
 });
 
