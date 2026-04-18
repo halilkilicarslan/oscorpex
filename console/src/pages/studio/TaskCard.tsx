@@ -193,7 +193,7 @@ export default function TaskCard({
               type="button"
               onClick={() => setErrorExpanded((prev) => !prev)}
               className="flex items-center gap-1 text-[10px] text-[#737373] hover:text-[#a3a3a3] transition-colors"
-              title={errorExpanded ? 'Hatayı gizle' : 'Hata detayını gör'}
+              title={errorExpanded ? 'Hide error' : 'Show error details'}
             >
               <AlertCircle size={10} className="text-[#ef4444]" />
               {errorExpanded ? (

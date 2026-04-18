@@ -296,7 +296,7 @@ export default function RuntimePanel({
                 className="flex-1 text-xs px-3 py-2 rounded bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 flex items-center justify-center gap-1.5 font-medium"
               >
                 {actionLoading === 'start-app' ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-                Uygulamayi Baslat
+                Start App
               </button>
             </div>
           </div>
@@ -306,7 +306,7 @@ export default function RuntimePanel({
       {/* ---- Databases ---- */}
       {analysis.databases.length > 0 && (
         <Section
-          title="Veritabanlari"
+          title="Databases"
           icon={<Database size={15} />}
           expanded={expandedSections.databases}
           onToggle={() => toggleSection('databases')}
@@ -331,7 +331,7 @@ export default function RuntimePanel({
                     </div>
                     {isRunning && (
                       <span className="text-[10px] text-[#22c55e] flex items-center gap-1">
-                        <CheckCircle2 size={10} /> Calisiyor
+                        <CheckCircle2 size={10} /> Running
                       </span>
                     )}
                   </div>
@@ -376,7 +376,7 @@ export default function RuntimePanel({
                         className="text-[10px] px-2.5 py-1 rounded bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 flex items-center gap-1"
                       >
                         {actionLoading === `db-${db.type}` ? <Loader2 size={10} className="animate-spin" /> : <Play size={10} />}
-                        Baslat
+                        Start
                       </button>
                     ) : (
                       <button
@@ -385,7 +385,7 @@ export default function RuntimePanel({
                         className="text-[10px] px-2.5 py-1 rounded bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 flex items-center gap-1"
                       >
                         {actionLoading === `db-stop-${db.type}` ? <Loader2 size={10} className="animate-spin" /> : <Square size={10} />}
-                        Durdur
+                        Stop
                       </button>
                     )}
                   </div>
@@ -452,7 +452,7 @@ export default function RuntimePanel({
               className="w-full text-xs px-3 py-1.5 rounded bg-[#3b82f6]/10 text-[#3b82f6] hover:bg-[#3b82f6]/20 flex items-center justify-center gap-1.5"
             >
               {actionLoading === 'env' ? <Loader2 size={12} className="animate-spin" /> : <Settings2 size={12} />}
-              .env Kaydet
+              Save .env
             </button>
           </div>
         )}
@@ -460,7 +460,7 @@ export default function RuntimePanel({
 
       {/* ---- Quick Status ---- */}
       <div className="bg-[#18181b] rounded-lg border border-[#27272a] p-3">
-        <div className="text-[10px] text-[#71717a] uppercase tracking-wide mb-2">Durum Ozeti</div>
+        <div className="text-[10px] text-[#71717a] uppercase tracking-wide mb-2">Status Summary</div>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <StatusItem
             label="Bagimliliklar"

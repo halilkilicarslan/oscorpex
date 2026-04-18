@@ -275,7 +275,7 @@ export default function AgentCard({
             <button
               onClick={onEdit}
               className="p-1.5 rounded-lg text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors"
-              title="Ajanı düzenle"
+              title="Edit agent"
             >
               <Pencil size={13} />
             </button>
@@ -286,7 +286,7 @@ export default function AgentCard({
             <button
               onClick={onDelete}
               className="p-1.5 rounded-lg text-[#525252] hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-colors"
-              title="Ajanı sil"
+              title="Delete agent"
             >
               <Trash2 size={13} />
             </button>
@@ -299,7 +299,7 @@ export default function AgentCard({
               className={`p-1.5 rounded-lg transition-colors text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] ${
                 showHistory ? 'bg-[#1f1f1f] text-[#a3a3a3]' : ''
               }`}
-              title="Çalıştırma geçmişi"
+              title="Run history"
             >
               <Clock size={13} />
             </button>
@@ -319,7 +319,7 @@ export default function AgentCard({
                   </div>
                 ) : runHistory.length === 0 ? (
                   <div className="px-3 py-3 text-[11px] text-[#525252] text-center">
-                    Henüz çalıştırma kaydı yok
+                    No run history yet
                   </div>
                 ) : (
                   <ul className="divide-y divide-[#1f1f1f]">
@@ -347,7 +347,7 @@ export default function AgentCard({
                                 run.exitCode === 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'
                               }`}
                             >
-                              çıkış: {run.exitCode}
+                              exit: {run.exitCode}
                             </span>
                           )}
                         </div>
@@ -363,7 +363,7 @@ export default function AgentCard({
                     className="w-full flex items-center justify-center gap-1 px-3 py-1.5 text-[10px] text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors"
                   >
                     <ChevronDown size={11} />
-                    Kapat
+                    Close
                   </button>
                 </div>
               </div>

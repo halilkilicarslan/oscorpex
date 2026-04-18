@@ -796,9 +796,9 @@ export default function FileExplorer({ projectId }: { projectId: string }) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-6">
         <FolderTree size={32} className="text-[#333] mb-3" />
-        <h3 className="text-[14px] font-medium text-[#a3a3a3] mb-1">Depo Yok</h3>
+        <h3 className="text-[14px] font-medium text-[#a3a3a3] mb-1">No Repository</h3>
         <p className="text-[12px] text-[#525252] max-w-sm">
-          Proje deposu, çalışma başladığında otomatik oluşturulacak.
+          The project repository will be created automatically when work begins.
         </p>
       </div>
     );
@@ -849,10 +849,10 @@ export default function FileExplorer({ projectId }: { projectId: string }) {
               <button
                 onClick={() => setShowNewFile(true)}
                 className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-[#525252] hover:text-[#3b82f6] hover:bg-[#3b82f6]/10 transition-colors"
-                title="Yeni dosya oluştur"
+                title="Create new file"
               >
                 <Plus size={12} />
-                <span>Yeni</span>
+                <span>New</span>
               </button>
 
               <div className="flex-1" />

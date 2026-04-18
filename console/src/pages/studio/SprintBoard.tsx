@@ -52,7 +52,7 @@ function BurndownChart({ points, totalItems }: { points: BurndownPoint[]; totalI
   if (points.length === 0) {
     return (
       <div className="flex items-center justify-center h-32 rounded-lg bg-[#0d0d0d] border border-[#1a1a1a]">
-        <span className="text-[12px] text-[#333]">Henüz veri yok</span>
+        <span className="text-[12px] text-[#333]">No data yet</span>
       </div>
     );
   }
@@ -152,11 +152,11 @@ function CreateSprintModal({ projectId, defaultName, onClose, onCreated }: Creat
   const handleSubmit = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('İsim zorunlu');
+      setError('Name is required');
       return;
     }
     if (endDate < startDate) {
-      setError('Bitiş tarihi başlangıçtan önce olamaz');
+      setError('End date cannot be before start date');
       return;
     }
     setSaving(true);
@@ -174,7 +174,7 @@ function CreateSprintModal({ projectId, defaultName, onClose, onCreated }: Creat
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? 'Sprint oluşturulamadı');
+        throw new Error(body.error ?? 'Failed to create sprint');
       }
       onCreated();
       onClose();
@@ -189,12 +189,12 @@ function CreateSprintModal({ projectId, defaultName, onClose, onCreated }: Creat
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="w-[420px] bg-[#111111] border border-[#262626] rounded-xl shadow-2xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
-          <h3 className="text-[13px] font-semibold text-[#fafafa]">Yeni Sprint</h3>
+          <h3 className="text-[13px] font-semibold text-[#fafafa]">New Sprint</h3>
           <button
             type="button"
             onClick={onClose}
             className="text-[#525252] hover:text-[#a3a3a3] transition-colors"
-            aria-label="Kapat"
+            aria-label="Close"
           >
             <X size={14} />
           </button>
@@ -203,7 +203,7 @@ function CreateSprintModal({ projectId, defaultName, onClose, onCreated }: Creat
         <div className="px-4 py-3 space-y-3">
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[#525252] mb-1">
-              İsim
+              Name
             </label>
             <input
               type="text"
@@ -216,21 +216,21 @@ function CreateSprintModal({ projectId, defaultName, onClose, onCreated }: Creat
 
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[#525252] mb-1">
-              Hedef (opsiyonel)
+              Goal (optional)
             </label>
             <input
               type="text"
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
               className="w-full px-2 py-1.5 text-[12px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] focus:outline-none focus:border-[#22c55e]"
-              placeholder="Auth akışını tamamla"
+              placeholder="Complete auth flow"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-[#525252] mb-1">
-                Başlangıç
+                Start Date
               </label>
               <input
                 type="date"
@@ -241,7 +241,7 @@ function CreateSprintModal({ projectId, defaultName, onClose, onCreated }: Creat
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-[#525252] mb-1">
-                Bitiş
+                End Date
               </label>
               <input
                 type="date"
@@ -266,7 +266,7 @@ function CreateSprintModal({ projectId, defaultName, onClose, onCreated }: Creat
             disabled={saving}
             className="px-3 py-1.5 text-[11px] text-[#a3a3a3] hover:text-[#fafafa] transition-colors disabled:opacity-50"
           >
-            İptal
+            Cancel
           </button>
           <button
             type="button"
@@ -275,7 +275,7 @@ function CreateSprintModal({ projectId, defaultName, onClose, onCreated }: Creat
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/20 transition-colors disabled:opacity-50"
           >
             {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-            Oluştur
+            Create
           </button>
         </div>
       </div>
@@ -651,7 +651,7 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
                           type="button"
                           onClick={() => handleAssignToSprint(item.id, null)}
                           className="opacity-0 group-hover:opacity-100 text-[#525252] hover:text-[#f87171] transition-all"
-                          title="Sprint'ten çıkar"
+                          title="Remove from sprint"
                         >
                           <X size={11} />
                         </button>

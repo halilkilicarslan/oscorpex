@@ -40,19 +40,19 @@ const TYPE_CONFIG: Record<
   { label: string; bg: string; text: string; border: string }
 > = {
   task_assignment: {
-    label: 'Görev',
+    label: 'Task',
     bg: 'bg-blue-500/10',
     text: 'text-blue-400',
     border: 'border-blue-500/20',
   },
   task_complete: {
-    label: 'Tamamlandı',
+    label: 'Completed',
     bg: 'bg-[#22c55e]/10',
     text: 'text-[#22c55e]',
     border: 'border-[#22c55e]/20',
   },
   review_request: {
-    label: 'İnceleme',
+    label: 'Review',
     bg: 'bg-yellow-500/10',
     text: 'text-yellow-400',
     border: 'border-yellow-500/20',
@@ -88,13 +88,13 @@ const TYPE_CONFIG: Record<
     border: 'border-indigo-500/20',
   },
   conflict: {
-    label: 'Çatışma',
+    label: 'Conflict',
     bg: 'bg-orange-500/10',
     text: 'text-orange-400',
     border: 'border-orange-500/20',
   },
   help_request: {
-    label: 'Yardım',
+    label: 'Help',
     bg: 'bg-pink-500/10',
     text: 'text-pink-400',
     border: 'border-pink-500/20',
@@ -135,12 +135,12 @@ const MESSAGE_TYPES: AgentMessageType[] = [
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'az önce';
-  if (minutes < 60) return `${minutes}d`;
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}s`;
+  if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
-  return `${days}g`;
+  return `${days}d`;
 }
 
 // Ajan adını ID'den bul
@@ -252,7 +252,7 @@ function MessageRow({
       <button
         onClick={onArchive}
         className="opacity-0 group-hover:opacity-100 p-1 rounded text-[#525252] hover:text-[#a3a3a3] hover:bg-[#262626] transition-all shrink-0"
-        title="Arşivle"
+        title="Archive"
       >
         <Archive size={12} />
       </button>
@@ -528,7 +528,7 @@ function ComposeBar({
           <textarea
             value={form.content}
             onChange={(e) => setForm((prev) => ({ ...prev, content: e.target.value }))}
-            placeholder="Mesaj içeriği..."
+            placeholder="Message content..."
             rows={3}
             className="w-full px-3 py-2 rounded-lg bg-[#111111] border border-[#262626] text-[12px] text-[#a3a3a3] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50 resize-none"
           />

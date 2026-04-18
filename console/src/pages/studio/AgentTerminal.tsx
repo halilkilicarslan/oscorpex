@@ -16,9 +16,9 @@ import {
 function StatusBadge({ status }: { status: AgentProcessInfo['status'] }) {
   // Her duruma karşılık gelen renk ve etiket
   const map: Record<AgentProcessInfo['status'], { dot: string; label: string }> = {
-    idle:     { dot: 'bg-[#525252]',                       label: 'Boşta' },
-    starting: { dot: 'bg-[#f59e0b] animate-pulse',         label: 'Başlatılıyor' },
-    running:  { dot: 'bg-[#22c55e] animate-pulse',         label: 'Çalışıyor' },
+    idle:     { dot: 'bg-[#525252]',                       label: 'Idle' },
+    starting: { dot: 'bg-[#f59e0b] animate-pulse',         label: 'Starting' },
+    running:  { dot: 'bg-[#22c55e] animate-pulse',         label: 'Running' },
     stopping: { dot: 'bg-[#f59e0b] animate-pulse',         label: 'Durduruluyor' },
     stopped:  { dot: 'bg-[#737373]',                       label: 'Durduruldu' },
     error:    { dot: 'bg-[#ef4444]',                       label: 'Hata' },
@@ -150,7 +150,7 @@ export default function AgentTerminal({
     fitAddonRef.current = fitAddon;
 
     // Karşılama mesajı
-    term.writeln('\x1b[32m● Agent terminal hazır\x1b[0m');
+    term.writeln('\x1b[32m● Agent terminal ready\x1b[0m');
     term.writeln(`\x1b[90mProje: ${projectId} | Ajan: ${agentId}\x1b[0m`);
     term.writeln('');
 
@@ -244,7 +244,7 @@ export default function AgentTerminal({
 
         <div className="flex items-center gap-1.5">
           {/* SSE bağlantı durumu göstergesi */}
-          <span title={connected ? 'Akış bağlı' : 'Akış bağlı değil'}>
+          <span title={connected ? 'Stream connected' : 'Stream disconnected'}>
             {connected
               ? <Wifi size={12} className="text-[#22c55e]" />
               : <WifiOff size={12} className="text-[#525252]" />
@@ -255,10 +255,10 @@ export default function AgentTerminal({
           <button
             onClick={handleClear}
             className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors"
-            title="Terminali temizle"
+            title="Clear terminal"
           >
             <Eraser size={11} />
-            Temizle
+            Clear
           </button>
         </div>
       </div>

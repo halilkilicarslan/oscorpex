@@ -347,7 +347,7 @@ export default function ProjectPage() {
           onClick={handleGenerateReadme}
           disabled={readmeLoading || !project.repoPath}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors bg-[#1f1f1f] text-[#a3a3a3] hover:bg-[#262626] hover:text-[#fafafa] disabled:opacity-40"
-          title="README.md oluştur ve git repo'ya yaz"
+          title="Generate README.md and commit to git repo"
         >
           {readmeLoading ? (
             <Loader2 size={14} className="animate-spin" />

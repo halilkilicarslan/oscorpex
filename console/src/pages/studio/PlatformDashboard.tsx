@@ -105,7 +105,7 @@ export default function PlatformDashboard() {
 		try {
 			setStats(await fetchPlatformStats());
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Veriler yüklenemedi");
+			setError(e instanceof Error ? e.message : "Failed to load data");
 		} finally {
 			setLoading(false);
 		}
@@ -127,7 +127,7 @@ export default function PlatformDashboard() {
 		return (
 			<div className="flex flex-col items-center justify-center py-32 gap-3">
 				<AlertTriangle size={20} className="text-[#ef4444]" />
-				<p className="text-[12px] text-[#737373]">{error ?? "Bilinmeyen hata"}</p>
+				<p className="text-[12px] text-[#737373]">{error ?? "Unknown error"}</p>
 				<button type="button" onClick={load} className="text-[11px] text-[#22c55e] hover:underline">
 					Retry
 				</button>
@@ -148,10 +148,10 @@ export default function PlatformDashboard() {
 		if (!iso) return "-";
 		const diff = Date.now() - new Date(iso).getTime();
 		const mins = Math.floor(diff / 60000);
-		if (mins < 60) return `${mins}dk once`;
+		if (mins < 60) return `${mins}m ago`;
 		const hrs = Math.floor(mins / 60);
-		if (hrs < 24) return `${hrs}sa once`;
-		return `${Math.floor(hrs / 24)}g once`;
+		if (hrs < 24) return `${hrs}h ago`;
+		return `${Math.floor(hrs / 24)}d ago`;
 	};
 
 	return (

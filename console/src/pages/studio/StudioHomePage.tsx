@@ -246,15 +246,15 @@ function recommendTeamCandidate(
 
   let reason = 'Balanced choice based on the current project intake.';
   if (context.projectType === 'landing-page' && best.hasFrontend) {
-    reason = 'Frontend ve tasarım ağırlıklı olduğu için bu takım landing page için daha uygun.';
+    reason = 'Frontend-heavy team recommended for landing page projects.';
   } else if (context.projectType === 'api-service' && best.hasBackend) {
-    reason = 'Backend ve servis teslimatı ağırlıklı olduğu için bu takım API projesine daha uygun.';
+    reason = 'Backend-focused team recommended for API service projects.';
   } else if ((context.projectType === 'dashboard' || context.projectType === 'web-app') && best.hasFrontend && best.hasBackend) {
-    reason = 'Hem arayüz hem uygulama mantığı gerektiği için dengeli bir ürün takımı önerildi.';
+    reason = 'Balanced product team recommended for both UI and application logic.';
   } else if (context.projectType === 'automation' && (best.hasBackend || best.hasDevops)) {
-    reason = 'Otomasyon ve workflow işleri için backend/ops kabiliyeti öne çıktığı için bu takım seçildi.';
+    reason = 'Backend/ops team selected for automation and workflow tasks.';
   } else if (context.previewEnabled && best.hasFrontend) {
-    reason = 'Preview beklentisi olduğu için çalıştırılabilir arayüz odaklı takım tercih edildi.';
+    reason = 'Frontend-focused team preferred for preview-enabled projects.';
   }
 
   return { candidate: best.candidate, reason };
@@ -562,7 +562,7 @@ function CreateProjectModal({ onClose, onCreate }: {
 
   useEffect(() => {
     if (step !== 2 || teamMode !== 'auto' || architectMessages.length > 0 || architectStreaming) return;
-    sendArchitectMessage('Bu intake için en uygun takımı öner. Gerekirse kısa takip soruları sor.');
+    sendArchitectMessage('Recommend the best team for this intake. Ask brief follow-up questions if needed.');
   }, [step, teamMode]);
 
   const handleSubmit = async () => {
@@ -603,7 +603,7 @@ function CreateProjectModal({ onClose, onCreate }: {
           <div>
             <h2 className="text-[18px] font-semibold text-[#fafafa]">New Project</h2>
             <p className="text-[12px] text-[#6b7280] mt-1">
-              Önce brief’i gir, sonra planlamadan önce takımı kur.
+              Enter the brief first, then set up the team before planning.
             </p>
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-[#1f1f1f] text-[#525252] hover:text-[#a3a3a3]">
@@ -645,10 +645,10 @@ function CreateProjectModal({ onClose, onCreate }: {
                 <>
                   <div className="rounded-2xl border border-[#1f1f1f] bg-[linear-gradient(180deg,#121212_0%,#0a0a0a_100%)] px-5 py-5">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 1</p>
-                    <h3 className="text-[15px] font-semibold text-[#fafafa]">Brief’i gir, ihtiyaç sinyalini netleştir.</h3>
+                    <h3 className="text-[15px] font-semibold text-[#fafafa]">Enter your brief, clarify the requirements.</h3>
                     <p className="text-[12px] leading-6 text-[#737373] mt-2 max-w-2xl">
-                      Bu adımda yalnızca ne yapmak istediğini tarif et. Sonraki adımda sistem önce uygun takımı kuracak,
-                      sonra planner bu somut takıma göre detaylı planı çıkaracak.
+                      Just describe what you want to build at this step. In the next step the system will assemble the right team,
+                      then the planner will generate a detailed plan based on that team.
                     </p>
                   </div>
 
@@ -710,7 +710,7 @@ function CreateProjectModal({ onClose, onCreate }: {
                         className="w-full px-3 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none resize-none leading-6"
                       />
                       <p className="text-[11px] text-[#525252] mt-2">
-                        Planner bu metni proje gereksinimi, kapsam ve başarı kriteri olarak yorumlar.
+                        The planner interprets this text as project requirements, scope, and success criteria.
                       </p>
                     </div>
 
@@ -723,9 +723,9 @@ function CreateProjectModal({ onClose, onCreate }: {
                           className="mt-0.5 h-4 w-4 rounded border-[#333] bg-[#111111] text-[#22c55e] focus:ring-[#22c55e]"
                         />
                         <div>
-                          <div className="text-[12px] font-medium text-[#fafafa]">Preview / Run App gerekli</div>
+                          <div className="text-[12px] font-medium text-[#fafafa]">Preview / Run App required</div>
                           <div className="text-[11px] text-[#525252] mt-1 leading-5">
-                            Uygulamayı studio içinde çalıştırıp incelemek istiyorsan açık bırak.
+                            Keep enabled if you want to run and preview the app inside the studio.
                           </div>
                         </div>
                       </label>
