@@ -206,7 +206,7 @@ export default function TerminalSheet({
           {loadingBuffer ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-[#525252]">
               <Loader2 size={16} className="animate-spin" />
-              <span className="text-[11px]">Log tamponu yükleniyor...</span>
+              <span className="text-[11px]">Loading log buffer...</span>
             </div>
           ) : lines.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-[#525252]">

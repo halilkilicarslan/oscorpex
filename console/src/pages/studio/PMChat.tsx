@@ -134,7 +134,7 @@ const CATEGORY_LABELS: Record<IntakeQuestionCategory, string> = {
   scope: 'Kapsam',
   functional: 'Fonksiyonel',
   nonfunctional: 'Non-functional',
-  priority: 'Öncelik',
+  priority: 'Priority',
   technical: 'Teknik',
   general: 'Genel',
 };
@@ -229,7 +229,7 @@ function IntakeQuestionCard({
               submit(customAnswer);
             }
           }}
-          placeholder={question.options.length > 0 ? 'Veya kendi cevabını yaz...' : 'Cevabını yaz...'}
+          placeholder={question.options.length > 0 ? 'Or type your own answer...' : 'Type your answer...'}
           disabled={disabled}
           className="flex-1 px-3 py-1.5 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[12px] text-[#fafafa] placeholder-[#525252] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
         />
@@ -238,7 +238,7 @@ function IntakeQuestionCard({
           disabled={!customAnswer.trim() || disabled}
           onClick={() => submit(customAnswer)}
           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20 hover:bg-[#22c55e]/20 text-[12px] font-medium disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Cevabı gönder"
+          title="Send answer"
         >
           {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
         </button>
@@ -283,7 +283,7 @@ export default function PMChat({
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevStreamingRef = useRef(streaming);
   const createPlanPrompt =
-    'Proje intake bilgilerini ve seçilmiş takım yapısını kullanarak detaylı proje planını şimdi oluştur. Bilgi yeterliyse doğrudan plan-json üret; gereksiz soru sorma.';
+    'Using the project intake information and selected team structure, generate the detailed project plan now. If you have enough information, produce the plan-json directly; do not ask unnecessary questions.';
 
   const refreshIntakeQuestions = useCallback(async () => {
     try {
@@ -353,7 +353,7 @@ export default function PMChat({
 
   const continuePlanningWithAnswers = () => {
     if (streaming) return;
-    sendMessage('Cevapları verdim, lütfen plana devam et veya eksik bilgi varsa tek blokta sor.');
+    sendMessage('I have provided the answers. Please continue with the plan or ask any remaining questions in one block.');
   };
 
   const sendMessage = (prefilledText?: string) => {
@@ -380,7 +380,7 @@ export default function PMChat({
       if (result.pipeline.started) {
         setPipelineToast({
           type: 'success',
-          message: 'Plan onaylandı. Pipeline otomatik olarak baslatildi — Board sekmesinden ilerlemeyi takip edebilirsiniz.',
+          message: 'Plan approved. Pipeline started automatically — track progress from the Board tab.',
         });
       } else if (result.pipeline.warning) {
         setPipelineToast({
@@ -436,7 +436,7 @@ export default function PMChat({
             </div>
             <h3 className="text-[14px] font-medium text-[#a3a3a3] mb-1">Chat with AI Planner</h3>
             <p className="text-[12px] text-[#525252] max-w-sm">
-              Project intake ve takım hazırsa planner’dan tek tıkla detaylı plan oluşturabilirsin.
+              If intake and team are ready, generate a detailed plan with one click.
             </p>
             <button
               type="button"
@@ -445,7 +445,7 @@ export default function PMChat({
               className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-[#22c55e] px-4 py-2.5 text-[13px] font-medium text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <Sparkles size={14} />
-              Planı Oluştur
+              Generate Plan
             </button>
             <p className="mt-2 text-[11px] text-[#525252]">
               Sonrasında gerekiyorsa aynı ekrandan plan güncellemesi isteyebilirsin.
@@ -547,7 +547,7 @@ export default function PMChat({
               className="inline-flex items-center gap-2 rounded-xl bg-[#22c55e]/10 px-3 py-2 text-[12px] font-medium text-[#22c55e] hover:bg-[#22c55e]/20 disabled:opacity-40"
             >
               <Sparkles size={13} />
-              Planı Oluştur
+              Generate Plan
             </button>
           </div>
         )}

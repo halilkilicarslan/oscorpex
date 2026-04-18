@@ -98,11 +98,11 @@ function LogLine({ line }: { line: string }) {
     icon = '?';
   } else if (clean.includes('[result]')) {
     color = 'text-[#525252]'; // dim for tool results
-  } else if (clean.includes('[error]') || clean.includes('Error') || clean.includes('FAIL') || clean.includes('Hata')) {
+  } else if (clean.includes('[error]') || clean.includes('Error') || clean.includes('FAIL') || clean.includes('Failed')) {
     color = 'text-[#ef4444]';
   } else if (clean.includes('[warn]') || clean.includes('Warning')) {
     color = 'text-[#f59e0b]';
-  } else if (clean.includes('Tamamlandı') || clean.includes('completed') || clean.includes('APPROVED')) {
+  } else if (clean.includes('Completed') || clean.includes('completed') || clean.includes('APPROVED')) {
     color = 'text-[#22c55e]';
   } else if (clean.includes('tokens') || clean.includes('$')) {
     color = 'text-[#06b6d4]'; // cyan for cost info

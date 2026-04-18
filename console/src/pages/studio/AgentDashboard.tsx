@@ -245,19 +245,19 @@ function AgentRow({ agent }: AgentRowProps) {
       <div className="flex gap-3 text-center flex-wrap">
         <div className="w-12">
           <p className="text-[13px] font-semibold text-[#fafafa]">{agent.tasksAssigned}</p>
-          <p className="text-[9px] text-[#525252]">Atanan</p>
+          <p className="text-[9px] text-[#525252]">Assigned</p>
         </div>
         <div className="w-12">
           <p className="text-[13px] font-semibold text-[#22c55e]">{agent.tasksCompleted}</p>
-          <p className="text-[9px] text-[#525252]">Biten</p>
+          <p className="text-[9px] text-[#525252]">Done</p>
         </div>
         <div className="w-12">
           <p className="text-[13px] font-semibold text-[#ef4444]">{agent.totalFailures ?? agent.tasksFailed}</p>
-          <p className="text-[9px] text-[#525252]">Hata</p>
+          <p className="text-[9px] text-[#525252]">Failed</p>
         </div>
         <div className="w-12">
           <p className="text-[13px] font-semibold text-[#f97316]">{agent.totalReviewRejections ?? 0}</p>
-          <p className="text-[9px] text-[#525252]">Red</p>
+          <p className="text-[9px] text-[#525252]">Rejected</p>
         </div>
       </div>
 

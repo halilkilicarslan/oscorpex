@@ -150,7 +150,7 @@ export default function DiffViewer({ projectId }: { projectId: string }) {
       // Listeyi yenile
       await load(selectedRef || undefined);
     } catch (err: any) {
-      setRevertError(err?.message || 'Revert işlemi başarısız oldu.');
+      setRevertError(err?.message || 'Revert operation failed.');
     } finally {
       setReverting(false);
     }
@@ -169,15 +169,15 @@ export default function DiffViewer({ projectId }: { projectId: string }) {
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-5 max-w-md w-full mx-4 shadow-2xl">
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle size={16} className="text-[#f59e0b]" />
-              <span className="text-[14px] font-semibold text-[#fafafa]">Commit Geri Al</span>
+              <span className="text-[14px] font-semibold text-[#fafafa]">Revert Commit</span>
             </div>
             <p className="text-[12px] text-[#a3a3a3] mb-2">
-              Aşağıdaki commit geri alınacak. Bu işlem yeni bir revert commit oluşturur ve geri döndürülemez.
+              The following commit will be reverted. This creates a new revert commit and cannot be undone.
             </p>
             <div className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg px-3 py-2 mb-4">
               <span className="text-[11px] font-mono text-[#22c55e]">{revertTarget.hash}</span>
               <p className="text-[12px] text-[#fafafa] mt-0.5 truncate">{revertTarget.message}</p>
-              <p className="text-[11px] text-[#525252] mt-0.5">{revertTarget.author} — {new Date(revertTarget.date).toLocaleDateString('tr-TR')}</p>
+              <p className="text-[11px] text-[#525252] mt-0.5">{revertTarget.author} — {new Date(revertTarget.date).toLocaleDateString('en-US')}</p>
             </div>
             {revertError && (
               <p className="text-[11px] text-[#ef4444] bg-[#ef4444]/10 border border-[#ef4444]/20 rounded px-2 py-1 mb-3">
@@ -190,7 +190,7 @@ export default function DiffViewer({ projectId }: { projectId: string }) {
                 disabled={reverting}
                 className="px-3 py-1.5 rounded-lg border border-[#262626] text-[12px] text-[#a3a3a3] hover:text-[#fafafa] hover:border-[#333] transition-colors disabled:opacity-50"
               >
-                Vazgec
+                Cancel
               </button>
               <button
                 onClick={handleRevertConfirm}
@@ -198,7 +198,7 @@ export default function DiffViewer({ projectId }: { projectId: string }) {
                 className="px-3 py-1.5 rounded-lg bg-[#ef4444]/10 border border-[#ef4444]/30 text-[12px] text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors disabled:opacity-50 flex items-center gap-1.5"
               >
                 {reverting ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
-                {reverting ? 'Geri Alınıyor...' : 'Geri Al'}
+                {reverting ? 'Reverting...' : 'Revert'}
               </button>
             </div>
           </div>

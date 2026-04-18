@@ -64,21 +64,21 @@ const PIPELINE_STATUS_COLORS: Record<string, string> = {
   failed: '#ef4444',
 };
 
-// Pipeline durum etiketleri (Türkçe)
+// Pipeline status labels
 const PIPELINE_STATUS_LABELS: Record<string, string> = {
-  idle: 'Beklemede',
-  running: 'Çalışıyor',
-  paused: 'Duraklatıldı',
-  completed: 'Tamamlandı',
-  failed: 'Hata',
+  idle: 'Idle',
+  running: 'Running',
+  paused: 'Paused',
+  completed: 'Completed',
+  failed: 'Failed',
 };
 
-// Aşama durum etiketleri
+// Stage status labels
 const STAGE_STATUS_LABELS: Record<string, string> = {
-  pending: 'Bekliyor',
-  running: 'Aktif',
-  completed: 'Tamamlandı',
-  failed: 'Hata',
+  pending: 'Pending',
+  running: 'Active',
+  completed: 'Completed',
+  failed: 'Failed',
 };
 
 // Görev durum simgeleri
@@ -232,7 +232,7 @@ function StageCard({
           );
         })}
         {stage.agents.length === 0 && (
-          <span className="text-[10px] text-[#525252] italic">Ajan yok</span>
+          <span className="text-[10px] text-[#525252] italic">No agents</span>
         )}
       </div>
 
@@ -240,7 +240,7 @@ function StageCard({
       <div className="mt-auto">
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] text-[#525252]">
-            {totalTasks > 0 ? `${doneTasks}/${totalTasks} görev` : 'Görev yok'}
+            {totalTasks > 0 ? `${doneTasks}/${totalTasks} tasks` : 'No tasks'}
           </span>
           <span className="text-[10px] text-[#525252]">
             {STAGE_STATUS_LABELS[stage.status]}
@@ -275,14 +275,14 @@ const TASK_STATUS_BADGE: Record<string, string> = {
 };
 
 const TASK_STATUS_LABEL: Record<string, string> = {
-  queued: 'Sırada',
-  assigned: 'Atandı',
-  running: 'Çalışıyor',
-  review: 'İnceleme',
-  revision: 'Revizyon',
-  waiting_approval: 'Onay Bekliyor',
-  done: 'Tamamlandı',
-  failed: 'Hata',
+  queued: 'Queued',
+  assigned: 'Assigned',
+  running: 'Running',
+  review: 'Review',
+  revision: 'Revision',
+  waiting_approval: 'Awaiting Approval',
+  done: 'Done',
+  failed: 'Failed',
 };
 
 function TaskRow({
@@ -317,7 +317,7 @@ function TaskRow({
   const handleReject = async () => {
     setApproving(true);
     try {
-      await rejectTask(projectId, task.id, 'Pipeline üzerinden reddedildi');
+      await rejectTask(projectId, task.id, 'Rejected via pipeline');
       onRefresh();
     } finally {
       setApproving(false);
@@ -343,7 +343,7 @@ function TaskRow({
               onClick={() => onRetryTask(task.id)}
               disabled={retryingTaskId === task.id}
               className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors shrink-0 disabled:opacity-50"
-              title="Görevi yeniden dene"
+              title="Retry task"
             >
               <RotateCcw size={9} className={retryingTaskId === task.id ? 'animate-spin' : ''} />
               Retry
@@ -420,16 +420,16 @@ function StageDetailPanel({
       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-[#1f1f1f]">
         <GitBranch size={14} className="text-[#525252]" />
         <span className="text-[12px] font-semibold text-[#a3a3a3]">
-          Aşama {stage.order} Detayı
+          Stage {stage.order} Details
         </span>
         <span className="text-[10px] text-[#525252] ml-auto">
-          {stage.agents.length} ajan — {stage.tasks.length} görev
+          {stage.agents.length} agents — {stage.tasks.length} tasks
         </span>
       </div>
 
       {/* Her ajan için görev listesi */}
       {stage.agents.length === 0 ? (
-        <p className="text-[12px] text-[#525252] italic">Bu aşamada ajan atanmamış.</p>
+        <p className="text-[12px] text-[#525252] italic">No agents assigned to this stage.</p>
       ) : (
         <div className="flex flex-col gap-3">
           {stage.agents.map((agent) => {
@@ -461,7 +461,7 @@ function StageDetailPanel({
                   <button
                     onClick={() => onOpenTerminal(agent)}
                     className="flex items-center gap-1 ml-auto px-2 py-1 rounded-md text-[10px] font-medium transition-colors text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] border border-transparent"
-                    title="Terminal aç"
+                    title="Open terminal"
                   >
                     <Terminal size={11} />
                     Terminal
@@ -476,7 +476,7 @@ function StageDetailPanel({
                     ))}
                   </div>
                 ) : (
-                  <p className="ml-10 text-[10px] text-[#525252] italic">Atanmış görev yok</p>
+                  <p className="ml-10 text-[10px] text-[#525252] italic">No assigned tasks</p>
                 )}
               </div>
             );
@@ -504,7 +504,7 @@ function StageDetailPanel({
             if (unmatched.length === 0) return null;
             return (
               <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-[#1f1f1f]">
-                <span className="text-[10px] text-[#525252] font-medium">Diğer Görevler</span>
+                <span className="text-[10px] text-[#525252] font-medium">Other Tasks</span>
                 <div className="ml-2 flex flex-col gap-1.5">
                   {unmatched.map((task, idx) => (
                     <TaskRow key={task.id} task={task} isLast={idx === unmatched.length - 1} retryingTaskId={retryingTaskId} onRetryTask={onRetryTask} projectId={projectId} onRefresh={onRefresh} onClickTask={onClickTask} />
@@ -568,7 +568,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
       if (err instanceof Error && err.message.includes('404')) {
         setPipelineState(null);
       } else {
-        setError(err instanceof Error ? err.message : 'Durum alınamadı');
+        setError(err instanceof Error ? err.message : 'Failed to fetch status');
       }
     } finally {
       setLoading(false);
@@ -598,7 +598,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
       setPipelineState(state);
       setSelectedStageIdx(state.currentStage ?? 0);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Pipeline başlatılamadı');
+      setError(err instanceof Error ? err.message : 'Failed to start pipeline');
     } finally {
       setActionLoading(false);
     }
@@ -612,7 +612,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
       await pausePipeline(projectId);
       await fetchStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Pipeline durdurulamadı');
+      setError(err instanceof Error ? err.message : 'Failed to pause pipeline');
     } finally {
       setActionLoading(false);
     }
@@ -640,7 +640,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
       const state = await advancePipeline(projectId);
       setPipelineState(state);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'İlerleme sağlanamadı');
+      setError(err instanceof Error ? err.message : 'Failed to advance');
     } finally {
       setActionLoading(false);
     }
@@ -664,9 +664,9 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
           <div className="w-14 h-14 rounded-2xl bg-[#111111] border border-[#262626] flex items-center justify-center mb-4">
             <GitBranch size={24} className="text-[#525252]" />
           </div>
-          <h3 className="text-[15px] font-semibold text-[#a3a3a3] mb-1">Pipeline Başlatılmamış</h3>
+          <h3 className="text-[15px] font-semibold text-[#a3a3a3] mb-1">Pipeline Not Started</h3>
           <p className="text-[12px] text-[#525252] max-w-xs mb-6">
-            Pipeline'ı başlatarak ajan ekibinizi otomatik çalıştırabilir ve aşamaları takip edebilirsiniz.
+            Start the pipeline to automatically run your agent team and track stages.
           </p>
           {error && (
             <p className="text-[11px] text-[#ef4444] mb-4 bg-[#ef4444]/10 px-3 py-1.5 rounded-lg">
@@ -683,7 +683,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
             ) : (
               <Play size={14} />
             )}
-            Pipeline Başlat
+            Start Pipeline
           </button>
         </div>
       </div>
@@ -746,7 +746,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#22c55e] hover:bg-[#16a34a] text-[#0a0a0a] text-[11px] font-semibold transition-colors disabled:opacity-50"
             >
               {actionLoading ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-              Başlat
+              Start
             </button>
           )}
 
@@ -758,7 +758,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#262626] text-[#f59e0b] text-[11px] font-medium transition-colors disabled:opacity-50"
             >
               {actionLoading ? <Loader2 size={12} className="animate-spin" /> : <Pause size={12} />}
-              Duraklat
+              Pause
             </button>
           )}
 
@@ -770,7 +770,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#262626] text-[#22c55e] text-[11px] font-medium transition-colors disabled:opacity-50"
             >
               {actionLoading ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
-              Devam Et
+              Resume
             </button>
           )}
 
@@ -780,10 +780,10 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
               onClick={handleAdvance}
               disabled={actionLoading}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#262626] text-[#525252] hover:text-[#a3a3a3] text-[11px] font-medium transition-colors disabled:opacity-50"
-              title="Sonraki aşamaya geç (test)"
+              title="Advance to next stage (test)"
             >
               {actionLoading ? <Loader2 size={12} className="animate-spin" /> : <SkipForward size={12} />}
-              İlerle
+              Advance
             </button>
           )}
         </div>
@@ -826,7 +826,7 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
           {/* Aşama yoksa bilgi mesajı */}
           {stages.length === 0 && (
             <p className="text-[12px] text-[#525252] italic">
-              Aşama bilgisi henüz yüklenmedi.
+              No stage data loaded yet.
             </p>
           )}
         </div>
@@ -841,10 +841,10 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#0e1a12] border border-[#22c55e]/30">
             <CheckCircle2 size={16} className="text-[#22c55e] shrink-0" />
             <div>
-              <p className="text-[12px] font-semibold text-[#22c55e]">Pipeline Tamamlandı</p>
+              <p className="text-[12px] font-semibold text-[#22c55e]">Pipeline Completed</p>
               {pipelineState.completedAt && (
                 <p className="text-[11px] text-[#525252]">
-                  {new Date(pipelineState.completedAt).toLocaleString('tr-TR')}
+                  {new Date(pipelineState.completedAt).toLocaleString('en-US')}
                 </p>
               )}
             </div>
@@ -856,9 +856,9 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#1a0e0e] border border-[#ef4444]/30">
             <XCircle size={16} className="text-[#ef4444] shrink-0" />
             <div>
-              <p className="text-[12px] font-semibold text-[#ef4444]">Pipeline Başarısız</p>
+              <p className="text-[12px] font-semibold text-[#ef4444]">Pipeline Failed</p>
               <p className="text-[11px] text-[#525252]">
-                Hata veren aşamayı inceleyip pipeline'ı yeniden başlatın.
+                Inspect the failing stage and restart the pipeline.
               </p>
             </div>
           </div>

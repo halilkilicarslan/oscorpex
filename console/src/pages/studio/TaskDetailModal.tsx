@@ -328,7 +328,7 @@ export default function TaskDetailModal({
 
           {/* Agent & Review info */}
           <div className="grid grid-cols-2 gap-4">
-            <Section title="Atanan Ajan">
+            <Section title="Assigned Agent">
               {agent ? (
                 <div className="flex items-center gap-2">
                   <AgentAvatarImg avatar={agent.avatar} name={agent.name} size="sm" />
@@ -597,7 +597,7 @@ export default function TaskDetailModal({
               onClick={onClose}
               className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-[#1f1f1f] text-[#a3a3a3] hover:bg-[#262626] hover:text-[#e5e5e5] transition-colors"
             >
-              Kapat
+              Close
             </button>
           </div>
         </div>

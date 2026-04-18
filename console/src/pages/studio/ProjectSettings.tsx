@@ -69,7 +69,7 @@ const WIDGETS: WidgetDef[] = [
     color: '#a78bfa',
     description: 'Kod kalitesi analizi ve quality gate kontrolu. Docker uzerinde calisir.',
     fields: [
-      { key: 'enabled', label: 'Aktif', type: 'toggle', defaultValue: 'false' },
+      { key: 'enabled', label: 'Enabled', type: 'toggle', defaultValue: 'false' },
       { key: 'hostUrl', label: 'Host URL', type: 'text', placeholder: 'http://localhost:9000', defaultValue: 'http://localhost:9000' },
       { key: 'token', label: 'Token', type: 'password', placeholder: 'squ_...', defaultValue: '' },
     ],
@@ -81,10 +81,10 @@ const WIDGETS: WidgetDef[] = [
     color: '#60a5fa',
     description: 'Task tamamlandiginda otomatik eslint --fix calistirir.',
     fields: [
-      { key: 'enabled', label: 'Aktif', type: 'toggle', defaultValue: 'true' },
+      { key: 'enabled', label: 'Enabled', type: 'toggle', defaultValue: 'true' },
       {
         key: 'preset',
-        label: 'Kural Seti',
+        label: 'Rule Set',
         type: 'select',
         options: [
           { label: 'Recommended', value: 'recommended' },
@@ -102,15 +102,15 @@ const WIDGETS: WidgetDef[] = [
     color: '#f472b6',
     description: 'Task tamamlandiginda otomatik prettier --write calistirir.',
     fields: [
-      { key: 'enabled', label: 'Aktif', type: 'toggle', defaultValue: 'true' },
+      { key: 'enabled', label: 'Enabled', type: 'toggle', defaultValue: 'true' },
       { key: 'printWidth', label: 'Print Width', type: 'number', placeholder: '100', defaultValue: '100' },
       {
         key: 'singleQuote',
         label: 'Single Quote',
         type: 'select',
         options: [
-          { label: 'Evet', value: 'true' },
-          { label: 'Hayir', value: 'false' },
+          { label: 'Yes', value: 'true' },
+          { label: 'No', value: 'false' },
         ],
         defaultValue: 'true',
       },
@@ -148,7 +148,7 @@ const WIDGETS: WidgetDef[] = [
       },
       { key: 'model', label: 'Model', type: 'text', placeholder: 'gpt-4o', defaultValue: '' },
       { key: 'maxRetries', label: 'Max Retries', type: 'number', placeholder: '8', defaultValue: '8' },
-      { key: 'timeout', label: 'Timeout (dk)', type: 'number', placeholder: '5', defaultValue: '5' },
+      { key: 'timeout', label: 'Timeout (min)', type: 'number', placeholder: '5', defaultValue: '5' },
     ],
   },
   {
@@ -158,7 +158,7 @@ const WIDGETS: WidgetDef[] = [
     color: '#fbbf24',
     description: 'Agent rollere gore docs/ dosyalarini otomatik doldurur.',
     fields: [
-      { key: 'enabled', label: 'Aktif', type: 'toggle', defaultValue: 'true' },
+      { key: 'enabled', label: 'Enabled', type: 'toggle', defaultValue: 'true' },
       { key: 'projectMd', label: 'PROJECT.md (PM)', type: 'toggle', defaultValue: 'true' },
       { key: 'architectureMd', label: 'ARCHITECTURE.md (Architect)', type: 'toggle', defaultValue: 'true' },
       { key: 'apiContractMd', label: 'API_CONTRACT.md (Backend)', type: 'toggle', defaultValue: 'true' },
@@ -172,9 +172,9 @@ const WIDGETS: WidgetDef[] = [
     color: '#f87171',
     description: 'Proje bazinda maliyet limiti. Limit asildiginda execution durur.',
     fields: [
-      { key: 'enabled', label: 'Aktif', type: 'toggle', defaultValue: 'false' },
-      { key: 'maxCostUsd', label: 'Max Maliyet ($)', type: 'number', placeholder: '10.00', defaultValue: '' },
-      { key: 'warningThreshold', label: 'Uyari Esigi ($)', type: 'number', placeholder: '8.00', defaultValue: '' },
+      { key: 'enabled', label: 'Enabled', type: 'toggle', defaultValue: 'false' },
+      { key: 'maxCostUsd', label: 'Max Cost ($)', type: 'number', placeholder: '10.00', defaultValue: '' },
+      { key: 'warningThreshold', label: 'Warning Threshold ($)', type: 'number', placeholder: '8.00', defaultValue: '' },
     ],
   },
   {
@@ -184,13 +184,13 @@ const WIDGETS: WidgetDef[] = [
     color: '#facc15',
     description: 'Ajan performans skoru agirlik ve baseline ayarlari.',
     fields: [
-      { key: 'w_success', label: 'Basari Orani Agirligi (%)', type: 'number', placeholder: '30', defaultValue: '30' },
-      { key: 'w_firstPass', label: 'Ilk Gecis Agirligi (%)', type: 'number', placeholder: '25', defaultValue: '25' },
-      { key: 'w_review', label: 'Review Onay Agirligi (%)', type: 'number', placeholder: '20', defaultValue: '20' },
-      { key: 'w_time', label: 'Hiz Agirligi (%)', type: 'number', placeholder: '15', defaultValue: '15' },
-      { key: 'w_cost', label: 'Maliyet Agirligi (%)', type: 'number', placeholder: '10', defaultValue: '10' },
-      { key: 'baselineTimeMin', label: 'Hiz Baseline (dk)', type: 'number', placeholder: '30', defaultValue: '30' },
-      { key: 'baselineCostUsd', label: 'Maliyet Baseline ($)', type: 'number', placeholder: '0.50', defaultValue: '0.50' },
+      { key: 'w_success', label: 'Success Rate Weight (%)', type: 'number', placeholder: '30', defaultValue: '30' },
+      { key: 'w_firstPass', label: 'First Pass Weight (%)', type: 'number', placeholder: '25', defaultValue: '25' },
+      { key: 'w_review', label: 'Review Approval Weight (%)', type: 'number', placeholder: '20', defaultValue: '20' },
+      { key: 'w_time', label: 'Speed Weight (%)', type: 'number', placeholder: '15', defaultValue: '15' },
+      { key: 'w_cost', label: 'Cost Weight (%)', type: 'number', placeholder: '10', defaultValue: '10' },
+      { key: 'baselineTimeMin', label: 'Speed Baseline (min)', type: 'number', placeholder: '30', defaultValue: '30' },
+      { key: 'baselineCostUsd', label: 'Cost Baseline ($)', type: 'number', placeholder: '0.50', defaultValue: '0.50' },
     ],
   },
   {
@@ -213,8 +213,8 @@ const WIDGETS: WidgetDef[] = [
     color: '#fb923c',
     description: 'Task dispatch oncesi politika kontrolu. Asim durumunda task bloklanir veya uyari verilir.',
     fields: [
-      { key: 'task_budget_usd', label: 'Task Basina Maks Maliyet ($)', type: 'number', placeholder: '5.00', defaultValue: '' },
-      { key: 'multi_reviewer_pattern', label: 'Coklu Reviewer Pattern (regex)', type: 'text', placeholder: 'src/auth/.*', defaultValue: '' },
+      { key: 'task_budget_usd', label: 'Max Cost per Task ($)', type: 'number', placeholder: '5.00', defaultValue: '' },
+      { key: 'multi_reviewer_pattern', label: 'Multi Reviewer Pattern (regex)', type: 'text', placeholder: 'src/auth/.*', defaultValue: '' },
     ],
   },
 ];
@@ -344,7 +344,7 @@ function WidgetCard({
         <span className="ml-auto flex items-center gap-2">
           {saved && (
             <span className="flex items-center gap-1 text-[10px] text-[#22c55e]">
-              <CheckCircle2 size={10} /> Kaydedildi
+              <CheckCircle2 size={10} /> Saved
             </span>
           )}
           <button
@@ -353,7 +353,7 @@ function WidgetCard({
             className="flex items-center gap-1 text-[10px] text-[#525252] hover:text-[#a3a3a3] transition-colors disabled:opacity-50"
           >
             {saving ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
-            Kaydet
+            Save
           </button>
         </span>
       </div>
@@ -432,17 +432,17 @@ function WidgetCard({
 // ---------------------------------------------------------------------------
 
 const WEBHOOK_EVENTS: { value: WebhookEventType; label: string }[] = [
-  { value: 'task_completed',         label: 'Görev Tamamlandı' },
-  { value: 'task_failed',            label: 'Görev Başarısız' },
-  { value: 'task_approval_required', label: 'Onay Bekliyor' },
-  { value: 'task_approved',          label: 'Görev Onaylandı' },
-  { value: 'task_rejected',          label: 'Görev Reddedildi' },
-  { value: 'pipeline_completed',     label: 'Pipeline Bitti' },
-  { value: 'execution_error',        label: 'Çalışma Hatası' },
-  { value: 'budget_warning',         label: 'Bütçe Uyarısı' },
-  { value: 'plan_approved',          label: 'Plan Onaylandı' },
-  { value: 'agent_started',          label: 'Agent Başladı' },
-  { value: 'agent_stopped',          label: 'Agent Durdu' },
+  { value: 'task_completed',         label: 'Task Completed' },
+  { value: 'task_failed',            label: 'Task Failed' },
+  { value: 'task_approval_required', label: 'Approval Required' },
+  { value: 'task_approved',          label: 'Task Approved' },
+  { value: 'task_rejected',          label: 'Task Rejected' },
+  { value: 'pipeline_completed',     label: 'Pipeline Completed' },
+  { value: 'execution_error',        label: 'Execution Error' },
+  { value: 'budget_warning',         label: 'Budget Warning' },
+  { value: 'plan_approved',          label: 'Plan Approved' },
+  { value: 'agent_started',          label: 'Agent Started' },
+  { value: 'agent_stopped',          label: 'Agent Stopped' },
 ];
 
 const WEBHOOK_TYPE_LABELS: Record<WebhookType, { label: string; color: string }> = {
@@ -501,7 +501,7 @@ function WebhookModal({ projectId, initial, onClose, onSaved }: WebhookModalProp
       }
       onSaved(saved);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Kaydetme basarisiz');
+      setErr(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -608,7 +608,7 @@ function WebhookModal({ projectId, initial, onClose, onSaved }: WebhookModalProp
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#22c55e] hover:bg-[#16a34a] text-black text-[11px] font-medium rounded-md transition-colors disabled:opacity-50"
           >
             {saving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
-            Kaydet
+            Save
           </button>
         </div>
       </div>
@@ -640,7 +640,7 @@ function WebhookRow({
     setTestMsg(null);
     try {
       const res = await testWebhook(projectId, webhook.id);
-      setTestMsg(res.success ? 'Test gonderildi!' : 'Test basarisiz');
+      setTestMsg(res.success ? 'Test sent!' : 'Test failed');
       setTimeout(() => setTestMsg(null), 3000);
     } catch {
       setTestMsg('Test hatasi');
@@ -874,7 +874,7 @@ const BUILTIN_RULES_INFO: { id: string; name: string; description: string; setti
   {
     id: 'max_cost_per_task',
     name: 'Max cost per task',
-    description: 'Tek bir gorevin toplam maliyeti butce tavanini asarsa bloklar.',
+    description: 'Blocks if a single task total cost exceeds the budget ceiling.',
     setting: 'budget.maxCostUsd > 0 iken aktif',
   },
   {
@@ -1047,7 +1047,7 @@ function PolicyRuleModal({ projectId, initial, onClose, onSave }: PolicyRuleModa
             onClick={handleSave}
             className="px-3 py-1.5 text-[10px] bg-[#22c55e] text-black font-medium rounded hover:bg-[#16a34a] transition-colors"
           >
-            Kaydet
+            Save
           </button>
         </div>
       </div>
@@ -1258,7 +1258,7 @@ function PolicySection({ projectId }: { projectId: string }) {
           {saved && (
             <span className="flex items-center gap-1 text-[10px] text-[#22c55e]">
               <CheckCircle2 size={10} />
-              Kaydedildi
+              Saved
             </span>
           )}
           <button
@@ -1380,8 +1380,8 @@ function PolicySection({ projectId }: { projectId: string }) {
 
 const TIER_INFO: { key: 'S' | 'M' | 'L' | 'XL'; label: string; description: string }[] = [
   { key: 'S',  label: 'Small',   description: 'Classification, intake cleanup, metadata' },
-  { key: 'M',  label: 'Medium',  description: 'Standart taskler, planner first pass' },
-  { key: 'L',  label: 'Large',   description: 'Karmasik taskler, refactor, multi-file' },
+  { key: 'M',  label: 'Medium',  description: 'Standard tasks, planner first pass' },
+  { key: 'L',  label: 'Large',   description: 'Complex tasks, refactor, multi-file' },
   { key: 'XL', label: 'Extra-L', description: 'Hard repair, high-risk, complex review' },
 ];
 
@@ -1460,7 +1460,7 @@ function ModelRoutingSection({ projectId }: { projectId: string }) {
           {saved && (
             <span className="flex items-center gap-1 text-[10px] text-[#22c55e]">
               <CheckCircle2 size={10} />
-              Kaydedildi
+              Saved
             </span>
           )}
           <button
@@ -1471,7 +1471,7 @@ function ModelRoutingSection({ projectId }: { projectId: string }) {
             title="Default degerlere sifirla"
           >
             <RotateCcw size={10} />
-            Sifirla
+            Reset
           </button>
           <button
             type="button"
@@ -1480,7 +1480,7 @@ function ModelRoutingSection({ projectId }: { projectId: string }) {
             className="flex items-center gap-1 px-2 py-1 text-[10px] bg-[#22c55e] text-black font-medium rounded hover:bg-[#16a34a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {saving ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
-            Kaydet
+            Save
           </button>
         </span>
       </div>
@@ -1632,7 +1632,7 @@ function FactRow({
             onClick={handleSave}
             disabled={busy}
             className="p-1 text-[#22c55e] hover:bg-[#22c55e]/10 rounded transition-colors disabled:opacity-40"
-            title="Kaydet"
+            title="Save"
           >
             {busy ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
           </button>
@@ -1734,7 +1734,7 @@ function MemorySection({ projectId }: { projectId: string }) {
       const ctx = await fetchMemoryContext(projectId).catch(() => '');
       setContextText(ctx);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Refresh basarisiz');
+      setError(e instanceof Error ? e.message : 'Refresh failed');
     } finally {
       setRefreshing(false);
     }

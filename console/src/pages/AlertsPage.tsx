@@ -307,7 +307,7 @@ export default function AlertsPage() {
   async function submitForm(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) {
-      setFormError('Kural adı zorunludur.');
+      setFormError('Rule name is required.');
       return;
     }
     setFormLoading(true);
@@ -339,21 +339,21 @@ export default function AlertsPage() {
       });
       if (!res.ok) {
         const err = await res.json() as { error?: string };
-        setFormError(err.error ?? 'İşlem başarısız oldu.');
+        setFormError(err.error ?? 'Operation failed.');
         return;
       }
       closeForm();
       void loadRules();
       void loadStats();
     } catch {
-      setFormError('Sunucuya bağlanılamadı.');
+      setFormError('Could not connect to server.');
     } finally {
       setFormLoading(false);
     }
   }
 
   async function deleteRule(id: string) {
-    if (!confirm('Bu kuralı silmek istediğinizden emin misiniz?')) return;
+    if (!confirm('Are you sure you want to delete this rule?')) return;
     try {
       await fetch(`${API_BASE}/alerts/${id}`, { method: 'DELETE' });
       void loadRules();
@@ -413,7 +413,7 @@ export default function AlertsPage() {
           </div>
           <div>
             <h1 className="text-base font-semibold text-[#fafafa]">Alerts</h1>
-            <p className="text-xs text-[#525252]">Uyarı kuralları ve geçmiş</p>
+            <p className="text-xs text-[#525252]">Alert rules and history</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -434,7 +434,7 @@ export default function AlertsPage() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs bg-[#111111] text-[#a3a3a3] border border-[#262626] hover:border-[#3f3f46] transition-colors"
           >
             <RefreshCw className="w-3 h-3" />
-            Yenile
+            Refresh
           </button>
         </div>
       </div>
@@ -502,17 +502,17 @@ export default function AlertsPage() {
                 {/* Ad */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] text-[#525252] mb-1">Kural Adı *</label>
+                    <label className="block text-[11px] text-[#525252] mb-1">Rule Name *</label>
                     <input
                       type="text"
                       value={form.name}
                       onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                      placeholder="Örn: High Error Rate"
+                      placeholder="e.g. High Error Rate"
                       className="w-full px-2.5 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-[#525252] mb-1">Tip *</label>
+                    <label className="block text-[11px] text-[#525252] mb-1">Type *</label>
                     <select
                       value={form.type}
                       onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as AlertType }))}
@@ -527,12 +527,12 @@ export default function AlertsPage() {
 
                 {/* Açıklama */}
                 <div>
-                  <label className="block text-[11px] text-[#525252] mb-1">Açıklama</label>
+                  <label className="block text-[11px] text-[#525252] mb-1">Description</label>
                   <input
                     type="text"
                     value={form.description}
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                    placeholder="Opsiyonel açıklama..."
+                    placeholder="Optional description..."
                     className="w-full px-2.5 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]"
                   />
                 </div>
@@ -540,7 +540,7 @@ export default function AlertsPage() {
                 {/* Condition */}
                 <div className="grid grid-cols-4 gap-2">
                   <div>
-                    <label className="block text-[11px] text-[#525252] mb-1">Metrik</label>
+                    <label className="block text-[11px] text-[#525252] mb-1">Metric</label>
                     <select
                       value={form.metric}
                       onChange={(e) => setForm((f) => ({ ...f, metric: e.target.value }))}
@@ -552,7 +552,7 @@ export default function AlertsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] text-[#525252] mb-1">Operatör</label>
+                    <label className="block text-[11px] text-[#525252] mb-1">Operator</label>
                     <select
                       value={form.operator}
                       onChange={(e) => setForm((f) => ({ ...f, operator: e.target.value as ConditionOperator }))}
@@ -564,7 +564,7 @@ export default function AlertsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] text-[#525252] mb-1">Eşik</label>
+                    <label className="block text-[11px] text-[#525252] mb-1">Threshold</label>
                     <input
                       type="number"
                       value={form.threshold}
@@ -573,7 +573,7 @@ export default function AlertsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-[#525252] mb-1">Pencere (dk)</label>
+                    <label className="block text-[11px] text-[#525252] mb-1">Window (min)</label>
                     <input
                       type="number"
                       value={form.window_minutes}
@@ -586,7 +586,7 @@ export default function AlertsPage() {
                 {/* Cooldown + Enabled */}
                 <div className="grid grid-cols-2 gap-3 items-end">
                   <div>
-                    <label className="block text-[11px] text-[#525252] mb-1">Cooldown (dk)</label>
+                    <label className="block text-[11px] text-[#525252] mb-1">Cooldown (min)</label>
                     <input
                       type="number"
                       value={form.cooldown_minutes}
@@ -605,7 +605,7 @@ export default function AlertsPage() {
                         : <ToggleLeft className="w-6 h-6" />}
                     </button>
                     <span className="text-xs text-[#a3a3a3]">
-                      {form.enabled ? 'Etkin' : 'Devre dışı'}
+                      {form.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </div>
                 </div>
@@ -631,7 +631,7 @@ export default function AlertsPage() {
                     onClick={closeForm}
                     className="px-4 py-1.5 text-xs bg-[#1c1c1c] text-[#a3a3a3] border border-[#262626] rounded-md hover:border-[#3f3f46] transition-colors"
                   >
-                    İptal
+                    Cancel
                   </button>
                 </div>
               </form>
@@ -647,12 +647,12 @@ export default function AlertsPage() {
             ) : rules.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 gap-3">
                 <Bell className="w-8 h-8 text-[#262626]" />
-                <p className="text-sm text-[#525252]">Henüz uyarı kuralı yok</p>
+                <p className="text-sm text-[#525252]">No alert rules yet</p>
                 <button
                   onClick={openCreate}
                   className="text-xs text-[#22c55e] hover:underline"
                 >
-                  İlk kuralı oluştur
+                  Create your first rule
                 </button>
               </div>
             ) : (
@@ -697,7 +697,7 @@ export default function AlertsPage() {
                           <div className="flex items-center gap-3 mt-1.5 text-[11px] text-[#525252]">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
-                              {rule.cooldown_minutes}dk cooldown
+                              {rule.cooldown_minutes}m cooldown
                             </span>
                             {rule.last_triggered_at && (
                               <span className="flex items-center gap-1 text-[#f59e0b]">
@@ -713,7 +713,7 @@ export default function AlertsPage() {
                           {/* Toggle */}
                           <button
                             onClick={() => void toggleRule(rule.id)}
-                            title={rule.enabled ? 'Devre dışı bırak' : 'Etkinleştir'}
+                            title={rule.enabled ? 'Disable' : 'Enable'}
                             className="p-1.5 rounded-md hover:bg-[#1c1c1c] text-[#525252] hover:text-[#a3a3a3] transition-colors"
                           >
                             {rule.enabled
@@ -767,7 +767,7 @@ export default function AlertsPage() {
                 <option value="acknowledged">Acknowledged</option>
                 <option value="resolved">Resolved</option>
               </select>
-              <span className="text-[11px] text-[#525252]">{historyTotal} toplam</span>
+              <span className="text-[11px] text-[#525252]">{historyTotal} total</span>
             </div>
           </div>
 
@@ -780,7 +780,7 @@ export default function AlertsPage() {
             ) : history.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 gap-3">
                 <CheckCircle2 className="w-8 h-8 text-[#262626]" />
-                <p className="text-sm text-[#525252]">Henüz uyarı yok</p>
+                <p className="text-sm text-[#525252]">No alerts yet</p>
               </div>
             ) : (
               <div className="p-4">
@@ -879,7 +879,7 @@ export default function AlertsPage() {
                       onClick={() => setHistoryPage((p) => p - 1)}
                       className="px-3 py-1 text-xs bg-[#111111] text-[#a3a3a3] border border-[#262626] rounded-md disabled:opacity-30 hover:border-[#3f3f46] transition-colors"
                     >
-                      Önceki
+                      Previous
                     </button>
                     <span className="text-xs text-[#525252]">
                       {historyPage + 1} / {totalHistoryPages}
@@ -889,7 +889,7 @@ export default function AlertsPage() {
                       onClick={() => setHistoryPage((p) => p + 1)}
                       className="px-3 py-1 text-xs bg-[#111111] text-[#a3a3a3] border border-[#262626] rounded-md disabled:opacity-30 hover:border-[#3f3f46] transition-colors"
                     >
-                      Sonraki
+                      Next
                     </button>
                   </div>
                 )}

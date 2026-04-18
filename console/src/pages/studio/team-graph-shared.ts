@@ -57,16 +57,16 @@ export const EDGE_LABELS: Record<string, string> = {
 };
 
 export const EDGE_DESCRIPTIONS: Record<string, string> = {
-  hierarchy: 'Raporlama hiyerarşisi. Bloklayıcı değildir, sadece organizasyonel yapı.',
-  workflow: 'Kaynak ajan hedef ajanı besler; hedef, kaynak tamamlanmadan çalışamaz.',
-  review: 'Hedef ajan, kaynak ajanın çıktısını inceler. Reddedilirse kaynak yeniden çalışır.',
-  gate: 'Onay kapısı — hedef, kaynaktan gelen onay olmadan ilerleyemez.',
-  escalation: 'Kaynak belirli sayıda başarısız olursa hedef ajana yükseltme yapılır.',
-  pair: "İki ajan aynı task üzerinde aynı wave'de paralel çalışır.",
-  conditional: 'Çalışma zamanı koşulu sağlanırsa aktif olur (örn: security-sensitive dosya).',
-  fallback: 'Kaynak başarısız olursa hedef ajan alternatif olarak devreye girer.',
-  notification: 'Bilgilendirme amaçlı, non-blocking mesaj.',
-  handoff: 'Formal iş devri — dokümantasyon gerektirir.',
-  approval: "Tek task için onay kapısı; tüm phase'i bloklayabilir.",
-  mentoring: 'Danışmanlık / feedback ilişkisi, bloklayıcı değildir.',
+  hierarchy: 'Reporting hierarchy. Non-blocking, organizational structure only.',
+  workflow: 'Source agent feeds target agent; target cannot run until source completes.',
+  review: 'Target agent reviews source agent output. If rejected, source re-runs.',
+  gate: 'Approval gate — target cannot proceed without approval from source.',
+  escalation: 'If source fails a certain number of times, escalation to target agent.',
+  pair: 'Two agents work in parallel on the same task in the same wave.',
+  conditional: 'Activates when a runtime condition is met (e.g. security-sensitive file).',
+  fallback: 'If source fails, target agent takes over as an alternative.',
+  notification: 'Informational, non-blocking message.',
+  handoff: 'Formal work handoff — requires documentation.',
+  approval: 'Single-task approval gate; can block the entire phase.',
+  mentoring: 'Advisory / feedback relationship, non-blocking.',
 };
