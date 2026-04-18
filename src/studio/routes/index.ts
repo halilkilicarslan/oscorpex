@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { seedPresetAgents, seedTeamTemplates } from "../db.js";
 import { initContextSession } from "../context-session.js";
 import { eventBus } from "../event-bus.js";
@@ -110,6 +111,42 @@ eventBus.on("budget:warning", (event) => {
 // ---------------------------------------------------------------------------
 
 const studio = new Hono();
+
+// ---------------------------------------------------------------------------
+// CORS — Allow configured origins (default: localhost dev ports)
+// ---------------------------------------------------------------------------
+const allowedOrigins = (process.env.OSCORPEX_CORS_ORIGINS ?? "http://localhost:5173,http://localhost:4242")
+	.split(",")
+	.map((o) => o.trim())
+	.filter(Boolean);
+
+studio.use(
+	"*",
+	cors({
+		origin: allowedOrigins,
+		allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+		allowHeaders: ["Content-Type", "Authorization"],
+		maxAge: 86400,
+	}),
+);
+
+// ---------------------------------------------------------------------------
+// Auth middleware — Bearer token (opt-in via OSCORPEX_API_KEY env var)
+// Skips SSE streams to avoid breaking EventSource connections.
+// ---------------------------------------------------------------------------
+const apiKey = process.env.OSCORPEX_API_KEY;
+if (apiKey) {
+	studio.use("*", async (c, next) => {
+		// Skip SSE/EventSource (Accept: text/event-stream) — browser EventSource can't set headers
+		if (c.req.header("accept")?.includes("text/event-stream")) return next();
+
+		const authHeader = c.req.header("authorization");
+		if (!authHeader || authHeader !== `Bearer ${apiKey}`) {
+			return c.json({ error: "Unauthorized" }, 401);
+		}
+		return next();
+	});
+}
 
 // Budget guard — execution route'larına uygula
 studio.use("/projects/:id/execute*", budgetGuard());

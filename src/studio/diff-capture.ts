@@ -3,7 +3,7 @@
 // Captures git diffs for task-modified files after task completion.
 // ---------------------------------------------------------------------------
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { insertTaskDiffs } from "./db.js";
 import type { TaskOutput } from "./types.js";
 
@@ -41,20 +41,33 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 	try {
 		let diff: string;
 		if (diffType === "created") {
-			// For new files, show full content as diff
-			diff = execSync(`git diff --no-color -- /dev/null "${filePath}" 2>/dev/null || git show HEAD:"${filePath}" 2>/dev/null || echo ""`, {
-				cwd: repoPath,
-				encoding: "utf-8",
-				timeout: 5000,
-			}).trim();
+			// For new files — use execFileSync with array args to prevent command injection
+			try {
+				diff = execFileSync("git", ["diff", "--no-color", "--", "/dev/null", filePath], {
+					cwd: repoPath,
+					encoding: "utf-8",
+					timeout: 5000,
+				}).trim();
+			} catch {
+				// Fallback: git show
+				try {
+					diff = execFileSync("git", ["show", `HEAD:${filePath}`], {
+						cwd: repoPath,
+						encoding: "utf-8",
+						timeout: 5000,
+					}).trim();
+				} catch {
+					diff = "";
+				}
+			}
 
 			if (!diff) {
 				// Fallback: just mark as created with no diff content
 				return { filePath, diffContent: `+++ ${filePath}\n(new file)`, diffType, linesAdded: 0, linesRemoved: 0 };
 			}
 		} else {
-			// For modified files, get the diff from HEAD
-			diff = execSync(`git diff --no-color HEAD -- "${filePath}" 2>/dev/null`, {
+			// For modified files — array args prevent shell injection via filePath
+			diff = execFileSync("git", ["diff", "--no-color", "HEAD", "--", filePath], {
 				cwd: repoPath,
 				encoding: "utf-8",
 				timeout: 5000,
@@ -62,7 +75,7 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 
 			if (!diff) {
 				// Try staged diff
-				diff = execSync(`git diff --no-color --cached -- "${filePath}" 2>/dev/null`, {
+				diff = execFileSync("git", ["diff", "--no-color", "--cached", "--", filePath], {
 					cwd: repoPath,
 					encoding: "utf-8",
 					timeout: 5000,

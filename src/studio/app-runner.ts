@@ -9,7 +9,7 @@
 //   4. Project settings override (DB'den)
 // ---------------------------------------------------------------------------
 
-import { type ChildProcess, execSync, spawn } from "child_process";
+import { type ChildProcess, execFileSync, execSync, spawn } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getDbConnectionInfo, provisionDatabase } from "./db-provisioner.js";
@@ -446,7 +446,7 @@ async function postStartHealthCheck(port: number, maxRetries = 5): Promise<boole
 
 function isPortInUse(port: number): boolean {
 	try {
-		execSync(`lsof -ti:${port}`, { stdio: "pipe", timeout: 2000 });
+		execFileSync("lsof", ["-ti", `:${port}`], { stdio: "pipe", timeout: 2000 });
 		return true;
 	} catch {
 		return false;

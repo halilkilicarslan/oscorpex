@@ -8,6 +8,14 @@ import { gitManager } from "../git-manager.js";
 
 export const gitFileRoutes = new Hono();
 
+/** Validate file path — reject directory traversal attempts */
+function validateFilePath(filePath: string): string | null {
+	if (!filePath) return "File path required";
+	if (filePath.includes("..")) return "Invalid file path: directory traversal not allowed";
+	if (filePath.startsWith("/")) return "Invalid file path: absolute paths not allowed";
+	return null;
+}
+
 // ---- Files & Git ----------------------------------------------------------
 
 gitFileRoutes.get("/projects/:id/files", async (c) => {
@@ -30,10 +38,13 @@ gitFileRoutes.get("/projects/:id/files/*", async (c) => {
 	if (!project.repoPath) return c.json({ error: "No repo path configured" }, 400);
 
 	const prefix = `/api/studio/projects/${c.req.param("id")}/files/`;
-	const filePath = c.req.path.startsWith(prefix)
-		? c.req.path.slice(prefix.length)
-		: c.req.path.replace(/^.*\/files\//, "");
-	if (!filePath) return c.json({ error: "File path required" }, 400);
+	const filePath = decodeURIComponent(
+		c.req.path.startsWith(prefix)
+			? c.req.path.slice(prefix.length)
+			: c.req.path.replace(/^.*\/files\//, ""),
+	);
+	const pathErr = validateFilePath(filePath);
+	if (pathErr) return c.json({ error: pathErr }, 400);
 
 	try {
 		const content = await gitManager.getFileContent(project.repoPath, filePath);
@@ -50,10 +61,13 @@ gitFileRoutes.put("/projects/:id/files/*", async (c) => {
 	if (!project.repoPath) return c.json({ error: "No repo path configured" }, 400);
 
 	const prefix = `/api/studio/projects/${c.req.param("id")}/files/`;
-	const filePath = c.req.path.startsWith(prefix)
-		? c.req.path.slice(prefix.length)
-		: c.req.path.replace(/^.*\/files\//, "");
-	if (!filePath) return c.json({ error: "File path required" }, 400);
+	const filePath = decodeURIComponent(
+		c.req.path.startsWith(prefix)
+			? c.req.path.slice(prefix.length)
+			: c.req.path.replace(/^.*\/files\//, ""),
+	);
+	const pathErr = validateFilePath(filePath);
+	if (pathErr) return c.json({ error: pathErr }, 400);
 
 	const body = (await c.req.json()) as { content: string };
 	if (typeof body.content !== "string") return c.json({ error: "Content required" }, 400);
