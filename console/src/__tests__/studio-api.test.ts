@@ -79,7 +79,7 @@ describe('studio-api — URL yapisi', () => {
 
     await fetchProjects();
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects');
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects', expect.objectContaining({ headers: expect.any(Object) }));
   });
 
   it('fetchProject id ile dogru endpoint cagirmalı', async () => {
@@ -87,7 +87,7 @@ describe('studio-api — URL yapisi', () => {
 
     await fetchProject('proj-42');
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-42');
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-42', expect.objectContaining({ headers: expect.any(Object) }));
   });
 
   it('createProject POST ile body gondermeli', async () => {
@@ -95,11 +95,11 @@ describe('studio-api — URL yapisi', () => {
 
     await createProject({ name: 'Yeni Proje', description: 'Aciklama', techStack: ['Vue'] });
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects', {
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects', expect.objectContaining({
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ name: 'Yeni Proje', description: 'Aciklama', techStack: ['Vue'] }),
-    });
+    }));
   });
 
   it('updateProject PATCH ile dogru URL cagirmalı', async () => {
@@ -107,11 +107,11 @@ describe('studio-api — URL yapisi', () => {
 
     await updateProject('proj-1', { name: 'Guncellenmis Proje' });
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-1', {
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-1', expect.objectContaining({
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ name: 'Guncellenmis Proje' }),
-    });
+    }));
   });
 
   it('deleteProject DELETE metodu ile cagrilmalı', async () => {
@@ -119,7 +119,7 @@ describe('studio-api — URL yapisi', () => {
 
     await deleteProject('proj-1');
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-1', { method: 'DELETE' });
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-1', expect.objectContaining({ method: 'DELETE' }));
   });
 
   it('fetchTasks proje ID\'si ile dogru endpoint cagirmalı', async () => {
@@ -127,7 +127,7 @@ describe('studio-api — URL yapisi', () => {
 
     await fetchTasks('proj-99');
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-99/tasks');
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-99/tasks', expect.objectContaining({ headers: expect.any(Object) }));
   });
 
   it('fetchProjectAgents dogru team endpoint\'i cagirmalı', async () => {
@@ -135,7 +135,7 @@ describe('studio-api — URL yapisi', () => {
 
     await fetchProjectAgents('proj-5');
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-5/team');
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-5/team', expect.objectContaining({ headers: expect.any(Object) }));
   });
 
   it('fetchAgentConfigs dogru agents endpoint\'ini cagirmalı', async () => {
@@ -143,7 +143,7 @@ describe('studio-api — URL yapisi', () => {
 
     await fetchAgentConfigs();
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/agents');
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/agents', expect.objectContaining({ headers: expect.any(Object) }));
   });
 
   it('fetchTeamTemplates dogru endpoint cagirmalı', async () => {
@@ -151,7 +151,7 @@ describe('studio-api — URL yapisi', () => {
 
     await fetchTeamTemplates();
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/team-templates');
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/team-templates', expect.objectContaining({ headers: expect.any(Object) }));
   });
 
   it('fetchProviders dogru providers endpoint\'ini cagirmalı', async () => {
@@ -159,7 +159,7 @@ describe('studio-api — URL yapisi', () => {
 
     await fetchProviders();
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/providers');
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/providers', expect.objectContaining({ headers: expect.any(Object) }));
   });
 });
 
@@ -266,6 +266,7 @@ describe('studio-api — veri donusumleri', () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       '/api/studio/projects/proj-1/agents/agent-1/output?since=10',
+      expect.objectContaining({ headers: expect.any(Object) }),
     );
   });
 
@@ -278,6 +279,7 @@ describe('studio-api — veri donusumleri', () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       '/api/studio/projects/proj-1/agents/agent-1/output',
+      expect.objectContaining({ headers: expect.any(Object) }),
     );
   });
 
@@ -296,6 +298,6 @@ describe('studio-api — veri donusumleri', () => {
 
     await fetchProjectMessages('proj-1');
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-1/messages');
+    expect(mockFetch).toHaveBeenCalledWith('/api/studio/projects/proj-1/messages', expect.objectContaining({ headers: expect.any(Object) }));
   });
 });
