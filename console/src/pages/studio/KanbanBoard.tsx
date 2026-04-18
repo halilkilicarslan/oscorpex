@@ -218,7 +218,7 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
     const interval = setInterval(() => {
       load();
       loadAutoStartStatus();
-    }, 5000);
+    }, 15000);
 
     return () => clearInterval(interval);
   }, [projectId, load, loadAutoStartStatus]);

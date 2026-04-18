@@ -16,7 +16,9 @@ class EventBus {
 		if (!this.handlers.has(key)) this.handlers.set(key, new Set());
 		this.handlers.get(key)!.add(handler);
 		return () => {
-			this.handlers.get(key)?.delete(handler);
+			const set = this.handlers.get(key);
+			set?.delete(handler);
+			if (set?.size === 0) this.handlers.delete(key);
 		};
 	}
 
@@ -26,7 +28,9 @@ class EventBus {
 		if (!this.handlers.has(key)) this.handlers.set(key, new Set());
 		this.handlers.get(key)!.add(handler);
 		return () => {
-			this.handlers.get(key)?.delete(handler);
+			const set = this.handlers.get(key);
+			set?.delete(handler);
+			if (set?.size === 0) this.handlers.delete(key);
 		};
 	}
 

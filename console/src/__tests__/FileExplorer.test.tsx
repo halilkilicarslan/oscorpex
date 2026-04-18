@@ -99,7 +99,7 @@ describe('FileExplorer — bos/hata durumu', () => {
     render(<FileExplorer projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Depo Yok')).toBeInTheDocument();
+      expect(screen.getByText('No Repository')).toBeInTheDocument();
     });
   });
 
@@ -109,7 +109,7 @@ describe('FileExplorer — bos/hata durumu', () => {
     render(<FileExplorer projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText(/otomatik oluşturulacak/)).toBeInTheDocument();
+      expect(screen.getByText(/automatically when work begins/)).toBeInTheDocument();
     });
   });
 });
@@ -178,7 +178,7 @@ describe('FileExplorer — dosya agaci', () => {
 
     await waitFor(() => {
       // Dosya viewer'da "Kapat" butonu gorunmeli
-      expect(screen.getByText('Kapat')).toBeInTheDocument();
+      expect(screen.getByText('Close')).toBeInTheDocument();
     });
   });
 
@@ -210,12 +210,12 @@ describe('FileExplorer — yeni dosya olusturma', () => {
     const user = userEvent.setup();
     render(<FileExplorer projectId="proj-1" />);
 
-    await waitFor(() => screen.getByText('Yeni'));
+    await waitFor(() => screen.getByText('New'));
 
-    await user.click(screen.getByText('Yeni'));
+    await user.click(screen.getByText('New'));
 
     await waitFor(() => {
-      expect(screen.getByText('Yeni Dosya Oluştur')).toBeInTheDocument();
+      expect(screen.getByText('Create New File')).toBeInTheDocument();
     });
   });
 
@@ -223,8 +223,8 @@ describe('FileExplorer — yeni dosya olusturma', () => {
     const user = userEvent.setup();
     render(<FileExplorer projectId="proj-1" />);
 
-    await waitFor(() => screen.getByText('Yeni'));
-    await user.click(screen.getByText('Yeni'));
+    await waitFor(() => screen.getByText('New'));
+    await user.click(screen.getByText('New'));
 
     await waitFor(() => {
       expect(
@@ -237,15 +237,15 @@ describe('FileExplorer — yeni dosya olusturma', () => {
     const user = userEvent.setup();
     render(<FileExplorer projectId="proj-1" />);
 
-    await waitFor(() => screen.getByText('Yeni'));
-    await user.click(screen.getByText('Yeni'));
+    await waitFor(() => screen.getByText('New'));
+    await user.click(screen.getByText('New'));
 
-    await waitFor(() => screen.getByText('Yeni Dosya Oluştur'));
+    await waitFor(() => screen.getByText('Create New File'));
 
-    await user.click(screen.getByText('İptal'));
+    await user.click(screen.getByText('Cancel'));
 
     await waitFor(() => {
-      expect(screen.queryByText('Yeni Dosya Oluştur')).not.toBeInTheDocument();
+      expect(screen.queryByText('Create New File')).not.toBeInTheDocument();
     });
   });
 
@@ -253,14 +253,14 @@ describe('FileExplorer — yeni dosya olusturma', () => {
     const user = userEvent.setup();
     render(<FileExplorer projectId="proj-1" />);
 
-    await waitFor(() => screen.getByText('Yeni'));
-    await user.click(screen.getByText('Yeni'));
+    await waitFor(() => screen.getByText('New'));
+    await user.click(screen.getByText('New'));
 
-    await waitFor(() => screen.getByText('Oluştur'));
-    await user.click(screen.getByText('Oluştur'));
+    await waitFor(() => screen.getByText('Create'));
+    await user.click(screen.getByText('Create'));
 
     await waitFor(() => {
-      expect(screen.getByText('Dosya yolu boş olamaz.')).toBeInTheDocument();
+      expect(screen.getByText('File path cannot be empty.')).toBeInTheDocument();
     });
   });
 
@@ -268,17 +268,17 @@ describe('FileExplorer — yeni dosya olusturma', () => {
     const user = userEvent.setup();
     render(<FileExplorer projectId="proj-1" />);
 
-    await waitFor(() => screen.getByText('Yeni'));
-    await user.click(screen.getByText('Yeni'));
+    await waitFor(() => screen.getByText('New'));
+    await user.click(screen.getByText('New'));
 
     await waitFor(() => screen.getByPlaceholderText('src/components/MyComponent.tsx'));
     const input = screen.getByPlaceholderText('src/components/MyComponent.tsx');
     await user.type(input, '../etc/passwd');
 
-    await user.click(screen.getByText('Oluştur'));
+    await user.click(screen.getByText('Create'));
 
     await waitFor(() => {
-      expect(screen.getByText('Geçersiz dosya yolu: ".." kullanılamaz.')).toBeInTheDocument();
+      expect(screen.getByText('Invalid path: ".." is not allowed.')).toBeInTheDocument();
     });
   });
 
@@ -303,14 +303,14 @@ describe('FileExplorer — yeni dosya olusturma', () => {
 
     render(<FileExplorer projectId="proj-1" />);
 
-    await waitFor(() => screen.getByText('Yeni'));
-    await user.click(screen.getByText('Yeni'));
+    await waitFor(() => screen.getByText('New'));
+    await user.click(screen.getByText('New'));
 
     await waitFor(() => screen.getByPlaceholderText('src/components/MyComponent.tsx'));
     const input = screen.getByPlaceholderText('src/components/MyComponent.tsx');
     await user.type(input, 'src/new.ts');
 
-    await user.click(screen.getByText('Oluştur'));
+    await user.click(screen.getByText('Create'));
 
     await waitFor(() => {
       expect(studioApi.createFile).toHaveBeenCalledWith('proj-1', 'src/new.ts', '');
@@ -447,7 +447,7 @@ describe('FileExplorer — commit modal', () => {
     await user.click(screen.getByTitle('Değişiklikleri commit et'));
 
     await waitFor(() => {
-      expect(screen.getByText('Commit Oluştur')).toBeInTheDocument();
+      expect(screen.getByText('Create Commit')).toBeInTheDocument();
     });
   });
 
@@ -458,8 +458,8 @@ describe('FileExplorer — commit modal', () => {
     await waitFor(() => screen.getByTitle('Değişiklikleri commit et'));
     await user.click(screen.getByTitle('Değişiklikleri commit et'));
 
-    await waitFor(() => screen.getByText('Commit Et'));
-    await user.click(screen.getByText('Commit Et'));
+    await waitFor(() => screen.getByText('Commit'));
+    await user.click(screen.getByText('Commit'));
 
     await waitFor(() => {
       expect(screen.getByText('Commit mesajı boş olamaz.')).toBeInTheDocument();
@@ -495,11 +495,11 @@ describe('FileExplorer — commit modal', () => {
     const commitBtns = screen.getAllByTitle('Değişiklikleri commit et');
     await user.click(commitBtns[0]);
 
-    await waitFor(() => screen.getByPlaceholderText('feat: yeni özellik eklendi'));
-    const input = screen.getByPlaceholderText('feat: yeni özellik eklendi');
+    await waitFor(() => screen.getByPlaceholderText('feat: add new feature'));
+    const input = screen.getByPlaceholderText('feat: add new feature');
     await user.type(input, 'feat: test degisikligi');
 
-    await user.click(screen.getByText('Commit Et'));
+    await user.click(screen.getByText('Commit'));
 
     await waitFor(() => {
       expect(studioApi.commitChanges).toHaveBeenCalledWith(

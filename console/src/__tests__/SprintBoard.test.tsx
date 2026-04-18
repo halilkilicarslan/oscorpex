@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SprintBoard from '../pages/studio/SprintBoard';
 
@@ -312,7 +312,7 @@ describe('SprintBoard — CreateSprintModal', () => {
     await waitFor(() => screen.getByText('Yeni Sprint'));
     await user.click(screen.getByText('Yeni Sprint'));
 
-    expect(screen.getByText('Yeni Sprint', { selector: 'h3' })).toBeInTheDocument();
+    expect(screen.getByText('New Sprint', { selector: 'h3' })).toBeInTheDocument();
   });
 
   it('modal kapatma butonu (X) ile modal kapanmalı', async () => {
@@ -323,11 +323,11 @@ describe('SprintBoard — CreateSprintModal', () => {
     await user.click(screen.getByText('Yeni Sprint'));
 
     // Modal açık
-    const closeBtn = screen.getByLabelText('Kapat');
+    const closeBtn = screen.getByLabelText('Close');
     await user.click(closeBtn);
 
     await waitFor(() => {
-      expect(screen.queryByRole('heading', { name: 'Yeni Sprint' })).toBeFalsy();
+      expect(screen.queryByRole('heading', { name: 'New Sprint' })).toBeFalsy();
     });
   });
 
@@ -338,10 +338,12 @@ describe('SprintBoard — CreateSprintModal', () => {
     await waitFor(() => screen.getByText('Yeni Sprint'));
     await user.click(screen.getByText('Yeni Sprint'));
 
-    await user.click(screen.getByText('İptal'));
+    // Modal içindeki Cancel butonunu bul (New Sprint h3'ünün parent modal div'i)
+    const modal = screen.getByText('New Sprint', { selector: 'h3' }).closest('div.bg-\\[\\#111111\\]') as HTMLElement;
+    await user.click(within(modal).getByText('Cancel'));
 
     await waitFor(() => {
-      expect(screen.queryByText('İptal')).toBeFalsy();
+      expect(screen.queryByText('New Sprint', { selector: 'h3' })).toBeFalsy();
     });
   });
 
@@ -378,14 +380,14 @@ describe('SprintBoard — CreateSprintModal', () => {
     await user.click(screen.getByText('Yeni Sprint'));
 
     // Form doldur ve gönder
-    const goalInput = screen.getByPlaceholderText('Auth akışını tamamla');
+    const goalInput = screen.getByPlaceholderText('Complete auth flow');
     await user.type(goalInput, 'Test hedefi');
 
-    await user.click(screen.getByText('Oluştur'));
+    await user.click(screen.getByText('Create'));
 
-    // Modal kapanmalı
+    // Modal kapanmalı (New Sprint h3 kaybolmalı)
     await waitFor(() => {
-      expect(screen.queryByText('İptal')).toBeFalsy();
+      expect(screen.queryByText('New Sprint', { selector: 'h3' })).toBeFalsy();
     });
   });
 
@@ -400,10 +402,10 @@ describe('SprintBoard — CreateSprintModal', () => {
     const nameInput = screen.getByPlaceholderText('Sprint 1') as HTMLInputElement;
     await user.clear(nameInput);
 
-    await user.click(screen.getByText('Oluştur'));
+    await user.click(screen.getByText('Create'));
 
     await waitFor(() => {
-      expect(screen.getByText('İsim zorunlu')).toBeInTheDocument();
+      expect(screen.getByText('Name is required')).toBeInTheDocument();
     });
   });
 
@@ -424,10 +426,10 @@ describe('SprintBoard — CreateSprintModal', () => {
     await user.clear(endInput);
     await user.type(endInput, '2026-05-01');
 
-    await user.click(screen.getByText('Oluştur'));
+    await user.click(screen.getByText('Create'));
 
     await waitFor(() => {
-      expect(screen.getByText('Bitiş tarihi başlangıçtan önce olamaz')).toBeInTheDocument();
+      expect(screen.getByText('End date cannot be before start date')).toBeInTheDocument();
     });
   });
 
@@ -449,7 +451,7 @@ describe('SprintBoard — CreateSprintModal', () => {
     await waitFor(() => screen.getByText('Yeni Sprint'));
     await user.click(screen.getByText('Yeni Sprint'));
 
-    await user.click(screen.getByText('Oluştur'));
+    await user.click(screen.getByText('Create'));
 
     await waitFor(() => {
       expect(screen.getByText('Sprint oluşturulamadı')).toBeInTheDocument();
@@ -569,7 +571,7 @@ describe('SprintBoard — item çıkarma (unassign)', () => {
     await waitFor(() => screen.getByText('Grafik bileşeni'));
 
     // Unassign butonunu bul (title="Sprint'ten çıkar")
-    const unassignBtns = screen.getAllByTitle("Sprint'ten çıkar");
+    const unassignBtns = screen.getAllByTitle('Remove from sprint');
     await user.click(unassignBtns[0]);
 
     await waitFor(() => {
@@ -787,7 +789,7 @@ describe('SprintBoard — burndown chart', () => {
     render(<SprintBoard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Henüz veri yok')).toBeInTheDocument();
+      expect(screen.getByText('No data yet')).toBeInTheDocument();
     });
   });
 });

@@ -185,16 +185,16 @@ describe('PolicySection', () => {
 		const conditionValueInput = screen.getByPlaceholderText('S | M | L | XL');
 		fireEvent.change(conditionValueInput, { target: { value: 'XL' } });
 
-		// Click modal Kaydet — it has class bg-[#22c55e] text-black and text "Kaydet"
-		// The modal Kaydet has class px-3 py-1.5 text-[10px] bg-[#22c55e]...
+		// Click modal Save — it has class bg-[#22c55e] text-black and text "Save"
+		// The modal Save has class px-3 py-1.5 text-[10px] bg-[#22c55e]...
 		// Use getByText with a selector that matches the modal button specifically
-		const allKaydetBtns = screen.getAllByText('Kaydet');
-		// Modal Kaydet is the one with px-3 class (not px-2 like ModelRouting's Kaydet)
-		const modalKaydet = allKaydetBtns.find(
+		const allSaveBtns = screen.getAllByText('Save');
+		// Modal Save is the one with px-3 class (not px-2 like ModelRouting's Save)
+		const modalSave = allSaveBtns.find(
 			(b) => b.className.includes('px-3') && b.className.includes('bg-[#22c55e]'),
 		);
-		if (modalKaydet) {
-			fireEvent.click(modalKaydet);
+		if (modalSave) {
+			fireEvent.click(modalSave);
 		}
 
 		await waitFor(() => {
@@ -307,7 +307,7 @@ describe('PolicySection', () => {
 		});
 	});
 
-	it('shows "Kaydedildi" after successfully saving a new rule', async () => {
+	it('shows "Saved" after successfully saving a new rule', async () => {
 		render(<ProjectSettings projectId="test-123" />);
 		await screen.findByText('Kural Ekle');
 		fireEvent.click(screen.getByText('Kural Ekle'));
@@ -320,12 +320,12 @@ describe('PolicySection', () => {
 		const conditionValueInput = screen.getByPlaceholderText('S | M | L | XL');
 		fireEvent.change(conditionValueInput, { target: { value: 'M' } });
 
-		const allKaydetBtns = screen.getAllByText('Kaydet');
-		const modalKaydet = allKaydetBtns.find(
+		const allSaveBtns = screen.getAllByText('Save');
+		const modalSave = allSaveBtns.find(
 			(b) => b.className.includes('px-3') && b.className.includes('bg-[#22c55e]'),
 		);
-		if (modalKaydet) {
-			fireEvent.click(modalKaydet);
+		if (modalSave) {
+			fireEvent.click(modalSave);
 		}
 
 		await waitFor(() => {
@@ -341,12 +341,12 @@ describe('PolicySection', () => {
 		await screen.findByText('Yeni Kural');
 
 		// Click modal Kaydet without filling name
-		const allKaydetBtns = screen.getAllByText('Kaydet');
-		const modalKaydet = allKaydetBtns.find(
+		const allSaveBtns = screen.getAllByText('Save');
+		const modalSave = allSaveBtns.find(
 			(b) => b.className.includes('px-3') && b.className.includes('bg-[#22c55e]'),
 		);
-		if (modalKaydet) {
-			fireEvent.click(modalKaydet);
+		if (modalSave) {
+			fireEvent.click(modalSave);
 		}
 
 		await waitFor(() => {
@@ -400,19 +400,19 @@ describe('ModelRoutingSection', () => {
 		expect(screen.getByText('Extra-L')).toBeInTheDocument();
 	});
 
-	it('renders "Sifirla" (reset) button', async () => {
+	it('renders "Reset" button', async () => {
 		render(<ProjectSettings projectId="test-123" />);
-		await screen.findByText('Sifirla');
-		expect(screen.getByText('Sifirla')).toBeInTheDocument();
+		await screen.findByText('Reset');
+		expect(screen.getByText('Reset')).toBeInTheDocument();
 	});
 
-	it('"Kaydet" button in Model Routing is disabled when config is not dirty', async () => {
+	it('"Save" button in Model Routing is disabled when config is not dirty', async () => {
 		render(<ProjectSettings projectId="test-123" />);
 		await screen.findByText('Small');
 
 		const section = getModelRoutingSection();
 		expect(section).toBeTruthy();
-		// When not dirty, Kaydet and Sifirla should be disabled
+		// When not dirty, Save and Reset should be disabled
 		const disabledBtns = section?.querySelectorAll('button[disabled]');
 		expect(disabledBtns?.length).toBeGreaterThan(0);
 	});
@@ -433,7 +433,7 @@ describe('ModelRoutingSection', () => {
 		}
 	});
 
-	it('"Sifirla" button resets config to defaults', async () => {
+	it('"Reset" button resets config to defaults', async () => {
 		render(<ProjectSettings projectId="test-123" />);
 		await screen.findByText('Small');
 
@@ -445,7 +445,7 @@ describe('ModelRoutingSection', () => {
 			fireEvent.change(firstSelect, { target: { value: 'claude-opus-4-6' } });
 		}
 
-		const resetBtn = screen.getByText('Sifirla');
+		const resetBtn = screen.getByText('Reset');
 		fireEvent.click(resetBtn);
 
 		await waitFor(() => {
@@ -470,7 +470,7 @@ describe('ModelRoutingSection', () => {
 			fireEvent.change(firstSelect, { target: { value: 'claude-opus-4-6' } });
 		}
 
-		// Find the enabled Kaydet button in the routing section
+		// Find the enabled Save button in the routing section
 		await waitFor(() => {
 			const saveBtn = section?.querySelector('button.bg-\\[\\#22c55e\\]:not([disabled])');
 			expect(saveBtn).toBeTruthy();
@@ -489,7 +489,7 @@ describe('ModelRoutingSection', () => {
 		}
 	});
 
-	it('shows "Kaydedildi" after successful model routing save', async () => {
+	it('shows "Saved" after successful model routing save', async () => {
 		render(<ProjectSettings projectId="test-123" />);
 		await screen.findByText('Small');
 
@@ -509,7 +509,7 @@ describe('ModelRoutingSection', () => {
 		if (saveBtn) {
 			fireEvent.click(saveBtn);
 			await waitFor(() => {
-				expect(screen.queryAllByText('Kaydedildi').length).toBeGreaterThan(0);
+				expect(screen.queryAllByText('Saved').length).toBeGreaterThan(0);
 			});
 		}
 	});

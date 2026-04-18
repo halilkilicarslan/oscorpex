@@ -697,6 +697,16 @@ CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_created ON webhook_deliveries(
 -- v3.0: Sub-task parent index
 CREATE INDEX IF NOT EXISTS idx_tasks_parent             ON tasks(parent_task_id);
 
+-- v4.2: Performance indexes — high-frequency query columns
+CREATE INDEX IF NOT EXISTS idx_tasks_status             ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_assigned_agent     ON tasks(assigned_agent);
+CREATE INDEX IF NOT EXISTS idx_events_type              ON events(type);
+CREATE INDEX IF NOT EXISTS idx_events_project_type      ON events(project_id, type);
+CREATE INDEX IF NOT EXISTS idx_events_timestamp         ON events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_token_usage_agent        ON token_usage(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_status        ON agent_runs(status);
+CREATE INDEX IF NOT EXISTS idx_ctx_events_project_task  ON context_events(project_id, task_id);
+
 -- v3.2: Work items indexes
 CREATE INDEX IF NOT EXISTS idx_work_items_project       ON work_items(project_id);
 CREATE INDEX IF NOT EXISTS idx_work_items_status        ON work_items(status);

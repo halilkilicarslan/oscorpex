@@ -24,6 +24,9 @@ vi.mock('../lib/studio-api', () => ({
   fetchLatestSonarScan: vi.fn().mockResolvedValue(null),
   triggerSonarScan: vi.fn().mockResolvedValue({}),
   fetchPoolStatus: vi.fn().mockResolvedValue({ initialized: false, total: 0, ready: 0, busy: 0, unhealthy: 0, containers: [] }),
+  fetchAgentHeatMap: vi.fn().mockResolvedValue([]),
+  fetchAgentComparison: vi.fn().mockResolvedValue([]),
+  fetchAgentDailyStats: vi.fn().mockResolvedValue([]),
   roleLabel: vi.fn((role: string) => role.charAt(0).toUpperCase() + role.slice(1)),
 }));
 
@@ -129,7 +132,7 @@ describe('AgentDashboard — yukleme durumu', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Proje Paneli')).toBeInTheDocument();
+      expect(screen.getByText('Project Dashboard')).toBeInTheDocument();
     });
   });
 });
@@ -159,7 +162,7 @@ describe('AgentDashboard — hata durumu', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Tekrar dene')).toBeInTheDocument();
+      expect(screen.getByText('Retry')).toBeInTheDocument();
     });
   });
 
@@ -173,11 +176,11 @@ describe('AgentDashboard — hata durumu', () => {
     const user = userEvent.setup();
     render(<AgentDashboard projectId="proj-1" />);
 
-    await waitFor(() => screen.getByText('Tekrar dene'));
-    await user.click(screen.getByText('Tekrar dene'));
+    await waitFor(() => screen.getByText('Retry'));
+    await user.click(screen.getByText('Retry'));
 
     await waitFor(() => {
-      expect(screen.getByText('Proje Paneli')).toBeInTheDocument();
+      expect(screen.getByText('Project Dashboard')).toBeInTheDocument();
     });
   });
 });
@@ -194,7 +197,7 @@ describe('AgentDashboard — metrik kartlari', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Toplam Gorev')).toBeInTheDocument();
+      expect(screen.getByText('Total Tasks')).toBeInTheDocument();
       expect(screen.getByText('24')).toBeInTheDocument();
     });
   });
@@ -203,9 +206,9 @@ describe('AgentDashboard — metrik kartlari', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Tamamlanma Orani')).toBeInTheDocument();
+      expect(screen.getByText('Completion Rate')).toBeInTheDocument();
       // 18/24 = %75
-      expect(screen.getByText('%75')).toBeInTheDocument();
+      expect(screen.getByText('75%')).toBeInTheDocument();
     });
   });
 
@@ -213,10 +216,10 @@ describe('AgentDashboard — metrik kartlari', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Aktif Ajan')).toBeInTheDocument();
+      expect(screen.getByText('Active Agents')).toBeInTheDocument();
       // Sadece Frontend Ajan isRunning = true — "1" degeri birden fazla yerde olabilir,
       // "Aktif Ajan" kartinin yanindaki alt metni kontrol et
-      expect(screen.getByText('2 toplam')).toBeInTheDocument();
+      expect(screen.getByText('2 total')).toBeInTheDocument();
     });
   });
 
@@ -224,7 +227,7 @@ describe('AgentDashboard — metrik kartlari', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Pipeline Calistirma')).toBeInTheDocument();
+      expect(screen.getByText('Pipeline Runs')).toBeInTheDocument();
       expect(screen.getByText('5')).toBeInTheDocument();
     });
   });
@@ -239,7 +242,7 @@ describe('AgentDashboard — metrik kartlari', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('%0')).toBeInTheDocument();
+      expect(screen.getByText('0%')).toBeInTheDocument();
     });
   });
 });
@@ -256,7 +259,7 @@ describe('AgentDashboard — ajan performans tablosu', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Ajan Performansi')).toBeInTheDocument();
+      expect(screen.getByText('Agent Performance')).toBeInTheDocument();
     });
   });
 
@@ -301,7 +304,7 @@ describe('AgentDashboard — ajan performans tablosu', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('2 ajan')).toBeInTheDocument();
+      expect(screen.getByText('2 agents')).toBeInTheDocument();
     });
   });
 
@@ -311,7 +314,7 @@ describe('AgentDashboard — ajan performans tablosu', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText(/henuz ajan atanmamis/i)).toBeInTheDocument();
+      expect(screen.getByText(/No agents assigned/i)).toBeInTheDocument();
     });
   });
 
@@ -320,7 +323,7 @@ describe('AgentDashboard — ajan performans tablosu', () => {
 
     await waitFor(() => {
       // Frontend: 8/10 = %80 — birden fazla olabilir (satir ve ozet kartinda)
-      const rateBadges = screen.getAllByText('%80');
+      const rateBadges = screen.getAllByText('80%');
       expect(rateBadges.length).toBeGreaterThanOrEqual(1);
     });
   });
@@ -338,7 +341,7 @@ describe('AgentDashboard — bar chart', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Ajan Basi Gorev Dagilimi')).toBeInTheDocument();
+      expect(screen.getByText('Tasks Per Agent')).toBeInTheDocument();
     });
   });
 
@@ -367,7 +370,7 @@ describe('AgentDashboard — timeline chart', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Son 7 Gun Aktivite')).toBeInTheDocument();
+      expect(screen.getByText('Last 7 Days Activity')).toBeInTheDocument();
     });
   });
 
@@ -401,7 +404,7 @@ describe('AgentDashboard — yenile butonu', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Yenile')).toBeInTheDocument();
+      expect(screen.getByText('Refresh')).toBeInTheDocument();
     });
   });
 
@@ -409,8 +412,8 @@ describe('AgentDashboard — yenile butonu', () => {
     const user = userEvent.setup();
     render(<AgentDashboard projectId="proj-1" />);
 
-    await waitFor(() => screen.getByText('Yenile'));
-    await user.click(screen.getByText('Yenile'));
+    await waitFor(() => screen.getByText('Refresh'));
+    await user.click(screen.getByText('Refresh'));
 
     await waitFor(() => {
       // fetchProjectAnalytics en az 2 kez cagrili olmali (ilk yukleme + yenile)
@@ -456,7 +459,7 @@ describe('AgentDashboard — sure formatlama', () => {
     render(<AgentDashboard projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Proje Paneli')).toBeInTheDocument();
+      expect(screen.getByText('Project Dashboard')).toBeInTheDocument();
     });
   });
 });

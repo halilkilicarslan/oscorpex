@@ -271,12 +271,12 @@ describe('AgentCard — duzenle ve sil butonlari', () => {
   it('onEdit prop verilince duzenle butonu gosterilmeli', () => {
     const onEdit = vi.fn();
     renderAgentCard({ onEdit });
-    expect(screen.getByTitle('Ajanı düzenle')).toBeInTheDocument();
+    expect(screen.getByTitle('Edit agent')).toBeInTheDocument();
   });
 
   it('onEdit prop verilmezse duzenle butonu gosterilmemeli', () => {
     renderAgentCard();
-    expect(screen.queryByTitle('Ajanı düzenle')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Edit agent')).not.toBeInTheDocument();
   });
 
   it('duzenle butonuna tiklaninca onEdit cagrisi yapilmali', async () => {
@@ -284,14 +284,14 @@ describe('AgentCard — duzenle ve sil butonlari', () => {
     const onEdit = vi.fn();
     renderAgentCard({ onEdit });
 
-    await user.click(screen.getByTitle('Ajanı düzenle'));
+    await user.click(screen.getByTitle('Edit agent'));
     expect(onEdit).toHaveBeenCalledOnce();
   });
 
   it('onDelete prop verilince sil butonu gosterilmeli', () => {
     const onDelete = vi.fn();
     renderAgentCard({ onDelete });
-    expect(screen.getByTitle('Ajanı sil')).toBeInTheDocument();
+    expect(screen.getByTitle('Delete agent')).toBeInTheDocument();
   });
 
   it('sil butonuna tiklaninca onDelete cagrisi yapilmali', async () => {
@@ -299,7 +299,7 @@ describe('AgentCard — duzenle ve sil butonlari', () => {
     const onDelete = vi.fn();
     renderAgentCard({ onDelete });
 
-    await user.click(screen.getByTitle('Ajanı sil'));
+    await user.click(screen.getByTitle('Delete agent'));
     expect(onDelete).toHaveBeenCalledOnce();
   });
 });
