@@ -78,8 +78,13 @@ const MAX_REVISION_CYCLES = 3;
 
 type TaskCompletionCallback = (taskId: string, projectId: string) => void;
 
+// Maximum number of task→project mappings to hold in the in-memory LRU cache.
+// task→project relationships are immutable so no invalidation is needed.
+const PROJECT_ID_CACHE_MAX = 500;
+
 class TaskEngine {
 	private completionCallbacks: Set<TaskCompletionCallback> = new Set();
+	private _projectIdCache: Map<string, string> = new Map();
 
 	// -------------------------------------------------------------------------
 	// Callback kayıt mekanizması (pipeline engine için hook noktası)
@@ -1170,6 +1175,9 @@ class TaskEngine {
 	}
 
 	private async getProjectIdForTask(task: Task): Promise<string> {
+		const cached = this._projectIdCache.get(task.id);
+		if (cached !== undefined) return cached;
+
 		const row = await queryOne<{ project_id: string }>(
 			`
       SELECT pp.project_id FROM tasks t
@@ -1179,7 +1187,16 @@ class TaskEngine {
     `,
 			[task.id],
 		);
-		return row?.project_id ?? "";
+		const projectId = row?.project_id ?? "";
+
+		// Evict the oldest entry when the cache is full (Map preserves insertion order).
+		if (this._projectIdCache.size >= PROJECT_ID_CACHE_MAX) {
+			const oldestKey = this._projectIdCache.keys().next().value;
+			if (oldestKey !== undefined) this._projectIdCache.delete(oldestKey);
+		}
+		this._projectIdCache.set(task.id, projectId);
+
+		return projectId;
 	}
 }
 

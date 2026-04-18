@@ -5,8 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
 import type { Phase, PhaseStatus, PlanStatus, Project, ProjectPlan } from "../types.js";
-import { now, rowToPhase, rowToProject } from "./helpers.js";
-import { listTasks } from "./task-repo.js";
+import { now, rowToPhase, rowToProject, rowToTask } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
 // Projects CRUD
@@ -153,12 +152,71 @@ export async function createPhase(data: Pick<Phase, "planId" | "name" | "order" 
 }
 
 export async function listPhases(planId: string): Promise<Phase[]> {
-	const rows = await query<any>('SELECT * FROM phases WHERE plan_id = $1 ORDER BY "order"', [planId]);
-	return Promise.all(
-		rows.map(async (row) => {
-			const tasks = await listTasks(row.id);
-			return rowToPhase(row, tasks);
-		}),
+	const rows = await query<any>(
+		`SELECT
+			p.id          AS p_id,
+			p.plan_id     AS p_plan_id,
+			p.name        AS p_name,
+			p."order"     AS p_order,
+			p.status      AS p_status,
+			p.depends_on  AS p_depends_on,
+			t.id                       AS id,
+			t.phase_id                 AS phase_id,
+			t.title                    AS title,
+			t.description              AS description,
+			t.assigned_agent           AS assigned_agent,
+			t.status                   AS status,
+			t.complexity               AS complexity,
+			t.depends_on               AS depends_on,
+			t.branch                   AS branch,
+			t.task_type                AS task_type,
+			t.output                   AS output,
+			t.retry_count              AS retry_count,
+			t.error                    AS error,
+			t.started_at               AS started_at,
+			t.completed_at             AS completed_at,
+			t.review_status            AS review_status,
+			t.reviewer_agent_id        AS reviewer_agent_id,
+			t.revision_count           AS revision_count,
+			t.assigned_agent_id        AS assigned_agent_id,
+			t.requires_approval        AS requires_approval,
+			t.approval_status          AS approval_status,
+			t.approval_rejection_reason AS approval_rejection_reason,
+			t.parent_task_id           AS parent_task_id,
+			t.target_files             AS target_files,
+			t.estimated_lines          AS estimated_lines
+		FROM phases p
+		LEFT JOIN tasks t ON t.phase_id = p.id
+		WHERE p.plan_id = $1
+		ORDER BY p."order", t.id`,
+		[planId],
+	);
+
+	const phaseMap = new Map<string, { phaseRow: any; taskRows: any[] }>();
+
+	for (const row of rows) {
+		const phaseId: string = row.p_id;
+		if (!phaseMap.has(phaseId)) {
+			phaseMap.set(phaseId, {
+				phaseRow: {
+					id: row.p_id,
+					plan_id: row.p_plan_id,
+					name: row.p_name,
+					order: row.p_order,
+					status: row.p_status,
+					depends_on: row.p_depends_on,
+				},
+				taskRows: [],
+			});
+		}
+		// LEFT JOIN produces a NULL task row when the phase has no tasks
+		if (row.id !== null) {
+			phaseMap.get(phaseId)!.taskRows.push(row);
+		}
+	}
+
+	return Array.from(phaseMap.values()).map(({ phaseRow, taskRows }) =>
+		rowToPhase(phaseRow, taskRows.map(rowToTask)),
 	);
 }
 

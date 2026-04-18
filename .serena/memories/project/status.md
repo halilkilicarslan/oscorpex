@@ -217,10 +217,29 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek im
 - **Files touched**: Sidebar, TopBar, ProjectPage, PlatformDashboard, InsightDashboard, KanbanBoard, PMChat, TaskDiffViewer, TerminalSheet, AgentDashboard, FileExplorer, PlannerSettingsModal, AlertsPage, SearchObservability, MessageCenter, AgentGrid, index.css
 - Typecheck: 0 errors
 
+### Session 2026-04-19 — Analysis Report + Phase 1 Quick Wins + Phase 2 Security
+
+**Comprehensive Analysis Report** — 5-domain parallel analysis (backend quality, security, architecture, frontend, performance). 115 findings (14 CRITICAL, 36 HIGH, 41 MEDIUM, 24 LOW). Report: `.planning/ANALYSIS_REPORT.md`. 5-phase roadmap.
+
+**Phase 1 Quick Wins** (commit `2a6bf32`, pushed)
+- 8 DB indexes (tasks.status, tasks.assigned_agent, events.type, events.project_id+type, events.timestamp, token_usage.agent_id, agent_runs.status, context_events.project_id+task_id)
+- `updateTask` RETURNING * (eliminate SELECT round-trip)
+- EventBus empty Set cleanup (memory leak prevention)
+- `getActivityTimeline` Promise.all (3 sequential→parallel queries)
+- KanbanBoard polling 5s→15s
+
+**Phase 2 Security Foundation** (commit `abf5d92`, pushed)
+- Command injection fix: `execSync` → `execFileSync` with array args (diff-capture.ts, app-runner.ts)
+- Path traversal fix: `validateFilePath()` on wildcard GET/PUT file routes (git-file-routes.ts)
+- CORS middleware: configurable `OSCORPEX_CORS_ORIGINS` env var (routes/index.ts)
+- Opt-in Bearer auth: `OSCORPEX_API_KEY` env var, SSE streams exempt (routes/index.ts)
+- Frontend auth headers: `VITE_API_KEY` injection in studio-api base.ts
+- Backend: 499/499, Frontend: 432/433 (1 pre-existing ProjectReport)
+
 ### Sıradaki Adımlar
-- v4.0-v4.1 tamamlandı (context-mode + DiffViewer + Agent Dashboard v2 + RAG Observability)
-- UI/UX audit tamamlandı — tüm UI text artık İngilizce
-- Potansiyel: Webhook notifications, Frontend Performance, i18n
+- Phase 3: N+1 Elimination (batch queries, connection pooling)
+- Phase 4: Frontend Refactor (component splitting, memo optimization)
+- Phase 5: Architecture Improvements (event sourcing, caching layer)
 
 ## Previous: v3.0-v3.9 Full Platform Upgrade
 

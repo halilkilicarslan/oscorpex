@@ -32,6 +32,13 @@ export async function fetchUnreadCount(
   return json(`${API}/projects/${projectId}/agents/${agentId}/inbox/count`);
 }
 
+// Tüm ajanların okunmamış mesaj sayılarını tek istekte getir (agentId → count)
+export async function fetchAllUnreadCounts(
+  projectId: string,
+): Promise<Record<string, number>> {
+  return json<Record<string, number>>(`${API}/projects/${projectId}/agents/unread-counts`);
+}
+
 // Yeni mesaj gönder
 export async function sendAgentMessage(
   projectId: string,

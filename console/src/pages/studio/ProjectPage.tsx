@@ -29,7 +29,7 @@ import {
 import {
   fetchProject,
   fetchProjectAgents,
-  fetchUnreadCount,
+  fetchAllUnreadCounts,
   startApp,
   stopApp,
   fetchAppStatus,
@@ -143,14 +143,8 @@ export default function ProjectPage() {
       const agents = await fetchProjectAgents(projectId);
       setProjectAgents(agents);
       if (agents.length === 0) return;
-      const counts = await Promise.all(
-        agents.map((a) =>
-          fetchUnreadCount(projectId, a.id)
-            .then((r) => r.unreadCount)
-            .catch(() => 0),
-        ),
-      );
-      setTotalUnread(counts.reduce((s, c) => s + c, 0));
+      const counts = await fetchAllUnreadCounts(projectId).catch(() => ({} as Record<string, number>));
+      setTotalUnread(Object.values(counts).reduce((s, c) => s + c, 0));
     } catch {
       // sessizce geç
     }

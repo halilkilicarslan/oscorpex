@@ -24,7 +24,7 @@ import {
   markMessageRead,
   archiveAgentMessage,
   broadcastMessage,
-  fetchUnreadCount,
+  fetchAllUnreadCounts,
   type ProjectAgent,
   type AgentMessage,
   type AgentMessageType,
@@ -616,22 +616,12 @@ export default function MessageCenter({ projectId }: { projectId: string }) {
   // Okunmamış sayıları yükle (tüm ajanlar için)
   const loadUnreadCounts = useCallback(async () => {
     try {
-      const counts: Record<string, number> = {};
-      await Promise.all(
-        agents.map(async (a) => {
-          try {
-            const res = await fetchUnreadCount(projectId, a.id);
-            counts[a.id] = res.unreadCount;
-          } catch {
-            counts[a.id] = 0;
-          }
-        }),
-      );
+      const counts = await fetchAllUnreadCounts(projectId);
       setUnreadCounts(counts);
     } catch {
       // hata sessizce geçilir
     }
-  }, [projectId, agents]);
+  }, [projectId]);
 
   // İlk yükleme
   useEffect(() => {

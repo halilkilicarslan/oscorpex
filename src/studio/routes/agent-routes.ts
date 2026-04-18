@@ -7,6 +7,7 @@ import { loadAgentLog } from "../agent-log-store.js";
 import {
 	archiveMessage,
 	broadcastToTeam,
+	getAllUnreadCounts,
 	getInbox,
 	getThread,
 	getUnreadCount,
@@ -209,6 +210,15 @@ agentRoutes.put("/projects/:id/messages/:messageId/archive", async (c) => {
 	if (!msg) return c.json({ error: "Message not found" }, 404);
 
 	return c.json(msg);
+});
+
+// Tüm ajanların okunmamış mesaj sayılarını tek istekte getir (batch)
+agentRoutes.get("/projects/:id/agents/unread-counts", async (c) => {
+	const project = await getProject(c.req.param("id"));
+	if (!project) return c.json({ error: "Project not found" }, 404);
+
+	const counts = await getAllUnreadCounts(c.req.param("id"));
+	return c.json(counts);
 });
 
 // Ajanın gelen kutusunu getir
