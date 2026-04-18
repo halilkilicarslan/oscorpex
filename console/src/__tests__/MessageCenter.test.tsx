@@ -289,7 +289,7 @@ describe('MessageCenter — mesaj arsivleme', () => {
     await waitFor(() => screen.getByText('API endpoint gorev atamasi'));
 
     // Arshiv butonu (title="Arşivle") — hover ile gorunur, ama DOM'da var
-    const arsivBtns = screen.getAllByTitle('Arşivle');
+    const arsivBtns = screen.getAllByTitle('Archive');
     expect(arsivBtns.length).toBeGreaterThan(0);
 
     await user.click(arsivBtns[0]);
@@ -305,7 +305,7 @@ describe('MessageCenter — mesaj arsivleme', () => {
 
     await waitFor(() => screen.getByText('API endpoint gorev atamasi'));
 
-    const arsivBtns = screen.getAllByTitle('Arşivle');
+    const arsivBtns = screen.getAllByTitle('Archive');
     await user.click(arsivBtns[0]);
 
     await waitFor(() => {
@@ -444,7 +444,7 @@ describe('MessageCenter — yeni mesaj compose', () => {
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Konu...')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Mesaj içeriği...')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Message content...')).toBeInTheDocument();
     });
   });
 
@@ -464,7 +464,7 @@ describe('MessageCenter — yeni mesaj compose', () => {
     await waitFor(() => screen.getByPlaceholderText('Konu...'));
 
     await user.type(screen.getByPlaceholderText('Konu...'), 'Test konusu');
-    await user.type(screen.getByPlaceholderText('Mesaj içeriği...'), 'Test mesaj icerigi');
+    await user.type(screen.getByPlaceholderText('Message content...'), 'Test mesaj icerigi');
 
     await user.click(screen.getByText('Gönder'));
 
@@ -533,7 +533,7 @@ describe('MessageCenter — mesaj tipleri rozeti', () => {
     render(<MessageCenter projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Görev')).toBeInTheDocument();
+      expect(screen.getByText('Task')).toBeInTheDocument();
     });
   });
 
@@ -543,7 +543,7 @@ describe('MessageCenter — mesaj tipleri rozeti', () => {
     render(<MessageCenter projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Tamamlandı')).toBeInTheDocument();
+      expect(screen.getByText('Completed')).toBeInTheDocument();
     });
   });
 });

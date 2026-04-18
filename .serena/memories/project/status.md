@@ -181,9 +181,46 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek im
 
 **Test counts**: Backend 499/499, Frontend 433/433, typecheck 0 hata.
 
+### Session 2026-04-18b — UI Language Audit Round 2
+
+- **Commit `0aa3153`**: Comprehensive UI language audit — 20 files, ~200+ Turkish strings → English
+  - AlertsPage: empty states, toggle tooltips, pagination, cancel button, cooldown unit
+  - PipelineDashboard: all status labels (pipeline + stage + task), action buttons (Start/Pause/Resume/Advance), error messages, stage detail panel, retry tooltip
+  - ProjectSettings: all "Kaydet"→"Save", "Sifirla"→"Reset", webhook event labels (11), scoring weight labels (5), policy description, timeout/cost labels
+  - StudioHomePage: team recommendation reasons, modal texts, brief description, preview checkbox
+  - SprintBoard: modal labels (New Sprint, Name, Goal, Start/End Date, Cancel, Create), validation errors
+  - MessageCenter: type labels (Task, Completed, Review, Conflict, Help), timeAgo function, archive tooltip, placeholder
+  - PMChat: planner prompt, intake placeholders, plan approval message, Generate Plan button
+  - AgentCard: tooltips (Edit/Delete/Run history), run history empty state, exit code label
+  - AgentTerminal: status labels (Idle/Starting/Running), terminal ready message, stream tooltip, clear button
+  - RuntimePanel: Start App, Databases, Running status, Start/Stop buttons, Status Summary, Save .env
+  - DiffViewer: revert modal (title, description, buttons), locale en-US, error message
+  - FileExplorer: No Repository empty state, New file tooltip
+  - TaskDetailModal: Assigned Agent, Close button
+  - TaskCard: error toggle tooltip
+  - PlatformDashboard: error messages, timeAgo (m/h/d ago)
+  - AgentDashboard: stat labels (Assigned/Done/Failed/Rejected)
+  - TerminalSheet: loading buffer text
+  - team-graph-shared: all 12 edge descriptions
+- Typecheck clean, 0 errors
+
+## Session 2026-04-18 — UI/UX Audit & Language Standardization
+
+**UI/UX Audit** (commit `84d1366`, pushed)
+- 17 files changed, 245 insertions, 239 deletions
+- **Language consistency**: ~100+ Turkish UI strings converted to English across all pages
+- **% format fix**: Turkish `%85` → international `85%` across all dashboards
+- **Sidebar fixes**: Duplicate "Dashboard" → "Overview", OSCORPEX section now collapsible, NavLink end prop for studio routes, doc link updated
+- **TopBar fixes**: apiUrl input now wired to connection check (was hardcoded), GitHub link corrected, org label "My Organization" → "Workspace"
+- **ProjectPage**: "Ayarlar" → "Settings", tab bar horizontal scroll overflow with `.scrollbar-none`
+- **Dashboard padding**: PlatformDashboard + InsightDashboard get `p-6` page padding
+- **Files touched**: Sidebar, TopBar, ProjectPage, PlatformDashboard, InsightDashboard, KanbanBoard, PMChat, TaskDiffViewer, TerminalSheet, AgentDashboard, FileExplorer, PlannerSettingsModal, AlertsPage, SearchObservability, MessageCenter, AgentGrid, index.css
+- Typecheck: 0 errors
+
 ### Sıradaki Adımlar
 - v4.0-v4.1 tamamlandı (context-mode + DiffViewer + Agent Dashboard v2 + RAG Observability)
-- Potansiyel: Webhook notifications, Frontend Performance
+- UI/UX audit tamamlandı — tüm UI text artık İngilizce
+- Potansiyel: Webhook notifications, Frontend Performance, i18n
 
 ## Previous: v3.0-v3.9 Full Platform Upgrade
 

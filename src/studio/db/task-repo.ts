@@ -179,8 +179,8 @@ export async function updateTask(
 	if (fields.length === 0) return getTask(id);
 
 	values.push(id);
-	await execute(`UPDATE tasks SET ${fields.join(", ")} WHERE id = $${idx}`, values as any[]);
-	return getTask(id);
+	const row = await queryOne<any>(`UPDATE tasks SET ${fields.join(", ")} WHERE id = $${idx} RETURNING *`, values as any[]);
+	return row ? rowToTask(row) : undefined;
 }
 
 /**
