@@ -20,3 +20,4 @@ export * from './work-items.js';
 export * from './misc.js';
 export * from './auth.js';
 export * from './notifications.js';
+export * from './tests.js';

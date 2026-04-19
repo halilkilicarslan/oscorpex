@@ -15,6 +15,7 @@ import type { EventType } from "../types.js";
 import { sendWebhookNotification } from "../webhook-sender.js";
 
 import { agentRoutes } from "./agent-routes.js";
+import { costRoutes } from "./cost-routes.js";
 import { notificationRoutes } from "./notification-routes.js";
 import { analyticsRoutes } from "./analytics-routes.js";
 import authRoutes from "./auth-routes.js";
@@ -275,5 +276,6 @@ studio.route("/", sprintRoutes);
 studio.route("/", memoryRoutes);
 studio.route("/plugins", pluginRoutes);
 studio.route("/notifications", notificationRoutes);
+studio.route("/cost", costRoutes);
 
 export { studio as studioRoutes };

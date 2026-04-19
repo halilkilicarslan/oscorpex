@@ -1196,3 +1196,25 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user    ON notifications(user_id, read);
 CREATE INDEX IF NOT EXISTS idx_notifications_project ON notifications(project_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
+
+-- ---------------------------------------------------------------------------
+-- V6 M2: Automated Test Results
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS test_results (
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  task_id     TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  framework   TEXT NOT NULL DEFAULT 'unknown',
+  passed      INTEGER NOT NULL DEFAULT 0,
+  failed      INTEGER NOT NULL DEFAULT 0,
+  skipped     INTEGER NOT NULL DEFAULT 0,
+  total       INTEGER NOT NULL DEFAULT 0,
+  coverage    REAL,
+  duration_ms INTEGER,
+  raw_output  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_test_results_project ON test_results(project_id);
+CREATE INDEX IF NOT EXISTS idx_test_results_task    ON test_results(task_id);
