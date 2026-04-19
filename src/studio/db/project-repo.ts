@@ -36,6 +36,13 @@ export async function listProjects(): Promise<Project[]> {
 	return rows.map(rowToProject);
 }
 
+export async function listProjectsPaginated(limit: number, offset: number): Promise<[Project[], number]> {
+	const countRow = await queryOne<any>("SELECT COUNT(*) AS cnt FROM projects");
+	const total = Number(countRow?.cnt ?? 0);
+	const rows = await query<any>("SELECT * FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2", [limit, offset]);
+	return [rows.map(rowToProject), total];
+}
+
 export async function updateProject(
 	id: string,
 	data: Partial<Pick<Project, "name" | "description" | "status" | "techStack" | "repoPath">>,

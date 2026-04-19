@@ -24,12 +24,17 @@ export async function insertEvent(data: Omit<StudioEvent, "id" | "timestamp">): 
 	return { id, ...data, timestamp };
 }
 
-export async function listEvents(projectId: string, limit = 100): Promise<StudioEvent[]> {
-	const rows = await query<any>("SELECT * FROM events WHERE project_id = $1 ORDER BY timestamp DESC LIMIT $2", [
-		projectId,
-		limit,
-	]);
+export async function listEvents(projectId: string, limit = 100, offset = 0): Promise<StudioEvent[]> {
+	const rows = await query<any>(
+		"SELECT * FROM events WHERE project_id = $1 ORDER BY timestamp DESC LIMIT $2 OFFSET $3",
+		[projectId, limit, offset],
+	);
 	return rows.map(rowToEvent);
+}
+
+export async function countEvents(projectId: string): Promise<number> {
+	const rows = await query<any>("SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1", [projectId]);
+	return Number(rows[0]?.cnt ?? 0);
 }
 
 // ---------------------------------------------------------------------------

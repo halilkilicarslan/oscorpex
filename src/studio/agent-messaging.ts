@@ -232,6 +232,41 @@ export async function listProjectMessages(
 	return rows.map(rowToAgentMessage);
 }
 
+export async function listProjectMessagesPaginated(
+	projectId: string,
+	agentId: string | undefined,
+	status: MessageStatus | undefined,
+	limit: number,
+	offset: number,
+): Promise<[AgentMessage[], number]> {
+	const conditions: string[] = ["project_id = $1"];
+	const params: any[] = [projectId];
+	let idx = 2;
+
+	if (agentId) {
+		conditions.push(`(from_agent_id = $${idx} OR to_agent_id = $${idx + 1})`);
+		params.push(agentId, agentId);
+		idx += 2;
+	}
+
+	if (status) {
+		conditions.push(`status = $${idx}`);
+		params.push(status);
+		idx++;
+	}
+
+	const where = conditions.join(" AND ");
+
+	const countRow = await query<any>(`SELECT COUNT(*) AS cnt FROM agent_messages WHERE ${where}`, params);
+	const total = Number(countRow[0]?.cnt ?? 0);
+
+	const rows = await query<any>(
+		`SELECT * FROM agent_messages WHERE ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
+		[...params, limit, offset],
+	);
+	return [rows.map(rowToAgentMessage), total];
+}
+
 // ---------------------------------------------------------------------------
 // Toplu İşlem Fonksiyonları
 // ---------------------------------------------------------------------------

@@ -588,11 +588,11 @@ describe('ProjectReport — başlık ve genel render', () => {
 			expect(screen.getByText('Project Report')).toBeInTheDocument();
 		});
 
-		// Yükleme bitti, spinner kaybolmali — ancak Refresh içindeki ikon farklı
-		// Loading state spinner'ı artık DOM'da olmamalı
-		// (Refresh butonu spin etmiyor çünkü refreshing = false)
-		const animateSpinElements = document.querySelectorAll('.animate-spin');
-		expect(animateSpinElements.length).toBe(0);
+		// Yükleme bitti, spinner kaybolmali — Suspense fallback'ler de resolve olmalı
+		await waitFor(() => {
+			const animateSpinElements = document.querySelectorAll('.animate-spin');
+			expect(animateSpinElements.length).toBe(0);
+		});
 	});
 });
 

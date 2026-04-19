@@ -121,6 +121,55 @@ export async function getWorkItems(
 	return rows.map(rowToWorkItem);
 }
 
+export async function getWorkItemsPaginated(
+	projectId: string,
+	filters: {
+		type?: WorkItemType;
+		priority?: WorkItemPriority;
+		status?: WorkItemStatus;
+		sprintId?: string;
+		source?: WorkItemSource;
+	},
+	limit: number,
+	offset: number,
+): Promise<[WorkItem[], number]> {
+	const conditions: string[] = ["project_id = $1"];
+	const values: unknown[] = [projectId];
+	let idx = 2;
+
+	if (filters.type !== undefined) {
+		conditions.push(`type = $${idx++}`);
+		values.push(filters.type);
+	}
+	if (filters.priority !== undefined) {
+		conditions.push(`priority = $${idx++}`);
+		values.push(filters.priority);
+	}
+	if (filters.status !== undefined) {
+		conditions.push(`status = $${idx++}`);
+		values.push(filters.status);
+	}
+	if (filters.sprintId !== undefined) {
+		conditions.push(`sprint_id = $${idx++}`);
+		values.push(filters.sprintId);
+	}
+	if (filters.source !== undefined) {
+		conditions.push(`source = $${idx++}`);
+		values.push(filters.source);
+	}
+
+	const where = conditions.join(" AND ");
+
+	const countRows = await query<any>(`SELECT COUNT(*) AS cnt FROM work_items WHERE ${where}`, values as any[]);
+	const total = Number(countRows[0]?.cnt ?? 0);
+
+	const rows = await query<any>(
+		`SELECT * FROM work_items WHERE ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
+		[...values, limit, offset] as any[],
+	);
+	return [rows.map(rowToWorkItem), total];
+}
+
 export async function updateWorkItem(
 	id: string,
 	data: Partial<

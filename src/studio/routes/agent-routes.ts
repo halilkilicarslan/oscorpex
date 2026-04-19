@@ -12,6 +12,7 @@ import {
 	getThread,
 	getUnreadCount,
 	listProjectMessages,
+	listProjectMessagesPaginated,
 	markAsRead,
 	notifyNextInPipeline,
 	sendMessage,
@@ -128,8 +129,12 @@ agentRoutes.get("/projects/:id/messages", async (c) => {
 
 	const agentId = c.req.query("agentId");
 	const status = c.req.query("status") as any;
+	const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+	const offset = Number(c.req.query("offset") ?? 0);
 
-	return c.json(await listProjectMessages(projectId, agentId, status));
+	const [messages, total] = await listProjectMessagesPaginated(projectId, agentId, status, limit, offset);
+	c.header("X-Total-Count", String(total));
+	return c.json(messages);
 });
 
 // Takıma toplu yayın mesajı gönder

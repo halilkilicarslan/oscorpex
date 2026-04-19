@@ -176,8 +176,31 @@ class TaskTimeoutError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Semaphore — limits concurrent CLI process executions
+// ---------------------------------------------------------------------------
+
+class Semaphore {
+	private current = 0;
+	private queue: (() => void)[] = [];
+	constructor(private max: number) {}
+	async acquire(): Promise<void> {
+		if (this.current < this.max) { this.current++; return; }
+		return new Promise<void>((resolve) => this.queue.push(resolve));
+	}
+	release(): void {
+		this.current--;
+		const next = this.queue.shift();
+		if (next) { this.current++; next(); }
+	}
+	get activeCount(): number { return this.current; }
+	get pendingCount(): number { return this.queue.length; }
+}
+
+// ---------------------------------------------------------------------------
 // Execution Engine
 // ---------------------------------------------------------------------------
+
+const MAX_CONCURRENT_TASKS = Number(process.env.OSCORPEX_MAX_CONCURRENT_TASKS) || 3;
 
 class ExecutionEngine {
 	/** Guard: prevents the same task from being dispatched concurrently */
@@ -185,6 +208,9 @@ class ExecutionEngine {
 
 	/** Active AbortControllers for running tasks, keyed by `projectId:taskId` */
 	private _activeControllers = new Map<string, AbortController>();
+
+	/** Semaphore limiting concurrent CLI executions */
+	private _semaphore = new Semaphore(MAX_CONCURRENT_TASKS);
 
 	constructor() {
 		// Register completion callback: when a task completes and a new phase starts,
@@ -437,7 +463,8 @@ class ExecutionEngine {
 
 		// Re-fetch task to get current status — another caller may have already started it
 		const freshTask = await getTask(task.id);
-		if (!freshTask || (freshTask.status !== "queued" && freshTask.status !== "running")) {
+		const executableStatuses = new Set(["queued", "assigned", "running"]);
+		if (!freshTask || !executableStatuses.has(freshTask.status)) {
 			console.log(`[execution-engine] Task "${task.title}" çalıştırılabilir durumda değil (${freshTask?.status}), skip.`);
 			return;
 		}
@@ -471,9 +498,11 @@ class ExecutionEngine {
 
 		this._dispatchingTasks.add(task.id);
 
+		await this._semaphore.acquire();
 		try {
 			await this._executeTaskInner(projectId, freshTask);
 		} finally {
+			this._semaphore.release();
 			this._dispatchingTasks.delete(task.id);
 			this._activeControllers.delete(`${projectId}:${task.id}`);
 		}
@@ -514,10 +543,31 @@ class ExecutionEngine {
 			return;
 		}
 
-		// Mark task as assigned then running (skip if already running — e.g. revision restart)
-		if (task.status !== "running") {
-			await taskEngine.assignTask(task.id, agent.id);
-			await taskEngine.startTask(task.id);
+		// Assign + start — guard against concurrent dispatch from onTaskCompleted callback.
+		// Two callers may race to assign the same task; catch and re-read on conflict.
+		try {
+			const currentTask = await getTask(task.id);
+			const currentStatus = currentTask?.status ?? task.status;
+			if (currentStatus === "queued") {
+				await taskEngine.assignTask(task.id, agent.id);
+				await taskEngine.startTask(task.id);
+			} else if (currentStatus === "assigned") {
+				await taskEngine.startTask(task.id);
+			}
+			// status === "running" → already started, skip both
+		} catch (err) {
+			// Another concurrent dispatch won the race — re-check if task is still runnable
+			const retryTask = await getTask(task.id);
+			if (!retryTask || (retryTask.status !== "running" && retryTask.status !== "assigned")) {
+				console.log(`[execution-engine] Concurrent dispatch conflict for "${task.title}" (${retryTask?.status}), skip.`);
+				return;
+			}
+			// If running/assigned, the winner is already executing — we should skip too
+			if (retryTask.status === "running") {
+				// Another caller is executing, bail out
+				console.log(`[execution-engine] Task "${task.title}" already running from concurrent dispatch, skip.`);
+				return;
+			}
 		}
 
 		const prompt = await this.buildTaskPrompt(task, project, agent.role);
@@ -1368,6 +1418,11 @@ Complete the task described in the user message. Be precise and produce working 
 			projectId,
 			runtimes: [],
 			progress,
+			concurrency: {
+				active: this._semaphore.activeCount,
+				pending: this._semaphore.pendingCount,
+				max: MAX_CONCURRENT_TASKS,
+			},
 		};
 	}
 }

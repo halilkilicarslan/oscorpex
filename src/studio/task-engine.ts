@@ -1175,16 +1175,23 @@ class TaskEngine {
 	}
 
 	private async getProjectIdForTask(task: Task): Promise<string> {
+		// Fast path 1: already on the task object (populated by createTask v4.2)
+		if (task.projectId) {
+			this._projectIdCache.set(task.id, task.projectId);
+			return task.projectId;
+		}
+
+		// Fast path 2: in-memory LRU cache
 		const cached = this._projectIdCache.get(task.id);
 		if (cached !== undefined) return cached;
 
+		// DB lookup: try direct column first (COALESCE), fall back to JOIN for un-backfilled rows.
 		const row = await queryOne<{ project_id: string }>(
-			`
-      SELECT pp.project_id FROM tasks t
-      JOIN phases p ON t.phase_id = p.id
-      JOIN project_plans pp ON p.plan_id = pp.id
-      WHERE t.id = $1
-    `,
+			`SELECT COALESCE(t.project_id, pp.project_id) AS project_id
+			 FROM tasks t
+			 JOIN phases p ON t.phase_id = p.id
+			 JOIN project_plans pp ON p.plan_id = pp.id
+			 WHERE t.id = $1`,
 			[task.id],
 		);
 		const projectId = row?.project_id ?? "";
