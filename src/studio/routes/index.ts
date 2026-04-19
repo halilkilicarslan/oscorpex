@@ -36,6 +36,11 @@ seedTeamTemplates();
 // v4.0: Context session event bridge — crash recovery tracking
 initContextSession(eventBus);
 
+// M3: PG LISTEN/NOTIFY durable event bridge — diğer process'lerden gelen event'leri dinle
+eventBus.initPgListener().catch((err) =>
+	console.warn("[routes] initPgListener failed:", err instanceof Error ? err.message : err),
+);
+
 // ---------------------------------------------------------------------------
 // Webhook Event Entegrasyonu — global event listener
 // ---------------------------------------------------------------------------

@@ -1,14 +1,21 @@
 // ---------------------------------------------------------------------------
-// Oscorpex — Event Bus (in-process pub/sub)
+// Oscorpex — Event Bus (in-process pub/sub + PG LISTEN/NOTIFY durable bridge)
 // ---------------------------------------------------------------------------
 
-import { insertEvent } from "./db.js";
+import { getEvent, insertEvent } from "./db.js";
+import { pgListener } from "./pg-listener.js";
 import type { EventType, StudioEvent } from "./types.js";
 
 type Handler = (event: StudioEvent) => void;
 
+// TTL: aynı process içinde emit edilmiş event'lerin PG notification'ından
+// tekrar tetiklenmesini önlemek için 5 saniye tutuyoruz.
+const DEDUP_TTL_MS = 5000;
+
 class EventBus {
 	private handlers = new Map<string, Set<Handler>>();
+	/** Bu process'te emit edilmiş ve henüz TTL süresi dolmamış event ID'leri */
+	private _recentlyEmitted = new Set<string>();
 
 	/** Subscribe to all events for a project */
 	onProject(projectId: string, handler: Handler): () => void {
@@ -39,6 +46,15 @@ class EventBus {
 		// Fire-and-forget: persist to DB asynchronously, then notify subscribers
 		insertEvent(data)
 			.then((event) => {
+				// Dedup guard: bu ID'yi aynı process'te pg-listener'dan gelince skip etmek için işaretle
+				this._recentlyEmitted.add(event.id);
+				setTimeout(() => this._recentlyEmitted.delete(event.id), DEDUP_TTL_MS);
+
+				// PG LISTEN/NOTIFY — durable event notification (diğer process'ler için)
+				pgListener
+					.notify({ id: event.id, projectId: event.projectId, type: event.type })
+					.catch(() => {});
+
 				// Notify project subscribers
 				const projectHandlers = this.handlers.get(`project:${event.projectId}`);
 				if (projectHandlers) {
@@ -108,6 +124,15 @@ class EventBus {
 	async emitAsync(data: Omit<StudioEvent, "id" | "timestamp">): Promise<StudioEvent> {
 		const event = await insertEvent(data);
 
+		// Dedup guard: bu ID'yi aynı process'te pg-listener'dan gelince skip etmek için işaretle
+		this._recentlyEmitted.add(event.id);
+		setTimeout(() => this._recentlyEmitted.delete(event.id), DEDUP_TTL_MS);
+
+		// PG LISTEN/NOTIFY — durable event notification (diğer process'ler için)
+		pgListener
+			.notify({ id: event.id, projectId: event.projectId, type: event.type })
+			.catch(() => {});
+
 		// Notify project subscribers
 		const projectHandlers = this.handlers.get(`project:${event.projectId}`);
 		if (projectHandlers) {
@@ -133,6 +158,56 @@ class EventBus {
 		}
 
 		return event;
+	}
+
+	/**
+	 * PG LISTEN/NOTIFY listener'ı başlatır.
+	 * Başka bir process'ten gelen pg_notify bildirimleri dinlenir,
+	 * event DB'den fetch edilip mevcut handler'lara iletilir.
+	 * Aynı process'te emit edilen event'ler _recentlyEmitted ile dedup edilir.
+	 */
+	async initPgListener(): Promise<void> {
+		await pgListener.start();
+
+		pgListener.onNotification((payload) => {
+			// Aynı process'te bu event zaten emit edildi — çift tetiklemeyi önle
+			if (this._recentlyEmitted.has(payload.id)) return;
+
+			getEvent(payload.id)
+				.then((event) => {
+					if (!event) return;
+
+					// Notify project subscribers
+					const projectHandlers = this.handlers.get(`project:${event.projectId}`);
+					if (projectHandlers) {
+						for (const handler of projectHandlers) {
+							try {
+								handler(event);
+							} catch {
+								/* subscriber error — ignore */
+							}
+						}
+					}
+
+					// Notify type subscribers
+					const typeHandlers = this.handlers.get(`type:${event.type}`);
+					if (typeHandlers) {
+						for (const handler of typeHandlers) {
+							try {
+								handler(event);
+							} catch {
+								/* subscriber error — ignore */
+							}
+						}
+					}
+				})
+				.catch((err) => {
+					console.warn(
+						"[event-bus] Failed to fetch event from PG notification:",
+						err instanceof Error ? err.message : err,
+					);
+				});
+		});
 	}
 
 	/** Create an SSE-compatible readable stream for a project's events */

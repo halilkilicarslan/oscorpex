@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { execute, query } from "../pg.js";
+import { execute, query, queryOne } from "../pg.js";
 import type { ChatMessage, ChatRole, StudioEvent } from "../types.js";
 import { now, rowToEvent } from "./helpers.js";
 
@@ -22,6 +22,12 @@ export async function insertEvent(data: Omit<StudioEvent, "id" | "timestamp">): 
 		[id, data.projectId, data.type, data.agentId ?? null, data.taskId ?? null, JSON.stringify(data.payload), timestamp],
 	);
 	return { id, ...data, timestamp };
+}
+
+export async function getEvent(eventId: string): Promise<StudioEvent | null> {
+	const row = await queryOne<any>("SELECT * FROM events WHERE id = $1", [eventId]);
+	if (!row) return null;
+	return rowToEvent(row);
 }
 
 export async function listEvents(projectId: string, limit = 100, offset = 0): Promise<StudioEvent[]> {
