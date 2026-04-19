@@ -1,8 +1,12 @@
 export const BASE = import.meta.env.VITE_API_BASE ?? '';
 export const API = `${BASE}/api/studio`;
 
-/** Build auth headers when VITE_API_KEY is configured */
+/** Build auth headers — JWT token takes precedence over VITE_API_KEY */
 function authHeaders(): Record<string, string> {
+	// JWT token from localStorage (set by auth flow)
+	const token = typeof localStorage !== 'undefined' ? localStorage.getItem('oscorpex_token') : null;
+	if (token) return { Authorization: `Bearer ${token}` };
+	// Fallback: static API key from env
 	const key = import.meta.env.VITE_API_KEY;
 	return key ? { Authorization: `Bearer ${key}` } : {};
 }

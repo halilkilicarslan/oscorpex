@@ -20,7 +20,9 @@ import {
   Users,
   Terminal,
   Gauge,
+  LogOut,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface NavItem {
   to: string;
@@ -85,6 +87,7 @@ const sections: NavSection[] = [
 const SIDEBAR_STORAGE_KEY = 'oscorpex-sidebar-collapsed';
 
 export default function Sidebar() {
+  const { user, isAuthenticated, logout } = useAuth();
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
@@ -224,6 +227,45 @@ export default function Sidebar() {
             </>
           )}
         </a>
+
+        {/* User info + logout */}
+        {isAuthenticated && user && (
+          <div
+            className={`flex items-center gap-2 px-2.5 py-2 rounded-md border border-[#1f1f1f] bg-[#0f0f0f] mt-1 ${
+              collapsed ? 'justify-center' : ''
+            }`}
+          >
+            {/* Avatar */}
+            <div
+              className="w-7 h-7 rounded-full bg-[#22c55e]/20 border border-[#22c55e]/30 flex items-center justify-center shrink-0"
+              title={user.displayName || user.email}
+            >
+              <span className="text-[11px] font-semibold text-[#22c55e] uppercase">
+                {(user.displayName || user.email).charAt(0)}
+              </span>
+            </div>
+
+            {!collapsed && (
+              <>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-medium text-[#fafafa] truncate leading-tight">
+                    {user.displayName || user.email}
+                  </p>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#262626] text-[#737373] font-medium uppercase tracking-wide">
+                    {user.role}
+                  </span>
+                </div>
+                <button
+                  onClick={logout}
+                  title="Sign out"
+                  className="p-1 rounded text-[#525252] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                >
+                  <LogOut size={14} />
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );

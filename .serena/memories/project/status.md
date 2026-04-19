@@ -329,6 +329,35 @@ Backend 531/531, Frontend 433/433, typecheck clean.
 - 15 new tests
 - Backend 573/573, Frontend 433/433, typecheck clean
 
+### v5 M6.2 + M6.3 — RLS + RBAC (commit `1764f3c`)
+- `tenant-context.ts`: getTenantContext(), withTenantFilter(), verifyProjectAccess()
+- Auth opt-in: OSCORPEX_AUTH_ENABLED=true (default off, backward-compat)
+- Project routes: tenant filter, SSE ?token= query param auth
+- `rbac.ts`: 5 roles (owner>admin>developer>viewer>billing), wildcard permissions
+- requirePermission() middleware on critical endpoints (project CRUD, pipeline, plugins)
+- Admin routes: GET /auth/users, PATCH /auth/users/:id/role, POST/GET/DELETE /auth/api-keys
+- 29 new tests (12 tenant-context + 17 rbac)
+- Backend 605/605
+
+### v5 M6.4 — Tenant Isolation Hardening (commit `d1a00ab`)
+- PG RLS policy (projects_tenant_isolation) defined but NOT enabled yet
+- setTenantContext() for PG session tenant context (RLS-ready)
+- WS tenant scoping: ?token= JWT parse, project tenant check on subscribe
+- API key scope enforcement: wildcard/resource wildcard/exact match in rbac.ts
+- logTenantActivity() audit log on register, role change, API key ops
+- 28 new tests
+- Backend 633/633, Frontend 433/433, typecheck clean
+
+### V5 ROADMAP COMPLETE
+All 6 milestones delivered:
+- M1 Polling Elimination (`e6b7449`)
+- M2 Pagination + Charts (`150bd51`)
+- M3 Durable Events LISTEN/NOTIFY (`f984704`)
+- M4 Multi-Provider Fallback (`f984704`)
+- M5 Plugin SDK v1 (`54e4c8f`)
+- M6 Multi-Tenant RBAC (`0af1420` → `d1a00ab`, 4 phases)
+Total: 633 backend tests, 433 frontend tests, 0 typecheck errors.
+
 ### Completed Analysis Roadmap
 All 5 phases from analysis report complete:
 1. Quick Wins (indexes, RETURNING, polling) — `2a6bf32`

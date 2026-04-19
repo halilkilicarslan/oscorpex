@@ -33,6 +33,8 @@ export * from "./agent-stats-repo.js";
 export * from "./plugin-repo.js";
 // M6: Multi-Tenant Identity
 export * from "./tenant-repo.js";
+// V6 M1: In-App Notifications
+export * from "./notification-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";

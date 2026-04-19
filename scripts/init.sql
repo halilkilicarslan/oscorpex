@@ -1175,3 +1175,24 @@ DO $$ BEGIN
 			);
 	END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- V6 M1: In-App Notification System
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  tenant_id  TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  user_id    TEXT,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  type       TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  body       TEXT DEFAULT '',
+  read       BOOLEAN DEFAULT false,
+  data       JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user    ON notifications(user_id, read);
+CREATE INDEX IF NOT EXISTS idx_notifications_project ON notifications(project_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
