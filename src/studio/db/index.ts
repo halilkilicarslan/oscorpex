@@ -29,6 +29,10 @@ export * from "./context-repo.js";
 export * from "./diff-repo.js";
 export * from "./search-log-repo.js";
 export * from "./agent-stats-repo.js";
+// M5: Plugin SDK
+export * from "./plugin-repo.js";
+// M6: Multi-Tenant Identity
+export * from "./tenant-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";

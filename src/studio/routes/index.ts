@@ -9,10 +9,13 @@ import { seedPresetAgents, seedTeamTemplates } from "../db.js";
 import { initContextSession } from "../context-session.js";
 import { eventBus } from "../event-bus.js";
 import { budgetGuard } from "../middleware/policy-middleware.js";
-import { notifyPlugins } from "../plugin-registry.js";
+import { notifyPlugins, pluginRegistry } from "../plugin-registry.js";
 import { sendWebhookNotification } from "../webhook-sender.js";
+import type { EventType } from "../types.js";
 
+import authRoutes from "./auth-routes.js";
 import { agentRoutes } from "./agent-routes.js";
+import pluginRoutes from "./plugin-routes.js";
 import { analyticsRoutes } from "./analytics-routes.js";
 import { ceremonyRoutes } from "./ceremony-routes.js";
 import { cliUsageRoutes } from "./cli-usage-routes.js";
@@ -29,6 +32,9 @@ import { taskRoutes } from "./task-routes.js";
 import { teamRoutes } from "./team-routes.js";
 import { workItemRoutes } from "./work-item-routes.js";
 
+// M6: auth middleware (şimdilik import edilmiş, M6.2'de aktif edilecek)
+// import { authMiddleware } from "../auth/auth-middleware.js";
+
 // Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();
 seedTeamTemplates();
@@ -44,6 +50,10 @@ eventBus.initPgListener().catch((err) =>
 // ---------------------------------------------------------------------------
 // Webhook Event Entegrasyonu — global event listener
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Webhook Event Listeners — type-specific webhook notifications
+// ---------------------------------------------------------------------------
+
 eventBus.on("task:completed", (event) => {
 	const payload = event.payload as Record<string, unknown>;
 	sendWebhookNotification(event.projectId, "task_completed", {
@@ -52,13 +62,6 @@ eventBus.on("task:completed", (event) => {
 		agentId: event.agentId ?? "",
 		...payload,
 	}).catch((err) => console.warn("[webhook] task_completed gonderilemedi:", err));
-
-	// v3.9: Notify plugins (non-blocking)
-	notifyPlugins("onTaskComplete", {
-		projectId: event.projectId,
-		taskId: event.taskId ?? "",
-		agentId: event.agentId ?? "",
-	}).catch((err) => console.warn("[plugin-registry] onTaskComplete failed:", err));
 });
 
 eventBus.on("task:failed", (event) => {
@@ -76,30 +79,6 @@ eventBus.on("pipeline:completed", (event) => {
 	sendWebhookNotification(event.projectId, "pipeline_completed", {
 		...(event.payload as Record<string, unknown>),
 	}).catch((err) => console.warn("[webhook] pipeline_completed gonderilemedi:", err));
-
-	// v3.9: Notify plugins (non-blocking)
-	const payload = event.payload as Record<string, unknown>;
-	notifyPlugins("onPipelineComplete", {
-		projectId: event.projectId,
-		status: String(payload.status ?? "completed"),
-	}).catch((err) => console.warn("[plugin-registry] onPipelineComplete failed:", err));
-});
-
-eventBus.on("work_item:created", (event) => {
-	const payload = event.payload as Record<string, unknown>;
-	notifyPlugins("onWorkItemCreated", {
-		projectId: event.projectId,
-		itemId: String(payload.itemId ?? payload.id ?? ""),
-		type: String(payload.type ?? "feature"),
-	}).catch((err) => console.warn("[plugin-registry] onWorkItemCreated failed:", err));
-});
-
-eventBus.on("phase:completed", (event) => {
-	const payload = event.payload as Record<string, unknown>;
-	notifyPlugins("onPhaseComplete", {
-		projectId: event.projectId,
-		phaseId: String(payload.phaseId ?? ""),
-	}).catch((err) => console.warn("[plugin-registry] onPhaseComplete failed:", err));
 });
 
 eventBus.on("budget:warning", (event) => {
@@ -110,6 +89,92 @@ eventBus.on("budget:warning", (event) => {
 		...payload,
 	}).catch((err) => console.warn("[webhook] budget_warning gonderilemedi:", err));
 });
+
+// ---------------------------------------------------------------------------
+// M5: Plugin Bridge — general event bridge for ALL event types
+// pluginRegistry handles hook-based filtering internally per plugin manifest.
+// Legacy notifyPlugins (hook-based) is also preserved for backward compat.
+// ---------------------------------------------------------------------------
+
+const ALL_PLUGIN_EVENTS: EventType[] = [
+	"task:assigned",
+	"task:started",
+	"task:completed",
+	"task:failed",
+	"task:timeout",
+	"task:retry",
+	"task:approval_required",
+	"task:approved",
+	"task:rejected",
+	"task:timeout_warning",
+	"task:review_rejected",
+	"agent:started",
+	"agent:stopped",
+	"agent:output",
+	"agent:error",
+	"phase:started",
+	"phase:completed",
+	"plan:created",
+	"plan:approved",
+	"execution:started",
+	"execution:error",
+	"escalation:user",
+	"git:commit",
+	"git:pr-created",
+	"pipeline:completed",
+	"budget:warning",
+	"budget:exceeded",
+	"prompt:size",
+	"work_item:created",
+	"work_item:planned",
+	"sprint:started",
+	"sprint:completed",
+	"ceremony:standup",
+	"ceremony:retrospective",
+	"policy:violation",
+	"lifecycle:transition",
+	"message:created",
+];
+
+for (const eventType of ALL_PLUGIN_EVENTS) {
+	eventBus.on(eventType, (event) => {
+		// New manifest-driven registry (M5)
+		pluginRegistry.notifyPlugins(event).catch((err) => {
+			console.warn(
+				`[plugin-bridge] Error notifying plugins for ${eventType}:`,
+				err instanceof Error ? err.message : err,
+			);
+		});
+
+		// Legacy hook-based bridge (backward compat — v3.9 style)
+		if (eventType === "task:completed") {
+			notifyPlugins("onTaskComplete", {
+				projectId: event.projectId,
+				taskId: event.taskId ?? "",
+				agentId: event.agentId ?? "",
+			}).catch((err) => console.warn("[plugin-registry] onTaskComplete failed:", err));
+		} else if (eventType === "pipeline:completed") {
+			const payload = event.payload as Record<string, unknown>;
+			notifyPlugins("onPipelineComplete", {
+				projectId: event.projectId,
+				status: String(payload.status ?? "completed"),
+			}).catch((err) => console.warn("[plugin-registry] onPipelineComplete failed:", err));
+		} else if (eventType === "work_item:created") {
+			const payload = event.payload as Record<string, unknown>;
+			notifyPlugins("onWorkItemCreated", {
+				projectId: event.projectId,
+				itemId: String(payload.itemId ?? payload.id ?? ""),
+				type: String(payload.type ?? "feature"),
+			}).catch((err) => console.warn("[plugin-registry] onWorkItemCreated failed:", err));
+		} else if (eventType === "phase:completed") {
+			const payload = event.payload as Record<string, unknown>;
+			notifyPlugins("onPhaseComplete", {
+				projectId: event.projectId,
+				phaseId: String(payload.phaseId ?? ""),
+			}).catch((err) => console.warn("[plugin-registry] onPhaseComplete failed:", err));
+		}
+	});
+}
 
 // ---------------------------------------------------------------------------
 // Ana Studio Router
@@ -175,5 +240,6 @@ studio.route("/", lifecycleRoutes);
 studio.route("/", ceremonyRoutes);
 studio.route("/", sprintRoutes);
 studio.route("/", memoryRoutes);
+studio.route("/plugins", pluginRoutes);
 
 export { studio as studioRoutes };

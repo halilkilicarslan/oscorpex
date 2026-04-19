@@ -748,6 +748,39 @@ CREATE INDEX IF NOT EXISTS idx_mem_steps_conv  ON voltagent_memory_steps(convers
 CREATE INDEX IF NOT EXISTS idx_mem_wf_status   ON voltagent_memory_workflow_states(status);
 
 -- ---------------------------------------------------------------------------
+-- M5: Plugin SDK Tables
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS registered_plugins (
+  id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name          TEXT UNIQUE NOT NULL,
+  version       TEXT NOT NULL DEFAULT '0.0.1',
+  description   TEXT DEFAULT '',
+  author        TEXT DEFAULT '',
+  enabled       BOOLEAN DEFAULT true,
+  hooks         TEXT[] DEFAULT '{}',
+  permissions   TEXT[] DEFAULT '{}',
+  config_json   JSONB DEFAULT '{}',
+  manifest_json JSONB DEFAULT '{}',
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  updated_at    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS plugin_executions (
+  id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  plugin_name TEXT NOT NULL,
+  hook        TEXT NOT NULL,
+  project_id  TEXT,
+  duration_ms INTEGER DEFAULT 0,
+  success     BOOLEAN DEFAULT true,
+  error       TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_plugin_executions_plugin  ON plugin_executions(plugin_name);
+CREATE INDEX IF NOT EXISTS idx_plugin_executions_created ON plugin_executions(created_at);
+
+-- ---------------------------------------------------------------------------
 -- Indexes — RAG Embeddings (pgvector)
 -- ---------------------------------------------------------------------------
 
@@ -1065,3 +1098,53 @@ DO $$ BEGIN
   END IF;
 
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- M6: Multi-Tenant Identity
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS tenants (
+  id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name       TEXT NOT NULL,
+  slug       TEXT UNIQUE NOT NULL,
+  plan       TEXT DEFAULT 'free',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  email         TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  display_name  TEXT DEFAULT '',
+  tenant_id     TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  updated_at    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_users_email  ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+  user_id   TEXT REFERENCES users(id) ON DELETE CASCADE,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  role      TEXT NOT NULL CHECK (role IN ('owner','admin','developer','viewer','billing')),
+  PRIMARY KEY (user_id, tenant_id)
+);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+  id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  tenant_id    TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  user_id      TEXT REFERENCES users(id) ON DELETE CASCADE,
+  key_hash     TEXT NOT NULL,
+  name         TEXT NOT NULL,
+  scopes       TEXT[] DEFAULT '{}',
+  expires_at   TIMESTAMPTZ,
+  last_used_at TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_hash   ON api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id);
+
+-- projects tablosuna tenant_id ve owner_id ekle (nullable, backward compat)
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_id  TEXT REFERENCES users(id) ON DELETE SET NULL;

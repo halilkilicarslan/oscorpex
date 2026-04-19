@@ -7,7 +7,7 @@ import { createCodeAssistant, createSummarizer, createTranslator } from "./agent
 import { observabilityRoutes } from "./observability-routes.js";
 import { containerPool } from "./studio/container-pool.js";
 import { applyDbBootstrap } from "./studio/db-bootstrap.js";
-import { studioRoutes } from "./studio/index.js";
+import { studioRoutes, authRoutes } from "./studio/index.js";
 import { webhookSender } from "./studio/webhook-sender.js";
 import { startWSServer } from "./studio/ws-server.js";
 import { calculatorTool, dateTimeTool, weatherTool, webSearchTool } from "./tools";
@@ -102,6 +102,8 @@ new VoltAgent({
 		configureApp: (app) => {
 			app.route("/api/studio", studioRoutes);
 			app.route("/api/observability", observabilityRoutes);
+			// M6: Auth routes — public (no auth middleware)
+			app.route("/api/auth", authRoutes);
 		},
 	}),
 	logger,
