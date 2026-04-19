@@ -29,13 +29,17 @@ import { getAdapter } from "../cli-adapter.js";
 // Mock: CLI adapter — prevents real AI calls
 // ---------------------------------------------------------------------------
 
-vi.mock("../cli-adapter.js", () => ({
-	getAdapter: vi.fn().mockReturnValue({
+vi.mock("../cli-adapter.js", () => {
+	const adapter = {
 		name: "mock-cli",
 		isAvailable: vi.fn().mockResolvedValue(true),
 		execute: vi.fn(),
-	}),
-}));
+	};
+	return {
+		getAdapter: vi.fn().mockReturnValue(adapter),
+		getAdapterChain: vi.fn().mockReturnValue([adapter]),
+	};
+});
 
 // Mock non-blocking side effects to avoid noise
 vi.mock("../agent-runtime.js", () => ({
@@ -91,6 +95,15 @@ vi.mock("../context-store.js", () => ({
 	getContextSource: vi.fn().mockResolvedValue(null),
 	listContextSources: vi.fn().mockResolvedValue([]),
 	deleteContextSource: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../provider-state.js", () => ({
+	providerState: {
+		isAvailable: vi.fn().mockReturnValue(true),
+		markSuccess: vi.fn(),
+		markFailure: vi.fn(),
+		markRateLimited: vi.fn(),
+		getAllStates: vi.fn().mockReturnValue([]),
+	},
 }));
 
 // Get the mock execute fn from the mocked adapter

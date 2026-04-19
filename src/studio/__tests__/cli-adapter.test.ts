@@ -51,23 +51,7 @@ describe("CLI Adapter (Faz 4.1)", () => {
 			expect(adapter.name).toBe("codex");
 		});
 
-		it("should not be available", async () => {
-			expect(await adapter.isAvailable()).toBe(false);
-		});
-
-		it("should throw on execute", async () => {
-			await expect(
-				adapter.execute({
-					projectId: "p1",
-					agentId: "a1",
-					agentName: "Test",
-					repoPath: "/tmp",
-					prompt: "hello",
-					systemPrompt: "sys",
-					timeoutMs: 5000,
-				}),
-			).rejects.toThrow("not yet implemented");
-		});
+		// isAvailable and execute are tested in multi-provider.test.ts with proper spawn mocks
 	});
 
 	describe("CursorAdapter", () => {

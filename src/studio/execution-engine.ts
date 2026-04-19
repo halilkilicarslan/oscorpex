@@ -9,7 +9,7 @@ import { agentRuntime } from "./agent-runtime.js";
 import { startApp, stopApp } from "./app-runner.js";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { resolveAllowedTools } from "./capability-resolver.js";
-import { getAdapter } from "./cli-adapter.js";
+import { getAdapter, getAdapterChain } from "./cli-adapter.js";
 import { executeWithCLI, isClaudeCliAvailable, resolveFilePaths } from "./cli-runtime.js";
 import { buildPolicyPromptSection, getDefaultPolicy } from "./command-policy.js";
 import { buildRAGContext, formatRAGContext } from "./context-builder.js";
@@ -36,6 +36,7 @@ import { eventBus } from "./event-bus.js";
 import { execute as pgExecute } from "./pg.js";
 import { runLintFix } from "./lint-runner.js";
 import { resolveModel } from "./model-router.js";
+import { providerState } from "./provider-state.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { taskEngine } from "./task-engine.js";
 import { runIntegrationTest } from "./task-runners.js";
@@ -600,43 +601,77 @@ class ExecutionEngine {
 				throw new Error(`Project ${projectId} has no repoPath configured`);
 			}
 
-			// CLI adapter seçimi: agent'ın cliTool ayarına göre
-			const adapter = getAdapter(agent.cliTool ?? "claude-code");
-			const adapterReady = await adapter.isAvailable();
-			console.log(`[execution] CLI adapter: ${adapter.name}, ready=${adapterReady}`);
-
-			if (!adapterReady) {
-				throw new Error(`CLI adapter "${adapter.name}" is not available. Install it to run tasks.`);
-			}
-
 			const allowedTools = await resolveAllowedTools(projectId, agent.id, agent.role);
 
-			// v3.4: Model routing — complexity + prior failures + review rejections drive tier selection.
-			// Falls back to agent's configured model (or "sonnet") if routing fails.
+			// v3.4 + M4: Model routing — complexity + prior failures + review rejections + provider-native models.
+			const primaryCliTool = agent.cliTool ?? "claude-code";
 			let routedModel: string = agent.model ?? "sonnet";
 			try {
 				const resolved = await resolveModel(task, {
 					projectId,
 					priorFailures: task.retryCount ?? 0,
 					reviewRejections: task.revisionCount ?? 0,
+					cliTool: primaryCliTool,
 				});
 				routedModel = resolved.model;
 			} catch (err) {
 				console.warn("[execution-engine] resolveModel failed, using fallback:", err);
 			}
 
-			const cliResult = await adapter.execute({
-				projectId,
-				agentId: agent.id,
-				agentName: agent.name,
-				repoPath: project.repoPath,
-				prompt,
-				systemPrompt: agent.systemPrompt ? composeSystemPrompt(agent.systemPrompt) : this.defaultSystemPrompt(agent),
-				timeoutMs,
-				model: routedModel,
-				signal: taskController.signal,
-				allowedTools,
-			});
+			// M4: Adapter fallback chain — primary + fallback providers
+			const adapterChain = getAdapterChain(primaryCliTool, ["claude-code", "cursor"]);
+			let cliResult: Awaited<ReturnType<(typeof adapterChain)[0]["execute"]>> | null = null;
+			let lastAdapterError: Error | null = null;
+
+			for (const adapter of adapterChain) {
+				const adapterName = adapter.name as import("./types.js").AgentCliTool;
+
+				if (!providerState.isAvailable(adapterName)) {
+					console.log(`[execution] Adapter "${adapter.name}" is in cooldown, skipping.`);
+					continue;
+				}
+
+				const adapterReady = await adapter.isAvailable();
+				console.log(`[execution] CLI adapter: ${adapter.name}, ready=${adapterReady}`);
+
+				if (!adapterReady) {
+					console.log(`[execution] Adapter "${adapter.name}" is not installed, skipping.`);
+					continue;
+				}
+
+				try {
+					cliResult = await adapter.execute({
+						projectId,
+						agentId: agent.id,
+						agentName: agent.name,
+						repoPath: project.repoPath,
+						prompt,
+						systemPrompt: agent.systemPrompt
+							? composeSystemPrompt(agent.systemPrompt)
+							: this.defaultSystemPrompt(agent),
+						timeoutMs,
+						model: routedModel,
+						signal: taskController.signal,
+						allowedTools,
+					});
+					providerState.markSuccess(adapterName);
+					break; // success — exit chain
+				} catch (adapterErr) {
+					lastAdapterError = adapterErr instanceof Error ? adapterErr : new Error(String(adapterErr));
+					const errMsg = lastAdapterError.message;
+					if (isRateLimitError(errMsg)) {
+						console.warn(`[execution] Rate limit on adapter "${adapter.name}" — marking cooldown.`);
+						providerState.markRateLimited(adapterName);
+					} else {
+						providerState.markFailure(adapterName);
+					}
+					console.warn(`[execution] Adapter "${adapter.name}" failed: ${errMsg.slice(0, 200)}`);
+				}
+			}
+
+			if (cliResult === null) {
+				throw lastAdapterError ?? new Error("All CLI adapters exhausted — no provider available.");
+			}
 
 			const output: TaskOutput = {
 				filesCreated: resolveFilePaths(cliResult.filesCreated, project.repoPath),

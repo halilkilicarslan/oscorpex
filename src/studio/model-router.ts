@@ -5,16 +5,17 @@
 // ---------------------------------------------------------------------------
 
 import { getProjectSettings } from "./db.js";
-import type { Task } from "./types.js";
+import type { AgentCliTool, Task } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface ResolvedModel {
-	provider: string;
+	provider: "anthropic" | "openai" | "cursor" | string;
 	model: string;
 	effort: "low" | "medium" | "high";
+	cliTool?: AgentCliTool;
 }
 
 // Complexity tiers in order — used for escalation arithmetic
@@ -83,9 +84,10 @@ export async function resolveModel(
 		priorFailures?: number;
 		reviewRejections?: number;
 		riskLevel?: string;
+		cliTool?: AgentCliTool;
 	},
 ): Promise<ResolvedModel> {
-	const { projectId, priorFailures = 0, reviewRejections = 0, riskLevel } = context;
+	const { projectId, priorFailures = 0, reviewRejections = 0, riskLevel, cliTool } = context;
 
 	// 1. Load project-level routing config
 	const settings = await getProjectSettings(projectId, "model_routing");
@@ -119,9 +121,27 @@ export async function resolveModel(
 		}
 	}
 
-	// 6. Resolve model from config
-	const model = routingConfig[tier] ?? routingConfig["M"] ?? "claude-sonnet-4-6";
 	const effort = effortForTier(tier);
 
-	return { provider: "anthropic", model, effort };
+	// 6. Provider-native model mapping based on cliTool
+	const resolvedCliTool = cliTool ?? "claude-code";
+
+	if (resolvedCliTool === "codex") {
+		const codexModels: Record<Tier, string> = { S: "gpt-4o-mini", M: "gpt-4o", L: "o3", XL: "o3" };
+		return { provider: "openai", model: codexModels[tier] ?? "gpt-4o", effort, cliTool: resolvedCliTool };
+	}
+
+	if (resolvedCliTool === "cursor") {
+		const cursorModels: Record<Tier, string> = {
+			S: "cursor-small",
+			M: "cursor-small",
+			L: "cursor-large",
+			XL: "cursor-large",
+		};
+		return { provider: "cursor", model: cursorModels[tier] ?? "cursor-small", effort, cliTool: resolvedCliTool };
+	}
+
+	// Default: anthropic
+	const model = routingConfig[tier] ?? routingConfig["M"] ?? "claude-sonnet-4-6";
+	return { provider: "anthropic", model, effort, cliTool: resolvedCliTool };
 }

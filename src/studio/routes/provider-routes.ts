@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import { isAnyProviderConfigured } from "../ai-provider-factory.js";
+import { providerState } from "../provider-state.js";
 import { isAnyPlannerCLIAvailable, listPlannerCLIProviders } from "../planner-cli.js";
 import {
 	createProvider,
@@ -147,6 +148,11 @@ providerRoutes.post("/providers/:id/default", async (c) => {
 	const provider = await setDefaultProvider(c.req.param("id"));
 	if (!provider) return c.json({ error: "Provider not found" }, 404);
 	return c.json(provider);
+});
+
+// GET /providers/status — CLI adapter runtime state (rate limits, cooldowns, failures)
+providerRoutes.get("/providers/status", async (c) => {
+	return c.json(providerState.getAllStates());
 });
 
 providerRoutes.post("/providers/:id/test", async (c) => {

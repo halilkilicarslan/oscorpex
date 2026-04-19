@@ -242,6 +242,9 @@ CREATE TABLE IF NOT EXISTS token_usage (
 ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS cache_creation_tokens INTEGER DEFAULT 0;
 ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS cache_read_tokens INTEGER DEFAULT 0;
 
+-- Migration: M4 — add provider column to token_usage
+ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS provider TEXT;
+
 CREATE TABLE IF NOT EXISTS cli_probe_settings (
   provider_id              TEXT PRIMARY KEY,
   enabled                  INTEGER NOT NULL DEFAULT 0,
