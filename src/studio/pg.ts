@@ -92,6 +92,22 @@ export async function withTransaction<T>(fn: (client: pg.PoolClient) => Promise<
 }
 
 /**
+ * Set the current tenant context for the PostgreSQL session.
+ * This is used by RLS policies when Row Level Security is enabled.
+ * The setting is transaction-scoped (true = reset after transaction end).
+ *
+ * Currently called as a no-op stub — RLS is not yet enabled (M6.4).
+ * When RLS is activated in a future migration, this function will enforce
+ * tenant isolation at the database level automatically.
+ *
+ * @example
+ *   await setTenantContext("tenant-uuid");
+ */
+export async function setTenantContext(tenantId: string): Promise<void> {
+	await execute("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
+}
+
+/**
  * Gracefully close the connection pool.
  * Call this during application shutdown to allow in-flight queries to finish.
  */

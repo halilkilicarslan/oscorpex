@@ -13,6 +13,7 @@
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
+import { verifyJwt } from "./auth/jwt.js";
 import { eventBus } from "./event-bus.js";
 import type { StudioEvent } from "./types.js";
 
@@ -54,6 +55,12 @@ interface ClientRecord {
 	lastPong: number;
 	/** Ölü bağlantı tespiti için ping timer'ı */
 	pingTimer?: ReturnType<typeof setInterval>;
+	/**
+	 * M6.4: Tenant isolation — JWT'den çıkarılan tenantId.
+	 * null = auth kapalı (backward compat) → tüm project event'leri iletilir.
+	 * Dolu = sadece bu tenant'ın projeleri için gelen event'ler iletilir.
+	 */
+	tenantId: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,11 +128,31 @@ class WebSocketManager {
 	// -------------------------------------------------------------------------
 
 	private _setupWSS(): void {
-		this.wss.on("connection", (ws: WebSocket) => {
+		this.wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+			// M6.4: Tenant isolation — URL query param ?token=<jwt> から tenantId çıkar.
+			// Browser WS API header gönderemediğinden token query param olarak iletilir.
+			// OSCORPEX_AUTH_ENABLED=false ya da token yoksa tenantId=null (backward compat).
+			let tenantId: string | null = null;
+			if (process.env.OSCORPEX_AUTH_ENABLED === "true") {
+				try {
+					const url = new URL(req.url ?? "", "http://localhost");
+					const token = url.searchParams.get("token");
+					if (token) {
+						const payload = verifyJwt(token);
+						if (payload) {
+							tenantId = payload.tenantId ?? null;
+						}
+					}
+				} catch {
+					// URL parse hatası — tenantId null kalır (backward compat)
+				}
+			}
+
 			const record: ClientRecord = {
 				ws,
 				subscriptions: new Set(),
 				lastPong: Date.now(),
+				tenantId,
 			};
 			this.clients.set(ws, record);
 
@@ -172,8 +199,13 @@ class WebSocketManager {
 					this._send(ws, { type: "error", payload: { message: "projectId zorunlu" } });
 					return;
 				}
+				// M6.4: tenantId varsa _subscribe async tenant kontrolü + "subscribed" yanıtı gönderir.
+				// tenantId yoksa (auth kapalı) senkron yol — burada "subscribed" gönderilir.
+				const isTenantScoped = record.tenantId !== null;
 				this._subscribe(ws, record, projectId);
-				this._send(ws, { type: "subscribed", projectId });
+				if (!isTenantScoped) {
+					this._send(ws, { type: "subscribed", projectId });
+				}
 				break;
 			}
 
@@ -202,6 +234,46 @@ class WebSocketManager {
 
 	private _subscribe(ws: WebSocket, record: ClientRecord, projectId: string): void {
 		if (record.subscriptions.has(projectId)) return; // Zaten abone
+
+		// M6.4: Tenant isolation — eğer client'ın tenantId'si varsa, project'in
+		// tenant_id'si ile eşleştiğini async kontrol et. Kontrol başarısız olursa
+		// subscribe edilmez ve client'a error gönderilir. Auth kapalıysa (tenantId=null)
+		// kontrol atlanır (backward compat).
+		if (record.tenantId !== null) {
+			import("./db.js")
+				.then(({ queryOne: qOne }) =>
+					qOne<{ tenant_id: string | null }>("SELECT tenant_id FROM projects WHERE id = $1", [projectId]),
+				)
+				.then((project) => {
+					if (!project) {
+						// Proje bulunamadı
+						this._send(ws, { type: "error", payload: { message: "Project not found" } });
+						return;
+					}
+					// Legacy projeler (tenant_id=null) tüm tenant'lara açık
+					if (project.tenant_id !== null && project.tenant_id !== record.tenantId) {
+						this._send(ws, { type: "error", payload: { message: "Access denied: tenant mismatch" } });
+						return;
+					}
+					// Erişim onaylandı — gerçek subscribe işlemi
+					this._doSubscribe(record, projectId);
+					this._send(ws, { type: "subscribed", projectId });
+				})
+				.catch(() => {
+					// DB hatası — backward compat için subscribe et
+					this._doSubscribe(record, projectId);
+					this._send(ws, { type: "subscribed", projectId });
+				});
+			return; // Async yol — _handleClientMessage içindeki "subscribed" yanıtını engelle
+		}
+
+		// Auth kapalı — doğrudan subscribe et
+		this._doSubscribe(record, projectId);
+	}
+
+	/** Gerçek abonelik mantığı — tenant kontrolü tamamlandıktan sonra çağrılır */
+	private _doSubscribe(record: ClientRecord, projectId: string): void {
+		if (record.subscriptions.has(projectId)) return;
 
 		record.subscriptions.add(projectId);
 

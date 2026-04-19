@@ -6,6 +6,7 @@
 
 import type { Context } from "hono";
 import { queryOne } from "../pg.js";
+import type { EventType } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +50,38 @@ export function withTenantFilter(
 	const clause = hasWhere ? ` AND tenant_id = $${paramIndex}` : ` WHERE tenant_id = $${paramIndex}`;
 
 	return { query: baseQuery + clause, params: [tenantId] };
+}
+
+// ---------------------------------------------------------------------------
+// Tenant Activity Audit Log
+// ---------------------------------------------------------------------------
+
+/**
+ * Log a tenant-scoped activity to the events table.
+ * Uses the events table as the audit sink — type: "tenant:activity".
+ * Non-blocking: errors are silently swallowed so callers are never interrupted.
+ *
+ * @param tenantId  The tenant performing the action (used as projectId in event)
+ * @param userId    The user performing the action
+ * @param action    Human-readable action label (e.g. "register", "role_change")
+ * @param details   Optional structured metadata for the event
+ */
+export async function logTenantActivity(
+	tenantId: string,
+	userId: string,
+	action: string,
+	details?: Record<string, unknown>,
+): Promise<void> {
+	// Dynamic import avoids circular dependency: auth/* → db.js → event-repo → ...
+	const { insertEvent } = await import("../db.js");
+	await insertEvent({
+		projectId: tenantId,
+		type: "tenant:activity" as EventType,
+		agentId: userId,
+		payload: { action, userId, ...details },
+	}).catch(() => {
+		// Non-blocking — audit log failures must never break the primary operation
+	});
 }
 
 // ---------------------------------------------------------------------------
