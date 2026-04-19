@@ -6,10 +6,10 @@ import { Hono } from "hono";
 import {
 	getActivityTimeline,
 	getAgentAnalytics,
-	getAllAgentCostSummaries,
 	getAgentComparison,
 	getAgentHeatMap,
 	getAgentPerformanceTimeline,
+	getAllAgentCostSummaries,
 	getProject,
 	getProjectAnalytics,
 	getProjectCostBreakdown,
@@ -301,10 +301,7 @@ analyticsRoutes.get("/projects/:id/analytics/context", async (c) => {
 		const project = await getProject(projectId);
 		if (!project) return c.json({ error: "Project not found" }, 404);
 
-		const [metrics, perTask] = await Promise.all([
-			getContextMetrics(projectId),
-			getPerTaskContextMetrics(projectId),
-		]);
+		const [metrics, perTask] = await Promise.all([getContextMetrics(projectId), getPerTaskContextMetrics(projectId)]);
 
 		return c.json({ metrics, perTask });
 	} catch (err) {

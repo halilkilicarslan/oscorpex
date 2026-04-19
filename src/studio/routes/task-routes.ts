@@ -5,7 +5,17 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { containerManager } from "../container-manager.js";
-import { appendTaskLogs, countProjectTasks, getProject, getTask, getTaskDiffs, getTaskDiffSummary, listPendingApprovals, listProjectTasks, updateTask } from "../db.js";
+import {
+	appendTaskLogs,
+	countProjectTasks,
+	getProject,
+	getTask,
+	getTaskDiffSummary,
+	getTaskDiffs,
+	listPendingApprovals,
+	listProjectTasks,
+	updateTask,
+} from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { executionEngine } from "../execution-engine.js";
 import { taskEngine } from "../task-engine.js";

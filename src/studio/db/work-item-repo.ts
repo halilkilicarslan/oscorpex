@@ -4,8 +4,8 @@
 
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
-import { now, rowToWorkItem } from "./helpers.js";
 import type { WorkItem, WorkItemPriority, WorkItemSource, WorkItemStatus, WorkItemType } from "../types.js";
+import { now, rowToWorkItem } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
 // Work Items CRUD
@@ -173,7 +173,10 @@ export async function getWorkItemsPaginated(
 export async function updateWorkItem(
 	id: string,
 	data: Partial<
-		Pick<WorkItem, "type" | "title" | "description" | "priority" | "severity" | "labels" | "status" | "plannedTaskId" | "sprintId">
+		Pick<
+			WorkItem,
+			"type" | "title" | "description" | "priority" | "severity" | "labels" | "status" | "plannedTaskId" | "sprintId"
+		>
 	>,
 ): Promise<WorkItem | null> {
 	const fields: string[] = [];
@@ -232,25 +235,19 @@ export async function deleteWorkItem(id: string): Promise<void> {
 }
 
 export async function getWorkItemsBySprint(sprintId: string): Promise<WorkItem[]> {
-	const rows = await query<any>(
-		"SELECT * FROM work_items WHERE sprint_id = $1 ORDER BY created_at DESC",
-		[sprintId],
-	);
+	const rows = await query<any>("SELECT * FROM work_items WHERE sprint_id = $1 ORDER BY created_at DESC", [sprintId]);
 	return rows.map(rowToWorkItem);
 }
 
 export async function countWorkItems(projectId: string, status?: WorkItemStatus): Promise<number> {
 	let row: any;
 	if (status !== undefined) {
-		row = await queryOne<any>(
-			"SELECT COUNT(*) AS cnt FROM work_items WHERE project_id = $1 AND status = $2",
-			[projectId, status],
-		);
+		row = await queryOne<any>("SELECT COUNT(*) AS cnt FROM work_items WHERE project_id = $1 AND status = $2", [
+			projectId,
+			status,
+		]);
 	} else {
-		row = await queryOne<any>(
-			"SELECT COUNT(*) AS cnt FROM work_items WHERE project_id = $1",
-			[projectId],
-		);
+		row = await queryOne<any>("SELECT COUNT(*) AS cnt FROM work_items WHERE project_id = $1", [projectId]);
 	}
-	return parseInt(row?.cnt ?? "0", 10);
+	return Number.parseInt(row?.cnt ?? "0", 10);
 }

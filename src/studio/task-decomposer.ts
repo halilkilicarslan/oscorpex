@@ -10,8 +10,8 @@ import { readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { generateObject } from "ai";
 import { z } from "zod";
-import { createTask, getProject, listProjectAgents } from "./db.js";
 import { getAIModelWithFallback } from "./ai-provider-factory.js";
+import { createTask, getProject, listProjectAgents } from "./db.js";
 import { execute } from "./pg.js";
 import type { Project, Task, TaskComplexity } from "./types.js";
 
@@ -195,17 +195,9 @@ Do not include any prose outside of the structured output.`;
 
 const subTaskSchema = z.object({
 	title: z.string().min(3).max(120).describe("Short action-oriented title, unique within the set"),
-	description: z
-		.string()
-		.min(10)
-		.max(800)
-		.describe("Specific instructions: file, function/component, behavior"),
+	description: z.string().min(10).max(800).describe("Specific instructions: file, function/component, behavior"),
 	complexity: z.enum(["S", "M"]).describe("S: 1 file 1-20 lines; M: 1-3 files 20-80 lines"),
-	targetFiles: z
-		.array(z.string())
-		.min(1)
-		.max(3)
-		.describe("Real file paths this task creates or modifies"),
+	targetFiles: z.array(z.string()).min(1).max(3).describe("Real file paths this task creates or modifies"),
 	estimatedLines: z.number().int().min(1).max(120).describe("Approximate lines changed"),
 	rationale: z.string().min(5).max(240).describe("One sentence explaining why this slice exists"),
 });
@@ -218,9 +210,7 @@ type AISubTask = z.infer<typeof subTaskSchema>;
 
 /** Build the user prompt with parent task + codebase context. */
 function buildDecomposerPrompt(project: Project, parentTask: Task, codebaseContext: string): string {
-	const targets = parentTask.targetFiles?.length
-		? parentTask.targetFiles.join(", ")
-		: "(none specified)";
+	const targets = parentTask.targetFiles?.length ? parentTask.targetFiles.join(", ") : "(none specified)";
 
 	return `# Project
 Name: ${project.name}
@@ -344,10 +334,7 @@ function heuristicDecompose(parentTask: Task): HeuristicSubTask[] {
 // Persistence
 // ---------------------------------------------------------------------------
 
-async function persistSubTasks(
-	parentTask: Task,
-	subTasks: Array<HeuristicSubTask | AISubTask>,
-): Promise<Task[]> {
+async function persistSubTasks(parentTask: Task, subTasks: Array<HeuristicSubTask | AISubTask>): Promise<Task[]> {
 	const created: Task[] = [];
 
 	for (const sub of subTasks) {
@@ -416,9 +403,7 @@ export async function decomposeTask(task: Task, projectId: string): Promise<Task
 	const subTasks: Array<HeuristicSubTask | AISubTask> = ai && ai.length >= 2 ? ai : heuristicDecompose(task);
 
 	if (ai && ai.length >= 2) {
-		console.log(
-			`[task-decomposer] AI produced ${ai.length} micro-tasks for "${task.title}" (${task.complexity})`,
-		);
+		console.log(`[task-decomposer] AI produced ${ai.length} micro-tasks for "${task.title}" (${task.complexity})`);
 	} else {
 		console.log(
 			`[task-decomposer] Heuristic produced ${subTasks.length} micro-tasks for "${task.title}" (${task.complexity})`,

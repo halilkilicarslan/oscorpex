@@ -15,11 +15,7 @@ vi.mock("../event-bus.js", () => ({
 
 import { createTask, getLatestPlan, getProject, listPhases, updateProject } from "../db.js";
 import { eventBus } from "../event-bus.js";
-import {
-	getValidTransitions,
-	transitionProject,
-	triggerHotfix,
-} from "../lifecycle-manager.js";
+import { getValidTransitions, transitionProject, triggerHotfix } from "../lifecycle-manager.js";
 
 const mockGetProject = vi.mocked(getProject);
 const mockUpdateProject = vi.mocked(updateProject);
@@ -178,9 +174,7 @@ describe("triggerHotfix", () => {
 		await triggerHotfix("p-1", "urgent");
 
 		expect(mockUpdateProject).toHaveBeenCalledWith("p-1", { status: "maintenance" });
-		const transitionEvents = mockEmit.mock.calls.filter(
-			(c) => (c[0] as any).type === "lifecycle:transition",
-		);
+		const transitionEvents = mockEmit.mock.calls.filter((c) => (c[0] as any).type === "lifecycle:transition");
 		expect(transitionEvents.length).toBeGreaterThanOrEqual(1);
 	});
 

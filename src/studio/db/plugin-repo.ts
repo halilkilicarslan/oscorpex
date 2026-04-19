@@ -75,18 +75,12 @@ function rowToPluginExecution(row: Record<string, unknown>): PluginExecution {
 // ---------------------------------------------------------------------------
 
 export async function listPlugins(): Promise<RegisteredPlugin[]> {
-	const rows = await query<Record<string, unknown>>(
-		"SELECT * FROM registered_plugins ORDER BY created_at ASC",
-		[],
-	);
+	const rows = await query<Record<string, unknown>>("SELECT * FROM registered_plugins ORDER BY created_at ASC", []);
 	return rows.map(rowToPlugin);
 }
 
 export async function getPlugin(name: string): Promise<RegisteredPlugin | null> {
-	const row = await queryOne<Record<string, unknown>>(
-		"SELECT * FROM registered_plugins WHERE name = $1",
-		[name],
-	);
+	const row = await queryOne<Record<string, unknown>>("SELECT * FROM registered_plugins WHERE name = $1", [name]);
 	return row ? rowToPlugin(row) : null;
 }
 
@@ -187,10 +181,7 @@ export async function insertPluginExecution(data: {
 	);
 }
 
-export async function getPluginExecutions(
-	pluginName: string,
-	limit = 50,
-): Promise<PluginExecution[]> {
+export async function getPluginExecutions(pluginName: string, limit = 50): Promise<PluginExecution[]> {
 	const rows = await query<Record<string, unknown>>(
 		"SELECT * FROM plugin_executions WHERE plugin_name = $1 ORDER BY created_at DESC LIMIT $2",
 		[pluginName, limit],

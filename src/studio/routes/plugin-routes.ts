@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { requirePermission } from "../auth/rbac.js";
 import { deletePlugin, getPlugin, getPluginExecutions, listPlugins, updatePlugin } from "../db.js";
 import { pluginRegistry } from "../plugin-registry.js";
 
@@ -39,9 +40,9 @@ router.get("/:name", async (c) => {
 });
 
 // PATCH /plugins/:name — enable/disable + config update
-router.patch("/:name", async (c) => {
+router.patch("/:name", requirePermission("plugins:write"), async (c) => {
 	try {
-		const name = c.req.param("name");
+		const name = c.req.param("name") ?? "";
 		const body = await c.req.json<{ enabled?: boolean; configJson?: Record<string, unknown> }>();
 		if (body.enabled !== undefined) {
 			if (body.enabled) {
@@ -61,9 +62,9 @@ router.patch("/:name", async (c) => {
 });
 
 // DELETE /plugins/:name
-router.delete("/:name", async (c) => {
+router.delete("/:name", requirePermission("plugins:write"), async (c) => {
 	try {
-		const name = c.req.param("name");
+		const name = c.req.param("name") ?? "";
 		pluginRegistry.unregister(name);
 		await deletePlugin(name);
 		return c.json({ ok: true });

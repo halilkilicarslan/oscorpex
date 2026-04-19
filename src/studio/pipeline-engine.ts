@@ -955,7 +955,9 @@ class PipelineEngine {
 		}
 
 		await persistState(state);
-		console.log(`[pipeline-engine] Pipeline refresh — ${newWaves.length} stage (${completedStageCount} completed korundu)`);
+		console.log(
+			`[pipeline-engine] Pipeline refresh — ${newWaves.length} stage (${completedStageCount} completed korundu)`,
+		);
 	}
 
 	// -------------------------------------------------------------------------

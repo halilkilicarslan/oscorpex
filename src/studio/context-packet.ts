@@ -4,14 +4,8 @@
 // Replaces ad-hoc prompt assembly scattered across execution-engine.ts.
 // ---------------------------------------------------------------------------
 
-import {
-	getLatestPlan,
-	getProject,
-	listPhases,
-	listProjectAgents,
-	listProjectTasks,
-} from "./db.js";
 import { searchContext } from "./context-store.js";
+import { getLatestPlan, getProject, listPhases, listProjectAgents, listProjectTasks } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import type { ContextPacketOptions, ProjectAgent, Task } from "./types.js";
 
@@ -112,11 +106,7 @@ async function assemblePlannerContext(
 
 	// Tech stack
 	if (project.techStack.length > 0) {
-		const techSection = buildSection(
-			"Tech Stack",
-			project.techStack.join(", "),
-			SECTION_BUDGETS.techStack,
-		);
+		const techSection = buildSection("Tech Stack", project.techStack.join(", "), SECTION_BUDGETS.techStack);
 		parts.push(techSection.text);
 		sections["techStack"] = techSection.tokens;
 	}
@@ -129,9 +119,7 @@ async function assemblePlannerContext(
 			.map(
 				(ph) =>
 					`### Phase ${ph.order}: ${ph.name} [${ph.status}]\n` +
-					(ph.tasks.length > 0
-						? ph.tasks.map((t) => `  - ${summarizeTask(t)}`).join("\n")
-						: "  (no tasks yet)"),
+					(ph.tasks.length > 0 ? ph.tasks.map((t) => `  - ${summarizeTask(t)}`).join("\n") : "  (no tasks yet)"),
 			)
 			.join("\n\n");
 		const planSection = buildSection(
@@ -215,9 +203,7 @@ async function assembleExecutionContext(
 	}
 
 	// Completed task context — FTS search augmented with task summaries
-	const completed = allTasks
-		.filter((t) => t.id !== taskId && t.status === "done")
-		.slice(-10);
+	const completed = allTasks.filter((t) => t.id !== taskId && t.status === "done").slice(-10);
 
 	// Try FTS search for relevant completed task context
 	let ftsCompletedBody = "";
@@ -262,11 +248,7 @@ async function assembleExecutionContext(
 	// Acceptance criteria — extracted from description if present
 	const criteriaMatch = task.description.match(/acceptance criteria[:\s]+([\s\S]+?)(?:\n##|\n---|\n\n\n|$)/i);
 	if (criteriaMatch) {
-		const criteriaSection = buildSection(
-			"Acceptance Criteria",
-			criteriaMatch[1].trim(),
-			2_000,
-		);
+		const criteriaSection = buildSection("Acceptance Criteria", criteriaMatch[1].trim(), 2_000);
 		parts.push(criteriaSection.text);
 		sections["acceptanceCriteria"] = criteriaSection.tokens;
 	}
@@ -307,11 +289,7 @@ async function assembleReviewContext(
 	// Acceptance criteria
 	const criteriaMatch = task.description.match(/acceptance criteria[:\s]+([\s\S]+?)(?:\n##|\n---|\n\n\n|$)/i);
 	if (criteriaMatch) {
-		const criteriaSection = buildSection(
-			"Acceptance Criteria",
-			criteriaMatch[1].trim(),
-			2_000,
-		);
+		const criteriaSection = buildSection("Acceptance Criteria", criteriaMatch[1].trim(), 2_000);
 		parts.push(criteriaSection.text);
 		sections["acceptanceCriteria"] = criteriaSection.tokens;
 	}
@@ -323,11 +301,7 @@ async function assembleReviewContext(
 			...task.output.filesModified.map((f) => `~ ${f} (modified)`),
 		];
 		if (changedFiles.length > 0) {
-			const changedSection = buildSection(
-				"Changed Files",
-				changedFiles.join("\n"),
-				2_000,
-			);
+			const changedSection = buildSection("Changed Files", changedFiles.join("\n"), 2_000);
 			parts.push(changedSection.text);
 			sections["changedFiles"] = changedSection.tokens;
 		}
@@ -368,11 +342,7 @@ async function assembleTeamArchitectContext(
 	const agents = await listProjectAgents(projectId);
 	if (agents.length > 0) {
 		const teamBody = agents.map((a) => `- ${summarizeAgent(a)}`).join("\n");
-		const teamSection = buildSection(
-			"Team Composition",
-			teamBody,
-			SECTION_BUDGETS.teamComposition,
-		);
+		const teamSection = buildSection("Team Composition", teamBody, SECTION_BUDGETS.teamComposition);
 		parts.push(teamSection.text);
 		sections["teamComposition"] = teamSection.tokens;
 	}
@@ -385,11 +355,7 @@ async function assembleTeamArchitectContext(
 			return `- ${a.name} → reports to → ${parent?.name ?? a.reportsTo}`;
 		});
 	if (deps.length > 0) {
-		const depSection = buildSection(
-			"Dependency Graph",
-			deps.join("\n"),
-			SECTION_BUDGETS.dependencyGraph,
-		);
+		const depSection = buildSection("Dependency Graph", deps.join("\n"), SECTION_BUDGETS.dependencyGraph);
 		parts.push(depSection.text);
 		sections["dependencyGraph"] = depSection.tokens;
 	}

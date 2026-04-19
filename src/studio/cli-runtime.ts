@@ -326,7 +326,8 @@ export function executeWithCLI(opts: {
 
 		// Rate-limit detection from stderr
 		let rateLimitDetected = false;
-		const RATE_LIMIT_RX = /you[''\u2019]ve hit your limit|rate limit|resets?\s+\d{1,2}[:.]\d{2}\s*(am|pm)|too many requests|quota exceeded/i;
+		const RATE_LIMIT_RX =
+			/you[''\u2019]ve hit your limit|rate limit|resets?\s+\d{1,2}[:.]\d{2}\s*(am|pm)|too many requests|quota exceeded/i;
 
 		// Process stderr
 		proc.stderr!.on("data", (chunk: Buffer) => {
@@ -480,7 +481,11 @@ function processStreamEvent(
 
 			// Extract model usage — sum across all models
 			if (res.modelUsage) {
-				let totalIn = 0, totalOut = 0, totalCacheCreate = 0, totalCacheRead = 0, totalCost = 0;
+				let totalIn = 0,
+					totalOut = 0,
+					totalCacheCreate = 0,
+					totalCacheRead = 0,
+					totalCost = 0;
 				for (const [modelName, usage] of Object.entries(res.modelUsage)) {
 					result.model = modelName;
 					totalIn += usage.inputTokens ?? 0;
@@ -608,7 +613,9 @@ export function streamWithCLI(
 					const res = event as CLIResultEvent;
 					costUsd = res.total_cost_usd ?? 0;
 					if (res.modelUsage) {
-						let totalIn = 0, totalOut = 0, totalCost = 0;
+						let totalIn = 0,
+							totalOut = 0,
+							totalCost = 0;
 						for (const usage of Object.values(res.modelUsage)) {
 							totalIn += usage.inputTokens ?? 0;
 							totalOut += usage.outputTokens ?? 0;

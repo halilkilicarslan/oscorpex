@@ -3,9 +3,16 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { createWorkItem, deleteWorkItem, getWorkItem, getWorkItems, getWorkItemsPaginated, updateWorkItem } from "../db.js";
-import { planWorkItem } from "../work-item-planner.js";
+import {
+	createWorkItem,
+	deleteWorkItem,
+	getWorkItem,
+	getWorkItems,
+	getWorkItemsPaginated,
+	updateWorkItem,
+} from "../db.js";
 import type { WorkItemPriority, WorkItemSource, WorkItemStatus, WorkItemType } from "../types.js";
+import { planWorkItem } from "../work-item-planner.js";
 
 export const workItemRoutes = new Hono();
 

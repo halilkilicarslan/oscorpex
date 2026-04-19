@@ -103,11 +103,7 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 // Public API: Capture all diffs for a completed task
 // ---------------------------------------------------------------------------
 
-export async function captureTaskDiffs(
-	taskId: string,
-	repoPath: string,
-	output: TaskOutput,
-): Promise<number> {
+export async function captureTaskDiffs(taskId: string, repoPath: string, output: TaskOutput): Promise<number> {
 	const diffs: FileDiff[] = [];
 
 	for (const fp of output.filesCreated) {

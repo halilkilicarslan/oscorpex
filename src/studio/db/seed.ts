@@ -400,14 +400,7 @@ export async function seedTeamTemplates(): Promise<void> {
 		const deps = buildDefaultDeps(new Set(t.roles));
 		await execute(
 			"INSERT INTO team_templates (id, name, description, agent_ids, dependencies, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
-			[
-				randomUUID(),
-				t.name,
-				t.description,
-				JSON.stringify(t.roles),
-				JSON.stringify(deps),
-				now(),
-			],
+			[randomUUID(), t.name, t.description, JSON.stringify(t.roles), JSON.stringify(deps), now()],
 		);
 	}
 }

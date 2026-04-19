@@ -53,8 +53,7 @@ function flattenPrompt(prompt: LanguageModelV3Prompt): { system: string; user: s
 			continue;
 		}
 
-		const roleLabel =
-			msg.role === "user" ? "User" : msg.role === "assistant" ? "Assistant" : "Tool";
+		const roleLabel = msg.role === "user" ? "User" : msg.role === "assistant" ? "Assistant" : "Tool";
 
 		const textChunks: string[] = [];
 		if (Array.isArray(msg.content)) {
@@ -115,11 +114,7 @@ function buildInvocation(tool: ProviderCliTool, model: string, system: string): 
 				parseOutput: (stdout) => {
 					try {
 						const obj = JSON.parse(stdout);
-						const text = typeof obj.result === "string"
-							? obj.result
-							: typeof obj.text === "string"
-								? obj.text
-								: stdout;
+						const text = typeof obj.result === "string" ? obj.result : typeof obj.text === "string" ? obj.text : stdout;
 						const usage = obj.usage ?? {};
 						return {
 							text,
@@ -135,14 +130,7 @@ function buildInvocation(tool: ProviderCliTool, model: string, system: string): 
 		case "cursor": {
 			// cursor agent -p --output-format json --model <model> --trust
 			// prompt body goes on stdin
-			const args = [
-				"agent",
-				"-p",
-				"--output-format",
-				"json",
-				"--trust",
-				"--force",
-			];
+			const args = ["agent", "-p", "--output-format", "json", "--trust", "--force"];
 			if (model) args.push("--model", model);
 			return {
 				bin,
@@ -150,11 +138,7 @@ function buildInvocation(tool: ProviderCliTool, model: string, system: string): 
 				parseOutput: (stdout) => {
 					try {
 						const obj = JSON.parse(stdout);
-						const text = typeof obj.result === "string"
-							? obj.result
-							: typeof obj.text === "string"
-								? obj.text
-								: stdout;
+						const text = typeof obj.result === "string" ? obj.result : typeof obj.text === "string" ? obj.text : stdout;
 						const usage = obj.usage ?? {};
 						return {
 							text,
@@ -261,11 +245,7 @@ async function runCli(
 			clearTimeout(timer);
 			if (abortSignal && abortHandler) abortSignal.removeEventListener("abort", abortHandler);
 			if (code !== 0) {
-				finish(
-					new Error(
-						`CLI ${tool} exited with code ${code}: ${stderr.slice(0, 500) || stdout.slice(0, 500)}`,
-					),
-				);
+				finish(new Error(`CLI ${tool} exited with code ${code}: ${stderr.slice(0, 500) || stdout.slice(0, 500)}`));
 				return;
 			}
 			try {

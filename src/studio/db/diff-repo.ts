@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { query, execute } from "../pg.js";
+import { execute, query } from "../pg.js";
 import { now } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
@@ -63,7 +63,13 @@ export async function insertTaskDiff(
 
 export async function insertTaskDiffs(
 	taskId: string,
-	diffs: Array<{ filePath: string; diffContent: string; diffType: "created" | "modified" | "deleted"; linesAdded: number; linesRemoved: number }>,
+	diffs: Array<{
+		filePath: string;
+		diffContent: string;
+		diffType: "created" | "modified" | "deleted";
+		linesAdded: number;
+		linesRemoved: number;
+	}>,
 ): Promise<number> {
 	if (diffs.length === 0) return 0;
 
@@ -88,14 +94,13 @@ export async function insertTaskDiffs(
 }
 
 export async function getTaskDiffs(taskId: string): Promise<TaskDiff[]> {
-	const rows = await query<any>(
-		"SELECT * FROM task_diffs WHERE task_id = $1 ORDER BY file_path",
-		[taskId],
-	);
+	const rows = await query<any>("SELECT * FROM task_diffs WHERE task_id = $1 ORDER BY file_path", [taskId]);
 	return rows.map(rowToTaskDiff);
 }
 
-export async function getTaskDiffSummary(taskId: string): Promise<{ totalFiles: number; linesAdded: number; linesRemoved: number }> {
+export async function getTaskDiffSummary(
+	taskId: string,
+): Promise<{ totalFiles: number; linesAdded: number; linesRemoved: number }> {
 	const row = await query<any>(
 		`SELECT COUNT(*) AS total_files,
 		        COALESCE(SUM(lines_added), 0) AS lines_added,

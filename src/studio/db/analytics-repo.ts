@@ -4,8 +4,8 @@
 
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
-import { getProjectSettingsMap } from "./settings-repo.js";
 import type { CostBreakdownEntry, ProjectCostSummary, TokenUsage } from "../types.js";
+import { getProjectSettingsMap } from "./settings-repo.js";
 
 // ---------------------------------------------------------------------------
 // Token Usage & Cost Tracking
@@ -505,23 +505,22 @@ export async function getAgentAnalytics(projectId: string) {
 		// --- Agent Score (0-100) ---
 		const successRate = tasksAssigned > 0 ? tasksCompleted / tasksAssigned : 0;
 		const firstPassRate = tasksCompleted > 0 ? firstPassTasks / tasksCompleted : 0;
-		const reviewApprovalRate = tasksAssigned > 0
-			? Math.max(0, 1 - totalReviewRejections / tasksAssigned)
-			: 0;
+		const reviewApprovalRate = tasksAssigned > 0 ? Math.max(0, 1 - totalReviewRejections / tasksAssigned) : 0;
 		const avgTimeMs = tasksCompleted > 0 ? totalRuntimeMs / tasksCompleted : 0;
 		const timeScore = avgTimeMs > 0 ? Math.min(1, BASELINE_MS / avgTimeMs) : 0;
 		const costPerTask = tasksCompleted > 0 ? costUsd / tasksCompleted : 0;
 		const costScore = costPerTask > 0 ? Math.min(1, BASELINE_COST / costPerTask) : 0;
 
-		const score = tasksAssigned > 0
-			? Math.round(
-				successRate * W_SUCCESS +
-				firstPassRate * W_FIRST_PASS +
-				reviewApprovalRate * W_REVIEW +
-				timeScore * W_TIME +
-				costScore * W_COST,
-			)
-			: 0;
+		const score =
+			tasksAssigned > 0
+				? Math.round(
+						successRate * W_SUCCESS +
+							firstPassRate * W_FIRST_PASS +
+							reviewApprovalRate * W_REVIEW +
+							timeScore * W_TIME +
+							costScore * W_COST,
+					)
+				: 0;
 
 		return {
 			agentId: a.id,

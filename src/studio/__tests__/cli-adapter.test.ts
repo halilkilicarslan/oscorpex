@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CursorAdapter, ClaudeAdapter, CodexAdapter, getAdapter } from "../cli-adapter.js";
+import { ClaudeAdapter, CodexAdapter, CursorAdapter, getAdapter } from "../cli-adapter.js";
 
 vi.mock("../cli-runtime.js", () => ({
 	isClaudeCliAvailable: vi.fn().mockResolvedValue(true),

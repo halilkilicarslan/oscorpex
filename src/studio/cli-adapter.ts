@@ -85,8 +85,12 @@ export class CodexAdapter implements CLIAdapter {
 				reject(new Error("Codex CLI timed out"));
 			}, opts.timeoutMs ?? 120_000);
 
-			proc.stdout?.on("data", (d) => { stdout += d.toString(); });
-			proc.stderr?.on("data", (d) => { stderr += d.toString(); });
+			proc.stdout?.on("data", (d) => {
+				stdout += d.toString();
+			});
+			proc.stderr?.on("data", (d) => {
+				stderr += d.toString();
+			});
 
 			if (opts.signal) {
 				opts.signal.addEventListener("abort", () => proc.kill("SIGTERM"), { once: true });
@@ -171,13 +175,7 @@ export class CursorAdapter implements CLIAdapter {
 	async execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult> {
 		const { spawn } = await import("node:child_process");
 		const startTime = Date.now();
-		const args = [
-			"agent",
-			"-p",
-			"--output-format", "json",
-			"--trust",
-			"--force",
-		];
+		const args = ["agent", "-p", "--output-format", "json", "--trust", "--force"];
 		if (opts.model) args.push("--model", opts.model);
 
 		return new Promise((resolve, reject) => {
@@ -194,16 +192,18 @@ export class CursorAdapter implements CLIAdapter {
 				reject(new Error("Cursor agent timed out"));
 			}, opts.timeoutMs ?? 120_000);
 
-			proc.stdout?.on("data", (d) => { stdout += d.toString(); });
-			proc.stderr?.on("data", (d) => { stderr += d.toString(); });
+			proc.stdout?.on("data", (d) => {
+				stdout += d.toString();
+			});
+			proc.stderr?.on("data", (d) => {
+				stderr += d.toString();
+			});
 
 			if (opts.signal) {
 				opts.signal.addEventListener("abort", () => proc.kill("SIGTERM"), { once: true });
 			}
 
-			const fullPrompt = opts.systemPrompt
-				? `${opts.systemPrompt}\n\n${opts.prompt}`
-				: opts.prompt;
+			const fullPrompt = opts.systemPrompt ? `${opts.systemPrompt}\n\n${opts.prompt}` : opts.prompt;
 			proc.stdin?.write(fullPrompt);
 			proc.stdin?.end();
 

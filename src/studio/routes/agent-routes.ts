@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { chatWithAgent } from "../agent-chat.js";
 import { loadAgentLog } from "../agent-log-store.js";
 import {
 	archiveMessage,
@@ -18,7 +19,6 @@ import {
 	sendMessage,
 } from "../agent-messaging.js";
 import { agentRuntime } from "../agent-runtime.js";
-import { chatWithAgent } from "../agent-chat.js";
 import { AVATARS, FEMALE_AVATARS, MALE_AVATARS } from "../avatars.js";
 import { containerManager } from "../container-manager.js";
 import {
@@ -155,7 +155,14 @@ agentRoutes.post("/projects/:id/messages/broadcast", async (c) => {
 		return c.json({ error: "fromAgentId, subject and content are required" }, 400);
 	}
 
-	const sent = await broadcastToTeam(projectId, body.fromAgentId, body.subject, body.content, body.metadata, body.type as any);
+	const sent = await broadcastToTeam(
+		projectId,
+		body.fromAgentId,
+		body.subject,
+		body.content,
+		body.metadata,
+		body.type as any,
+	);
 	return c.json({ sent: sent.length, messages: sent }, 201);
 });
 

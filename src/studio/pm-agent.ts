@@ -4,6 +4,7 @@
 
 import { tool } from "ai";
 import { z } from "zod";
+import { BEHAVIORAL_PRINCIPLES } from "./behavioral-prompt.js";
 import {
 	createPhase,
 	createPlan,
@@ -17,7 +18,6 @@ import {
 	updatePlanStatus,
 	updateTask,
 } from "./db.js";
-import { BEHAVIORAL_PRINCIPLES } from "./behavioral-prompt.js";
 import { eventBus } from "./event-bus.js";
 import { gitManager } from "./git-manager.js";
 import {
@@ -344,7 +344,9 @@ const phaseSchema = z.object({
 			targetFiles: z
 				.array(z.string())
 				.default([])
-				.describe("Target files this task will create or modify (e.g. ['src/auth/login.ts', 'src/auth/login.test.ts'])"),
+				.describe(
+					"Target files this task will create or modify (e.g. ['src/auth/login.ts', 'src/auth/login.test.ts'])",
+				),
 			estimatedLines: z
 				.number()
 				.int()
@@ -474,9 +476,10 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 		try {
 			const lines: string[] = [`# Project Plan — ${project.name}`, "", `**Version:** ${plan.version}`, ""];
 			for (const { input } of createdPhases) {
-				const depOrders = (input.dependsOnPhaseOrders ?? []).length > 0
-					? ` (depends on phase ${input.dependsOnPhaseOrders.join(", ")})`
-					: "";
+				const depOrders =
+					(input.dependsOnPhaseOrders ?? []).length > 0
+						? ` (depends on phase ${input.dependsOnPhaseOrders.join(", ")})`
+						: "";
 				lines.push(`## Phase ${input.order}: ${input.name}${depOrders}`, "");
 				for (const t of input.tasks) {
 					const deps = t.dependsOnTaskTitles.length > 0 ? ` (depends on: ${t.dependsOnTaskTitles.join(", ")})` : "";

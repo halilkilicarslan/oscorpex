@@ -125,13 +125,9 @@ describe("PluginRegistry — notifyPlugins hook filtering", () => {
 	});
 
 	it("enforces timeout — slow plugin is rejected after timeout", async () => {
-		const slowHandler: PluginHandler = () =>
-			new Promise((resolve) => setTimeout(resolve, 10_000));
+		const slowHandler: PluginHandler = () => new Promise((resolve) => setTimeout(resolve, 10_000));
 
-		pluginRegistry.register(
-			makeManifest({ name: "slow", hooks: ["task:completed"], timeout: 50 }),
-			slowHandler,
-		);
+		pluginRegistry.register(makeManifest({ name: "slow", hooks: ["task:completed"], timeout: 50 }), slowHandler);
 
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 

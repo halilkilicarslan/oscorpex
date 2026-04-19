@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { query, execute, queryOne } from "../pg.js";
+import { execute, query, queryOne } from "../pg.js";
 import { now } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
@@ -60,7 +60,13 @@ export async function upsertAgentDailyStat(
 	projectId: string,
 	agentId: string,
 	statDate: string,
-	delta: { tasksCompleted?: number; tasksFailed?: number; tokensUsed?: number; costUsd?: number; avgTaskTimeMs?: number },
+	delta: {
+		tasksCompleted?: number;
+		tasksFailed?: number;
+		tokensUsed?: number;
+		costUsd?: number;
+		avgTaskTimeMs?: number;
+	},
 ): Promise<void> {
 	const id = randomUUID();
 	await execute(
@@ -74,10 +80,16 @@ export async function upsertAgentDailyStat(
 		   cost_usd = agent_daily_stats.cost_usd + EXCLUDED.cost_usd,
 		   avg_task_time_ms = CASE WHEN EXCLUDED.avg_task_time_ms > 0 THEN EXCLUDED.avg_task_time_ms ELSE agent_daily_stats.avg_task_time_ms END`,
 		[
-			id, projectId, agentId, statDate,
-			delta.tasksCompleted ?? 0, delta.tasksFailed ?? 0,
-			delta.tokensUsed ?? 0, delta.costUsd ?? 0,
-			delta.avgTaskTimeMs ?? 0, now(),
+			id,
+			projectId,
+			agentId,
+			statDate,
+			delta.tasksCompleted ?? 0,
+			delta.tasksFailed ?? 0,
+			delta.tokensUsed ?? 0,
+			delta.costUsd ?? 0,
+			delta.avgTaskTimeMs ?? 0,
+			now(),
 		],
 	);
 }
@@ -166,7 +178,8 @@ export async function getAgentComparison(projectId: string): Promise<AgentCompar
 		const total = completed + failed;
 		const costPerTask = completed > 0 ? Number(r.total_cost) / completed : 0;
 		const firstPassRate = total > 0 ? completed / total : 0;
-		const score = total > 0 ? Math.round(firstPassRate * 70 + Math.min(1, 30000 / Math.max(Number(r.avg_time), 1)) * 30) : 0;
+		const score =
+			total > 0 ? Math.round(firstPassRate * 70 + Math.min(1, 30000 / Math.max(Number(r.avg_time), 1)) * 30) : 0;
 
 		return {
 			agentId: r.agent_id,

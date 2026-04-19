@@ -11,8 +11,8 @@
 // runtime side-effects that the wave planner cannot express.
 // ---------------------------------------------------------------------------
 
-import { listAgentDependencies } from "./db.js";
 import { sendMessage } from "./agent-messaging.js";
+import { listAgentDependencies } from "./db.js";
 import type { AgentDependency, Task, TaskOutput } from "./types.js";
 
 /** Simple inline doc-detection heuristic for handoff edges. */
@@ -103,9 +103,7 @@ export async function applyPostCompletionHooks(
 	}
 
 	// handoff: enforce documentation requirement (metadata.documentRequired)
-	const handoffEdges = outgoing.filter(
-		(d) => d.type === "handoff" && d.metadata?.documentRequired === true,
-	);
+	const handoffEdges = outgoing.filter((d) => d.type === "handoff" && d.metadata?.documentRequired === true);
 	if (handoffEdges.length > 0 && !outputHasDocumentation(output)) {
 		result.handoffDocMissing = true;
 		for (const edge of handoffEdges) {

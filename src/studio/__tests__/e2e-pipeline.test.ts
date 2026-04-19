@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { getAdapter } from "../cli-adapter.js";
 import {
 	createPhase,
 	createPlan,
@@ -20,10 +21,9 @@ import {
 	updatePlanStatus,
 	updateProject,
 } from "../db.js";
-import { execute, query } from "../pg.js";
 import { executionEngine } from "../execution-engine.js";
+import { execute, query } from "../pg.js";
 import { taskEngine } from "../task-engine.js";
-import { getAdapter } from "../cli-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Mock: CLI adapter — prevents real AI calls
@@ -64,7 +64,9 @@ vi.mock("../context-builder.js", () => ({
 	formatRAGContext: vi.fn().mockReturnValue(""),
 }));
 vi.mock("../context-sandbox.js", () => ({
-	compactCrossAgentContext: vi.fn().mockResolvedValue({ prompt: "", totalFiles: 0, relevantFiles: 0, totalCompletedTasks: 0 }),
+	compactCrossAgentContext: vi
+		.fn()
+		.mockResolvedValue({ prompt: "", totalFiles: 0, relevantFiles: 0, totalCompletedTasks: 0 }),
 	indexTaskOutput: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("../context-session.js", () => ({

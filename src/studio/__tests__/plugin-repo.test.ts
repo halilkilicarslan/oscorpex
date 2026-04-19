@@ -12,7 +12,6 @@ vi.mock("../pg.js", () => ({
 	execute: vi.fn(),
 }));
 
-import * as pg from "../pg.js";
 import {
 	deletePlugin,
 	getPlugin,
@@ -22,6 +21,7 @@ import {
 	registerPlugin,
 	updatePlugin,
 } from "../db/plugin-repo.js";
+import * as pg from "../pg.js";
 
 const mockQuery = vi.mocked(pg.query);
 const mockQueryOne = vi.mocked(pg.queryOne);
@@ -67,10 +67,7 @@ describe("listPlugins", () => {
 
 		const result = await listPlugins();
 
-		expect(mockQuery).toHaveBeenCalledWith(
-			expect.stringContaining("SELECT * FROM registered_plugins"),
-			[],
-		);
+		expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining("SELECT * FROM registered_plugins"), []);
 		expect(result).toHaveLength(1);
 		expect(result[0]).toMatchObject({
 			id: "plugin-id-1",
@@ -95,10 +92,7 @@ describe("getPlugin", () => {
 
 		const result = await getPlugin("my-plugin");
 
-		expect(mockQueryOne).toHaveBeenCalledWith(
-			expect.stringContaining("WHERE name = $1"),
-			["my-plugin"],
-		);
+		expect(mockQueryOne).toHaveBeenCalledWith(expect.stringContaining("WHERE name = $1"), ["my-plugin"]);
 		expect(result).not.toBeNull();
 		expect(result?.name).toBe("my-plugin");
 		expect(result?.author).toBe("tester");
@@ -168,10 +162,7 @@ describe("updatePlugin", () => {
 		mockQueryOne.mockResolvedValueOnce(samplePluginRow);
 		// No fields → falls through to getPlugin
 		await updatePlugin("my-plugin", {});
-		expect(mockQueryOne).toHaveBeenCalledWith(
-			expect.stringContaining("WHERE name = $1"),
-			["my-plugin"],
-		);
+		expect(mockQueryOne).toHaveBeenCalledWith(expect.stringContaining("WHERE name = $1"), ["my-plugin"]);
 	});
 });
 
@@ -181,10 +172,7 @@ describe("deletePlugin", () => {
 
 		await deletePlugin("my-plugin");
 
-		expect(mockExecute).toHaveBeenCalledWith(
-			expect.stringContaining("DELETE FROM registered_plugins"),
-			["my-plugin"],
-		);
+		expect(mockExecute).toHaveBeenCalledWith(expect.stringContaining("DELETE FROM registered_plugins"), ["my-plugin"]);
 	});
 });
 
@@ -232,10 +220,7 @@ describe("getPluginExecutions", () => {
 
 		const result = await getPluginExecutions("my-plugin", 25);
 
-		expect(mockQuery).toHaveBeenCalledWith(
-			expect.stringContaining("WHERE plugin_name = $1"),
-			["my-plugin", 25],
-		);
+		expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining("WHERE plugin_name = $1"), ["my-plugin", 25]);
 		expect(result).toHaveLength(1);
 		expect(result[0]).toMatchObject({
 			pluginName: "my-plugin",

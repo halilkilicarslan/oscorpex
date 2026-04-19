@@ -43,10 +43,7 @@ export async function getSprint(id: string): Promise<Sprint | null> {
 }
 
 export async function getSprintsByProject(projectId: string): Promise<Sprint[]> {
-	const rows = await query<any>(
-		"SELECT * FROM sprints WHERE project_id = $1 ORDER BY start_date ASC",
-		[projectId],
-	);
+	const rows = await query<any>("SELECT * FROM sprints WHERE project_id = $1 ORDER BY start_date ASC", [projectId]);
 	return rows.map(rowToSprint);
 }
 
@@ -65,10 +62,9 @@ export async function startSprint(id: string): Promise<Sprint> {
 	}
 
 	// Ensure no other sprint is active for this project
-	const activeSprint = await queryOne<any>(
-		"SELECT id FROM sprints WHERE project_id = $1 AND status = 'active'",
-		[sprint.projectId],
-	);
+	const activeSprint = await queryOne<any>("SELECT id FROM sprints WHERE project_id = $1 AND status = 'active'", [
+		sprint.projectId,
+	]);
 	if (activeSprint) {
 		throw new Error(`Project ${sprint.projectId} already has an active sprint (${activeSprint.id})`);
 	}
@@ -99,9 +95,7 @@ export async function cancelSprint(id: string): Promise<Sprint> {
  * Calculate burndown data for a sprint.
  * Groups work_items by their updated_at date and counts remaining open items.
  */
-export async function calculateBurndown(
-	sprintId: string,
-): Promise<{ date: string; remaining: number }[]> {
+export async function calculateBurndown(sprintId: string): Promise<{ date: string; remaining: number }[]> {
 	// Sprint penceresinde (startDate..min(endDate, today)) her gün icin
 	// o gune kadar sprint'e girmis ve o gunde henuz tamamlanmamis is sayisini dondur.
 	// Yaklasim: bir item "tamamlanmis" sayilir eger current status done/closed/wontfix VE
@@ -170,7 +164,6 @@ export async function calculateVelocity(projectId: string, lastN?: number): Prom
 
 	return Math.round(Number(countRow.total) / Number(countRow.sprint_count));
 }
-
 
 // ---------------------------------------------------------------------------
 // Per-sprint velocity: tamamlanmis is sayisi (done/closed)

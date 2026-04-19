@@ -103,10 +103,7 @@ describe("PgListener — notify()", () => {
 		const payload = { id: "evt-1", projectId: "proj-1", type: "task:completed" };
 		await mockExecute(`SELECT pg_notify($1, $2)`, [channel, JSON.stringify(payload)]);
 
-		expect(mockExecute).toHaveBeenCalledWith("SELECT pg_notify($1, $2)", [
-			"oscorpex_events",
-			JSON.stringify(payload),
-		]);
+		expect(mockExecute).toHaveBeenCalledWith("SELECT pg_notify($1, $2)", ["oscorpex_events", JSON.stringify(payload)]);
 	});
 
 	// -------------------------------------------------------------------------
@@ -115,9 +112,7 @@ describe("PgListener — notify()", () => {
 	it("pgListener.notify should resolve without error", async () => {
 		// Gerçek pgListener mock'lu olduğundan bu import'u kullanırız
 		const { pgListener } = await import("../pg-listener.js");
-		await expect(
-			pgListener.notify({ id: "x", projectId: "p", type: "t" }),
-		).resolves.toBeUndefined();
+		await expect(pgListener.notify({ id: "x", projectId: "p", type: "t" })).resolves.toBeUndefined();
 	});
 });
 

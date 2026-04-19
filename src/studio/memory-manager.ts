@@ -2,9 +2,9 @@
 // Oscorpex — Memory Manager: Working memory + context assembly
 // ---------------------------------------------------------------------------
 
-import type { ProjectContextSnapshot, MemoryFact } from "./types.js";
-import { getProject, getLatestPlan, listProjectAgents } from "./db.js";
-import { upsertContextSnapshot, getMemoryFacts, upsertMemoryFact, getContextSnapshot } from "./db.js";
+import { getLatestPlan, getProject, listProjectAgents } from "./db.js";
+import { getContextSnapshot, getMemoryFacts, upsertContextSnapshot, upsertMemoryFact } from "./db.js";
+import type { MemoryFact, ProjectContextSnapshot } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Working Memory
@@ -153,14 +153,7 @@ export async function extractFacts(
 ): Promise<void> {
 	await Promise.all(
 		data.map((item) =>
-			upsertMemoryFact(
-				projectId,
-				item.scope ?? "general",
-				item.key,
-				item.value,
-				1.0,
-				item.source ?? "system",
-			),
+			upsertMemoryFact(projectId, item.scope ?? "general", item.key, item.value, 1.0, item.source ?? "system"),
 		),
 	);
 }

@@ -48,7 +48,9 @@ describe.skipIf(!dbReady)("Studio DB", () => {
 		// Clean up tables so tests start with a known empty state
 		await execute("DELETE FROM chat_messages");
 		await execute("DELETE FROM events");
-		await execute("DELETE FROM intake_questions").catch(() => { /* tablo yoksa atla */ });
+		await execute("DELETE FROM intake_questions").catch(() => {
+			/* tablo yoksa atla */
+		});
 		await execute("DELETE FROM tasks");
 		await execute("DELETE FROM phases");
 		await execute("DELETE FROM project_plans");

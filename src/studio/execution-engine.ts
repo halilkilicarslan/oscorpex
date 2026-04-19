@@ -27,17 +27,17 @@ import {
 	listProjectTasks,
 	listProjects,
 	recordTokenUsage,
-	updateProject,
 	updatePhaseStatus,
+	updateProject,
 	updateTask,
 } from "./db.js";
 import { updateDocsAfterTask } from "./docs-generator.js";
 import { eventBus } from "./event-bus.js";
-import { execute as pgExecute } from "./pg.js";
 import { runLintFix } from "./lint-runner.js";
 import { resolveModel } from "./model-router.js";
-import { providerState } from "./provider-state.js";
+import { execute as pgExecute } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
+import { providerState } from "./provider-state.js";
 import { taskEngine } from "./task-engine.js";
 import { runIntegrationTest } from "./task-runners.js";
 import type { AgentConfig, Project, Task, TaskOutput } from "./types.js";
@@ -185,16 +185,26 @@ class Semaphore {
 	private queue: (() => void)[] = [];
 	constructor(private max: number) {}
 	async acquire(): Promise<void> {
-		if (this.current < this.max) { this.current++; return; }
+		if (this.current < this.max) {
+			this.current++;
+			return;
+		}
 		return new Promise<void>((resolve) => this.queue.push(resolve));
 	}
 	release(): void {
 		this.current--;
 		const next = this.queue.shift();
-		if (next) { this.current++; next(); }
+		if (next) {
+			this.current++;
+			next();
+		}
 	}
-	get activeCount(): number { return this.current; }
-	get pendingCount(): number { return this.queue.length; }
+	get activeCount(): number {
+		return this.current;
+	}
+	get pendingCount(): number {
+		return this.queue.length;
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +322,11 @@ class ExecutionEngine {
 				// Recover orphaned running tasks — stuck in "running" with no active CLI process
 				// These arise when revision re-execution fails silently (fire-and-forget .catch)
 				for (const task of phase.tasks ?? []) {
-					if (task.status === "running" && !this._dispatchingTasks.has(task.id) && !this._activeControllers.has(`${project.id}:${task.id}`)) {
+					if (
+						task.status === "running" &&
+						!this._dispatchingTasks.has(task.id) &&
+						!this._activeControllers.has(`${project.id}:${task.id}`)
+					) {
 						console.log(`[execution-engine] Recovery: orphaned running task "${task.title}" → queued`);
 						await updateTask(task.id, { status: "queued", startedAt: undefined });
 						hasRecovered = true;
@@ -375,10 +389,7 @@ class ExecutionEngine {
 		for (const task of tasks) {
 			if (task.status === "running" || task.status === "assigned") {
 				try {
-					await pgExecute(
-						"UPDATE tasks SET status = 'queued', started_at = NULL WHERE id = $1",
-						[task.id],
-					);
+					await pgExecute("UPDATE tasks SET status = 'queued', started_at = NULL WHERE id = $1", [task.id]);
 					console.log(`[execution-engine] Task "${task.title}" → queued (pipeline paused)`);
 				} catch (err) {
 					console.warn(`[execution-engine] Task reset failed: ${task.id}`, err);
@@ -466,15 +477,14 @@ class ExecutionEngine {
 		const freshTask = await getTask(task.id);
 		const executableStatuses = new Set(["queued", "assigned", "running"]);
 		if (!freshTask || !executableStatuses.has(freshTask.status)) {
-			console.log(`[execution-engine] Task "${task.title}" çalıştırılabilir durumda değil (${freshTask?.status}), skip.`);
+			console.log(
+				`[execution-engine] Task "${task.title}" çalıştırılabilir durumda değil (${freshTask?.status}), skip.`,
+			);
 			return;
 		}
 
 		// v3.0: Auto-decompose L/XL tasks into micro-tasks
-		if (
-			(freshTask.complexity === "L" || freshTask.complexity === "XL") &&
-			!freshTask.parentTaskId
-		) {
+		if ((freshTask.complexity === "L" || freshTask.complexity === "XL") && !freshTask.parentTaskId) {
 			try {
 				const { shouldDecompose, decomposeTask } = await import("./task-decomposer.js");
 				if (shouldDecompose(freshTask)) {
@@ -560,7 +570,9 @@ class ExecutionEngine {
 			// Another concurrent dispatch won the race — re-check if task is still runnable
 			const retryTask = await getTask(task.id);
 			if (!retryTask || (retryTask.status !== "running" && retryTask.status !== "assigned")) {
-				console.log(`[execution-engine] Concurrent dispatch conflict for "${task.title}" (${retryTask?.status}), skip.`);
+				console.log(
+					`[execution-engine] Concurrent dispatch conflict for "${task.title}" (${retryTask?.status}), skip.`,
+				);
 				return;
 			}
 			// If running/assigned, the winner is already executing — we should skip too
@@ -1137,12 +1149,8 @@ class ExecutionEngine {
 				`## Durum`,
 				"Orijinal task hiçbir dosya oluşturmadı veya değiştirmedi.",
 				"",
-				...(allFiles.length > 0
-					? [`## Decision Dosyası`, `- \`${allFiles[0]}\``, ""]
-					: []),
-				...(decisionContent
-					? ["## Decision İçeriği (inline)", decisionContent, ""]
-					: []),
+				...(allFiles.length > 0 ? [`## Decision Dosyası`, `- \`${allFiles[0]}\``, ""] : []),
+				...(decisionContent ? ["## Decision İçeriği (inline)", decisionContent, ""] : []),
 				`## Reviewer Talimatları`,
 				...(allFiles.length > 0
 					? ["1. readFile ile decision.md dosyasını oku"]
@@ -1209,7 +1217,9 @@ class ExecutionEngine {
 				agentName: reviewer.name,
 				repoPath: project.repoPath,
 				prompt: reviewPrompt,
-				systemPrompt: reviewer.systemPrompt ? composeSystemPrompt(reviewer.systemPrompt) : this.defaultSystemPrompt(reviewer),
+				systemPrompt: reviewer.systemPrompt
+					? composeSystemPrompt(reviewer.systemPrompt)
+					: this.defaultSystemPrompt(reviewer),
 				timeoutMs: reviewer.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS,
 				model: "sonnet",
 				allowedTools: reviewTools,
@@ -1269,7 +1279,9 @@ class ExecutionEngine {
 							try {
 								const msg = e instanceof Error ? e.message : String(e);
 								await taskEngine.failTask(originalTaskId!, `Revision re-execution failed: ${msg}`);
-							} catch { /* task zaten fail olmuş olabilir */ }
+							} catch {
+								/* task zaten fail olmuş olabilir */
+							}
 						});
 					}
 				}
@@ -1302,9 +1314,7 @@ class ExecutionEngine {
 		if (ready.length === 0) return;
 
 		// If phase has failed tasks, only dispatch review tasks (to complete in-progress work)
-		const toDispatch = phaseFailed
-			? ready.filter((t) => t.title.startsWith("Code Review: "))
-			: ready;
+		const toDispatch = phaseFailed ? ready.filter((t) => t.title.startsWith("Code Review: ")) : ready;
 		if (toDispatch.length === 0) return;
 
 		// Execute tasks sequentially to avoid rate-limit issues with AI providers

@@ -6,6 +6,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { indexTaskOutput } from "./context-sandbox.js";
 import {
 	areAllSubTasksDone,
 	createTask,
@@ -23,15 +24,14 @@ import {
 	updateProject,
 	updateTask,
 } from "./db.js";
-import { indexTaskOutput } from "./context-sandbox.js";
-import { captureTaskDiffs } from "./diff-capture.js";
 import { upsertAgentDailyStat } from "./db.js";
+import { captureTaskDiffs } from "./diff-capture.js";
 import { applyPostCompletionHooks, taskNeedsApprovalFromEdges } from "./edge-hooks.js";
 import { eventBus } from "./event-bus.js";
 import { recordAgentStep } from "./memory-bridge.js";
 import { updateWorkingMemory } from "./memory-manager.js";
-import { evaluatePolicies } from "./policy-engine.js";
 import { queryOne } from "./pg.js";
+import { evaluatePolicies } from "./policy-engine.js";
 import type { Phase, ProjectAgent, Task, TaskOutput } from "./types.js";
 
 // Default onay keyword'leri — proje bazlı override yoksa bunlar kullanılır
@@ -66,7 +66,10 @@ async function getApprovalKeywords(projectId: string): Promise<string[]> {
  * Task'ın onay gerektirip gerektirmediğini belirler.
  * XL complexity veya kritik keyword içeren task'lar onay gerektirir.
  */
-async function shouldRequireApproval(projectId: string, task: Pick<Task, "title" | "description" | "complexity">): Promise<boolean> {
+async function shouldRequireApproval(
+	projectId: string,
+	task: Pick<Task, "title" | "description" | "complexity">,
+): Promise<boolean> {
 	if (task.complexity === "XL") return true;
 	const keywords = await getApprovalKeywords(projectId);
 	const searchText = `${task.title} ${task.description}`.toLowerCase();
@@ -245,7 +248,8 @@ class TaskEngine {
 		// Human-in-the-Loop: Onay kontrolü — budget kontrolünden önce yapılır
 		// v3.1: Incoming "approval" edge on the agent also forces human approval
 		const edgeRequiresApproval = await taskNeedsApprovalFromEdges(projectId, task);
-		const needsApproval = task.requiresApproval || await shouldRequireApproval(projectId, task) || edgeRequiresApproval;
+		const needsApproval =
+			task.requiresApproval || (await shouldRequireApproval(projectId, task)) || edgeRequiresApproval;
 		const alreadyApproved = task.approvalStatus === "approved";
 		if (needsApproval && !alreadyApproved) {
 			// Task'ı waiting_approval durumuna al ve kullanıcıdan onay iste
@@ -840,9 +844,7 @@ class TaskEngine {
 		// v3.1: Check for fallback edge — if primary agent fails, try fallback agent
 		try {
 			const deps = await listAgentDependencies(projectId);
-			const fallbackEdge = deps.find(
-				(d) => d.type === "fallback" && d.fromAgentId === task.assignedAgentId,
-			);
+			const fallbackEdge = deps.find((d) => d.type === "fallback" && d.fromAgentId === task.assignedAgentId);
 			if (fallbackEdge && task.retryCount === 0) {
 				console.log(`[task-engine] Fallback edge found — re-assigning task "${task.title}" to fallback agent`);
 				await updateTask(taskId, {
@@ -857,9 +859,7 @@ class TaskEngine {
 			}
 
 			// v3.1: Check for escalation edge — if task fails N times, escalate
-			const escalationEdge = deps.find(
-				(d) => d.type === "escalation" && d.fromAgentId === task.assignedAgentId,
-			);
+			const escalationEdge = deps.find((d) => d.type === "escalation" && d.fromAgentId === task.assignedAgentId);
 			const maxFailures = escalationEdge?.metadata?.maxFailures ?? 3;
 			if (escalationEdge && (task.retryCount ?? 0) >= maxFailures) {
 				console.log(`[task-engine] Escalation triggered — task "${task.title}" failed ${task.retryCount} times`);
