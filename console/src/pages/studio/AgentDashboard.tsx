@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useState, useCallback } from 'react';
+import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
 import {
   Loader2,
   RefreshCw,
@@ -386,12 +387,25 @@ export default function AgentDashboard({ projectId }: Props) {
     }
   }, [projectId]);
 
+  // WS-driven refresh: task/pipeline event'leri gelince metrikleri yenile (debounced)
+  const { isWsActive } = useWsEventRefresh(
+    projectId,
+    ['task:completed', 'task:failed', 'pipeline:completed'],
+    () => load(true),
+    { debounceMs: 2000 },
+  );
+
+  // İlk yükleme
   useEffect(() => {
     load();
-    // 30 saniyede bir otomatik yenile
-    const interval = setInterval(() => load(true), 30000);
-    return () => clearInterval(interval);
   }, [load]);
+
+  // Polling: yalnızca WS bağlantısı yokken çalışır
+  useEffect(() => {
+    if (isWsActive) return;
+    const interval = setInterval(() => load(true), 30_000);
+    return () => clearInterval(interval);
+  }, [isWsActive, load]);
 
   if (loading) {
     return (

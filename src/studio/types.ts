@@ -206,7 +206,8 @@ export type EventType =
 	| "ceremony:standup"
 	| "ceremony:retrospective"
 	| "policy:violation"
-	| "lifecycle:transition";
+	| "lifecycle:transition"
+	| "message:created";
 
 export interface StudioEvent {
 	id: string;

@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
 import {
   Play,
   Square,
@@ -38,6 +39,15 @@ function TerminalLoader() {
 
 // Çalışma zamanı durum tipi — AgentProcessInfo ile uyumlu genişletilmiş küme
 type RuntimeStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'stopped' | 'error';
+
+const AGENT_CARD_WS_EVENTS = [
+	'agent:output',
+	'task:completed',
+	'task:started',
+	'task:failed',
+	'agent:started',
+	'agent:stopped',
+];
 
 // Her duruma karşılık gelen renk ve etiket
 const STATUS_STYLES: Record<RuntimeStatus, { color: string; label: string }> = {
@@ -139,23 +149,30 @@ function AgentCard({
     }
   };
 
-  // Ajan çalışırken süreç durumunu 3 saniyede bir güncelle
+  // Ajan süreç durumunu getir
+  const pollAgentStatus = useCallback(async () => {
+    try {
+      const info = await getAgentStatus(projectId, agent.id);
+      setProcessInfo(info);
+    } catch {
+      // Polling hatalarını sessizce atla
+    }
+  }, [projectId, agent.id]);
+
+  // WS event-driven refresh — eşleşen event geldiğinde durumu güncelle
+  const { isWsActive } = useWsEventRefresh(projectId, AGENT_CARD_WS_EVENTS, pollAgentStatus, {
+    debounceMs: 300,
+    enabled: isRunning,
+  });
+
+  // Ajan çalışırken süreç durumunu güncelle — yalnızca WS bağlantısı yokken polling yap
   useEffect(() => {
     if (!isRunning) return;
-
-    const poll = async () => {
-      try {
-        const info = await getAgentStatus(projectId, agent.id);
-        setProcessInfo(info);
-      } catch {
-        // Polling hatalarını sessizce atla
-      }
-    };
-
-    poll();
-    const interval = setInterval(poll, 3000);
+    pollAgentStatus();
+    if (isWsActive) return; // WS handles it
+    const interval = setInterval(pollAgentStatus, 3000);
     return () => clearInterval(interval);
-  }, [projectId, agent.id, isRunning]);
+  }, [projectId, agent.id, isRunning, isWsActive, pollAgentStatus]);
 
   // Terminal kapandığında geçmişi kapat
   useEffect(() => {

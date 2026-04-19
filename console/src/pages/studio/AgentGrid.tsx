@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Loader2, Users, Plus, LayoutGrid, Network, ArrowRight, BookTemplate } from 'lucide-react';
+import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
+
+const AGENT_GRID_WS_EVENTS = ['task:assigned', 'task:completed', 'task:started', 'task:failed', 'agent:started', 'agent:stopped'];
 import {
   fetchProjectAgents,
   deleteProjectAgent,
@@ -117,51 +120,59 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
 
   useEffect(() => { loadAgents(); }, [loadAgents]);
 
-  // Çalışma zamanı durumlarını 5 saniyede bir sorgula (getAgentRuntimes kullanır)
-  useEffect(() => {
+  // Çalışma zamanı durumlarını sorgula (getAgentRuntimes kullanır)
+  const pollRuntimes = useCallback(async () => {
     if (agents.length === 0) return;
-
-    const poll = async () => {
-      try {
-        // Yeni API fonksiyonu — AgentProcessInfo[] döner, mode alanını da içerir
-        const runtimes = await getAgentRuntimes(projectId);
-        setStatuses((prev) => {
-          const next = { ...prev };
-          // Geçiş durumunda olmayan ajanları idle'a sıfırla
-          agents.forEach((a) => {
-            if (next[a.id] !== 'starting' && next[a.id] !== 'stopping') {
-              next[a.id] = 'idle';
-            }
-          });
-          // Çalışan ajanları AgentProcessInfo.status alanına göre güncelle
-          for (const rt of runtimes) {
-            if (!rt.agentId) continue;
-            // Yeni şekil: status 'running' | 'stopped' | 'error' | 'starting' | 'stopping' | 'idle' olabilir
-            const mappedStatus: RuntimeStatus =
-              rt.status === 'running'  ? 'running'  :
-              rt.status === 'starting' ? 'starting' :
-              rt.status === 'stopping' ? 'stopping' :
-              rt.status === 'error'    ? 'error'    :
-              'idle';
-            // Geçiş durumundaki ajanları koruma: yalnızca kesinleşmiş durumları yaz
-            if (next[rt.agentId] !== 'starting' && next[rt.agentId] !== 'stopping') {
-              next[rt.agentId] = mappedStatus;
-            } else if (rt.status === 'running' || rt.status === 'error') {
-              // Başlatma/durdurma tamamlandıysa durumu güncelle
-              next[rt.agentId] = mappedStatus;
-            }
+    try {
+      // Yeni API fonksiyonu — AgentProcessInfo[] döner, mode alanını da içerir
+      const runtimes = await getAgentRuntimes(projectId);
+      setStatuses((prev) => {
+        const next = { ...prev };
+        // Geçiş durumunda olmayan ajanları idle'a sıfırla
+        agents.forEach((a) => {
+          if (next[a.id] !== 'starting' && next[a.id] !== 'stopping') {
+            next[a.id] = 'idle';
           }
-          return next;
         });
-      } catch {
-        // Polling hatalarını sessizce atla
-      }
-    };
-
-    poll();
-    const interval = setInterval(poll, 5000);
-    return () => clearInterval(interval);
+        // Çalışan ajanları AgentProcessInfo.status alanına göre güncelle
+        for (const rt of runtimes) {
+          if (!rt.agentId) continue;
+          // Yeni şekil: status 'running' | 'stopped' | 'error' | 'starting' | 'stopping' | 'idle' olabilir
+          const mappedStatus: RuntimeStatus =
+            rt.status === 'running'  ? 'running'  :
+            rt.status === 'starting' ? 'starting' :
+            rt.status === 'stopping' ? 'stopping' :
+            rt.status === 'error'    ? 'error'    :
+            'idle';
+          // Geçiş durumundaki ajanları koruma: yalnızca kesinleşmiş durumları yaz
+          if (next[rt.agentId] !== 'starting' && next[rt.agentId] !== 'stopping') {
+            next[rt.agentId] = mappedStatus;
+          } else if (rt.status === 'running' || rt.status === 'error') {
+            // Başlatma/durdurma tamamlandıysa durumu güncelle
+            next[rt.agentId] = mappedStatus;
+          }
+        }
+        return next;
+      });
+    } catch {
+      // Polling hatalarını sessizce atla
+    }
   }, [projectId, agents]);
+
+  // WS-driven refresh — ajan ve task olaylarında runtime durumlarını günceller
+  const { isWsActive } = useWsEventRefresh(projectId, AGENT_GRID_WS_EVENTS, pollRuntimes, { debounceMs: 500 });
+
+  // İlk yükleme
+  useEffect(() => {
+    pollRuntimes();
+  }, [pollRuntimes]);
+
+  // Polling — yalnızca WS bağlantısı yoksa çalışır
+  useEffect(() => {
+    if (isWsActive) return;
+    const interval = setInterval(pollRuntimes, 5000);
+    return () => clearInterval(interval);
+  }, [isWsActive, pollRuntimes]);
 
   // Ajan sürecini başlat — yeni API fonksiyonu kullanılır
   const handleStart = useCallback(async (agentId: string) => {
