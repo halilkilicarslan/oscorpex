@@ -4,8 +4,6 @@
 
 import { Hono } from "hono";
 import { isAnyProviderConfigured } from "../ai-provider-factory.js";
-import { providerState } from "../provider-state.js";
-import { isAnyPlannerCLIAvailable, listPlannerCLIProviders } from "../planner-cli.js";
 import {
 	createProvider,
 	deleteProvider,
@@ -18,6 +16,8 @@ import {
 	updateFallbackOrder,
 	updateProvider,
 } from "../db.js";
+import { isAnyPlannerCLIAvailable, listPlannerCLIProviders } from "../planner-cli.js";
+import { providerState } from "../provider-state.js";
 
 export const providerRoutes = new Hono();
 

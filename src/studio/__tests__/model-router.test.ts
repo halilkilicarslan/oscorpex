@@ -102,9 +102,7 @@ describe("resolveModel", () => {
 	});
 
 	it("respects project-level routing overrides", async () => {
-		mockSettings.mockResolvedValue([
-			{ category: "model_routing", key: "M", value: "custom-model-m" } as any,
-		]);
+		mockSettings.mockResolvedValue([{ category: "model_routing", key: "M", value: "custom-model-m" } as any]);
 
 		const r = await resolveModel(makeTask({ complexity: "M" }), { projectId: "p-1" });
 		expect(r.model).toBe("custom-model-m");

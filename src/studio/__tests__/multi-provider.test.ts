@@ -34,9 +34,9 @@ vi.mock("../db.js", () => ({
 	getProjectSettings: vi.fn().mockResolvedValue([]),
 }));
 
-import { EventEmitter } from "node:events";
 import * as childProcess from "node:child_process";
-import { CodexAdapter, ClaudeAdapter, getAdapterChain } from "../cli-adapter.js";
+import { EventEmitter } from "node:events";
+import { ClaudeAdapter, CodexAdapter, getAdapterChain } from "../cli-adapter.js";
 import { getProjectSettings } from "../db.js";
 import { resolveModel } from "../model-router.js";
 import type { Task } from "../types.js";

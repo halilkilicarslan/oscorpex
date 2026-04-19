@@ -62,7 +62,14 @@ export interface PlannerStreamCallbacks {
 	onError: (error: Error) => void;
 }
 
-function summarizeCLIError(provider: string, model: string, effort: string | null | undefined, stderr: string, stdout: string, exitCode: number | null): Error {
+function summarizeCLIError(
+	provider: string,
+	model: string,
+	effort: string | null | undefined,
+	stderr: string,
+	stdout: string,
+	exitCode: number | null,
+): Error {
 	const merged = `${stderr}\n${stdout}`
 		.split("\n")
 		.map((line) => line.trim())
@@ -72,7 +79,9 @@ function summarizeCLIError(provider: string, model: string, effort: string | nul
 		.slice(-6);
 	const detail = lastMeaningful.join(" | ");
 	const suffix = detail ? ` — ${detail}` : "";
-	return new Error(`${provider} CLI exited with code ${exitCode ?? 1} [model=${model}${effort ? ` effort=${effort}` : ""}]${suffix}`);
+	return new Error(
+		`${provider} CLI exited with code ${exitCode ?? 1} [model=${model}${effort ? ` effort=${effort}` : ""}]${suffix}`,
+	);
 }
 
 function probeBinary(binary: string, args: string[]): Promise<{ available: boolean; version?: string }> {
@@ -258,35 +267,15 @@ function streamWithGemini(
 	},
 	callbacks: PlannerStreamCallbacks,
 ): () => void {
-	const {
-		repoPath,
-		prompt,
-		systemPrompt,
-		model = "gemini-2.5-flash",
-		effort,
-		timeoutMs = 120_000,
-	} = opts;
+	const { repoPath, prompt, systemPrompt, model = "gemini-2.5-flash", effort, timeoutMs = 120_000 } = opts;
 	const fullPrompt = `${systemPrompt}\n\n${prompt}`;
 
-	const proc = spawn(
-		"gemini",
-		[
-			"-p",
-			fullPrompt,
-			"-m",
-			model,
-			"--approval-mode",
-			"plan",
-			"-o",
-			"text",
-		],
-		{
-			cwd: repoPath,
-			stdio: ["ignore", "pipe", "pipe"],
-			shell: false,
-			env: { ...process.env, PATH: process.env.PATH },
-		},
-	);
+	const proc = spawn("gemini", ["-p", fullPrompt, "-m", model, "--approval-mode", "plan", "-o", "text"], {
+		cwd: repoPath,
+		stdio: ["ignore", "pipe", "pipe"],
+		shell: false,
+		env: { ...process.env, PATH: process.env.PATH },
+	});
 
 	let fullText = "";
 	let stderrText = "";

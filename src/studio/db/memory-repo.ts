@@ -4,8 +4,8 @@
 
 import { randomUUID } from "node:crypto";
 import { execute, getPool, query, queryOne } from "../pg.js";
-import { now, rowToMemoryFact, rowToContextSnapshot, rowToConversationCompaction } from "./helpers.js";
-import type { MemoryFact, ProjectContextSnapshot, ConversationCompaction } from "../types.js";
+import type { ConversationCompaction, MemoryFact, ProjectContextSnapshot } from "../types.js";
+import { now, rowToContextSnapshot, rowToConversationCompaction, rowToMemoryFact } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
 // Context Snapshots
@@ -33,18 +33,17 @@ export async function upsertContextSnapshot(
 }
 
 export async function getContextSnapshot(projectId: string, kind: string): Promise<ProjectContextSnapshot | null> {
-	const row = await queryOne<any>(
-		"SELECT * FROM project_context_snapshots WHERE project_id = $1 AND kind = $2",
-		[projectId, kind],
-	);
+	const row = await queryOne<any>("SELECT * FROM project_context_snapshots WHERE project_id = $1 AND kind = $2", [
+		projectId,
+		kind,
+	]);
 	return row ? rowToContextSnapshot(row) : null;
 }
 
 export async function getContextSnapshots(projectId: string): Promise<ProjectContextSnapshot[]> {
-	const rows = await query<any>(
-		"SELECT * FROM project_context_snapshots WHERE project_id = $1 ORDER BY kind",
-		[projectId],
-	);
+	const rows = await query<any>("SELECT * FROM project_context_snapshots WHERE project_id = $1 ORDER BY kind", [
+		projectId,
+	]);
 	return rows.map(rowToContextSnapshot);
 }
 
@@ -77,10 +76,10 @@ export async function getConversationCompaction(
 	projectId: string,
 	channel: string,
 ): Promise<ConversationCompaction | null> {
-	const row = await queryOne<any>(
-		"SELECT * FROM conversation_compactions WHERE project_id = $1 AND channel = $2",
-		[projectId, channel],
-	);
+	const row = await queryOne<any>("SELECT * FROM conversation_compactions WHERE project_id = $1 AND channel = $2", [
+		projectId,
+		channel,
+	]);
 	return row ? rowToConversationCompaction(row) : null;
 }
 
@@ -115,46 +114,33 @@ export async function upsertMemoryFact(
 export async function getMemoryFacts(projectId: string, scope?: string): Promise<MemoryFact[]> {
 	let rows: any[];
 	if (scope) {
-		rows = await query<any>(
-			"SELECT * FROM memory_facts WHERE project_id = $1 AND scope = $2 ORDER BY scope, key",
-			[projectId, scope],
-		);
+		rows = await query<any>("SELECT * FROM memory_facts WHERE project_id = $1 AND scope = $2 ORDER BY scope, key", [
+			projectId,
+			scope,
+		]);
 	} else {
-		rows = await query<any>(
-			"SELECT * FROM memory_facts WHERE project_id = $1 ORDER BY scope, key",
-			[projectId],
-		);
+		rows = await query<any>("SELECT * FROM memory_facts WHERE project_id = $1 ORDER BY scope, key", [projectId]);
 	}
 	return rows.map(rowToMemoryFact);
 }
 
 export async function getMemoryFact(projectId: string, scope: string, key: string): Promise<MemoryFact | null> {
-	const row = await queryOne<any>(
-		"SELECT * FROM memory_facts WHERE project_id = $1 AND scope = $2 AND key = $3",
-		[projectId, scope, key],
-	);
+	const row = await queryOne<any>("SELECT * FROM memory_facts WHERE project_id = $1 AND scope = $2 AND key = $3", [
+		projectId,
+		scope,
+		key,
+	]);
 	return row ? rowToMemoryFact(row) : null;
 }
 
 export async function deleteMemoryFact(projectId: string, scope: string, key: string): Promise<void> {
-	await execute(
-		"DELETE FROM memory_facts WHERE project_id = $1 AND scope = $2 AND key = $3",
-		[projectId, scope, key],
-	);
+	await execute("DELETE FROM memory_facts WHERE project_id = $1 AND scope = $2 AND key = $3", [projectId, scope, key]);
 }
 
 // ---------------------------------------------------------------------------
 // Model Routing Policies
 // ---------------------------------------------------------------------------
 
-
-
-
-
-
-
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-

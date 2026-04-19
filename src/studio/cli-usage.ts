@@ -6,7 +6,7 @@
 
 import { execSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execute, query, queryOne } from "./pg.js";
@@ -377,14 +377,21 @@ function runCommand(
 	});
 }
 
-async function probeBinary(def: CLIProviderDef): Promise<{ installed: boolean; binaryPath?: string; version?: string; errors: string[] }> {
+async function probeBinary(
+	def: CLIProviderDef,
+): Promise<{ installed: boolean; binaryPath?: string; version?: string; errors: string[] }> {
 	const binaryPath = await locateBinary(def.binary);
 	if (!binaryPath) return { installed: false, errors: [] };
 
 	try {
 		const result = await runCommand(binaryPath, def.versionArgs, { timeoutMs: 5_000 });
 		const version = (result.stdout.trim() || result.stderr.trim()).split("\n")[0];
-		return { installed: true, binaryPath, version, errors: result.code === 0 ? [] : [`version exited with code ${result.code}`] };
+		return {
+			installed: true,
+			binaryPath,
+			version,
+			errors: result.code === 0 ? [] : [`version exited with code ${result.code}`],
+		};
 	} catch (err) {
 		return { installed: true, binaryPath, errors: [sanitizeError(err)] };
 	}
@@ -506,10 +513,10 @@ export async function getCLIProbeEvents(providerId?: CLIProviderId, limit = 50):
 	await ensureCLIUsageTables();
 	const cappedLimit = Math.min(Math.max(limit, 1), 200);
 	const rows = providerId
-		? await query<any>(
-				`SELECT * FROM cli_probe_events WHERE provider_id = $1 ORDER BY created_at DESC LIMIT $2`,
-				[providerId, cappedLimit],
-			)
+		? await query<any>(`SELECT * FROM cli_probe_events WHERE provider_id = $1 ORDER BY created_at DESC LIMIT $2`, [
+				providerId,
+				cappedLimit,
+			])
 		: await query<any>(`SELECT * FROM cli_probe_events ORDER BY created_at DESC LIMIT $1`, [cappedLimit]);
 
 	return rows.map((row) => ({
@@ -553,10 +560,10 @@ async function getOscorpexUsage(def: CLIProviderDef): Promise<OscorpexUsageSnaps
 			 WHERE tu.created_at >= $1 AND ${usageWhere}`,
 			[week, cliAliases, modelPatterns, providerPatterns],
 		),
-		queryOne<any>(
-			"SELECT COUNT(*) AS cnt FROM agent_runs WHERE cli_tool = ANY($1) AND created_at >= $2",
-			[cliAliases, week],
-		),
+		queryOne<any>("SELECT COUNT(*) AS cnt FROM agent_runs WHERE cli_tool = ANY($1) AND created_at >= $2", [
+			cliAliases,
+			week,
+		]),
 		queryOne<any>(
 			`SELECT COUNT(*) AS cnt
 			 FROM events e
@@ -643,7 +650,12 @@ function parsePercentQuota(text: string, providerId: CLIProviderId): UsageQuota[
 				resetText: resetMatch?.[0],
 				status: quotaStatus(percentRemaining),
 			});
-		} else if (line.includes("5h") || line.includes("session") || line.includes("limit") || line.includes("current session")) {
+		} else if (
+			line.includes("5h") ||
+			line.includes("session") ||
+			line.includes("limit") ||
+			line.includes("current session")
+		) {
 			quotas.push({
 				type: "session",
 				label: line.includes("5h") ? "5h limit" : "Session",
@@ -1057,7 +1069,7 @@ async function probeClaudeOAuthAPI(): Promise<{ global: GlobalUsageSnapshot; aut
 		claude_api: "Claude API",
 	};
 	const accountTier = creds.subscriptionType
-		? tierMap[creds.subscriptionType.toLowerCase()] ?? creds.subscriptionType
+		? (tierMap[creds.subscriptionType.toLowerCase()] ?? creds.subscriptionType)
 		: undefined;
 
 	return {
@@ -1152,7 +1164,11 @@ async function probeClaudeAdminAPI(): Promise<GlobalUsageSnapshot | null> {
 	};
 }
 
-async function probeClaude(def: CLIProviderDef, binaryPath: string, permissions: ProviderProbePermission): Promise<{ global: GlobalUsageSnapshot | null; authStatus: AuthStatus; errors: string[] }> {
+async function probeClaude(
+	def: CLIProviderDef,
+	binaryPath: string,
+	permissions: ProviderProbePermission,
+): Promise<{ global: GlobalUsageSnapshot | null; authStatus: AuthStatus; errors: string[] }> {
 	if (!permissions.enabled) return { global: null, authStatus: "unknown", errors: [] };
 	const errors: string[] = [];
 
@@ -1256,31 +1272,44 @@ function findCodexAccessToken(json: Record<string, any> | null): string | undefi
 	return json.access_token || json.accessToken || json.tokens?.access_token || json.auth?.access_token;
 }
 
-async function probeCodex(def: CLIProviderDef, permissions: ProviderProbePermission): Promise<{ global: GlobalUsageSnapshot | null; authStatus: AuthStatus; errors: string[] }> {
+async function probeCodex(
+	def: CLIProviderDef,
+	permissions: ProviderProbePermission,
+): Promise<{ global: GlobalUsageSnapshot | null; authStatus: AuthStatus; errors: string[] }> {
 	if (!permissions.enabled) return { global: null, authStatus: "unknown", errors: [] };
-	if (!permissions.allowAuthFileRead) return { global: null, authStatus: "unknown", errors: ["Auth file read permission is disabled"] };
+	if (!permissions.allowAuthFileRead)
+		return { global: null, authStatus: "unknown", errors: ["Auth file read permission is disabled"] };
 
 	const authPath = join(homedir(), ".codex", "auth.json");
 	const auth = loadJSONFile(authPath);
 	if (!auth) return { global: null, authStatus: "missing", errors: ["Codex auth file not found"] };
-	if (!permissions.allowNetworkProbe) return { global: null, authStatus: "connected", errors: ["Network probe is disabled"] };
+	if (!permissions.allowNetworkProbe)
+		return { global: null, authStatus: "connected", errors: ["Network probe is disabled"] };
 
 	const accessToken = findCodexAccessToken(auth);
 	if (!accessToken) return { global: null, authStatus: "expired", errors: ["Codex access token not found"] };
 
 	try {
 		const res = await fetch("https://chatgpt.com/backend-api/wham/usage", {
-			headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json", "User-Agent": "Oscorpex CLI Usage Observatory" },
+			headers: {
+				Authorization: `Bearer ${accessToken}`,
+				Accept: "application/json",
+				"User-Agent": "Oscorpex CLI Usage Observatory",
+			},
 			signal: AbortSignal.timeout(15_000),
 		});
 		if (res.status === 401 || res.status === 403) {
 			return { global: null, authStatus: "expired", errors: ["Codex auth expired or unauthorized"] };
 		}
 		if (!res.ok) return { global: null, authStatus: "connected", errors: [`Codex usage HTTP ${res.status}`] };
-		const body = await res.json() as any;
+		const body = (await res.json()) as any;
 		const quotas: UsageQuota[] = [];
-		const primaryUsed = Number(res.headers.get("x-codex-primary-used-percent") ?? body.rate_limit?.primary_window?.used_percent);
-		const secondaryUsed = Number(res.headers.get("x-codex-secondary-used-percent") ?? body.rate_limit?.secondary_window?.used_percent);
+		const primaryUsed = Number(
+			res.headers.get("x-codex-primary-used-percent") ?? body.rate_limit?.primary_window?.used_percent,
+		);
+		const secondaryUsed = Number(
+			res.headers.get("x-codex-secondary-used-percent") ?? body.rate_limit?.secondary_window?.used_percent,
+		);
 		const primaryReset = resetDateFromWindow(body.rate_limit?.primary_window);
 		const secondaryReset = resetDateFromWindow(body.rate_limit?.secondary_window);
 		if (Number.isFinite(primaryUsed)) {
@@ -1330,18 +1359,23 @@ function resetDateFromWindow(window: any): string | undefined {
 	if (!window) return undefined;
 	const nowSeconds = Date.now() / 1000;
 	if (Number.isFinite(window.reset_at)) return new Date(window.reset_at * 1000).toISOString();
-	if (Number.isFinite(window.reset_after_seconds)) return new Date((nowSeconds + window.reset_after_seconds) * 1000).toISOString();
+	if (Number.isFinite(window.reset_after_seconds))
+		return new Date((nowSeconds + window.reset_after_seconds) * 1000).toISOString();
 	return undefined;
 }
 
-async function probeGemini(permissions: ProviderProbePermission): Promise<{ global: GlobalUsageSnapshot | null; authStatus: AuthStatus; errors: string[] }> {
+async function probeGemini(
+	permissions: ProviderProbePermission,
+): Promise<{ global: GlobalUsageSnapshot | null; authStatus: AuthStatus; errors: string[] }> {
 	if (!permissions.enabled) return { global: null, authStatus: "unknown", errors: [] };
-	if (!permissions.allowAuthFileRead) return { global: null, authStatus: "unknown", errors: ["Auth file read permission is disabled"] };
+	if (!permissions.allowAuthFileRead)
+		return { global: null, authStatus: "unknown", errors: ["Auth file read permission is disabled"] };
 
 	const credsPath = join(homedir(), ".gemini", "oauth_creds.json");
 	const creds = loadJSONFile(credsPath);
 	if (!creds) return { global: null, authStatus: "missing", errors: ["Gemini OAuth credentials not found"] };
-	if (!permissions.allowNetworkProbe) return { global: null, authStatus: "connected", errors: ["Network probe is disabled"] };
+	if (!permissions.allowNetworkProbe)
+		return { global: null, authStatus: "connected", errors: ["Network probe is disabled"] };
 
 	const accessToken = creds.access_token;
 	if (!accessToken) return { global: null, authStatus: "expired", errors: ["Gemini access token not found"] };
@@ -1357,7 +1391,7 @@ async function probeGemini(permissions: ProviderProbePermission): Promise<{ glob
 			return { global: null, authStatus: "expired", errors: ["Gemini auth expired or unauthorized"] };
 		}
 		if (!res.ok) return { global: null, authStatus: "connected", errors: [`Gemini quota HTTP ${res.status}`] };
-		const body = await res.json() as any;
+		const body = (await res.json()) as any;
 		const buckets = Array.isArray(body.buckets) ? body.buckets : [];
 		const quotas = buckets
 			.map((bucket: any) => {
@@ -1389,7 +1423,15 @@ async function probeGemini(permissions: ProviderProbePermission): Promise<{ glob
 // Cursor probe — reads token from SQLite DB, calls cursor.com/api/usage-summary
 // ---------------------------------------------------------------------------
 
-const CURSOR_DB_PATH = join(homedir(), "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb");
+const CURSOR_DB_PATH = join(
+	homedir(),
+	"Library",
+	"Application Support",
+	"Cursor",
+	"User",
+	"globalStorage",
+	"state.vscdb",
+);
 
 function readCursorAccessToken(): string | null {
 	if (!existsSync(CURSOR_DB_PATH)) return null;
@@ -1418,17 +1460,22 @@ function extractUserIdFromJWT(token: string): string | null {
 	}
 }
 
-async function probeCursor(permissions: ProviderProbePermission): Promise<{ global: GlobalUsageSnapshot | null; authStatus: AuthStatus; errors: string[] }> {
+async function probeCursor(
+	permissions: ProviderProbePermission,
+): Promise<{ global: GlobalUsageSnapshot | null; authStatus: AuthStatus; errors: string[] }> {
 	if (!permissions.enabled) return { global: null, authStatus: "unknown", errors: [] };
-	if (!permissions.allowAuthFileRead) return { global: null, authStatus: "unknown", errors: ["Auth file read permission is disabled"] };
+	if (!permissions.allowAuthFileRead)
+		return { global: null, authStatus: "unknown", errors: ["Auth file read permission is disabled"] };
 
 	const accessToken = readCursorAccessToken();
-	if (!accessToken) return { global: null, authStatus: "missing", errors: ["Cursor auth token not found (not logged in?)"] };
+	if (!accessToken)
+		return { global: null, authStatus: "missing", errors: ["Cursor auth token not found (not logged in?)"] };
 
 	const userId = extractUserIdFromJWT(accessToken);
 	if (!userId) return { global: null, authStatus: "expired", errors: ["Cursor JWT token is invalid"] };
 
-	if (!permissions.allowNetworkProbe) return { global: null, authStatus: "connected", errors: ["Network probe is disabled"] };
+	if (!permissions.allowNetworkProbe)
+		return { global: null, authStatus: "connected", errors: ["Network probe is disabled"] };
 
 	try {
 		const cookie = `WorkosCursorSessionToken=${userId}::${accessToken}`;
@@ -1599,7 +1646,9 @@ export async function listCLIUsageSnapshots(refresh = false): Promise<CLIUsageSn
 }
 
 export async function getOscorpexCLIUsage(): Promise<Record<CLIProviderId, OscorpexUsageSnapshot>> {
-	const entries = await Promise.all(PROVIDERS.map(async (provider) => [provider.id, await getOscorpexUsage(provider)] as const));
+	const entries = await Promise.all(
+		PROVIDERS.map(async (provider) => [provider.id, await getOscorpexUsage(provider)] as const),
+	);
 	return Object.fromEntries(entries) as Record<CLIProviderId, OscorpexUsageSnapshot>;
 }
 

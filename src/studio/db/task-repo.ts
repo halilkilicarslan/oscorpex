@@ -135,11 +135,12 @@ export async function countProjectTasks(projectId: string): Promise<number> {
 }
 
 /** Paginated variant returning [tasks, total] — used by task-routes. */
-export async function listProjectTasksPaginated(projectId: string, limit: number, offset: number): Promise<[Task[], number]> {
-	const [tasks, total] = await Promise.all([
-		listProjectTasks(projectId, limit, offset),
-		countProjectTasks(projectId),
-	]);
+export async function listProjectTasksPaginated(
+	projectId: string,
+	limit: number,
+	offset: number,
+): Promise<[Task[], number]> {
+	const [tasks, total] = await Promise.all([listProjectTasks(projectId, limit, offset), countProjectTasks(projectId)]);
 	return [tasks, total];
 }
 
@@ -230,7 +231,10 @@ export async function updateTask(
 	if (fields.length === 0) return getTask(id);
 
 	values.push(id);
-	const row = await queryOne<any>(`UPDATE tasks SET ${fields.join(", ")} WHERE id = $${idx} RETURNING *`, values as any[]);
+	const row = await queryOne<any>(
+		`UPDATE tasks SET ${fields.join(", ")} WHERE id = $${idx} RETURNING *`,
+		values as any[],
+	);
 	return row ? rowToTask(row) : undefined;
 }
 

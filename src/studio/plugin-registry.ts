@@ -3,12 +3,8 @@
 // Manifest-driven, timeout-protected, DB-persisted plugin platform.
 // ---------------------------------------------------------------------------
 
+import { registerPlugin as dbRegisterPlugin, updatePlugin as dbUpdatePlugin, insertPluginExecution } from "./db.js";
 import type { StudioEvent } from "./types.js";
-import {
-	insertPluginExecution,
-	registerPlugin as dbRegisterPlugin,
-	updatePlugin as dbUpdatePlugin,
-} from "./db.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -93,9 +89,7 @@ class PluginRegistry {
 			hooks: manifest.hooks,
 			permissions: manifest.permissions,
 			config: manifest.config
-				? Object.fromEntries(
-						Object.entries(manifest.config).map(([k, v]) => [k, v.default ?? null]),
-					)
+				? Object.fromEntries(Object.entries(manifest.config).map(([k, v]) => [k, v.default ?? null]))
 				: {},
 			manifest: manifest as unknown as Record<string, unknown>,
 		});
@@ -147,10 +141,7 @@ class PluginRegistry {
 				await Promise.race([
 					Promise.resolve(plugin.handler(ctx)),
 					new Promise<never>((_, reject) =>
-						setTimeout(
-							() => reject(new Error(`Plugin "${name}" timed out after ${timeout}ms`)),
-							timeout,
-						),
+						setTimeout(() => reject(new Error(`Plugin "${name}" timed out after ${timeout}ms`)), timeout),
 					),
 				]);
 				const durationMs = Date.now() - startTime;

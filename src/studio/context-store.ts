@@ -5,22 +5,17 @@
 // ---------------------------------------------------------------------------
 
 import {
-	upsertContextSource,
-	insertChunks,
-	searchChunks,
-	getContextSource,
-	listContextSources,
-	deleteContextSource,
 	cleanupStaleSources,
+	deleteContextSource,
+	getContextSource,
+	insertChunks,
 	insertSearchLog,
+	listContextSources,
+	searchChunks,
+	upsertContextSource,
 } from "./db.js";
 import { execute } from "./pg.js";
-import type {
-	ContextContentType,
-	ContextSearchOptions,
-	ContextSearchResult,
-	ContextSource,
-} from "./types.js";
+import type { ContextContentType, ContextSearchOptions, ContextSearchResult, ContextSource } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -208,12 +203,7 @@ function chunkJSONArray(arr: unknown[], keyPath: string): RawChunk[] {
 	return chunks;
 }
 
-function buildArrayBatchTitle(
-	batch: unknown[],
-	keyPath: string,
-	batchNum: number,
-	identityFields: string[],
-): string {
+function buildArrayBatchTitle(batch: unknown[], keyPath: string, batchNum: number, identityFields: string[]): string {
 	const first = batch[0];
 	if (first && typeof first === "object" && first !== null) {
 		for (const field of identityFields) {
@@ -368,7 +358,9 @@ export async function searchContext(opts: ContextSearchOptions): Promise<Context
 
 		// v4.1: Log individual query for observability
 		const topRank = results.length > 0 ? Math.max(...results.map((r) => r.rank)) : null;
-		insertSearchLog(projectId, q, results.length, topRank, Date.now() - qStart, opts.source, opts.contentType).catch(() => {});
+		insertSearchLog(projectId, q, results.length, topRank, Date.now() - qStart, opts.source, opts.contentType).catch(
+			() => {},
+		);
 	}
 
 	// Deduplicate by title+source, keep highest rank

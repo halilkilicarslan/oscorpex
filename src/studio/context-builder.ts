@@ -3,9 +3,9 @@
 // Enhances agent task prompts with RAG-retrieved codebase context.
 // ---------------------------------------------------------------------------
 
+import { searchContext } from "./context-store.js";
 import { execute, query, queryOne } from "./pg.js";
 import { searchSimilar } from "./vector-store.js";
-import { searchContext } from "./context-store.js";
 
 // ---------------------------------------------------------------------------
 // Types

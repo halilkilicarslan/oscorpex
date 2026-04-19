@@ -39,9 +39,7 @@ gitFileRoutes.get("/projects/:id/files/*", async (c) => {
 
 	const prefix = `/api/studio/projects/${c.req.param("id")}/files/`;
 	const filePath = decodeURIComponent(
-		c.req.path.startsWith(prefix)
-			? c.req.path.slice(prefix.length)
-			: c.req.path.replace(/^.*\/files\//, ""),
+		c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : c.req.path.replace(/^.*\/files\//, ""),
 	);
 	const pathErr = validateFilePath(filePath);
 	if (pathErr) return c.json({ error: pathErr }, 400);
@@ -62,9 +60,7 @@ gitFileRoutes.put("/projects/:id/files/*", async (c) => {
 
 	const prefix = `/api/studio/projects/${c.req.param("id")}/files/`;
 	const filePath = decodeURIComponent(
-		c.req.path.startsWith(prefix)
-			? c.req.path.slice(prefix.length)
-			: c.req.path.replace(/^.*\/files\//, ""),
+		c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : c.req.path.replace(/^.*\/files\//, ""),
 	);
 	const pathErr = validateFilePath(filePath);
 	if (pathErr) return c.json({ error: pathErr }, 400);

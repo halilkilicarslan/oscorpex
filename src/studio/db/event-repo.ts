@@ -59,7 +59,14 @@ export async function insertChatMessage(
   `,
 		[id, data.projectId, data.role, data.content, data.agentId ?? null, ts],
 	);
-	return { id, projectId: data.projectId, role: data.role, content: data.content, agentId: data.agentId, createdAt: ts };
+	return {
+		id,
+		projectId: data.projectId,
+		role: data.role,
+		content: data.content,
+		agentId: data.agentId,
+		createdAt: ts,
+	};
 }
 
 export async function listChatMessages(projectId: string, agentId?: string): Promise<ChatMessage[]> {
@@ -69,7 +76,10 @@ export async function listChatMessages(projectId: string, agentId?: string): Pro
 		conditions.push("agent_id = $2");
 		values.push(agentId);
 	}
-	const rows = await query<any>(`SELECT * FROM chat_messages WHERE ${conditions.join(" AND ")} ORDER BY created_at`, values);
+	const rows = await query<any>(
+		`SELECT * FROM chat_messages WHERE ${conditions.join(" AND ")} ORDER BY created_at`,
+		values,
+	);
 	return rows.map((row) => ({
 		id: row.id,
 		projectId: row.project_id,

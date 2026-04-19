@@ -244,9 +244,98 @@ v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek im
 - Bulk budget status: `getAllAgentCostSummaries` GROUP BY replaces per-agent cost queries (analytics-repo.ts, analytics-routes.ts)
 - Backend: 499/499, Frontend: 432/433 (1 pre-existing ProjectReport)
 
-### Sıradaki Adımlar
-- Phase 4: Frontend Refactor (component splitting, memo optimization)
-- Phase 5: Architecture Improvements (event sourcing, caching layer)
+**Phase 4 Frontend Refactor** (commit `f6b0cae`, pushed)
+- React.memo: TaskCard, AgentCard wrapped
+- useMemo: KanbanBoard (subTaskMap, grouped, activeColumns), ProjectPage (plannerAgent, visibleTabs)
+- StudioHomePage split: 1497→144 lines, extracted CreateProjectModal/ImportProjectModal/TemplateProjectModal/ProjectCard
+- ModalOverlay component: focus trap, Escape key, aria-modal — applied to 4 modals (RejectModal, TaskDetail, NewSprint, NewItem)
+- React.lazy: 10 ProjectPage tabs + AgentGrid sub-components (OrgChart, TeamTemplatePreview)
+- Pre-existing ProjectReport test fix (fetchSearchObservability mock)
+
+**Phase 5 Architecture Improvements** (commit `b201394`, pushed)
+- TIMESTAMPTZ migration: 25 TEXT→TIMESTAMPTZ columns in init.sql (idempotent DO block with information_schema checks)
+- tasks.project_id: denormalized column + backfill UPDATE via phases→project_plans JOIN + idx_tasks_project_id
+- API pagination: 5 endpoints (projects, tasks, messages, work-items, events) with LIMIT/OFFSET + X-Total-Count headers
+- Concurrency limiter: Semaphore class (acquire/release pattern), MAX_CONCURRENT_TASKS=3 (env configurable OSCORPEX_MAX_CONCURRENT_TASKS)
+- Bug fix: duplicate dispatch race condition — onTaskCompleted callback + dispatchReadyTasks could concurrently assignTask same task. Fixed with DB re-read + try/catch conflict resolution in _executeTaskInner
+- Backend: 499/499, Frontend: 433/433, typecheck 0 hata
+
+### v5 M1 — Polling Elimination (commit `e6b7449`, pushed)
+- `useWsEventRefresh` hook: WS event→debounced callback, `isWsActive` for polling fallback
+- Backend: `message:created` event type + emit in agent-messaging.ts
+- 8 components migrated (10 polling loops eliminated):
+  - PipelineDashboard (3s→WS), AgentCard (3s→WS), AgentTerminal (3s→WS)
+  - KanbanBoard (15s→WS), AgentGrid (5s→WS), MessageCenter (5s→WS)
+  - ProjectPage (5s+10s→WS), AgentDashboard (30s→WS)
+- All retain polling fallback when WS disconnected
+- V5 roadmap: `.planning/V5_ROADMAP.md` (6 milestones, ~12 weeks)
+- Backend 499/499, Frontend 433/433
+
+### v5 M2 — Frontend Pagination + Charts (commit `150bd51`, pushed)
+- `fetchPaginated<T>()` helper: reads X-Total-Count header, returns PaginatedResult
+- 4 paginated API variants: projects, tasks, messages, work-items
+- `Pagination` component (prev/next, dark theme) + `useInfiniteList` hook (load-more pattern)
+- 4 pages paginated: StudioHomePage, KanbanBoard, MessageCenter, BacklogBoard
+- 4 Recharts chart components (lazy-loaded via React.lazy + Suspense):
+  - CostTrendChart (LineChart — daily cost trend)
+  - VelocityTrendChart (BarChart — sprint velocity)
+  - AgentTimelineChart (AreaChart — dual axis tokens + cost)
+  - ComplexityPieChart (PieChart — S/M/L/XL distribution)
+- Charts integrated: AgentDashboard, SprintBoard, ProjectReport
+- recharts v3.8.1 added
+- Backend 499/499, Frontend 433/433
+
+### v5 M3 + M4 — Durable Events + Multi-Provider (commit `f984704`, pushed)
+
+**M3 — PostgreSQL LISTEN/NOTIFY:**
+- `pg-listener.ts`: dedicated PG connection with LISTEN, auto-reconnect (2s delay, max 5 retries)
+- `event-bus.ts`: emit/emitAsync → pg_notify after insertEvent, dedup via _recentlyEmitted Set (5s TTL)
+- `event-repo.ts`: getEvent(id) for notification payload fetch
+- `routes/index.ts`: initPgListener() at startup
+- emitTransient unchanged (in-memory for high-freq agent:output)
+- 12 new tests
+
+**M4 — Multi-Provider Execution + Fallback:**
+- `CodexAdapter` real implementation (spawn, JSON parse, OpenAI cost estimate)
+- Provider-aware `resolveModel`: codex→openai (gpt-4o-mini/gpt-4o/o3), cursor→cursor (small/large)
+- `getAdapterChain(primary, fallbacks)` in cli-adapter.ts
+- `provider-state.ts`: ProviderStateManager (markRateLimited/markSuccess/markFailure/isAvailable)
+- execution-engine: adapter chain loop with per-provider state, rate limit → skip to next
+- GET /providers/status endpoint
+- token_usage.provider column migration
+- 21 new tests
+
+Backend 531/531, Frontend 433/433, typecheck clean.
+
+### v5 M5 — Plugin SDK v1 (commit `54e4c8f`)
+- `plugin-registry.ts` refactor: PluginManifest, PluginContext, PluginHandler types
+- Hook filtering: 4 → 35 event types, manifest.hooks based subscription
+- Promise.race timeout (5s default, manifest configurable), per-plugin error isolation
+- Non-blocking execution logging to plugin_executions table
+- `plugin-repo.ts`: DB CRUD (registered_plugins + plugin_executions)
+- `plugin-routes.ts`: GET/PATCH/DELETE /plugins + GET /plugins/:name/executions
+- ALL_PLUGIN_EVENTS bridge in routes/index.ts (replaces old 4-hook bridge)
+- Backward-compatible legacy API preserved (v3.9 PluginHooks)
+- 23 new tests (12 plugin-sdk + 11 plugin-repo)
+
+### v5 M6.1 — User Identity Foundation (commit `0af1420`)
+- DB: tenants, users, user_roles, api_keys tables + projects.tenant_id/owner_id columns
+- `auth/jwt.ts`: HMAC-SHA256 JWT sign/verify (node:crypto, no deps)
+- `auth/password.ts`: scrypt hashing + timingSafeEqual verification
+- `auth/auth-middleware.ts`: tri-mode auth (env API key / JWT / DB osx_ key), backward-compatible
+- `db/tenant-repo.ts`: tenant, user, role, API key CRUD (barrel-exported)
+- `routes/auth-routes.ts`: POST /auth/register, POST /auth/login, GET /auth/me
+- authMiddleware imported but commented out (activates in M6.2)
+- 15 new tests
+- Backend 573/573, Frontend 433/433, typecheck clean
+
+### Completed Analysis Roadmap
+All 5 phases from analysis report complete:
+1. Quick Wins (indexes, RETURNING, polling) — `2a6bf32`
+2. Security Foundation (injection, traversal, CORS, auth) — `abf5d92`
+3. N+1 Elimination (CTE, JOIN, cache, batch) — `9d877dc`
+4. Frontend Refactor (memo, lazy, split, a11y) — `f6b0cae`
+5. Architecture Improvements (TIMESTAMPTZ, pagination, semaphore) — `b201394`
 
 ## Previous: v3.0-v3.9 Full Platform Upgrade
 

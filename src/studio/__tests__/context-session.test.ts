@@ -2,13 +2,8 @@
 // Oscorpex — Context Session Tests (v4.0 Faz 3)
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-	trackEvent,
-	initContextSession,
-	buildResumeSnapshot,
-	formatResumeSnapshot,
-} from "../context-session.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildResumeSnapshot, formatResumeSnapshot, initContextSession, trackEvent } from "../context-session.js";
 
 // ---------------------------------------------------------------------------
 // Mock dependencies

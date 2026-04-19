@@ -16,11 +16,7 @@ import type { ProjectAgent } from "./types.js";
  * Builds a system prompt for a direct agent chat session.
  * Combines the agent's configured system prompt with project context.
  */
-export function buildAgentChatPrompt(
-	agent: ProjectAgent,
-	projectSummary: string,
-	userMessage: string,
-): string {
+export function buildAgentChatPrompt(agent: ProjectAgent, projectSummary: string, userMessage: string): string {
 	return [
 		`You are ${agent.name}, a ${agent.role} on this software project.`,
 		"",
@@ -52,15 +48,8 @@ export function buildAgentChatPrompt(
  *
  * Both the user message and the agent response are persisted to chat_messages.
  */
-export async function chatWithAgent(
-	projectId: string,
-	agentId: string,
-	message: string,
-): Promise<string> {
-	const [agent, project] = await Promise.all([
-		getProjectAgent(agentId),
-		getProject(projectId),
-	]);
+export async function chatWithAgent(projectId: string, agentId: string, message: string): Promise<string> {
+	const [agent, project] = await Promise.all([getProjectAgent(agentId), getProject(projectId)]);
 
 	if (!agent) {
 		throw new Error(`Agent ${agentId} not found`);

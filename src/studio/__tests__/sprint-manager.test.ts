@@ -101,16 +101,12 @@ describe("startSprint", () => {
 	});
 
 	it("throws when another sprint is already active", async () => {
-		mockQueryOne
-			.mockResolvedValueOnce(makeRow({ status: "planned" }))
-			.mockResolvedValueOnce({ id: "s-2" });
+		mockQueryOne.mockResolvedValueOnce(makeRow({ status: "planned" })).mockResolvedValueOnce({ id: "s-2" });
 		await expect(startSprint("s-1")).rejects.toThrow(/already has an active/);
 	});
 
 	it("updates status to active", async () => {
-		mockQueryOne
-			.mockResolvedValueOnce(makeRow({ status: "planned" }))
-			.mockResolvedValueOnce(null);
+		mockQueryOne.mockResolvedValueOnce(makeRow({ status: "planned" })).mockResolvedValueOnce(null);
 		const sprint = await startSprint("s-1");
 		expect(sprint.status).toBe("active");
 		expect(mockExecute).toHaveBeenCalledWith(expect.stringContaining("status = 'active'"), ["s-1"]);

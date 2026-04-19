@@ -364,8 +364,7 @@ export async function copyAgentsToProject(
 	if (options?.plannerSourceAgentId) {
 		const selectedPlanner = presets.find((preset) => preset.id === options.plannerSourceAgentId);
 		const projectPlanner =
-			created.find((agent) => agent.role === "product-owner") ??
-			created.find((agent) => agent.role === "pm");
+			created.find((agent) => agent.role === "product-owner") ?? created.find((agent) => agent.role === "pm");
 
 		if (
 			selectedPlanner &&

@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { query, queryOne, execute } from "../pg.js";
+import { execute, query, queryOne } from "../pg.js";
 import { now } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
@@ -69,7 +69,17 @@ export async function insertSearchLog(
 	await execute(
 		`INSERT INTO context_search_log (id, project_id, query_text, result_count, top_rank, latency_ms, source_filter, content_type, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		[randomUUID(), projectId, queryText, resultCount, topRank, latencyMs, sourceFilter ?? null, contentType ?? null, now()],
+		[
+			randomUUID(),
+			projectId,
+			queryText,
+			resultCount,
+			topRank,
+			latencyMs,
+			sourceFilter ?? null,
+			contentType ?? null,
+			now(),
+		],
 	);
 }
 

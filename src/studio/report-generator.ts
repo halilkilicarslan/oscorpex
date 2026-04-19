@@ -3,7 +3,7 @@
 // Generates structured and human-readable project reports from aggregated data
 // ---------------------------------------------------------------------------
 
-import { getProject, getProjectCostSummary, getLatestPlan, listEvents, listProjectTasks } from "./db.js";
+import { getLatestPlan, getProject, getProjectCostSummary, listEvents, listProjectTasks } from "./db.js";
 import type { Project, ProjectPlan, StudioEvent, Task } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -19,9 +19,9 @@ export interface ProjectReport {
 	totalCostUsd: number;
 	durationMs: number;
 	qualityMetrics: {
-		reviewPassRate: number;   // 0–1: tasks approved on first review
-		avgRevisions: number;     // average revision cycles across all tasks
-		firstPassRate: number;    // 0–1: tasks completed without any revision
+		reviewPassRate: number; // 0–1: tasks approved on first review
+		avgRevisions: number; // average revision cycles across all tasks
+		firstPassRate: number; // 0–1: tasks completed without any revision
 	};
 	topFileChanges: { path: string; changeCount: number }[];
 }
@@ -53,10 +53,7 @@ function extractTopFileChanges(tasks: Task[], limit = 10): { path: string; chang
 	const fileCounts = new Map<string, number>();
 
 	for (const task of tasks) {
-		const files = [
-			...(task.output?.filesCreated ?? []),
-			...(task.output?.filesModified ?? []),
-		];
+		const files = [...(task.output?.filesCreated ?? []), ...(task.output?.filesModified ?? [])];
 		for (const file of files) {
 			fileCounts.set(file, (fileCounts.get(file) ?? 0) + 1);
 		}
@@ -75,7 +72,9 @@ function calcQualityMetrics(tasks: Task[], events: StudioEvent[]) {
 	}
 
 	// Review pass rate: tasks approved by reviewer vs total done tasks
-	const reviewApprovedEvents = events.filter((e) => e.type === "task:completed" && e.payload["reviewApproved"] === true).length;
+	const reviewApprovedEvents = events.filter(
+		(e) => e.type === "task:completed" && e.payload["reviewApproved"] === true,
+	).length;
 	const totalWithReview = events.filter((e) => e.type === "task:completed" && "reviewApproved" in e.payload).length;
 	const reviewPassRate = totalWithReview > 0 ? reviewApprovedEvents / totalWithReview : 1;
 
@@ -132,7 +131,7 @@ export async function generateProjectReport(projectId: string): Promise<ProjectR
 
 	console.log(
 		`[report-generator] Report generated for "${project.name}" — ` +
-		`${completedTasks}/${totalTasks} tasks done, cost: $${report.totalCostUsd}`,
+			`${completedTasks}/${totalTasks} tasks done, cost: $${report.totalCostUsd}`,
 	);
 
 	return report;
@@ -145,23 +144,24 @@ export async function generateProjectReport(projectId: string): Promise<ProjectR
 export async function generateStakeholderReport(projectId: string): Promise<string> {
 	const report = await generateProjectReport(projectId);
 
-	const durationHours = Math.round(report.durationMs / (1000 * 60 * 60) * 10) / 10;
-	const completionPct = report.totalTasks > 0
-		? Math.round((report.completedTasks / report.totalTasks) * 100)
-		: 0;
+	const durationHours = Math.round((report.durationMs / (1000 * 60 * 60)) * 10) / 10;
+	const completionPct = report.totalTasks > 0 ? Math.round((report.completedTasks / report.totalTasks) * 100) : 0;
 
 	const successIndicator =
-		completionPct >= 90 ? "successfully" :
-		completionPct >= 70 ? "largely" :
-		completionPct >= 50 ? "partially" :
-		"with challenges";
+		completionPct >= 90
+			? "successfully"
+			: completionPct >= 70
+				? "largely"
+				: completionPct >= 50
+					? "partially"
+					: "with challenges";
 
 	const qualitySummary =
 		report.qualityMetrics.firstPassRate >= 0.8
 			? "The team delivered high-quality work with minimal rework required."
 			: report.qualityMetrics.avgRevisions > 2
-			? "Some tasks required multiple revisions — quality improvements are recommended for the next phase."
-			: "Quality was acceptable with a reasonable number of review cycles.";
+				? "Some tasks required multiple revisions — quality improvements are recommended for the next phase."
+				: "Quality was acceptable with a reasonable number of review cycles.";
 
 	const costSummary =
 		report.totalCostUsd === 0
@@ -170,7 +170,10 @@ export async function generateStakeholderReport(projectId: string): Promise<stri
 
 	const filesSummary =
 		report.topFileChanges.length > 0
-			? `Key files changed include: ${report.topFileChanges.slice(0, 5).map((f) => f.path).join(", ")}.`
+			? `Key files changed include: ${report.topFileChanges
+					.slice(0, 5)
+					.map((f) => f.path)
+					.join(", ")}.`
 			: "No file change data available.";
 
 	const lines = [
@@ -178,8 +181,8 @@ export async function generateStakeholderReport(projectId: string): Promise<stri
 		"",
 		`## Executive Summary`,
 		`The project "${report.projectName}" completed ${successIndicator}. ` +
-		`Out of ${report.totalTasks} total tasks, ${report.completedTasks} were completed (${completionPct}%) ` +
-		`and ${report.failedTasks} failed.`,
+			`Out of ${report.totalTasks} total tasks, ${report.completedTasks} were completed (${completionPct}%) ` +
+			`and ${report.failedTasks} failed.`,
 		"",
 		`## Duration`,
 		`The project ran for approximately ${durationHours} hours.`,
@@ -187,7 +190,7 @@ export async function generateStakeholderReport(projectId: string): Promise<stri
 		`## Quality`,
 		qualitySummary,
 		`First-pass success rate: ${Math.round(report.qualityMetrics.firstPassRate * 100)}%. ` +
-		`Average revisions per task: ${report.qualityMetrics.avgRevisions}.`,
+			`Average revisions per task: ${report.qualityMetrics.avgRevisions}.`,
 		"",
 		`## Cost`,
 		costSummary,

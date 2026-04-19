@@ -11,14 +11,7 @@ vi.mock("../db.js", () => ({
 	updateWorkItem: vi.fn(),
 }));
 
-import {
-	createPhase,
-	createTask,
-	getLatestPlan,
-	getWorkItem,
-	listProjectAgents,
-	updateWorkItem,
-} from "../db.js";
+import { createPhase, createTask, getLatestPlan, getWorkItem, listProjectAgents, updateWorkItem } from "../db.js";
 import { planWorkItem } from "../work-item-planner.js";
 
 const mockGetWorkItem = vi.mocked(getWorkItem);

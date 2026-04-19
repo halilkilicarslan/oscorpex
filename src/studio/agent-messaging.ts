@@ -299,7 +299,15 @@ export async function broadcastToTeam(
 	// Her takım üyesine ayrı ayrı mesaj gönder
 	const sent: AgentMessage[] = [];
 	for (const member of teamMembers) {
-		const msg = await sendMessage(projectId, fromAgentId, member.id, type ?? "notification", subject, content, metadata);
+		const msg = await sendMessage(
+			projectId,
+			fromAgentId,
+			member.id,
+			type ?? "notification",
+			subject,
+			content,
+			metadata,
+		);
 		sent.push(msg);
 	}
 

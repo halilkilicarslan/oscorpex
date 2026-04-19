@@ -4,9 +4,9 @@
 // Replaces raw file listing with FTS-ranked relevant context.
 // ---------------------------------------------------------------------------
 
-import { searchContext, indexContent } from "./context-store.js";
-import { listProjectTasks, getProjectSetting } from "./db.js";
-import type { Task, TaskOutput, ContextSearchResult } from "./types.js";
+import { indexContent, searchContext } from "./context-store.js";
+import { getProjectSetting, listProjectTasks } from "./db.js";
+import type { ContextSearchResult, Task, TaskOutput } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Threshold Logic
@@ -18,7 +18,11 @@ const DEFAULT_COMPACT_THRESHOLD = 100_000; // 20-100KB: compact reference
 
 export type OutputStrategy = "inline" | "compact" | "index";
 
-export function classifyOutput(output: string, inlineThreshold = DEFAULT_INLINE_THRESHOLD, compactThreshold = DEFAULT_COMPACT_THRESHOLD): OutputStrategy {
+export function classifyOutput(
+	output: string,
+	inlineThreshold = DEFAULT_INLINE_THRESHOLD,
+	compactThreshold = DEFAULT_COMPACT_THRESHOLD,
+): OutputStrategy {
 	const bytes = Buffer.byteLength(output, "utf-8");
 	if (bytes < inlineThreshold) return "inline";
 	if (bytes < compactThreshold) return "compact";
@@ -95,13 +99,7 @@ interface CompactContext {
 }
 
 export async function compactCrossAgentContext(opts: CompactContextOptions): Promise<CompactContext> {
-	const {
-		projectId,
-		taskTitle,
-		taskDescription,
-		maxTokens = 3000,
-		maxFiles = 10,
-	} = opts;
+	const { projectId, taskTitle, taskDescription, maxTokens = 3000, maxFiles = 10 } = opts;
 
 	// Gather completed tasks for raw file count
 	const allTasks = await listProjectTasks(projectId);
@@ -168,9 +166,7 @@ export async function compactCrossAgentContext(opts: CompactContextOptions): Pro
 	}
 
 	// Recent errors for context
-	const recentFailed = allTasks
-		.filter((t) => t.status === "failed" && t.error)
-		.slice(-2);
+	const recentFailed = allTasks.filter((t) => t.status === "failed" && t.error).slice(-2);
 
 	if (recentFailed.length > 0) {
 		lines.push("", "### Recent Errors", "");

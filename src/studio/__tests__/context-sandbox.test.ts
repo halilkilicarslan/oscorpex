@@ -2,8 +2,8 @@
 // Oscorpex — Context Sandbox Tests (v4.0 Faz 2)
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { classifyOutput, indexTaskOutput, compactCrossAgentContext } from "../context-sandbox.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { classifyOutput, compactCrossAgentContext, indexTaskOutput } from "../context-sandbox.js";
 
 // ---------------------------------------------------------------------------
 // Mock dependencies

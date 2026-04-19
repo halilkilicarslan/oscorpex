@@ -2,7 +2,7 @@
 // Oscorpex — Context Store Tests (v4.0)
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { chunkMarkdown, chunkPlainText } from "../context-store.js";
 
 // ---------------------------------------------------------------------------

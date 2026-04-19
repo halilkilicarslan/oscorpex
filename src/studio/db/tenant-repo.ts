@@ -41,11 +41,20 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | undefined>
 
 export async function createTenant(data: { name: string; slug: string; plan?: string }): Promise<Tenant> {
 	const id = randomUUID();
-	await execute(
-		"INSERT INTO tenants (id, name, slug, plan) VALUES ($1, $2, $3, $4)",
-		[id, data.name, data.slug, data.plan ?? "free"],
-	);
-	return { id, name: data.name, slug: data.slug, plan: data.plan ?? "free", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+	await execute("INSERT INTO tenants (id, name, slug, plan) VALUES ($1, $2, $3, $4)", [
+		id,
+		data.name,
+		data.slug,
+		data.plan ?? "free",
+	]);
+	return {
+		id,
+		name: data.name,
+		slug: data.slug,
+		plan: data.plan ?? "free",
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -91,10 +100,10 @@ export async function getUserByEmail(email: string): Promise<User | undefined> {
 export type UserRole = "owner" | "admin" | "developer" | "viewer" | "billing";
 
 export async function getUserRole(userId: string, tenantId: string): Promise<UserRole | undefined> {
-	const row = await queryOne<{ role: string }>(
-		"SELECT role FROM user_roles WHERE user_id = $1 AND tenant_id = $2",
-		[userId, tenantId],
-	);
+	const row = await queryOne<{ role: string }>("SELECT role FROM user_roles WHERE user_id = $1 AND tenant_id = $2", [
+		userId,
+		tenantId,
+	]);
 	return (row?.role as UserRole) ?? undefined;
 }
 

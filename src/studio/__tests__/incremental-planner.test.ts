@@ -19,11 +19,7 @@ vi.mock("../pipeline-engine.js", () => ({
 
 import { createPhase, createTask, getLatestPlan, listProjectAgents, updateTask } from "../db.js";
 import { eventBus } from "../event-bus.js";
-import {
-	appendPhaseToPlan,
-	appendTaskToPhase,
-	replanUnfinishedTasks,
-} from "../incremental-planner.js";
+import { appendPhaseToPlan, appendTaskToPhase, replanUnfinishedTasks } from "../incremental-planner.js";
 import { pipelineEngine } from "../pipeline-engine.js";
 
 const mockGetLatestPlan = vi.mocked(getLatestPlan);
@@ -119,9 +115,7 @@ describe("appendPhaseToPlan", () => {
 			order: 3,
 			dependsOn: ["p-2"],
 		});
-		expect(mockEmit).toHaveBeenCalledWith(
-			expect.objectContaining({ projectId: "proj-1", type: "plan:phase_added" }),
-		);
+		expect(mockEmit).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-1", type: "plan:phase_added" }));
 		expect(mockRefresh).toHaveBeenCalledWith("proj-1");
 	});
 
@@ -131,9 +125,7 @@ describe("appendPhaseToPlan", () => {
 
 		await appendPhaseToPlan("proj-1", { name: "First" });
 
-		expect(mockCreatePhase).toHaveBeenCalledWith(
-			expect.objectContaining({ order: 1, dependsOn: [] }),
-		);
+		expect(mockCreatePhase).toHaveBeenCalledWith(expect.objectContaining({ order: 1, dependsOn: [] }));
 	});
 
 	it("suppresses refresh errors when pipeline not running", async () => {
@@ -233,9 +225,7 @@ describe("appendTaskToPhase", () => {
 		});
 
 		expect(mockListAgents).not.toHaveBeenCalled();
-		expect(mockCreateTask).toHaveBeenCalledWith(
-			expect.objectContaining({ assignedAgentId: "a-explicit" }),
-		);
+		expect(mockCreateTask).toHaveBeenCalledWith(expect.objectContaining({ assignedAgentId: "a-explicit" }));
 	});
 
 	it("emits task:added event and refreshes pipeline", async () => {
@@ -251,9 +241,7 @@ describe("appendTaskToPhase", () => {
 			branch: "feat/x",
 		});
 
-		expect(mockEmit).toHaveBeenCalledWith(
-			expect.objectContaining({ type: "task:added", taskId: "t-new" }),
-		);
+		expect(mockEmit).toHaveBeenCalledWith(expect.objectContaining({ type: "task:added", taskId: "t-new" }));
 		expect(mockRefresh).toHaveBeenCalledWith("proj-1");
 	});
 });
@@ -306,10 +294,7 @@ describe("replanUnfinishedTasks", () => {
 	it("emits plan:replanned event with counts", async () => {
 		const phase = makePhase({
 			id: "p-1",
-			tasks: [
-				makeTask({ id: "t-done", status: "done" }),
-				makeTask({ id: "t-queued", status: "queued" }),
-			],
+			tasks: [makeTask({ id: "t-done", status: "done" }), makeTask({ id: "t-queued", status: "queued" })],
 		});
 		mockGetLatestPlan.mockResolvedValue(makePlan([phase]));
 		mockUpdateTask.mockResolvedValue(makeTask());

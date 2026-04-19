@@ -11,11 +11,7 @@ vi.mock("../agent-messaging.js", () => ({
 
 import { sendMessage } from "../agent-messaging.js";
 import { listAgentDependencies } from "../db.js";
-import {
-	applyPostCompletionHooks,
-	outputHasDocumentation,
-	taskNeedsApprovalFromEdges,
-} from "../edge-hooks.js";
+import { applyPostCompletionHooks, outputHasDocumentation, taskNeedsApprovalFromEdges } from "../edge-hooks.js";
 
 const mockListDeps = vi.mocked(listAgentDependencies);
 const mockSendMessage = vi.mocked(sendMessage);
@@ -75,27 +71,19 @@ describe("edge-hooks — outputHasDocumentation", () => {
 	});
 
 	it("returns true when logs reference documentation", () => {
-		expect(outputHasDocumentation(makeOutput({ logs: ["Added new documentation section"] }))).toBe(
-			true,
-		);
+		expect(outputHasDocumentation(makeOutput({ logs: ["Added new documentation section"] }))).toBe(true);
 	});
 
 	it("returns false for code-only output", () => {
 		expect(
-			outputHasDocumentation(
-				makeOutput({ filesCreated: ["src/auth/login.ts"], filesModified: ["src/auth/index.ts"] }),
-			),
+			outputHasDocumentation(makeOutput({ filesCreated: ["src/auth/login.ts"], filesModified: ["src/auth/index.ts"] })),
 		).toBe(false);
 	});
 });
 
 describe("edge-hooks — applyPostCompletionHooks", () => {
 	it("returns zeroed result when task has no assignedAgentId", async () => {
-		const result = await applyPostCompletionHooks(
-			"proj-1",
-			makeTask({ assignedAgentId: undefined }),
-			makeOutput(),
-		);
+		const result = await applyPostCompletionHooks("proj-1", makeTask({ assignedAgentId: undefined }), makeOutput());
 		expect(result).toEqual({ notificationsSent: 0, mentoringMessagesSent: 0, handoffDocMissing: false });
 		expect(mockSendMessage).not.toHaveBeenCalled();
 	});
@@ -167,15 +155,9 @@ describe("edge-hooks — applyPostCompletionHooks", () => {
 	});
 
 	it("ignores handoff edges without documentRequired flag", async () => {
-		mockListDeps.mockResolvedValue([
-			makeDep({ type: "handoff", toAgentId: "a-next", metadata: {} }),
-		]);
+		mockListDeps.mockResolvedValue([makeDep({ type: "handoff", toAgentId: "a-next", metadata: {} })]);
 
-		const result = await applyPostCompletionHooks(
-			"proj-1",
-			makeTask(),
-			makeOutput({ filesCreated: ["src/code.ts"] }),
-		);
+		const result = await applyPostCompletionHooks("proj-1", makeTask(), makeOutput({ filesCreated: ["src/code.ts"] }));
 
 		expect(result.handoffDocMissing).toBe(false);
 	});
@@ -185,9 +167,7 @@ describe("edge-hooks — applyPostCompletionHooks", () => {
 			makeDep({ type: "notification", toAgentId: "a-qa" }),
 			makeDep({ id: "d-2", type: "notification", toAgentId: "a-devops" }),
 		]);
-		mockSendMessage
-			.mockRejectedValueOnce(new Error("first-fail"))
-			.mockResolvedValueOnce({} as any);
+		mockSendMessage.mockRejectedValueOnce(new Error("first-fail")).mockResolvedValueOnce({} as any);
 
 		const result = await applyPostCompletionHooks("proj-1", makeTask(), makeOutput());
 
@@ -203,25 +183,19 @@ describe("edge-hooks — applyPostCompletionHooks", () => {
 
 describe("edge-hooks — taskNeedsApprovalFromEdges", () => {
 	it("returns true when the agent has an incoming approval edge", async () => {
-		mockListDeps.mockResolvedValue([
-			makeDep({ type: "approval", fromAgentId: "a-lead", toAgentId: "a-backend" }),
-		]);
+		mockListDeps.mockResolvedValue([makeDep({ type: "approval", fromAgentId: "a-lead", toAgentId: "a-backend" })]);
 
 		expect(await taskNeedsApprovalFromEdges("proj-1", makeTask())).toBe(true);
 	});
 
 	it("returns false when the approval edge points elsewhere", async () => {
-		mockListDeps.mockResolvedValue([
-			makeDep({ type: "approval", fromAgentId: "a-lead", toAgentId: "a-other" }),
-		]);
+		mockListDeps.mockResolvedValue([makeDep({ type: "approval", fromAgentId: "a-lead", toAgentId: "a-other" })]);
 
 		expect(await taskNeedsApprovalFromEdges("proj-1", makeTask())).toBe(false);
 	});
 
 	it("returns false when task has no assignedAgentId", async () => {
-		expect(
-			await taskNeedsApprovalFromEdges("proj-1", makeTask({ assignedAgentId: undefined })),
-		).toBe(false);
+		expect(await taskNeedsApprovalFromEdges("proj-1", makeTask({ assignedAgentId: undefined }))).toBe(false);
 		expect(mockListDeps).not.toHaveBeenCalled();
 	});
 

@@ -104,9 +104,30 @@ export async function getPolicies(projectId: string): Promise<PolicyRule[]> {
 
 	// Built-in rules always exist (represented as synthetic PolicyRule objects)
 	const builtins: PolicyRule[] = [
-		{ id: BUILTIN_RULE_MAX_COST, projectId, name: "Max cost per task", condition: "task.budget > project.maxCost", action: "block", enabled: true },
-		{ id: BUILTIN_RULE_LARGE_APPROVAL, projectId, name: "Require approval for large tasks", condition: "task.complexity in [L, XL]", action: "require_approval", enabled: true },
-		{ id: BUILTIN_RULE_MULTI_REVIEWER, projectId, name: "Multi-reviewer for sensitive files", condition: "task.targetFiles matches pattern", action: "warn", enabled: true },
+		{
+			id: BUILTIN_RULE_MAX_COST,
+			projectId,
+			name: "Max cost per task",
+			condition: "task.budget > project.maxCost",
+			action: "block",
+			enabled: true,
+		},
+		{
+			id: BUILTIN_RULE_LARGE_APPROVAL,
+			projectId,
+			name: "Require approval for large tasks",
+			condition: "task.complexity in [L, XL]",
+			action: "require_approval",
+			enabled: true,
+		},
+		{
+			id: BUILTIN_RULE_MULTI_REVIEWER,
+			projectId,
+			name: "Multi-reviewer for sensitive files",
+			condition: "task.targetFiles matches pattern",
+			action: "warn",
+			enabled: true,
+		},
 	];
 
 	// Merge: custom policies from settings override/supplement builtins
@@ -219,7 +240,7 @@ function evaluateCustomCondition(condition: string, task: Task): boolean {
 			return Array.isArray(files) && files.some((f: string) => f.toLowerCase().includes(val));
 		}
 		if (lower.includes("retry_count >=")) {
-			const val = parseInt(lower.split("retry_count >=")[1].trim(), 10);
+			const val = Number.parseInt(lower.split("retry_count >=")[1].trim(), 10);
 			return !isNaN(val) && (task.retryCount ?? 0) >= val;
 		}
 

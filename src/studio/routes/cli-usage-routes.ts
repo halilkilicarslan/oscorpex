@@ -4,8 +4,9 @@
 
 import { Hono } from "hono";
 import {
-	getCLIProbeSettings,
+	type ProviderProbePermission,
 	getCLIProbeEvents,
+	getCLIProbeSettings,
 	getCLIUsageHistory,
 	getCLIUsageSnapshot,
 	getOscorpexCLIUsage,
@@ -13,7 +14,6 @@ import {
 	latestCLIUsageSnapshots,
 	listCLIUsageSnapshots,
 	setCLIProbeSettings,
-	type ProviderProbePermission,
 } from "../cli-usage.js";
 
 export const cliUsageRoutes = new Hono();

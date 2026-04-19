@@ -42,11 +42,7 @@ describe("getPolicies", () => {
 		mockSettings.mockResolvedValue({});
 		const policies = await getPolicies("p-1");
 		expect(policies).toHaveLength(3);
-		expect(policies.map((p) => p.id)).toEqual([
-			"max_cost_per_task",
-			"require_approval_for_large",
-			"multi_reviewer",
-		]);
+		expect(policies.map((p) => p.id)).toEqual(["max_cost_per_task", "require_approval_for_large", "multi_reviewer"]);
 	});
 
 	it("merges custom rules from project_settings on top of built-ins", async () => {
@@ -54,7 +50,14 @@ describe("getPolicies", () => {
 			policy: {
 				rules: JSON.stringify({
 					rules: [
-						{ id: "c-1", projectId: "p-1", name: "No main branch", condition: "branch == main", action: "block", enabled: true },
+						{
+							id: "c-1",
+							projectId: "p-1",
+							name: "No main branch",
+							condition: "branch == main",
+							action: "block",
+							enabled: true,
+						},
 					],
 				}),
 			},
@@ -100,10 +103,7 @@ describe("evaluatePolicies — built-in rules", () => {
 
 	it("allows L tasks that are already approved", async () => {
 		mockSettings.mockResolvedValue({});
-		const result = await evaluatePolicies(
-			"p-1",
-			makeTask({ complexity: "L", approvalStatus: "approved" }),
-		);
+		const result = await evaluatePolicies("p-1", makeTask({ complexity: "L", approvalStatus: "approved" }));
 		expect(result.violations).toEqual([]);
 	});
 
@@ -142,7 +142,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-1", projectId: "p-1", name: "No XL", condition: "complexity == XL", action: "block", enabled: true }],
+					rules: [
+						{
+							id: "c-1",
+							projectId: "p-1",
+							name: "No XL",
+							condition: "complexity == XL",
+							action: "block",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});
@@ -155,7 +164,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-1", projectId: "p-1", name: "No deploys", condition: "title contains deploy", action: "block", enabled: true }],
+					rules: [
+						{
+							id: "c-1",
+							projectId: "p-1",
+							name: "No deploys",
+							condition: "title contains deploy",
+							action: "block",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});
@@ -167,7 +185,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-1", projectId: "p-1", name: "No XL", condition: "complexity == XL", action: "block", enabled: false }],
+					rules: [
+						{
+							id: "c-1",
+							projectId: "p-1",
+							name: "No XL",
+							condition: "complexity == XL",
+							action: "block",
+							enabled: false,
+						},
+					],
 				}),
 			},
 		});
@@ -179,7 +206,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-10", projectId: "p-1", name: "Block large+", condition: "complexity >= L", action: "block", enabled: true }],
+					rules: [
+						{
+							id: "c-10",
+							projectId: "p-1",
+							name: "Block large+",
+							condition: "complexity >= L",
+							action: "block",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});
@@ -193,7 +229,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-10", projectId: "p-1", name: "Block large+", condition: "complexity >= L", action: "block", enabled: true }],
+					rules: [
+						{
+							id: "c-10",
+							projectId: "p-1",
+							name: "Block large+",
+							condition: "complexity >= L",
+							action: "block",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});
@@ -207,7 +252,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-11", projectId: "p-1", name: "No intern", condition: "assigned_agent == intern-dev", action: "block", enabled: true }],
+					rules: [
+						{
+							id: "c-11",
+							projectId: "p-1",
+							name: "No intern",
+							condition: "assigned_agent == intern-dev",
+							action: "block",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});
@@ -219,7 +273,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-11", projectId: "p-1", name: "No intern", condition: "assigned_agent == intern-dev", action: "block", enabled: true }],
+					rules: [
+						{
+							id: "c-11",
+							projectId: "p-1",
+							name: "No intern",
+							condition: "assigned_agent == intern-dev",
+							action: "block",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});
@@ -231,7 +294,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-12", projectId: "p-1", name: "Protect env", condition: "target_files contains .env", action: "block", enabled: true }],
+					rules: [
+						{
+							id: "c-12",
+							projectId: "p-1",
+							name: "Protect env",
+							condition: "target_files contains .env",
+							action: "block",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});
@@ -244,7 +316,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-12", projectId: "p-1", name: "Protect env", condition: "target_files contains .env", action: "block", enabled: true }],
+					rules: [
+						{
+							id: "c-12",
+							projectId: "p-1",
+							name: "Protect env",
+							condition: "target_files contains .env",
+							action: "block",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});
@@ -257,7 +338,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-13", projectId: "p-1", name: "Too many retries", condition: "retry_count >= 3", action: "block", enabled: true }],
+					rules: [
+						{
+							id: "c-13",
+							projectId: "p-1",
+							name: "Too many retries",
+							condition: "retry_count >= 3",
+							action: "block",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});
@@ -269,7 +359,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-13", projectId: "p-1", name: "Too many retries", condition: "retry_count >= 3", action: "block", enabled: true }],
+					rules: [
+						{
+							id: "c-13",
+							projectId: "p-1",
+							name: "Too many retries",
+							condition: "retry_count >= 3",
+							action: "block",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});
@@ -281,7 +380,16 @@ describe("evaluatePolicies — custom rules", () => {
 		mockSettings.mockResolvedValue({
 			policy: {
 				rules: JSON.stringify({
-					rules: [{ id: "c-1", projectId: "p-1", name: "Branch warn", condition: "branch == main", action: "warn", enabled: true }],
+					rules: [
+						{
+							id: "c-1",
+							projectId: "p-1",
+							name: "Branch warn",
+							condition: "branch == main",
+							action: "warn",
+							enabled: true,
+						},
+					],
 				}),
 			},
 		});

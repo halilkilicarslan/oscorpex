@@ -158,7 +158,8 @@ export async function runRetrospective(projectId: string): Promise<Retrospective
 	if (completionRate >= 80) whatWentWell.push(`High task completion rate: ${completionRate}%`);
 	if (agentStats.some((s) => s.successRate >= 0.9)) {
 		const topAgent = agentStats.find((s) => s.successRate >= 0.9);
-		if (topAgent) whatWentWell.push(`${topAgent.agentName} achieved ${Math.round(topAgent.successRate * 100)}% success rate`);
+		if (topAgent)
+			whatWentWell.push(`${topAgent.agentName} achieved ${Math.round(topAgent.successRate * 100)}% success rate`);
 	}
 	const zeroRevisionAgents = agentStats.filter((s) => s.avgRevisions === 0 && s.tasksCompleted > 0);
 	if (zeroRevisionAgents.length > 0) {
@@ -176,12 +177,15 @@ export async function runRetrospective(projectId: string): Promise<Retrospective
 	}
 
 	const failureCount = allEvents.filter((e: StudioEvent) => e.type === "task:failed").length;
-	if (failureCount > 3) whatCouldImprove.push(`${failureCount} task failures detected — improve test coverage or task scoping`);
+	if (failureCount > 3)
+		whatCouldImprove.push(`${failureCount} task failures detected — improve test coverage or task scoping`);
 
 	const escalations = allEvents.filter((e: StudioEvent) => e.type === "escalation:user").length;
-	if (escalations > 0) whatCouldImprove.push(`${escalations} escalation(s) required user intervention — refine agent policies`);
+	if (escalations > 0)
+		whatCouldImprove.push(`${escalations} escalation(s) required user intervention — refine agent policies`);
 
-	if (completionRate < 80) whatCouldImprove.push(`Overall completion rate ${completionRate}% is below target — review planning accuracy`);
+	if (completionRate < 80)
+		whatCouldImprove.push(`Overall completion rate ${completionRate}% is below target — review planning accuracy`);
 
 	// ---- Action items -------------------------------------------------------
 
@@ -192,7 +196,8 @@ export async function runRetrospective(projectId: string): Promise<Retrospective
 	if (whatWentWell.length === 0) actionItems.push("Define clearer success metrics for next sprint");
 
 	const report: RetrospectiveReport = {
-		whatWentWell: whatWentWell.length > 0 ? whatWentWell : ["Project progressed — review completed tasks for specific wins"],
+		whatWentWell:
+			whatWentWell.length > 0 ? whatWentWell : ["Project progressed — review completed tasks for specific wins"],
 		whatCouldImprove,
 		actionItems,
 		agentStats,

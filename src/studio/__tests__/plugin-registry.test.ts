@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-	getPlugins,
-	notifyPlugins,
-	type Plugin,
-	registerPlugin,
-	unregisterPlugin,
-} from "../plugin-registry.js";
+import { type Plugin, getPlugins, notifyPlugins, registerPlugin, unregisterPlugin } from "../plugin-registry.js";
 
 beforeEach(() => {
 	// Clear registry between tests
@@ -62,7 +56,11 @@ describe("plugin-registry", () => {
 		registerPlugin({
 			name: "bad",
 			version: "1",
-			hooks: { onTaskComplete: async () => { throw new Error("boom"); } },
+			hooks: {
+				onTaskComplete: async () => {
+					throw new Error("boom");
+				},
+			},
 		});
 		registerPlugin({ name: "good", version: "1", hooks: { onTaskComplete: goodHook } });
 

@@ -25,17 +25,19 @@ const mockExecute = vi.mocked(execute);
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import { hashPassword, verifyPassword } from "../auth/password.js";
-import { signJwt, verifyJwt } from "../auth/jwt.js";
 import { authMiddleware } from "../auth/auth-middleware.js";
+import { signJwt, verifyJwt } from "../auth/jwt.js";
+import { hashPassword, verifyPassword } from "../auth/password.js";
 
 // ---------------------------------------------------------------------------
 // Helper: minimal Hono Context mock (typed loosely to avoid Hono generic constraints)
 // ---------------------------------------------------------------------------
-function makeMockContext(overrides: {
-	authHeader?: string;
-	acceptHeader?: string;
-} = {}) {
+function makeMockContext(
+	overrides: {
+		authHeader?: string;
+		acceptHeader?: string;
+	} = {},
+) {
 	const store: Record<string, unknown> = {};
 	// biome-ignore lint/suspicious/noExplicitAny: test mock — intentionally loose typed
 	const ctx: Record<string, any> = {
@@ -47,7 +49,9 @@ function makeMockContext(overrides: {
 				return undefined;
 			},
 		},
-		set: (key: string, value: unknown) => { store[key] = value; },
+		set: (key: string, value: unknown) => {
+			store[key] = value;
+		},
 		get: (key: string) => store[key],
 		json: (body: unknown, status = 200) => ({ body, status }),
 		_store: store,
@@ -100,9 +104,7 @@ describe("signJwt / verifyJwt", () => {
 	it("returns null for expired token", () => {
 		// Manually construct an expired JWT
 		const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-		const expiredPayload = Buffer.from(
-			JSON.stringify({ ...payload, iat: 1, exp: 1, jti: "x" }),
-		).toString("base64url");
+		const expiredPayload = Buffer.from(JSON.stringify({ ...payload, iat: 1, exp: 1, jti: "x" })).toString("base64url");
 		// Signature won't match but exp check fires first — actually sig check fires first,
 		// so let's use a real token but override exp via direct manipulation.
 		// Instead, test with a completely fake token that has past exp:
@@ -205,7 +207,7 @@ describe("Auth routes", () => {
 		});
 
 		expect(res.status).toBe(201);
-		const body = await res.json() as { token: string; user: { email: string; role: string } };
+		const body = (await res.json()) as { token: string; user: { email: string; role: string } };
 		expect(typeof body.token).toBe("string");
 		expect(body.token.split(".")).toHaveLength(3);
 		expect(body.user.email).toBe("user@example.com");
@@ -234,7 +236,7 @@ describe("Auth routes", () => {
 		});
 
 		expect(res.status).toBe(200);
-		const body = await res.json() as { token: string; user: { role: string } };
+		const body = (await res.json()) as { token: string; user: { role: string } };
 		expect(typeof body.token).toBe("string");
 		expect(body.user.role).toBe("owner");
 	});
@@ -256,7 +258,7 @@ describe("Auth routes", () => {
 		});
 
 		expect(res.status).toBe(401);
-		const body = await res.json() as { error: string };
+		const body = (await res.json()) as { error: string };
 		expect(body.error).toMatch(/invalid credentials/i);
 	});
 
@@ -298,7 +300,7 @@ describe("Auth routes", () => {
 		});
 
 		expect(res.status).toBe(200);
-		const body = await res.json() as { id: string; email: string; role: string };
+		const body = (await res.json()) as { id: string; email: string; role: string };
 		expect(body.id).toBe("u-1");
 		expect(body.email).toBe("user@example.com");
 		expect(body.role).toBe("owner");

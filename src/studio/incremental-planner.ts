@@ -10,13 +10,7 @@
 // surface the new work without a full restart.
 // ---------------------------------------------------------------------------
 
-import {
-	createPhase,
-	createTask,
-	getLatestPlan,
-	listProjectAgents,
-	updateTask,
-} from "./db.js";
+import { createPhase, createTask, getLatestPlan, listProjectAgents, updateTask } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { pipelineEngine } from "./pipeline-engine.js";
 import type { Phase, ProjectPlan, Task, TaskComplexity } from "./types.js";
@@ -91,11 +85,7 @@ async function resolveAgentId(projectId: string, role: string): Promise<string |
 }
 
 /** Append a task to an existing phase. */
-export async function appendTaskToPhase(
-	projectId: string,
-	phaseId: string,
-	input: AppendTaskInput,
-): Promise<Task> {
+export async function appendTaskToPhase(projectId: string, phaseId: string, input: AppendTaskInput): Promise<Task> {
 	const plan = await getLatestPlan(projectId);
 	if (!plan) throw new Error(`No plan found for project ${projectId}`);
 
@@ -143,10 +133,7 @@ export interface ReplanResult {
  * is preserved. Caller is expected to follow up with appendPhaseToPlan /
  * appendTaskToPhase to lay down the refreshed work.
  */
-export async function replanUnfinishedTasks(
-	projectId: string,
-	reason: string,
-): Promise<ReplanResult> {
+export async function replanUnfinishedTasks(projectId: string, reason: string): Promise<ReplanResult> {
 	const plan = await getLatestPlan(projectId);
 	if (!plan) throw new Error(`No plan found for project ${projectId}`);
 

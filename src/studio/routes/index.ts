@@ -5,18 +5,17 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { seedPresetAgents, seedTeamTemplates } from "../db.js";
 import { initContextSession } from "../context-session.js";
+import { seedPresetAgents, seedTeamTemplates } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { budgetGuard } from "../middleware/policy-middleware.js";
 import { notifyPlugins, pluginRegistry } from "../plugin-registry.js";
-import { sendWebhookNotification } from "../webhook-sender.js";
 import type { EventType } from "../types.js";
+import { sendWebhookNotification } from "../webhook-sender.js";
 
-import authRoutes from "./auth-routes.js";
 import { agentRoutes } from "./agent-routes.js";
-import pluginRoutes from "./plugin-routes.js";
 import { analyticsRoutes } from "./analytics-routes.js";
+import authRoutes from "./auth-routes.js";
 import { ceremonyRoutes } from "./ceremony-routes.js";
 import { cliUsageRoutes } from "./cli-usage-routes.js";
 import { gitFileRoutes } from "./git-file-routes.js";
@@ -24,6 +23,7 @@ import { integrationRoutes } from "./integration-routes.js";
 import { lifecycleRoutes } from "./lifecycle-routes.js";
 import { memoryRoutes } from "./memory-routes.js";
 import { pipelineRoutes } from "./pipeline-routes.js";
+import pluginRoutes from "./plugin-routes.js";
 import { projectRoutes } from "./project-routes.js";
 import { providerRoutes } from "./provider-routes.js";
 import { runtimeRoutes } from "./runtime-routes.js";
@@ -32,8 +32,9 @@ import { taskRoutes } from "./task-routes.js";
 import { teamRoutes } from "./team-routes.js";
 import { workItemRoutes } from "./work-item-routes.js";
 
-// M6: auth middleware (şimdilik import edilmiş, M6.2'de aktif edilecek)
-// import { authMiddleware } from "../auth/auth-middleware.js";
+// M6.2: auth middleware — opt-in via OSCORPEX_AUTH_ENABLED=true
+// Disabled by default so existing tests and integrations keep working.
+import { authMiddleware } from "../auth/auth-middleware.js";
 
 // Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();
@@ -43,9 +44,9 @@ seedTeamTemplates();
 initContextSession(eventBus);
 
 // M3: PG LISTEN/NOTIFY durable event bridge — diğer process'lerden gelen event'leri dinle
-eventBus.initPgListener().catch((err) =>
-	console.warn("[routes] initPgListener failed:", err instanceof Error ? err.message : err),
-);
+eventBus
+	.initPgListener()
+	.catch((err) => console.warn("[routes] initPgListener failed:", err instanceof Error ? err.message : err));
 
 // ---------------------------------------------------------------------------
 // Webhook Event Entegrasyonu — global event listener
@@ -218,12 +219,28 @@ if (apiKey) {
 	});
 }
 
+// ---------------------------------------------------------------------------
+// M6.2: Tenant-aware auth middleware — only active when OSCORPEX_AUTH_ENABLED=true
+// Sets tenantId / userId / userRole / authType on context for downstream use.
+// /api/auth/* is always auth-free (register/login endpoints).
+// SSE endpoints are skipped because browser EventSource cannot send headers;
+// they use the ?token= query param fallback instead.
+// ---------------------------------------------------------------------------
+if (process.env.OSCORPEX_AUTH_ENABLED === "true") {
+	studio.use("*", async (c, next) => {
+		// Skip SSE — handled with query-param token in the route itself
+		if (c.req.header("accept")?.includes("text/event-stream")) return next();
+		return authMiddleware(c, next);
+	});
+}
+
 // Budget guard — execution route'larına uygula
 studio.use("/projects/:id/execute*", budgetGuard());
 studio.use("/projects/:id/pipeline/start*", budgetGuard());
 studio.use("/projects/:id/agents/:agentId/exec*", budgetGuard());
 
 // Sub-router'ları mount et
+studio.route("/auth", authRoutes);
 studio.route("/", projectRoutes);
 studio.route("/", taskRoutes);
 studio.route("/", agentRoutes);

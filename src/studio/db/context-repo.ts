@@ -4,14 +4,14 @@
 
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
-import { now, rowToContextSource, rowToContextChunk } from "./helpers.js";
 import type {
-	ContextSource,
 	ContextChunk,
 	ContextContentType,
 	ContextMatchLayer,
 	ContextSearchResult,
+	ContextSource,
 } from "../types.js";
+import { now, rowToContextChunk, rowToContextSource } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
 // Sources
@@ -39,30 +39,23 @@ export async function upsertContextSource(
 	return { id, projectId, label, chunkCount, codeChunkCount, indexedAt: ts };
 }
 
-export async function getContextSource(
-	projectId: string,
-	label: string,
-): Promise<ContextSource | null> {
-	const row = await queryOne<any>(
-		"SELECT * FROM context_sources WHERE project_id = $1 AND label = $2",
-		[projectId, label],
-	);
+export async function getContextSource(projectId: string, label: string): Promise<ContextSource | null> {
+	const row = await queryOne<any>("SELECT * FROM context_sources WHERE project_id = $1 AND label = $2", [
+		projectId,
+		label,
+	]);
 	return row ? rowToContextSource(row) : null;
 }
 
 export async function listContextSources(projectId: string): Promise<ContextSource[]> {
-	const rows = await query<any>(
-		"SELECT * FROM context_sources WHERE project_id = $1 ORDER BY indexed_at DESC",
-		[projectId],
-	);
+	const rows = await query<any>("SELECT * FROM context_sources WHERE project_id = $1 ORDER BY indexed_at DESC", [
+		projectId,
+	]);
 	return rows.map(rowToContextSource);
 }
 
 export async function deleteContextSource(projectId: string, label: string): Promise<void> {
-	await execute(
-		"DELETE FROM context_sources WHERE project_id = $1 AND label = $2",
-		[projectId, label],
-	);
+	await execute("DELETE FROM context_sources WHERE project_id = $1 AND label = $2", [projectId, label]);
 }
 
 // ---------------------------------------------------------------------------
@@ -104,10 +97,7 @@ export async function insertChunks(
 }
 
 export async function getChunksBySource(sourceId: string): Promise<ContextChunk[]> {
-	const rows = await query<any>(
-		"SELECT * FROM context_chunks WHERE source_id = $1 ORDER BY id",
-		[sourceId],
-	);
+	const rows = await query<any>("SELECT * FROM context_chunks WHERE source_id = $1 ORDER BY id", [sourceId]);
 	return rows.map(rowToContextChunk);
 }
 
@@ -272,10 +262,10 @@ function rrfMerge(
 
 export async function cleanupStaleSources(projectId: string, maxAgeDays = 7): Promise<number> {
 	const cutoff = new Date(Date.now() - maxAgeDays * 86_400_000).toISOString();
-	const { rowCount } = await execute(
-		"DELETE FROM context_sources WHERE project_id = $1 AND indexed_at < $2",
-		[projectId, cutoff],
-	);
+	const { rowCount } = await execute("DELETE FROM context_sources WHERE project_id = $1 AND indexed_at < $2", [
+		projectId,
+		cutoff,
+	]);
 	return rowCount;
 }
 
@@ -381,10 +371,9 @@ export async function isDuplicateEvent(
 }
 
 export async function countSessionEvents(sessionKey: string): Promise<number> {
-	const row = await queryOne<{ cnt: string }>(
-		"SELECT COUNT(*) AS cnt FROM context_events WHERE session_key = $1",
-		[sessionKey],
-	);
+	const row = await queryOne<{ cnt: string }>("SELECT COUNT(*) AS cnt FROM context_events WHERE session_key = $1", [
+		sessionKey,
+	]);
 	return Number(row?.cnt ?? 0);
 }
 
@@ -406,9 +395,6 @@ export async function evictLowPriorityEvents(sessionKey: string, maxEvents: numb
 
 export async function cleanupOldEvents(maxAgeDays = 30): Promise<number> {
 	const cutoff = new Date(Date.now() - maxAgeDays * 86_400_000).toISOString();
-	const { rowCount } = await execute(
-		"DELETE FROM context_events WHERE created_at < $1",
-		[cutoff],
-	);
+	const { rowCount } = await execute("DELETE FROM context_events WHERE created_at < $1", [cutoff]);
 	return rowCount;
 }

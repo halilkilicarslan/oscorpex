@@ -4,7 +4,15 @@
 
 // ---- Project (Workspace) --------------------------------------------------
 
-export type ProjectStatus = "planning" | "approved" | "running" | "paused" | "completed" | "failed" | "maintenance" | "archived";
+export type ProjectStatus =
+	| "planning"
+	| "approved"
+	| "running"
+	| "paused"
+	| "completed"
+	| "failed"
+	| "maintenance"
+	| "archived";
 
 export interface Project {
 	id: string;
@@ -574,13 +582,7 @@ export interface WorkItem {
 
 export type IntakeQuestionStatus = "pending" | "answered" | "skipped";
 
-export type IntakeQuestionCategory =
-	| "scope"
-	| "functional"
-	| "nonfunctional"
-	| "priority"
-	| "technical"
-	| "general";
+export type IntakeQuestionCategory = "scope" | "functional" | "nonfunctional" | "priority" | "technical" | "general";
 
 export interface IntakeQuestion {
 	id: string;
@@ -609,9 +611,6 @@ export interface Sprint {
 	status: SprintStatus;
 	createdAt: string;
 }
-
-
-
 
 // ---- Memory Architecture (v3.4) --------------------------------------------
 

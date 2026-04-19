@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { requirePermission } from "../auth/rbac.js";
 import { getLatestPlan, getProject, getTask, listPhases, listProjectAgents, listTasks } from "../db.js";
 import { pipelineEngine } from "../pipeline-engine.js";
 import type { Task } from "../types.js";
@@ -10,8 +11,8 @@ import type { Task } from "../types.js";
 export const pipelineRoutes = new Hono();
 
 // POST /projects/:id/pipeline/start
-pipelineRoutes.post("/projects/:id/pipeline/start", async (c) => {
-	const projectId = c.req.param("id");
+pipelineRoutes.post("/projects/:id/pipeline/start", requirePermission("pipeline:start"), async (c) => {
+	const projectId = c.req.param("id") ?? "";
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
@@ -138,8 +139,8 @@ pipelineRoutes.get("/projects/:id/pipeline/status", async (c) => {
 });
 
 // POST /projects/:id/pipeline/pause
-pipelineRoutes.post("/projects/:id/pipeline/pause", async (c) => {
-	const projectId = c.req.param("id");
+pipelineRoutes.post("/projects/:id/pipeline/pause", requirePermission("pipeline:pause"), async (c) => {
+	const projectId = c.req.param("id") ?? "";
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
@@ -153,8 +154,8 @@ pipelineRoutes.post("/projects/:id/pipeline/pause", async (c) => {
 });
 
 // POST /projects/:id/pipeline/resume
-pipelineRoutes.post("/projects/:id/pipeline/resume", async (c) => {
-	const projectId = c.req.param("id");
+pipelineRoutes.post("/projects/:id/pipeline/resume", requirePermission("pipeline:resume"), async (c) => {
+	const projectId = c.req.param("id") ?? "";
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 

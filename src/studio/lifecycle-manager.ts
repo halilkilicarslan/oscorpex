@@ -4,13 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import {
-	createTask,
-	getLatestPlan,
-	getProject,
-	listPhases,
-	updateProject,
-} from "./db.js";
+import { createTask, getLatestPlan, getProject, listPhases, updateProject } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import type { ProjectStatus } from "./types.js";
 
@@ -54,9 +48,7 @@ export async function transitionProject(projectId: string, newStatus: ProjectSta
 
 	const allowed = getValidTransitions(project.status);
 	if (!allowed.includes(newStatus)) {
-		throw new Error(
-			`Invalid transition: ${project.status} → ${newStatus}. Allowed: [${allowed.join(", ") || "none"}]`,
-		);
+		throw new Error(`Invalid transition: ${project.status} → ${newStatus}. Allowed: [${allowed.join(", ") || "none"}]`);
 	}
 
 	await updateProject(projectId, { status: newStatus });
@@ -89,9 +81,7 @@ export async function triggerHotfix(projectId: string, description: string): Pro
 	}
 
 	if (project.status !== "completed" && project.status !== "maintenance") {
-		throw new Error(
-			`Hotfix requires project in "completed" or "maintenance" status (current: ${project.status})`,
-		);
+		throw new Error(`Hotfix requires project in "completed" or "maintenance" status (current: ${project.status})`);
 	}
 
 	const plan = await getLatestPlan(projectId);

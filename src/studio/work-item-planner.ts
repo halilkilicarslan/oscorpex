@@ -5,14 +5,7 @@
 // needed and appends additional tasks to it on subsequent conversions.
 // ---------------------------------------------------------------------------
 
-import {
-	createPhase,
-	createTask,
-	getLatestPlan,
-	getWorkItem,
-	listProjectAgents,
-	updateWorkItem,
-} from "./db.js";
+import { createPhase, createTask, getLatestPlan, getWorkItem, listProjectAgents, updateWorkItem } from "./db.js";
 import type {
 	Phase,
 	ProjectAgent,
@@ -71,11 +64,12 @@ function complexityForPriority(priority: WorkItemPriority): TaskComplexity {
 
 /** Slug-safe branch suffix derived from the work item title. */
 function branchForWorkItem(item: WorkItem): string {
-	const slug = item.title
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "")
-		.slice(0, 40) || "work-item";
+	const slug =
+		item.title
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-+|-+$/g, "")
+			.slice(0, 40) || "work-item";
 	const prefix =
 		item.type === "bug" || item.type === "defect" || item.type === "hotfix"
 			? "fix"
@@ -119,10 +113,7 @@ export async function planWorkItem(itemId: string): Promise<PlanWorkItemResult> 
 	const plan = await getLatestPlan(item.projectId);
 	if (!plan) throw new Error(`No plan found for project ${item.projectId}`);
 
-	const [phase, agents] = await Promise.all([
-		resolveBacklogPhase(plan),
-		listProjectAgents(item.projectId),
-	]);
+	const [phase, agents] = await Promise.all([resolveBacklogPhase(plan), listProjectAgents(item.projectId)]);
 
 	const preferredRole = roleForType(item.type);
 	const agent = pickAgent(agents, preferredRole);
@@ -148,8 +139,7 @@ export async function planWorkItem(itemId: string): Promise<PlanWorkItemResult> 
 		branch: branchForWorkItem(item),
 	});
 
-	const updatedItem =
-		(await updateWorkItem(item.id, { status: "planned", plannedTaskId: task.id })) ?? item;
+	const updatedItem = (await updateWorkItem(item.id, { status: "planned", plannedTaskId: task.id })) ?? item;
 
 	return { workItem: updatedItem, phase, task };
 }

@@ -52,9 +52,7 @@ describe("task-decomposer — eligibility", () => {
 
 describe("task-decomposer — inferTargetFiles", () => {
 	it("extracts source paths and globs from descriptions", () => {
-		const out = inferTargetFiles(
-			"Update src/auth/login.ts and tests/auth.test.ts. Also touch *.sql files.",
-		);
+		const out = inferTargetFiles("Update src/auth/login.ts and tests/auth.test.ts. Also touch *.sql files.");
 		expect(out).toContain("src/auth/login.ts");
 		expect(out).toContain("tests/auth.test.ts");
 		expect(out).toContain("*.sql");
@@ -86,9 +84,7 @@ describe("task-decomposer — heuristic fallback", () => {
 	});
 
 	it("falls back to impl + tests split for impl+test descriptions", () => {
-		const subs = heuristicDecompose(
-			makeTask({ description: "Write a parser implementation with full unit tests" }),
-		);
+		const subs = heuristicDecompose(makeTask({ description: "Write a parser implementation with full unit tests" }));
 		expect(subs.length).toBe(2);
 		expect(subs[0].description.toLowerCase()).toMatch(/implement/);
 		expect(subs[1].description.toLowerCase()).toMatch(/test/);
@@ -102,18 +98,14 @@ describe("task-decomposer — heuristic fallback", () => {
 	});
 
 	it("caps sub-tasks at 8", () => {
-		const longDesc = Array.from({ length: 20 }, (_, i) => `step-${i} src/file${i}.ts then`).join(
-			" ",
-		);
+		const longDesc = Array.from({ length: 20 }, (_, i) => `step-${i} src/file${i}.ts then`).join(" ");
 		const subs = heuristicDecompose(makeTask({ description: longDesc }));
 		expect(subs.length).toBeLessThanOrEqual(8);
 	});
 
 	it("assigns S complexity to short segments and M to long ones", () => {
 		const longSegment = "Implement an extremely detailed payment flow ".repeat(6);
-		const subs = heuristicDecompose(
-			makeTask({ description: `${longSegment} and write tests for it` }),
-		);
+		const subs = heuristicDecompose(makeTask({ description: `${longSegment} and write tests for it` }));
 		const hasMedium = subs.some((s) => s.complexity === "M");
 		expect(hasMedium).toBe(true);
 	});

@@ -1148,3 +1148,9 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id);
 -- projects tablosuna tenant_id ve owner_id ekle (nullable, backward compat)
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_id  TEXT REFERENCES users(id) ON DELETE SET NULL;
+
+-- ---------------------------------------------------------------------------
+-- M6.2: Tenant Scoping — indexes for row-level filtering
+-- ---------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_projects_tenant   ON projects(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_projects_owner    ON projects(owner_id);

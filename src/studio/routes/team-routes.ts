@@ -2,9 +2,9 @@
 // Team Routes — Team Templates, Custom Teams, Project Team (project_agents)
 // ---------------------------------------------------------------------------
 
+import { resolve } from "node:path";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { resolve } from "node:path";
 import {
 	createAgentFiles,
 	deleteAgentFiles,
@@ -24,14 +24,19 @@ import {
 	getProject,
 	getProjectAgent,
 	getTeamTemplate,
-	listPresetAgents,
 	listCustomTeamTemplates,
+	listPresetAgents,
 	listProjectAgents,
 	listTeamTemplates,
 	updateCustomTeamTemplate,
 	updateProjectAgent,
 } from "../db.js";
-import { listPlannerCLIProviders, streamPlannerWithCLI, type PlannerCLIProvider, type PlannerReasoningEffort } from "../planner-cli.js";
+import {
+	type PlannerCLIProvider,
+	type PlannerReasoningEffort,
+	listPlannerCLIProviders,
+	streamPlannerWithCLI,
+} from "../planner-cli.js";
 import { TEAM_ARCHITECT_SYSTEM_PROMPT } from "../team-architect.js";
 import type { ProjectAgent } from "../types.js";
 
@@ -98,20 +103,27 @@ teamRoutes.post("/team-architect/chat", async (c) => {
 		effort?: PlannerReasoningEffort;
 	};
 
-	const selectedProvider = availableProviders.find((provider) => provider.id === body.provider)?.id ?? availableProviders[0].id;
+	const selectedProvider =
+		availableProviders.find((provider) => provider.id === body.provider)?.id ?? availableProviders[0].id;
 	const selectedProviderInfo =
 		availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0];
 	const selectedModel =
 		body.model && selectedProviderInfo.models.includes(body.model) ? body.model : selectedProviderInfo.defaultModel;
 	const selectedEffort =
-		body.effort && selectedProviderInfo.efforts.includes(body.effort) ? body.effort : selectedProviderInfo.defaultEffort;
+		body.effort && selectedProviderInfo.efforts.includes(body.effort)
+			? body.effort
+			: selectedProviderInfo.defaultEffort;
 
 	const intake = body.intake ?? {};
 	const teamTemplates = await listTeamTemplates();
 	const customTeams = await listCustomTeamTemplates();
 	const presetAgents = await listPresetAgents();
 	const allowedRoles = Array.from(
-		new Set([...presetAgents.map((agent) => agent.role), ...teamTemplates.flatMap((team) => team.roles), ...customTeams.flatMap((team) => team.roles)]),
+		new Set([
+			...presetAgents.map((agent) => agent.role),
+			...teamTemplates.flatMap((team) => team.roles),
+			...customTeams.flatMap((team) => team.roles),
+		]),
 	).sort();
 
 	const teamCatalog = [
@@ -170,11 +182,9 @@ ${allowedRoles.join(", ")}`;
 					},
 					{
 						onTextDelta: (text) => {
-							stream
-								.writeSSE({ event: "text-delta", data: JSON.stringify({ text }) })
-								.catch(() => {
-									/* stream closed */
-								});
+							stream.writeSSE({ event: "text-delta", data: JSON.stringify({ text }) }).catch(() => {
+								/* stream closed */
+							});
 						},
 						onDone: async (fullText) => {
 							await stream.writeSSE({

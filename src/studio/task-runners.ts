@@ -3,8 +3,8 @@
 // Integration test ve run-app gibi özel task type'ları için executor'lar.
 // ---------------------------------------------------------------------------
 
-import { analyzeProject } from "./runtime-analyzer.js";
 import { startApp, stopApp } from "./app-runner.js";
+import { analyzeProject } from "./runtime-analyzer.js";
 import type { TaskOutput } from "./types.js";
 
 async function httpCheck(url: string, timeoutMs = 5000): Promise<{ ok: boolean; status: number; body: string }> {

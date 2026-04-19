@@ -6,13 +6,13 @@
 
 import { createHash } from "node:crypto";
 import {
-	insertContextEvent,
-	getContextEvents,
-	isDuplicateEvent,
 	countSessionEvents,
 	evictLowPriorityEvents,
+	getContextEvents,
+	insertContextEvent,
+	isDuplicateEvent,
 } from "./db.js";
-import { eventBus as _eventBusType } from "./event-bus.js";
+import type { eventBus as _eventBusType } from "./event-bus.js";
 type EventBus = typeof _eventBusType;
 
 // ---------------------------------------------------------------------------
@@ -112,15 +112,11 @@ export function initContextSession(eventBus: EventBus): void {
 
 	for (const eventType of bridgeEvents) {
 		eventBus.on(eventType as any, (data: any) => {
-			trackEvent(
-				data.projectId,
-				data.taskId,
-				data.agentId,
-				eventType,
-				JSON.stringify(data.payload ?? data),
-			).catch((err) => {
-				console.warn(`[context-session] Failed to track ${eventType}:`, err);
-			});
+			trackEvent(data.projectId, data.taskId, data.agentId, eventType, JSON.stringify(data.payload ?? data)).catch(
+				(err) => {
+					console.warn(`[context-session] Failed to track ${eventType}:`, err);
+				},
+			);
 		});
 	}
 }

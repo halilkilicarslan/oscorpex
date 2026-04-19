@@ -40,18 +40,14 @@ class PgListener {
 	}
 
 	private async _connect(): Promise<void> {
-		const connectionString =
-			process.env.DATABASE_URL ?? "postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex";
+		const connectionString = process.env.DATABASE_URL ?? "postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex";
 
 		const client = new pg.Client({ connectionString });
 
 		try {
 			await client.connect();
 		} catch (err) {
-			console.warn(
-				"[pg-listener] Connection failed:",
-				err instanceof Error ? err.message : err,
-			);
+			console.warn("[pg-listener] Connection failed:", err instanceof Error ? err.message : err);
 			client.end().catch(() => {});
 			this._scheduleReconnect();
 			return;

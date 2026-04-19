@@ -12,16 +12,29 @@ import { now, rowToPhase, rowToProject, rowToTask } from "./helpers.js";
 // ---------------------------------------------------------------------------
 
 export async function createProject(
-	data: Pick<Project, "name" | "description" | "techStack" | "repoPath">,
+	data: Pick<Project, "name" | "description" | "techStack" | "repoPath"> & {
+		tenantId?: string | null;
+		ownerId?: string | null;
+	},
 ): Promise<Project> {
 	const id = randomUUID();
 	const ts = now();
 	await execute(
 		`
-    INSERT INTO projects (id, name, description, status, tech_stack, repo_path, created_at, updated_at)
-    VALUES ($1, $2, $3, 'planning', $4, $5, $6, $7)
+    INSERT INTO projects (id, name, description, status, tech_stack, repo_path, tenant_id, owner_id, created_at, updated_at)
+    VALUES ($1, $2, $3, 'planning', $4, $5, $6, $7, $8, $9)
   `,
-		[id, data.name, data.description, JSON.stringify(data.techStack), data.repoPath, ts, ts],
+		[
+			id,
+			data.name,
+			data.description,
+			JSON.stringify(data.techStack),
+			data.repoPath,
+			data.tenantId ?? null,
+			data.ownerId ?? null,
+			ts,
+			ts,
+		],
 	);
 	return (await getProject(id))!;
 }
@@ -36,7 +49,20 @@ export async function listProjects(): Promise<Project[]> {
 	return rows.map(rowToProject);
 }
 
-export async function listProjectsPaginated(limit: number, offset: number): Promise<[Project[], number]> {
+export async function listProjectsPaginated(
+	limit: number,
+	offset: number,
+	tenantId?: string | null,
+): Promise<[Project[], number]> {
+	if (tenantId) {
+		const countRow = await queryOne<any>("SELECT COUNT(*) AS cnt FROM projects WHERE tenant_id = $1", [tenantId]);
+		const total = Number(countRow?.cnt ?? 0);
+		const rows = await query<any>(
+			"SELECT * FROM projects WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+			[tenantId, limit, offset],
+		);
+		return [rows.map(rowToProject), total];
+	}
 	const countRow = await queryOne<any>("SELECT COUNT(*) AS cnt FROM projects");
 	const total = Number(countRow?.cnt ?? 0);
 	const rows = await query<any>("SELECT * FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2", [limit, offset]);
@@ -222,9 +248,7 @@ export async function listPhases(planId: string): Promise<Phase[]> {
 		}
 	}
 
-	return Array.from(phaseMap.values()).map(({ phaseRow, taskRows }) =>
-		rowToPhase(phaseRow, taskRows.map(rowToTask)),
-	);
+	return Array.from(phaseMap.values()).map(({ phaseRow, taskRows }) => rowToPhase(phaseRow, taskRows.map(rowToTask)));
 }
 
 export async function updatePhaseStatus(id: string, status: PhaseStatus): Promise<void> {

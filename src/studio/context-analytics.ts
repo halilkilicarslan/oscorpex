@@ -63,10 +63,9 @@ export async function getContextMetrics(projectId: string): Promise<ContextMetri
 	const totalBytes = Number(sizeRow?.total_bytes ?? 0);
 
 	// Session events
-	const eventRow = await queryOne<{ cnt: string }>(
-		"SELECT COUNT(*) AS cnt FROM context_events WHERE project_id = $1",
-		[projectId],
-	);
+	const eventRow = await queryOne<{ cnt: string }>("SELECT COUNT(*) AS cnt FROM context_events WHERE project_id = $1", [
+		projectId,
+	]);
 	const totalEvents = Number(eventRow?.cnt ?? 0);
 
 	// Events by category

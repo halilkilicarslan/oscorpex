@@ -7,6 +7,9 @@ import { join, resolve } from "node:path";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { createAgentFiles } from "../agent-files.js";
+import { verifyJwt } from "../auth/jwt.js";
+import { requirePermission } from "../auth/rbac.js";
+import { getTenantContext, verifyProjectAccess } from "../auth/tenant-context.js";
 import {
 	answerIntakeQuestion,
 	copyAgentsToProject,
@@ -36,7 +39,6 @@ import {
 	updatePlanStatus,
 	updateProject,
 } from "../db.js";
-import type { IntakeQuestionCategory } from "../types.js";
 import { eventBus } from "../event-bus.js";
 import { executionEngine } from "../execution-engine.js";
 import { gitManager } from "../git-manager.js";
@@ -44,15 +46,16 @@ import { initLintConfig } from "../lint-runner.js";
 import { recordChatToMemory } from "../memory-bridge.js";
 import { pipelineEngine } from "../pipeline-engine.js";
 import {
-	listPlannerCLIProviders,
-	streamPlannerWithCLI,
 	type PlannerCLIProvider,
 	type PlannerReasoningEffort,
+	listPlannerCLIProviders,
+	streamPlannerWithCLI,
 } from "../planner-cli.js";
 import { PM_SYSTEM_PROMPT, buildPlan, estimatePlanCost } from "../pm-agent.js";
 import { getProjectTemplate, listProjectTemplates, scaffoldFromTemplate } from "../project-templates.js";
 import { initSonarConfig, isSonarEnabled } from "../sonar-runner.js";
 import { taskEngine } from "../task-engine.js";
+import type { IntakeQuestionCategory } from "../types.js";
 
 export const projectRoutes = new Hono();
 
@@ -329,34 +332,51 @@ projectRoutes.get("/platform/analytics", async (c) => {
 				activeDays: Number(t.active_days ?? 0),
 			},
 			agentUsage: agentUsage.map((r: any) => ({
-				agent: r.agent_name, role: r.role, count: Number(r.task_count),
+				agent: r.agent_name,
+				role: r.role,
+				count: Number(r.task_count),
 			})),
-			dailyActivity: dailyActivity.map((r: any) => ({
-				date: r.date, events: Number(r.events), errors: Number(r.errors), completions: Number(r.completions),
-			})).reverse(),
+			dailyActivity: dailyActivity
+				.map((r: any) => ({
+					date: r.date,
+					events: Number(r.events),
+					errors: Number(r.errors),
+					completions: Number(r.completions),
+				}))
+				.reverse(),
 			hourlyPattern: Array.from({ length: 24 }, (_, i) => {
 				const found = hourlyPattern.find((r: any) => Number(r.hour) === i);
 				return { hour: i, count: found ? Number(found.count) : 0 };
 			}),
 			projectActivity: projectActivity.map((r: any) => ({
-				projectName: r.project_name, projectId: r.project_id, status: r.status,
-				events: Number(r.events), activeDays: Number(r.active_days),
+				projectName: r.project_name,
+				projectId: r.project_id,
+				status: r.status,
+				events: Number(r.events),
+				activeDays: Number(r.active_days),
 			})),
 			fileActivity: fileActivity.map((r: any) => ({
-				file: r.file, count: Number(r.count),
+				file: r.file,
+				count: Number(r.count),
 			})),
 			complexityDistribution: complexityDist.map((r: any) => ({
-				complexity: r.complexity, count: Number(r.count),
+				complexity: r.complexity,
+				count: Number(r.count),
 			})),
 			eventTypes: eventTypes.map((r: any) => ({
-				type: r.type, count: Number(r.count),
+				type: r.type,
+				count: Number(r.count),
 			})),
 			errorRates: errorRates.map((r: any) => ({
-				projectName: r.project_name, projectId: r.project_id,
-				errors: Number(r.errors), total: Number(r.total), errorRate: Number(r.error_rate),
+				projectName: r.project_name,
+				projectId: r.project_id,
+				errors: Number(r.errors),
+				total: Number(r.total),
+				errorRate: Number(r.error_rate),
 			})),
 			costByModel: costByModel.map((r: any) => ({
-				model: r.model, calls: Number(r.calls),
+				model: r.model,
+				calls: Number(r.calls),
 				cost: Math.round(Number(r.cost) * 1000) / 1000,
 				tokens: Number(r.tokens),
 			})),
@@ -373,7 +393,9 @@ projectRoutes.get("/projects", async (c) => {
 	try {
 		const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
 		const offset = Number(c.req.query("offset") ?? 0);
-		const [projects, total] = await listProjectsPaginated(limit, offset);
+		const { tenantId } = getTenantContext(c);
+		// tenantId varsa sadece o tenant'ın projelerini döndür (M6.2 tenant scoping)
+		const [projects, total] = await listProjectsPaginated(limit, offset, tenantId);
 		c.header("X-Total-Count", String(total));
 		return c.json(projects);
 	} catch (err) {
@@ -382,7 +404,7 @@ projectRoutes.get("/projects", async (c) => {
 	}
 });
 
-projectRoutes.post("/projects", async (c) => {
+projectRoutes.post("/projects", requirePermission("projects:create"), async (c) => {
 	const body = (await c.req.json()) as {
 		name: string;
 		description?: string;
@@ -393,11 +415,14 @@ projectRoutes.post("/projects", async (c) => {
 		plannerAgentId?: string;
 		previewEnabled?: boolean;
 	};
+	const { tenantId, userId } = getTenantContext(c);
 	const project = await createProject({
 		name: body.name,
 		description: body.description ?? "",
 		techStack: body.techStack ?? [],
 		repoPath: "",
+		tenantId,
+		ownerId: userId,
 	});
 	await saveProjectIntake(project.id, {
 		previewEnabled: body.previewEnabled,
@@ -568,20 +593,27 @@ projectRoutes.post("/projects/import", async (c) => {
 });
 
 projectRoutes.get("/projects/:id", async (c) => {
-	const project = await getProject(c.req.param("id"));
+	const projectId = c.req.param("id");
+	const { tenantId } = getTenantContext(c);
+	// Ownership check — returns 404 (not 403) to avoid leaking project existence
+	const hasAccess = await verifyProjectAccess(projectId, tenantId);
+	if (!hasAccess) return c.json({ error: "Project not found" }, 404);
+	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 	return c.json(project);
 });
 
-projectRoutes.patch("/projects/:id", async (c) => {
+projectRoutes.patch("/projects/:id", requirePermission("projects:update"), async (c) => {
 	const body = await c.req.json();
-	const project = await updateProject(c.req.param("id"), body);
+	const id = c.req.param("id") ?? "";
+	const project = await updateProject(id, body);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 	return c.json(project);
 });
 
-projectRoutes.delete("/projects/:id", async (c) => {
-	const ok = await deleteProject(c.req.param("id"));
+projectRoutes.delete("/projects/:id", requirePermission("projects:delete"), async (c) => {
+	const id = c.req.param("id") ?? "";
+	const ok = await deleteProject(id);
 	if (!ok) return c.json({ error: "Project not found" }, 404);
 	return c.json({ success: true });
 });
@@ -594,7 +626,8 @@ projectRoutes.post("/projects/:id/chat", async (c) => {
 	if (availableProviders.length === 0) {
 		return c.json(
 			{
-				error: "No supported planner CLI is available. Install Claude CLI, Codex CLI, or Gemini CLI to use the Planner.",
+				error:
+					"No supported planner CLI is available. Install Claude CLI, Codex CLI, or Gemini CLI to use the Planner.",
 			},
 			503,
 		);
@@ -615,13 +648,12 @@ projectRoutes.post("/projects/:id/chat", async (c) => {
 		effort?: PlannerReasoningEffort;
 	};
 	const userMessage = body.message;
-	const selectedProvider = availableProviders.find((provider) => provider.id === body.provider)?.id ?? availableProviders[0].id;
+	const selectedProvider =
+		availableProviders.find((provider) => provider.id === body.provider)?.id ?? availableProviders[0].id;
 	const selectedProviderInfo =
 		availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0];
 	const plannerModel =
-		body.model && selectedProviderInfo.models.includes(body.model)
-			? body.model
-			: selectedProviderInfo.defaultModel;
+		body.model && selectedProviderInfo.models.includes(body.model) ? body.model : selectedProviderInfo.defaultModel;
 	const plannerEffort =
 		body.effort && selectedProviderInfo.efforts.includes(body.effort)
 			? body.effort
@@ -719,9 +751,7 @@ ${
 				...(answeredIntake.length > 0
 					? [
 							"Answered questions (settled — do NOT re-ask):",
-							...answeredIntake.map(
-								(q) => `- [${q.category}] Q: ${q.question}\n  A: ${q.answer ?? "(no answer)"}`,
-							),
+							...answeredIntake.map((q) => `- [${q.category}] Q: ${q.question}\n  A: ${q.answer ?? "(no answer)"}`),
 						]
 					: []),
 				...(pendingIntake.length > 0
@@ -794,9 +824,7 @@ ${
 													? (rawCat as IntakeQuestionCategory)
 													: "general";
 												const options = Array.isArray(q.options)
-													? q.options
-															.map((o: unknown) => String(o).trim())
-															.filter((o: string) => o.length > 0)
+													? q.options.map((o: unknown) => String(o).trim()).filter((o: string) => o.length > 0)
 													: [];
 												return { question: text, category, options };
 											})
@@ -1195,6 +1223,27 @@ projectRoutes.post("/projects/from-template", async (c) => {
 
 projectRoutes.get("/projects/:id/events", async (c) => {
 	const projectId = c.req.param("id");
+
+	// SSE: browser EventSource cannot send Authorization headers.
+	// Accept ?token=<jwt> query param as fallback when auth is enabled.
+	const tokenParam = c.req.query("token");
+	if (tokenParam) {
+		const payload = verifyJwt(tokenParam);
+		if (payload) {
+			// biome-ignore lint/suspicious/noExplicitAny: Hono Context is untyped here — set auth variables for downstream helpers
+			const cx = c as any;
+			cx.set("tenantId", payload.tenantId);
+			cx.set("userId", payload.sub);
+			cx.set("userRole", payload.role);
+			cx.set("authType", "jwt");
+		}
+	}
+
+	// Ownership check (no-op when auth disabled)
+	const { tenantId } = getTenantContext(c);
+	const hasAccess = await verifyProjectAccess(projectId, tenantId);
+	if (!hasAccess) return c.json({ error: "Project not found" }, 404);
+
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
@@ -1235,10 +1284,7 @@ projectRoutes.get("/projects/:id/events/recent", async (c) => {
 	const projectId = c.req.param("id");
 	const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
 	const offset = Number(c.req.query("offset") ?? 0);
-	const [events, total] = await Promise.all([
-		listEvents(projectId, limit, offset),
-		countEvents(projectId),
-	]);
+	const [events, total] = await Promise.all([listEvents(projectId, limit, offset), countEvents(projectId)]);
 	c.header("X-Total-Count", String(total));
 	return c.json(events);
 });

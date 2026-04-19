@@ -2,7 +2,7 @@
 // Oscorpex — Context Analytics Tests (v4.0 Faz 4)
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getContextMetrics, getPerTaskContextMetrics } from "../context-analytics.js";
 
 // ---------------------------------------------------------------------------
@@ -63,9 +63,7 @@ describe("getContextMetrics", () => {
 		]);
 
 		// First queryOne: total_bytes, second: event count
-		queryOneFn
-			.mockResolvedValueOnce({ total_bytes: "16000" })
-			.mockResolvedValueOnce({ cnt: "25" });
+		queryOneFn.mockResolvedValueOnce({ total_bytes: "16000" }).mockResolvedValueOnce({ cnt: "25" });
 
 		// query: events by category
 		queryFn.mockResolvedValueOnce([
@@ -105,8 +103,22 @@ describe("getPerTaskContextMetrics", () => {
 
 	it("should filter and parse task sources", async () => {
 		listContextSources.mockResolvedValue([
-			{ id: "s1", projectId: "p1", label: "task:t1:Auth System", chunkCount: 5, codeChunkCount: 3, indexedAt: "2026-04-17" },
-			{ id: "s2", projectId: "p1", label: "task:t2:DB Setup", chunkCount: 3, codeChunkCount: 1, indexedAt: "2026-04-17" },
+			{
+				id: "s1",
+				projectId: "p1",
+				label: "task:t1:Auth System",
+				chunkCount: 5,
+				codeChunkCount: 3,
+				indexedAt: "2026-04-17",
+			},
+			{
+				id: "s2",
+				projectId: "p1",
+				label: "task:t2:DB Setup",
+				chunkCount: 3,
+				codeChunkCount: 1,
+				indexedAt: "2026-04-17",
+			},
 			{ id: "s3", projectId: "p1", label: "manual:readme", chunkCount: 2, codeChunkCount: 0, indexedAt: "2026-04-17" },
 		]);
 
@@ -122,7 +134,14 @@ describe("getPerTaskContextMetrics", () => {
 
 	it("should handle task labels with colons in title", async () => {
 		listContextSources.mockResolvedValue([
-			{ id: "s1", projectId: "p1", label: "task:t1:Fix: auth bug", chunkCount: 2, codeChunkCount: 1, indexedAt: "2026-04-17" },
+			{
+				id: "s1",
+				projectId: "p1",
+				label: "task:t1:Fix: auth bug",
+				chunkCount: 2,
+				codeChunkCount: 1,
+				indexedAt: "2026-04-17",
+			},
 		]);
 
 		const result = await getPerTaskContextMetrics("p1");
