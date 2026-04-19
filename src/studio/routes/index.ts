@@ -38,6 +38,9 @@ import { templateRoutes } from "./template-routes.js";
 import { ciRoutes } from "./ci-routes.js";
 import { jobRoutes } from "./job-routes.js";
 import { telemetryRoutes } from "./telemetry-routes.js";
+import { clusterRoutes } from "./cluster-routes.js";
+import { collaborationRoutes } from "./collaboration-routes.js";
+import { marketplaceRoutes } from "./marketplace-routes.js";
 // import { tracingMiddleware } from "../middleware/tracing-middleware.js";
 // NOTE: Uncomment the line above and apply below to enable global HTTP tracing:
 //   studio.use("*", tracingMiddleware());
@@ -293,5 +296,9 @@ studio.route("/jobs", jobRoutes);
 if (process.env.OSCORPEX_TRACE_ENABLED === "true") {
 	studio.route("/telemetry", telemetryRoutes);
 }
+
+studio.route("/cluster", clusterRoutes);
+studio.route("/collaboration", collaborationRoutes);
+studio.route("/marketplace", marketplaceRoutes);
 
 export { studio as studioRoutes };
