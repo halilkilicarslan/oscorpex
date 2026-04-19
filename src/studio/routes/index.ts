@@ -37,6 +37,11 @@ import { workItemRoutes } from "./work-item-routes.js";
 import { templateRoutes } from "./template-routes.js";
 import { ciRoutes } from "./ci-routes.js";
 import { jobRoutes } from "./job-routes.js";
+import { telemetryRoutes } from "./telemetry-routes.js";
+// import { tracingMiddleware } from "../middleware/tracing-middleware.js";
+// NOTE: Uncomment the line above and apply below to enable global HTTP tracing:
+//   studio.use("*", tracingMiddleware());
+// Requires OSCORPEX_TRACE_ENABLED=true to actually export/log spans.
 
 // M6.2: auth middleware — opt-in via OSCORPEX_AUTH_ENABLED=true
 // Disabled by default so existing tests and integrations keep working.
@@ -283,5 +288,10 @@ studio.route("/cost", costRoutes);
 studio.route("/templates", templateRoutes);
 studio.route("/ci", ciRoutes);
 studio.route("/jobs", jobRoutes);
+
+// Telemetry debug endpoints — only mounted when tracing is enabled
+if (process.env.OSCORPEX_TRACE_ENABLED === "true") {
+	studio.route("/telemetry", telemetryRoutes);
+}
 
 export { studio as studioRoutes };
