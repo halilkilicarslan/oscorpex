@@ -1,39 +1,57 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, FolderInput, LayoutTemplate, Loader2, Code2 } from 'lucide-react';
-import { fetchProjects, deleteProject, type Project } from '../../lib/studio-api';
+import { fetchProjectsPaginated, deleteProject, type Project } from '../../lib/studio-api';
+import { Pagination } from '../../components/Pagination';
 import { ProjectCard } from './studio-home/ProjectCard';
 import { CreateProjectModal } from './studio-home/CreateProjectModal';
 import { ImportProjectModal } from './studio-home/ImportProjectModal';
 import { TemplateProjectModal } from './studio-home/TemplateProjectModal';
 
+const PAGE_SIZE = 24;
+
 export default function StudioHomePage() {
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [currentPage, setCurrentPage] = useState(1);
+	const [totalPages, setTotalPages] = useState(1);
 	const [showCreate, setShowCreate] = useState(false);
 	const [showImport, setShowImport] = useState(false);
 	const [showTemplate, setShowTemplate] = useState(false);
 	const navigate = useNavigate();
 
-	const load = async () => {
+	const load = useCallback(async (page: number) => {
+		setLoading(true);
 		try {
-			const data = await fetchProjects();
-			setProjects(data);
+			const offset = (page - 1) * PAGE_SIZE;
+			const result = await fetchProjectsPaginated(PAGE_SIZE, offset);
+			setProjects(result.data);
+			setTotalPages(Math.max(1, Math.ceil(result.total / PAGE_SIZE)));
 		} catch {
 			// API not ready yet
 		} finally {
 			setLoading(false);
 		}
-	};
+	}, []);
 
 	useEffect(() => {
-		load();
-	}, []);
+		load(currentPage);
+	}, [currentPage, load]);
+
+	const handlePageChange = (page: number) => {
+		setCurrentPage(page);
+	};
 
 	const handleDelete = async (id: string) => {
 		if (!confirm('Are you sure you want to delete this project?')) return;
 		await deleteProject(id);
-		setProjects((prev) => prev.filter((p) => p.id !== id));
+		// Reload current page — if it becomes empty, go to previous page
+		const remainingOnPage = projects.filter((p) => p.id !== id).length;
+		if (remainingOnPage === 0 && currentPage > 1) {
+			setCurrentPage((prev) => prev - 1);
+		} else {
+			load(currentPage);
+		}
 	};
 
 	return (
@@ -92,16 +110,24 @@ export default function StudioHomePage() {
 					</button>
 				</div>
 			) : (
-				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-					{projects.map((project) => (
-						<ProjectCard
-							key={project.id}
-							project={project}
-							onOpen={() => navigate(`/studio/${project.id}`)}
-							onDelete={() => handleDelete(project.id)}
-						/>
-					))}
-				</div>
+				<>
+					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+						{projects.map((project) => (
+							<ProjectCard
+								key={project.id}
+								project={project}
+								onOpen={() => navigate(`/studio/${project.id}`)}
+								onDelete={() => handleDelete(project.id)}
+							/>
+						))}
+					</div>
+
+					<Pagination
+						currentPage={currentPage}
+						totalPages={totalPages}
+						onPageChange={handlePageChange}
+					/>
+				</>
 			)}
 
 			{/* Create modal */}
@@ -109,9 +135,11 @@ export default function StudioHomePage() {
 				<CreateProjectModal
 					onClose={() => setShowCreate(false)}
 					onCreate={(project) => {
-						setProjects((prev) => [project, ...prev]);
 						setShowCreate(false);
 						navigate(`/studio/${project.id}`);
+						// Reload first page so new project appears
+						setCurrentPage(1);
+						load(1);
 					}}
 				/>
 			)}
@@ -121,9 +149,10 @@ export default function StudioHomePage() {
 				<ImportProjectModal
 					onClose={() => setShowImport(false)}
 					onImport={(project) => {
-						setProjects((prev) => [project, ...prev]);
 						setShowImport(false);
 						navigate(`/studio/${project.id}`);
+						setCurrentPage(1);
+						load(1);
 					}}
 				/>
 			)}
@@ -133,9 +162,10 @@ export default function StudioHomePage() {
 				<TemplateProjectModal
 					onClose={() => setShowTemplate(false)}
 					onCreate={(project) => {
-						setProjects((prev) => [project, ...prev]);
 						setShowTemplate(false);
 						navigate(`/studio/${project.id}`);
+						setCurrentPage(1);
+						load(1);
 					}}
 				/>
 			)}

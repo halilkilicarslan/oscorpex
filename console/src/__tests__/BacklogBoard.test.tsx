@@ -91,12 +91,20 @@ const ORNEK_SPRINTS = [
 ];
 
 // fetch mock yardımcı fonksiyon — başarılı JSON yanıtı döner
+// fetchPaginated X-Total-Count header'ı beklediğinden headers mock'u da ekliyoruz
 function fetchBasariMock(workItems: WorkItem[] = ORNEK_ITEMS, sprints = ORNEK_SPRINTS) {
 	return vi.fn().mockImplementation((url: string) => {
 		if (url.includes('/sprints')) {
-			return Promise.resolve({ ok: true, json: () => Promise.resolve(sprints) });
+			return Promise.resolve({
+				ok: true,
+				json: () => Promise.resolve(sprints),
+				headers: { get: () => null },
+			});
 		}
-		return Promise.resolve({ ok: true, json: () => Promise.resolve(workItems) });
+		const headers = {
+			get: (name: string) => name === 'X-Total-Count' ? String(workItems.length) : null,
+		};
+		return Promise.resolve({ ok: true, json: () => Promise.resolve(workItems), headers });
 	});
 }
 
@@ -361,9 +369,9 @@ describe('BacklogBoard — "open" statüsündeki item\'larda Convert butonu', ()
 				return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
 			}
 			if (url.includes('/sprints')) {
-				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS) });
+				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS), headers: { get: () => null } });
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS), headers: { get: (n: string) => n === 'X-Total-Count' ? String(ORNEK_ITEMS.length) : null } });
 		});
 		global.fetch = fetchMock;
 
@@ -393,9 +401,9 @@ describe('BacklogBoard — "open" statüsündeki item\'larda Convert butonu', ()
 				});
 			}
 			if (url.includes('/sprints')) {
-				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS) });
+				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS), headers: { get: () => null } });
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS), headers: { get: (n: string) => n === 'X-Total-Count' ? String(ORNEK_ITEMS.length) : null } });
 		});
 		global.fetch = fetchMock;
 
@@ -424,9 +432,9 @@ describe('BacklogBoard — status değişikliği', () => {
 				return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
 			}
 			if (url.includes('/sprints')) {
-				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS) });
+				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS), headers: { get: () => null } });
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS), headers: { get: (n: string) => n === 'X-Total-Count' ? String(ORNEK_ITEMS.length) : null } });
 		});
 		global.fetch = fetchMock;
 
@@ -469,9 +477,9 @@ describe('BacklogBoard — silme işlemi', () => {
 				return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
 			}
 			if (url.includes('/sprints')) {
-				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS) });
+				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS), headers: { get: () => null } });
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS), headers: { get: (n: string) => n === 'X-Total-Count' ? String(ORNEK_ITEMS.length) : null } });
 		});
 		global.fetch = fetchMock;
 
@@ -577,9 +585,9 @@ describe('BacklogBoard — yeni item oluşturma modal\'ı', () => {
 				return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
 			}
 			if (url.includes('/sprints')) {
-				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS) });
+				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS), headers: { get: () => null } });
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS), headers: { get: (n: string) => n === 'X-Total-Count' ? String(ORNEK_ITEMS.length) : null } });
 		});
 		global.fetch = fetchMock;
 
@@ -621,9 +629,9 @@ describe('BacklogBoard — yeni item oluşturma modal\'ı', () => {
 				return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
 			}
 			if (url.includes('/sprints')) {
-				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS) });
+				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS), headers: { get: () => null } });
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS), headers: { get: (n: string) => n === 'X-Total-Count' ? String(ORNEK_ITEMS.length) : null } });
 		});
 		global.fetch = fetchMock;
 
@@ -796,9 +804,9 @@ describe('BacklogBoard — sprint atama', () => {
 				return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
 			}
 			if (url.includes('/sprints')) {
-				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS) });
+				return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_SPRINTS), headers: { get: () => null } });
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS), headers: { get: (n: string) => n === 'X-Total-Count' ? String(ORNEK_ITEMS.length) : null } });
 		});
 		global.fetch = fetchMock;
 
@@ -850,7 +858,7 @@ describe('BacklogBoard — API hata yönetimi', () => {
 			if (url.includes('/sprints')) {
 				return Promise.reject(new Error('Sprint API hatası'));
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(ORNEK_ITEMS), headers: { get: (n: string) => n === 'X-Total-Count' ? String(ORNEK_ITEMS.length) : null } });
 		});
 
 		render(<BacklogBoard projectId="proj-1" />);
@@ -874,9 +882,8 @@ describe('BacklogBoard — fetch yeniden çağrımı', () => {
 		const { rerender } = render(<BacklogBoard projectId="proj-1" />);
 
 		await waitFor(() => {
-			expect(fetchMock).toHaveBeenCalledWith(
-				expect.stringContaining('/projects/proj-1/work-items'),
-			);
+			const urls = fetchMock.mock.calls.map(([url]) => url as string);
+			expect(urls.some((u) => u.includes('/projects/proj-1/work-items'))).toBe(true);
 		});
 
 		// projectId değiştir
@@ -885,9 +892,8 @@ describe('BacklogBoard — fetch yeniden çağrımı', () => {
 		});
 
 		await waitFor(() => {
-			expect(fetchMock).toHaveBeenCalledWith(
-				expect.stringContaining('/projects/proj-2/work-items'),
-			);
+			const urls = fetchMock.mock.calls.map(([url]) => url as string);
+			expect(urls.some((u) => u.includes('/projects/proj-2/work-items'))).toBe(true);
 		});
 	});
 });

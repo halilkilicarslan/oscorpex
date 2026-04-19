@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Filter, Bug, Lightbulb, Shield, Zap, Wrench, Loader2, X, ArrowRight, ChevronDown, Trash2 } from 'lucide-react';
 import ModalOverlay from './ModalOverlay';
+import { fetchWorkItemsPaginated } from '../../lib/studio-api';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
+const PAGE_SIZE = 50;
 
 type WorkItemType = 'feature' | 'bug' | 'defect' | 'security' | 'hotfix' | 'improvement';
 type WorkItemStatus = 'open' | 'planned' | 'in_progress' | 'done' | 'closed' | 'wontfix';
@@ -243,19 +245,43 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
   const [filterPriority, setFilterPriority] = useState<Priority | ''>('');
   const [filterSource, setFilterSource] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  // Pagination state
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [wiOffset, setWiOffset] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const load = useCallback(() => {
     Promise.all([
-      fetch(`${BASE}/api/studio/projects/${projectId}/work-items`).then((r) => r.json()),
+      fetchWorkItemsPaginated(projectId, PAGE_SIZE, 0),
       fetch(`${BASE}/api/studio/projects/${projectId}/sprints`).then((r) => r.json()).catch(() => []),
     ])
-      .then(([wi, sp]) => {
-        setItems(Array.isArray(wi) ? wi : (wi.items ?? []));
+      .then(([result, sp]) => {
+        setItems(result.data as WorkItem[]);
+        setTotal(result.total);
+        setWiOffset(PAGE_SIZE);
+        setHasMore(result.data.length < result.total);
         setSprints(Array.isArray(sp) ? sp : (sp.sprints ?? []));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [projectId]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const result = await fetchWorkItemsPaginated(projectId, PAGE_SIZE, wiOffset);
+      setItems((prev) => [...prev, ...(result.data as WorkItem[])]);
+      setWiOffset((prev) => prev + PAGE_SIZE);
+      setTotal(result.total);
+      setHasMore(items.length + result.data.length < result.total);
+    } catch {
+      // sessizce geç
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [projectId, wiOffset, hasMore, loadingMore, items.length]);
 
   useEffect(() => {
     load();
@@ -351,7 +377,7 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-[15px] font-semibold text-[#fafafa]">Backlog</h2>
-            <p className="text-[11px] text-[#525252] mt-0.5">{items.length} work items</p>
+            <p className="text-[11px] text-[#525252] mt-0.5">{total > 0 ? total : items.length} work items</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -427,6 +453,17 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
               </button>
             )}
           </div>
+        )}
+
+        {/* Load more butonu */}
+        {hasMore && (
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="w-full py-2 text-sm text-gray-400 hover:text-white bg-[#1a1a1a] border border-[#262626] rounded-lg hover:bg-[#222] transition-colors"
+          >
+            {loadingMore ? 'Loading...' : `Load more (${items.length} of ${total})`}
+          </button>
         )}
 
         {/* Columns */}

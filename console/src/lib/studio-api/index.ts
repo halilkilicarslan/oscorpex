@@ -2,6 +2,7 @@
 // Oscorpex — Studio API barrel export
 // ---------------------------------------------------------------------------
 
+export type { PaginatedResult } from './base.js';
 export * from './types.js';
 export * from './projects.js';
 export * from './plans.js';

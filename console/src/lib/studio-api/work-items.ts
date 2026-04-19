@@ -1,17 +1,21 @@
 import type {
-  WorkItem,
-  Sprint,
-  StandupReport,
-  RetrospectiveReport,
-  ProjectReport,
-  LifecycleInfo,
+	WorkItem,
+	Sprint,
+	StandupReport,
+	RetrospectiveReport,
+	ProjectReport,
+	LifecycleInfo,
 } from './types.js';
-import { API, json } from './base.js';
+import { API, json, fetchPaginated, type PaginatedResult } from './base.js';
 
 // --- Work Items (v3.2) ---
 export async function fetchWorkItems(projectId: string, filters?: Record<string, string>): Promise<WorkItem[]> {
-  const params = new URLSearchParams(filters);
-  return json(`${API}/projects/${projectId}/work-items?${params}`);
+	const params = new URLSearchParams(filters);
+	return json(`${API}/projects/${projectId}/work-items?${params}`);
+}
+
+export async function fetchWorkItemsPaginated(projectId: string, limit = 50, offset = 0): Promise<PaginatedResult<WorkItem>> {
+	return fetchPaginated<WorkItem>(`${API}/projects/${projectId}/work-items`, limit, offset);
 }
 
 export async function createWorkItem(projectId: string, data: Partial<WorkItem>): Promise<WorkItem> {

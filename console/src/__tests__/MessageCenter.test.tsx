@@ -7,15 +7,22 @@ import type { ProjectAgent, AgentMessage } from '../lib/studio-api';
 
 // studio-api modulunu mockla
 vi.mock('../lib/studio-api', () => ({
-  fetchProjectAgents: vi.fn(),
-  fetchProjectMessages: vi.fn(),
-  fetchMessageThread: vi.fn(),
-  sendAgentMessage: vi.fn(),
-  markMessageRead: vi.fn(),
-  archiveAgentMessage: vi.fn(),
-  broadcastMessage: vi.fn(),
-  fetchUnreadCount: vi.fn(),
+	fetchProjectAgents: vi.fn(),
+	fetchProjectMessages: vi.fn(),
+	fetchProjectMessagesPaginated: vi.fn(),
+	fetchMessageThread: vi.fn(),
+	sendAgentMessage: vi.fn(),
+	markMessageRead: vi.fn(),
+	archiveAgentMessage: vi.fn(),
+	broadcastMessage: vi.fn(),
+	fetchUnreadCount: vi.fn(),
+	fetchAllUnreadCounts: vi.fn().mockResolvedValue({}),
 }));
+
+/** PaginatedResult sarmalayıcısı */
+function paginatedMsgs(items: AgentMessage[], total?: number) {
+	return { data: items, total: total ?? items.length, limit: 50, offset: 0 };
+}
 
 const ORNEK_AJANLAR: ProjectAgent[] = [
   {
@@ -80,75 +87,80 @@ const ORNEK_MESAJLAR: AgentMessage[] = [
 ];
 
 describe('MessageCenter — yukleme durumu', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+		vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
+	});
 
-  it('mesajlar yuklenirken spinner gosterilmeli', async () => {
-    vi.mocked(studioApi.fetchProjectMessages).mockReturnValue(new Promise(() => {}));
+	it('mesajlar yuklenirken spinner gosterilmeli', async () => {
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockReturnValue(new Promise(() => {}));
 
-    render(<MessageCenter projectId="proj-1" />);
+		render(<MessageCenter projectId="proj-1" />);
 
-    // Spinner DOM'da olmali
-    const spinner = document.querySelector('.animate-spin');
-    expect(spinner).toBeTruthy();
-  });
+		// Spinner DOM'da olmali
+		const spinner = document.querySelector('.animate-spin');
+		expect(spinner).toBeTruthy();
+	});
 
-  it('mesajlar yuklendikten sonra baslik gosterilmeli', async () => {
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
+	it('mesajlar yuklendikten sonra baslik gosterilmeli', async () => {
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs(ORNEK_MESAJLAR));
 
-    render(<MessageCenter projectId="proj-1" />);
+		render(<MessageCenter projectId="proj-1" />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Mesaj Merkezi')).toBeInTheDocument();
-    });
-  });
+		await waitFor(() => {
+			expect(screen.getByText('Mesaj Merkezi')).toBeInTheDocument();
+		});
+	});
 });
 
 describe('MessageCenter — mesaj listesi', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 1 });
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs(ORNEK_MESAJLAR));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 1 });
+		vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
+	});
 
-  it('mesaj konularini gostermeli', async () => {
-    render(<MessageCenter projectId="proj-1" />);
+	it('mesaj konularini gostermeli', async () => {
+		render(<MessageCenter projectId="proj-1" />);
 
-    await waitFor(() => {
-      expect(screen.getByText('API endpoint gorev atamasi')).toBeInTheDocument();
-      expect(screen.getByText('Database schema tamamlandi')).toBeInTheDocument();
-    });
-  });
+		await waitFor(() => {
+			expect(screen.getByText('API endpoint gorev atamasi')).toBeInTheDocument();
+			expect(screen.getByText('Database schema tamamlandi')).toBeInTheDocument();
+		});
+	});
 
-  it('mesaj listesi bossa "Mesaj yok" gosterilmeli', async () => {
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([]);
+	it('mesaj listesi bossa "Mesaj yok" gosterilmeli', async () => {
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs([]));
 
-    render(<MessageCenter projectId="proj-1" />);
+		render(<MessageCenter projectId="proj-1" />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Mesaj yok')).toBeInTheDocument();
-    });
-  });
+		await waitFor(() => {
+			expect(screen.getByText('Mesaj yok')).toBeInTheDocument();
+		});
+	});
 
-  it('mesaj icerik onizlemesi gosterilmeli', async () => {
-    render(<MessageCenter projectId="proj-1" />);
+	it('mesaj icerik onizlemesi gosterilmeli', async () => {
+		render(<MessageCenter projectId="proj-1" />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/Kullanici kayit endpoint/)).toBeInTheDocument();
-    });
-  });
+		await waitFor(() => {
+			expect(screen.getByText(/Kullanici kayit endpoint/)).toBeInTheDocument();
+		});
+	});
 });
 
 describe('MessageCenter — ajan kenar cubugu', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs(ORNEK_MESAJLAR));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
+		vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+	});
 
   it('ajan listesi kenar cubuğunda gosterilmeli', async () => {
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
@@ -187,14 +199,16 @@ describe('MessageCenter — ajan kenar cubugu', () => {
 });
 
 describe('MessageCenter — mesaj secimi ve thread goruntuleme', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
-    vi.mocked(studioApi.fetchMessageThread).mockResolvedValue([ORNEK_MESAJLAR[0]]);
-    vi.mocked(studioApi.markMessageRead).mockResolvedValue(ORNEK_MESAJLAR[0]);
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs(ORNEK_MESAJLAR));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
+		vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+		vi.mocked(studioApi.fetchMessageThread).mockResolvedValue([ORNEK_MESAJLAR[0]]);
+		vi.mocked(studioApi.markMessageRead).mockResolvedValue(ORNEK_MESAJLAR[0]);
+	});
 
   it('mesaja tiklaninca thread basligini gostermeli', async () => {
     const user = userEvent.setup();
@@ -271,16 +285,18 @@ describe('MessageCenter — mesaj secimi ve thread goruntuleme', () => {
 });
 
 describe('MessageCenter — mesaj arsivleme', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
-    vi.mocked(studioApi.archiveAgentMessage).mockResolvedValue({
-      ...ORNEK_MESAJLAR[0],
-      status: 'archived',
-    });
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs(ORNEK_MESAJLAR));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
+		vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+		vi.mocked(studioApi.archiveAgentMessage).mockResolvedValue({
+			...ORNEK_MESAJLAR[0],
+			status: 'archived',
+		});
+	});
 
   it('arsiv butonuna tiklaninca archiveAgentMessage cagrisi yapilmali', async () => {
     const user = userEvent.setup();
@@ -315,12 +331,14 @@ describe('MessageCenter — mesaj arsivleme', () => {
 });
 
 describe('MessageCenter — filtreler', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 1 });
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs(ORNEK_MESAJLAR));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
+		vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 1 });
+	});
 
   it('"Tümü" ve "Okunmamış" filtre butonlari gosterilmeli', async () => {
     render(<MessageCenter projectId="proj-1" />);
@@ -348,72 +366,70 @@ describe('MessageCenter — filtreler', () => {
     });
   });
 
-  it('"Tümü" filtresine tiklaninca tum mesajlar yuklenmeli', async () => {
-    const user = userEvent.setup();
-    render(<MessageCenter projectId="proj-1" />);
+	it('"Tümü" filtresine tiklaninca tum mesajlar yuklenmeli', async () => {
+		const user = userEvent.setup();
+		render(<MessageCenter projectId="proj-1" />);
 
-    await waitFor(() => screen.getByText('Tümü'));
+		await waitFor(() => screen.getByText('Tümü'));
 
-    // Once Okunmamis'a tiklayip sonra Tümü'ye geri don
-    await user.click(screen.getByText('Okunmamış'));
-    await user.click(screen.getByText('Tümü'));
+		// Once Okunmamis'a tiklayip sonra Tümü'ye geri don
+		await user.click(screen.getByText('Okunmamış'));
+		await user.click(screen.getByText('Tümü'));
 
-    await waitFor(() => {
-      expect(studioApi.fetchProjectMessages).toHaveBeenCalledWith(
-        'proj-1',
-        undefined,
-        undefined,
-      );
-    });
-  });
+		await waitFor(() => {
+			// Filtre yokken fetchProjectMessagesPaginated çağrılmalı
+			expect(studioApi.fetchProjectMessagesPaginated).toHaveBeenCalledWith('proj-1', 50, 0);
+		});
+	});
 });
 
 describe('MessageCenter — okunmamis sayaci', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
+		vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
+	});
 
-  it('okunmamis mesaj varsa header\'da sayac gosterilmeli', async () => {
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([
-      ORNEK_MESAJLAR[0], // unread
-    ]);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 1 });
+	it('okunmamis mesaj varsa header\'da sayac gosterilmeli', async () => {
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs([ORNEK_MESAJLAR[0]]));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([ORNEK_MESAJLAR[0]]);
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 1 });
 
-    render(<MessageCenter projectId="proj-1" />);
+		render(<MessageCenter projectId="proj-1" />);
 
-    await waitFor(() => {
-      // Okunmamis mesaj sayaci (1 unread mesaj)
-      const badges = screen.getAllByText('1');
-      expect(badges.length).toBeGreaterThan(0);
-    });
-  });
+		await waitFor(() => {
+			// Okunmamis mesaj sayaci (1 unread mesaj)
+			const badges = screen.getAllByText('1');
+			expect(badges.length).toBeGreaterThan(0);
+		});
+	});
 
-  it('okunmamis mesaj yoksa sayac rozeti gosterilmemeli', async () => {
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([
-      ORNEK_MESAJLAR[1], // read
-    ]);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+	it('okunmamis mesaj yoksa sayac rozeti gosterilmemeli', async () => {
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs([ORNEK_MESAJLAR[1]]));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([ORNEK_MESAJLAR[1]]);
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
 
-    render(<MessageCenter projectId="proj-1" />);
+		render(<MessageCenter projectId="proj-1" />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Mesaj Merkezi')).toBeInTheDocument();
-    });
+		await waitFor(() => {
+			expect(screen.getByText('Mesaj Merkezi')).toBeInTheDocument();
+		});
 
-    // Sayac rozeti olmamali (yeşil renkli küçük rozet)
-    const sayacRozet = document.querySelector('.rounded-full.bg-\\[\\#22c55e\\]');
-    expect(sayacRozet).toBeNull();
-  });
+		// Sayac rozeti olmamali (yeşil renkli küçük rozet)
+		const sayacRozet = document.querySelector('.rounded-full.bg-\\[\\#22c55e\\]');
+		expect(sayacRozet).toBeNull();
+	});
 });
 
 describe('MessageCenter — yeni mesaj compose', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([]);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs([]));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([]);
+		vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+	});
 
   it('"Yeni Mesaj Oluştur" butonu gosterilmeli', async () => {
     render(<MessageCenter projectId="proj-1" />);
@@ -493,57 +509,62 @@ describe('MessageCenter — yeni mesaj compose', () => {
 });
 
 describe('MessageCenter — yenile butonu', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs(ORNEK_MESAJLAR));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue(ORNEK_MESAJLAR);
+		vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+	});
 
-  it('"Yenile" butonuna tiklaninca mesajlar yeniden yuklenmeli', async () => {
-    const user = userEvent.setup();
-    render(<MessageCenter projectId="proj-1" />);
+	it('"Yenile" butonuna tiklaninca mesajlar yeniden yuklenmeli', async () => {
+		const user = userEvent.setup();
+		render(<MessageCenter projectId="proj-1" />);
 
-    // Ilk yuklemenin tamamlanmasini bekle
-    await waitFor(() => screen.getByText('API endpoint gorev atamasi'));
+		// Ilk yuklemenin tamamlanmasini bekle
+		await waitFor(() => screen.getByText('API endpoint gorev atamasi'));
 
-    // Ilk yukleme sayisini kaydet
-    const ilkCagriSayisi = vi.mocked(studioApi.fetchProjectMessages).mock.calls.length;
+		// Ilk yukleme sayisini kaydet
+		const ilkCagriSayisi = vi.mocked(studioApi.fetchProjectMessagesPaginated).mock.calls.length;
 
-    await user.click(screen.getByTitle('Yenile'));
+		await user.click(screen.getByTitle('Yenile'));
 
-    await waitFor(() => {
-      // Yenileme sonrasi en az 1 ek cagri yapilmali
-      const yeniCagriSayisi = vi.mocked(studioApi.fetchProjectMessages).mock.calls.length;
-      expect(yeniCagriSayisi).toBeGreaterThan(ilkCagriSayisi);
-    });
-  });
+		await waitFor(() => {
+			// Yenileme sonrasi en az 1 ek cagri yapilmali
+			const yeniCagriSayisi = vi.mocked(studioApi.fetchProjectMessagesPaginated).mock.calls.length;
+			expect(yeniCagriSayisi).toBeGreaterThan(ilkCagriSayisi);
+		});
+	});
 });
 
 describe('MessageCenter — mesaj tipleri rozeti', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
-    vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
+		vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
+		vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
+	});
 
-  it('task_assignment tipi "Görev" rozeti gostermeli', async () => {
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([ORNEK_MESAJLAR[0]]);
+	it('task_assignment tipi "Görev" rozeti gostermeli', async () => {
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs([ORNEK_MESAJLAR[0]]));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([ORNEK_MESAJLAR[0]]);
 
-    render(<MessageCenter projectId="proj-1" />);
+		render(<MessageCenter projectId="proj-1" />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Task')).toBeInTheDocument();
-    });
-  });
+		await waitFor(() => {
+			expect(screen.getByText('Task')).toBeInTheDocument();
+		});
+	});
 
-  it('task_complete tipi "Tamamlandı" rozeti gostermeli', async () => {
-    vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([ORNEK_MESAJLAR[1]]);
+	it('task_complete tipi "Tamamlandı" rozeti gostermeli', async () => {
+		vi.mocked(studioApi.fetchProjectMessagesPaginated).mockResolvedValue(paginatedMsgs([ORNEK_MESAJLAR[1]]));
+		vi.mocked(studioApi.fetchProjectMessages).mockResolvedValue([ORNEK_MESAJLAR[1]]);
 
-    render(<MessageCenter projectId="proj-1" />);
+		render(<MessageCenter projectId="proj-1" />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Completed')).toBeInTheDocument();
-    });
-  });
+		await waitFor(() => {
+			expect(screen.getByText('Completed')).toBeInTheDocument();
+		});
+	});
 });

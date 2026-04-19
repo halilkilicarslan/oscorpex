@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Loader2, RefreshCw, CheckCircle2, XCircle, DollarSign, Activity, TrendingUp, FileText, Clock, Database, Code2, FileSearch } from 'lucide-react';
 import { fetchContextMetrics, type ContextMetricsResponse } from '../../lib/studio-api/analytics.js';
 import { SearchObservability } from './SearchObservability';
+
+const ComplexityPieChart = lazy(() => import('./charts/ComplexityPieChart'));
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
@@ -78,6 +80,7 @@ function MetricRow({ label, value, bar, color = '#22c55e' }: MetricRowProps) {
 export default function ProjectReport({ projectId }: { projectId: string }) {
   const [report, setReport] = useState<ReportData | null>(null);
   const [ctxMetrics, setCtxMetrics] = useState<ContextMetricsResponse | null>(null);
+  const [complexityDist, setComplexityDist] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,16 +90,29 @@ export default function ProjectReport({ projectId }: { projectId: string }) {
     else setRefreshing(true);
     setError(null);
     try {
-      const [reportRes, ctxRes] = await Promise.all([
+      const [reportRes, ctxRes, tasksRes] = await Promise.all([
         fetch(`${BASE}/api/studio/projects/${projectId}/report`).then(async (r) => {
           const d = await r.json();
           if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
           return d as ReportData;
         }),
         fetchContextMetrics(projectId).then((r) => r?.metrics ? r : null).catch(() => null),
+        fetch(`${BASE}/api/studio/projects/${projectId}/tasks`)
+          .then((r) => r.ok ? r.json() : { tasks: [] })
+          .catch(() => ({ tasks: [] })),
       ]);
       setReport(reportRes);
       setCtxMetrics(ctxRes);
+
+      // Compute complexity distribution from tasks
+      const tasks: Array<{ complexity?: string }> = Array.isArray(tasksRes)
+        ? tasksRes
+        : (tasksRes.tasks ?? []);
+      const dist: Record<string, number> = {};
+      for (const t of tasks) {
+        if (t.complexity) dist[t.complexity] = (dist[t.complexity] ?? 0) + 1;
+      }
+      setComplexityDist(dist);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load report');
     } finally {
@@ -237,6 +253,22 @@ export default function ProjectReport({ projectId }: { projectId: string }) {
           color={completionRate >= 80 ? '#22c55e' : completionRate >= 50 ? '#f59e0b' : '#ef4444'}
         />
       </div>
+
+      {/* Complexity Distribution */}
+      {Object.keys(complexityDist).length > 0 && (
+        <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity size={14} className="text-[#f59e0b]" />
+            <h3 className="text-[12px] font-semibold text-[#fafafa]">Task Complexity Distribution</h3>
+            <span className="ml-auto text-[10px] text-[#525252]">
+              {Object.values(complexityDist).reduce((a, b) => a + b, 0)} tasks
+            </span>
+          </div>
+          <Suspense fallback={<div className="h-[220px] animate-pulse bg-[#1a1a1a] rounded-lg" />}>
+            <ComplexityPieChart data={complexityDist} />
+          </Suspense>
+        </div>
+      )}
 
       {/* Top changed files */}
       {(report?.topChangedFiles?.length ?? 0) > 0 && (

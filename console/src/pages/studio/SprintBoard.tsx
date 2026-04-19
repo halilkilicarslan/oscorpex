@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+
+const VelocityTrendChart = lazy(() => import('./charts/VelocityTrendChart'));
 import {
   Loader2,
   Plus,
@@ -613,6 +615,20 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
                 </div>
                 <BurndownChart points={burndown} totalItems={totalCount} />
               </div>
+
+              {/* Velocity Trend */}
+              {sprints.some((s) => s.status === 'completed') && (
+                <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <TrendingUp size={14} className="text-[#22c55e]" />
+                    <h3 className="text-[12px] font-semibold text-[#fafafa]">Velocity Trend</h3>
+                    <span className="ml-auto text-[10px] text-[#525252]">completed sprints</span>
+                  </div>
+                  <Suspense fallback={<div className="h-[200px] animate-pulse bg-[#1a1a1a] rounded-lg" />}>
+                    <VelocityTrendChart sprints={sprints} />
+                  </Suspense>
+                </div>
+              )}
 
               {/* Work items list */}
               <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">

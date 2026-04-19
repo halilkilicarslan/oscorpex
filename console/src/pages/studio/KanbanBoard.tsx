@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Loader2, Kanban, Zap, AlertCircle, X, ShieldAlert, XCircle } from 'lucide-react';
 import {
-  fetchTasks,
+  fetchTasksPaginated,
   retryTask,
   fetchAutoStartStatus,
   fetchProjectAgents,
@@ -16,6 +16,8 @@ import TaskDetailModal from './TaskDetailModal';
 import TerminalSheet from './TerminalSheet';
 import ModalOverlay from './ModalOverlay';
 import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
+
+const PAGE_SIZE = 50;
 
 const KANBAN_WS_EVENTS = ['task:completed', 'task:failed', 'task:started', 'task:assigned', 'task:retry'];
 
@@ -191,6 +193,11 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
   const [terminalTask, setTerminalTask] = useState<Task | null>(null);
   // Detay modal için seçili task
   const [detailTask, setDetailTask] = useState<Task | null>(null);
+  // Pagination state
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -203,11 +210,32 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
   }, [dismissToast]);
 
   const load = useCallback(() => {
-    Promise.all([fetchTasks(projectId), fetchProjectAgents(projectId)])
-      .then(([t, a]) => { setTasks(t); setAgents(a); })
+    Promise.all([fetchTasksPaginated(projectId, PAGE_SIZE, 0), fetchProjectAgents(projectId)])
+      .then(([result, a]) => {
+        setTasks(result.data);
+        setAgents(a);
+        setTotal(result.total);
+        setOffset(PAGE_SIZE);
+        setHasMore(result.data.length < result.total);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [projectId]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const result = await fetchTasksPaginated(projectId, PAGE_SIZE, offset);
+      setTasks((prev) => [...prev, ...result.data]);
+      setOffset((prev) => prev + PAGE_SIZE);
+      setHasMore(tasks.length + result.data.length < result.total);
+    } catch {
+      // sessizce geç
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [projectId, offset, hasMore, loadingMore, tasks.length]);
 
   const loadAutoStartStatus = useCallback(() => {
     fetchAutoStartStatus(projectId)
@@ -414,6 +442,16 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
           );
         })()}
 
+        <div className="flex flex-col gap-3 flex-1">
+        {hasMore && (
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="w-full py-2 text-sm text-gray-400 hover:text-white bg-[#1a1a1a] border border-[#262626] rounded-lg hover:bg-[#222] transition-colors"
+          >
+            {loadingMore ? 'Loading...' : `Load more (${tasks.length} of ${total})`}
+          </button>
+        )}
         <div className="flex gap-4 min-w-min flex-1">
           {activeColumns.map((col) => {
             const colTasks = grouped.get(col.key) ?? [];
@@ -468,6 +506,7 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
               </div>
             );
           })}
+        </div>
         </div>
       </div>
 
