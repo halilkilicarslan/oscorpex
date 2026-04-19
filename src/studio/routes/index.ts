@@ -34,6 +34,8 @@ import { sprintRoutes } from "./sprint-routes.js";
 import { taskRoutes } from "./task-routes.js";
 import { teamRoutes } from "./team-routes.js";
 import { workItemRoutes } from "./work-item-routes.js";
+import { templateRoutes } from "./template-routes.js";
+import { ciRoutes } from "./ci-routes.js";
 
 // M6.2: auth middleware — opt-in via OSCORPEX_AUTH_ENABLED=true
 // Disabled by default so existing tests and integrations keep working.
@@ -277,5 +279,7 @@ studio.route("/", memoryRoutes);
 studio.route("/plugins", pluginRoutes);
 studio.route("/notifications", notificationRoutes);
 studio.route("/cost", costRoutes);
+studio.route("/templates", templateRoutes);
+studio.route("/ci", ciRoutes);
 
 export { studio as studioRoutes };
