@@ -37,6 +37,10 @@ export * from "./tenant-repo.js";
 export * from "./notification-repo.js";
 // V6 M2: Automated Test Results
 export * from "./test-results-repo.js";
+// V6 M3: Project Templates
+export * from "./template-repo.js";
+// V6 M3 F12: CI Tracking
+export * from "./ci-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";

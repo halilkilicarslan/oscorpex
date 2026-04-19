@@ -21,3 +21,5 @@ export * from './misc.js';
 export * from './auth.js';
 export * from './notifications.js';
 export * from './tests.js';
+export * from './templates.js';
+export * from './ci.js';

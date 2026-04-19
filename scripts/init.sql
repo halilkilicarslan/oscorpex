@@ -1218,3 +1218,45 @@ CREATE TABLE IF NOT EXISTS test_results (
 
 CREATE INDEX IF NOT EXISTS idx_test_results_project ON test_results(project_id);
 CREATE INDEX IF NOT EXISTS idx_test_results_task    ON test_results(task_id);
+
+-- ---------------------------------------------------------------------------
+-- V6 M3: Project Templates
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS project_templates (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  description  TEXT DEFAULT '',
+  category     TEXT NOT NULL DEFAULT 'fullstack',
+  tech_stack   JSONB DEFAULT '[]',
+  agent_config JSONB DEFAULT '{}',
+  phases       JSONB DEFAULT '[]',
+  is_public    BOOLEAN DEFAULT true,
+  author_id    TEXT,
+  usage_count  INTEGER DEFAULT 0,
+  rating       REAL DEFAULT 0,
+  created_at   TIMESTAMPTZ DEFAULT now(),
+  updated_at   TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_templates_category ON project_templates(category);
+CREATE INDEX IF NOT EXISTS idx_project_templates_usage    ON project_templates(usage_count DESC);
+CREATE INDEX IF NOT EXISTS idx_project_templates_public   ON project_templates(is_public);
+
+-- ---------------------------------------------------------------------------
+-- V6 M3: CI Tracking
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS ci_trackings (
+  id           TEXT PRIMARY KEY,
+  project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  provider     TEXT NOT NULL DEFAULT 'github',
+  pr_id        TEXT NOT NULL,
+  pr_url       TEXT,
+  status       TEXT NOT NULL DEFAULT 'pending',
+  details      JSONB DEFAULT '{}',
+  pipeline_url TEXT,
+  created_at   TIMESTAMPTZ DEFAULT now(),
+  updated_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ci_trackings_project ON ci_trackings(project_id);
