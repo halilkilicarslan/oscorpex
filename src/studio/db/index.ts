@@ -43,6 +43,8 @@ export * from "./template-repo.js";
 export * from "./ci-repo.js";
 // V6 M4: Durable Job Queue
 export * from "./job-repo.js";
+// V6 M6 F6: Agent Marketplace
+export * from "./marketplace-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";

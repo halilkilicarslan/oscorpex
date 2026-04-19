@@ -1282,3 +1282,28 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_queue_status ON jobs(queue, status);
 CREATE INDEX IF NOT EXISTS idx_jobs_status       ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_created      ON jobs(created_at);
+
+-- ---------------------------------------------------------------------------
+-- V6 M6 F6: Agent Marketplace
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS marketplace_items (
+  id           TEXT PRIMARY KEY,
+  type         TEXT NOT NULL DEFAULT 'agent',
+  name         TEXT NOT NULL,
+  description  TEXT DEFAULT '',
+  author       TEXT DEFAULT 'Anonymous',
+  author_id    TEXT,
+  category     TEXT DEFAULT 'general',
+  tags         JSONB DEFAULT '[]',
+  config       JSONB NOT NULL DEFAULT '{}',
+  downloads    INTEGER DEFAULT 0,
+  rating       REAL DEFAULT 0,
+  rating_count INTEGER DEFAULT 0,
+  is_verified  BOOLEAN DEFAULT false,
+  created_at   TIMESTAMPTZ DEFAULT now(),
+  updated_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_marketplace_type      ON marketplace_items(type);
+CREATE INDEX IF NOT EXISTS idx_marketplace_category  ON marketplace_items(category);
+CREATE INDEX IF NOT EXISTS idx_marketplace_downloads ON marketplace_items(downloads DESC);
