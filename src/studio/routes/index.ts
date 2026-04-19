@@ -6,6 +6,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { initContextSession } from "../context-session.js";
+import { processEventForNotification } from "../notification-service.js";
 import { seedPresetAgents, seedTeamTemplates } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { budgetGuard } from "../middleware/policy-middleware.js";
@@ -14,6 +15,7 @@ import type { EventType } from "../types.js";
 import { sendWebhookNotification } from "../webhook-sender.js";
 
 import { agentRoutes } from "./agent-routes.js";
+import { notificationRoutes } from "./notification-routes.js";
 import { analyticsRoutes } from "./analytics-routes.js";
 import authRoutes from "./auth-routes.js";
 import { ceremonyRoutes } from "./ceremony-routes.js";
@@ -178,6 +180,20 @@ for (const eventType of ALL_PLUGIN_EVENTS) {
 }
 
 // ---------------------------------------------------------------------------
+// V6 M1: Notification Bridge — important events → in-app notifications
+// ---------------------------------------------------------------------------
+
+const NOTIFICATION_EVENTS: EventType[] = ["task:completed", "task:failed", "pipeline:completed"];
+
+for (const eventType of NOTIFICATION_EVENTS) {
+	eventBus.on(eventType, (event) => {
+		processEventForNotification(event).catch((err) => {
+			console.warn(`[notification-bridge] Error for ${eventType}:`, err instanceof Error ? err.message : err);
+		});
+	});
+}
+
+// ---------------------------------------------------------------------------
 // Ana Studio Router
 // ---------------------------------------------------------------------------
 
@@ -258,5 +274,6 @@ studio.route("/", ceremonyRoutes);
 studio.route("/", sprintRoutes);
 studio.route("/", memoryRoutes);
 studio.route("/plugins", pluginRoutes);
+studio.route("/notifications", notificationRoutes);
 
 export { studio as studioRoutes };

@@ -4,6 +4,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './index.css';
 import Layout from './components/Layout';
 import { PlannerChatProvider } from './contexts/PlannerChatContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 const DashboardWrapper = lazy(() => import('./pages/DashboardWrapper'));
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'));
@@ -22,6 +24,8 @@ const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const FeedbacksPage = lazy(() => import('./pages/FeedbacksPage'));
 const TriggersPage = lazy(() => import('./pages/TriggersPage'));
 const RagPage = lazy(() => import('./pages/RagPage'));
+const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 
 function LoadingSpinner() {
   return (
@@ -41,31 +45,87 @@ function LoadingSpinner() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <PlannerChatProvider>
-        <Suspense fallback={<LoadingSpinner />}>
-          <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<DashboardWrapper />} />
-            <Route path="/dashboard" element={<ObservabilityPage />} />
-            <Route path="/traces" element={<TracesPage />} />
-            <Route path="/logs" element={<LogsPage />} />
-            <Route path="/feedbacks" element={<FeedbacksPage />} />
-            <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/memory" element={<MemoryPage />} />
-            <Route path="/rag" element={<RagPage />} />
-            <Route path="/prompts" element={<PromptsPage />} />
-            <Route path="/triggers" element={<TriggersPage />} />
-            <Route path="/studio" element={<StudioHomePage />} />
-            <Route path="/studio/dashboard" element={<PlatformDashboard />} />
-            <Route path="/studio/insights" element={<InsightDashboard />} />
-            <Route path="/studio/teams" element={<TeamBuilderPage />} />
-            <Route path="/studio/providers" element={<ProvidersPage />} />
-            <Route path="/studio/cli-monitor" element={<CLIUsageMonitorPage />} />
-            <Route path="/studio/:projectId" element={<ProjectPage />} />
-          </Route>
-        </Routes>
-        </Suspense>
-      </PlannerChatProvider>
+      <AuthProvider>
+        <PlannerChatProvider>
+          <Suspense fallback={<LoadingSpinner />}>
+            <Routes>
+              {/* Auth pages — no layout */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+
+              {/* Main app — with layout */}
+              <Route element={<Layout />}>
+                <Route index element={<DashboardWrapper />} />
+                <Route path="/dashboard" element={<ObservabilityPage />} />
+                <Route path="/traces" element={<TracesPage />} />
+                <Route path="/logs" element={<LogsPage />} />
+                <Route path="/feedbacks" element={<FeedbacksPage />} />
+                <Route path="/alerts" element={<AlertsPage />} />
+                <Route path="/memory" element={<MemoryPage />} />
+                <Route path="/rag" element={<RagPage />} />
+                <Route path="/prompts" element={<PromptsPage />} />
+                <Route path="/triggers" element={<TriggersPage />} />
+                <Route
+                  path="/studio"
+                  element={
+                    <ProtectedRoute>
+                      <StudioHomePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/studio/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <PlatformDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/studio/insights"
+                  element={
+                    <ProtectedRoute>
+                      <InsightDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/studio/teams"
+                  element={
+                    <ProtectedRoute>
+                      <TeamBuilderPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/studio/providers"
+                  element={
+                    <ProtectedRoute>
+                      <ProvidersPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/studio/cli-monitor"
+                  element={
+                    <ProtectedRoute>
+                      <CLIUsageMonitorPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/studio/:projectId"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectPage />
+                    </ProtectedRoute>
+                  }
+                />
+              </Route>
+            </Routes>
+          </Suspense>
+        </PlannerChatProvider>
+      </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
 );
