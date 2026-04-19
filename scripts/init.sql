@@ -1154,3 +1154,24 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_id  TEXT REFERENCES users(id
 -- ---------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_projects_tenant   ON projects(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_projects_owner    ON projects(owner_id);
+
+-- ---------------------------------------------------------------------------
+-- M6.4: Row Level Security Policies (policy tanımları — şimdilik ENABLE EDİLMEDİ)
+-- NOT: ALTER TABLE ... ENABLE ROW LEVEL SECURITY komutları kasıtlı olarak
+-- dahil edilmedi. Testler app.current_tenant_id set etmediğinden RLS etkinleştirilmesi
+-- mevcut test suite'ini bozar. Bu policy'ler gelecekte ayrı bir migration'da
+-- etkinleştirilecek.
+-- ---------------------------------------------------------------------------
+
+DO $$ BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_policies
+		WHERE policyname = 'projects_tenant_isolation' AND tablename = 'projects'
+	) THEN
+		CREATE POLICY projects_tenant_isolation ON projects
+			USING (
+				tenant_id IS NULL
+				OR tenant_id = current_setting('app.current_tenant_id', true)
+			);
+	END IF;
+END $$;

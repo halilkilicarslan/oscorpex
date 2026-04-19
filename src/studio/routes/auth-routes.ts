@@ -11,6 +11,7 @@ import type { AuthVariables } from "../auth/auth-middleware.js";
 import { signJwt } from "../auth/jwt.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { requirePermission } from "../auth/rbac.js";
+import { logTenantActivity } from "../auth/tenant-context.js";
 import { createApiKey, listApiKeys, revokeApiKey } from "../db/tenant-repo.js";
 import { execute, query, queryOne } from "../pg.js";
 
@@ -71,6 +72,10 @@ router.post("/register", async (c) => {
 		await execute("INSERT INTO user_roles (user_id, tenant_id, role) VALUES ($1, $2, $3)", [userId, tenantId, "owner"]);
 
 		const token = signJwt({ sub: userId, email, tenantId, role: "owner" });
+
+		// M6.4: Audit log — non-blocking
+		logTenantActivity(tenantId, userId, "register", { email, tenantName: resolvedTenantName });
+
 		return c.json(
 			{
 				token,
@@ -229,6 +234,13 @@ router.patch("/users/:id/role", async (c) => {
 			 ON CONFLICT (user_id, tenant_id) DO UPDATE SET role = $3`,
 			[userId, tid, role],
 		);
+
+		// M6.4: Audit log — non-blocking
+		const callerId = ctx.get("userId") as string | undefined;
+		if (callerId) {
+			logTenantActivity(tid, callerId, "role_change", { targetUserId: userId, newRole: role });
+		}
+
 		return c.json({ ok: true, userId, role });
 	} catch (err) {
 		console.error("[auth] patch role error:", err);
@@ -255,6 +267,10 @@ router.post("/api-keys", async (c) => {
 			name: body.name ?? "Default",
 			scopes: body.scopes ?? [],
 		});
+
+		// M6.4: Audit log — non-blocking
+		logTenantActivity(tid, uid, "api_key_create", { keyName: body.name ?? "Default", scopes: body.scopes ?? [] });
+
 		return c.json(result, 201);
 	} catch (err) {
 		console.error("[auth] create api-key error:", err);
@@ -285,7 +301,18 @@ router.get("/api-keys", async (c) => {
 router.delete("/api-keys/:id", async (c) => {
 	try {
 		const keyId = c.req.param("id");
+		// biome-ignore lint/suspicious/noExplicitAny: Hono context variables
+		const ctx = c as any;
+		const tid = ctx.get("tenantId") as string | undefined;
+		const uid = ctx.get("userId") as string | undefined;
+
 		await revokeApiKey(keyId);
+
+		// M6.4: Audit log — non-blocking
+		if (tid && uid) {
+			logTenantActivity(tid, uid, "api_key_delete", { keyId });
+		}
+
 		return c.json({ ok: true });
 	} catch (err) {
 		console.error("[auth] revoke api-key error:", err);

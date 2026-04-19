@@ -79,7 +79,15 @@ export function hasPermission(role: Role | string, permission: string): boolean 
  * Bypass rules (backward compat):
  *   - authType === "none"     → no auth configured, allow everything
  *   - authType === "api-key"  → legacy env key, treated as system admin
- *   - authType === "api-key-db" → DB-backed key inherits role from DB (falls through to role check)
+ *   - authType === "api-key-db" → DB-backed key: scope check first, then role check
+ *
+ * M6.4 Scope enforcement for DB-backed API keys:
+ *   If the key has declared scopes, the requested permission must be covered by one of them.
+ *   Scope matching rules:
+ *     - "*"              → grants any permission (superscope)
+ *     - "resource:*"     → grants all actions on a resource (e.g. "projects:*")
+ *     - "resource:action" → exact permission match (e.g. "projects:read")
+ *   If scopes are empty the check falls through to normal role-based enforcement.
  */
 // biome-ignore lint/suspicious/noExplicitAny: middleware must be env-agnostic to work across all routers
 export function requirePermission(permission: string): MiddlewareHandler<any> {
@@ -91,6 +99,36 @@ export function requirePermission(permission: string): MiddlewareHandler<any> {
 
 		// Legacy env API key = system-level access, skip permission check
 		if (authType === "api-key") return next();
+
+		// M6.4: Scope check for DB-backed API keys
+		// If the key has declared scopes, the scope check is authoritative:
+		//   - Scope granted  → return next() immediately (bypass role check)
+		//   - Scope denied   → return 403 immediately
+		//   - Scopes empty   → fall through to role-based check (backward compat)
+		if (authType === "api-key-db") {
+			const scopes = c.get("apiKeyScopes") as string[] | undefined;
+			if (scopes && scopes.length > 0) {
+				const [permResource] = permission.split(":");
+				const scopeGranted = scopes.some((s) => {
+					if (s === "*") return true; // superscope — grants everything
+					if (s === permission) return true; // exact match
+					const [sResource, sAction] = s.split(":");
+					return sResource === permResource && sAction === "*"; // resource wildcard
+				});
+				if (!scopeGranted) {
+					return c.json(
+						{
+							error: "API key scope insufficient",
+							required: permission,
+							scopes,
+						},
+						403,
+					);
+				}
+				// Scope explicitly granted — skip role check (scope is the authority)
+				return next();
+			}
+		}
 
 		const role = c.get("userRole") as string | undefined;
 		if (!role || !hasPermission(role, permission)) {

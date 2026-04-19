@@ -20,6 +20,8 @@ export interface AuthVariables {
 	email: string;
 	tenantId: string;
 	userRole: string;
+	/** M6.4: Scopes declared on a DB-backed API key (osx_* prefix). Empty = role-only check. */
+	apiKeyScopes: string[];
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: Hono Context is generic — use any to avoid requiring explicit Env param everywhere
@@ -65,8 +67,9 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<void 
 			user_id: string;
 			tenant_id: string;
 			role: string;
+			scopes: string[] | null;
 		}>(
-			`SELECT ak.id, ak.user_id, ak.tenant_id, ur.role
+			`SELECT ak.id, ak.user_id, ak.tenant_id, ak.scopes, ur.role
 			 FROM api_keys ak
 			 JOIN user_roles ur ON ak.user_id = ur.user_id AND ak.tenant_id = ur.tenant_id
 			 WHERE ak.key_hash = $1 AND (ak.expires_at IS NULL OR ak.expires_at > now())`,
@@ -77,6 +80,11 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<void 
 			c.set("userId", row.user_id);
 			c.set("tenantId", row.tenant_id);
 			c.set("userRole", row.role);
+			// M6.4: Store API key scopes for scope-aware permission enforcement in rbac.ts
+			const scopes = row.scopes ?? [];
+			if (scopes.length > 0) {
+				c.set("apiKeyScopes", scopes);
+			}
 			// Non-blocking last_used_at update
 			queryOne("UPDATE api_keys SET last_used_at = now() WHERE id = $1", [row.id]).catch(() => {});
 			return next();
