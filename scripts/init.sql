@@ -1260,3 +1260,25 @@ CREATE TABLE IF NOT EXISTS ci_trackings (
   updated_at   TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_ci_trackings_project ON ci_trackings(project_id);
+
+-- ---------------------------------------------------------------------------
+-- V6 M4: Durable Job Queue
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS jobs (
+  id          TEXT PRIMARY KEY,
+  queue       TEXT NOT NULL DEFAULT 'task-execution',
+  data        JSONB NOT NULL DEFAULT '{}',
+  status      TEXT NOT NULL DEFAULT 'created',
+  output      JSONB,
+  error       TEXT,
+  retry_count INTEGER DEFAULT 0,
+  max_retries INTEGER DEFAULT 3,
+  started_at  TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_queue_status ON jobs(queue, status);
+CREATE INDEX IF NOT EXISTS idx_jobs_status       ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_created      ON jobs(created_at);
