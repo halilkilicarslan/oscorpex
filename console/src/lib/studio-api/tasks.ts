@@ -1,8 +1,12 @@
 import type { Task } from './types.js';
-import { API, json } from './base.js';
+import { API, json, fetchPaginated, type PaginatedResult } from './base.js';
 
 export async function fetchTasks(projectId: string): Promise<Task[]> {
-  return json(`${API}/projects/${projectId}/tasks`);
+	return json(`${API}/projects/${projectId}/tasks`);
+}
+
+export async function fetchTasksPaginated(projectId: string, limit = 50, offset = 0): Promise<PaginatedResult<Task>> {
+	return fetchPaginated<Task>(`${API}/projects/${projectId}/tasks`, limit, offset);
 }
 
 export async function retryTask(projectId: string, taskId: string): Promise<void> {

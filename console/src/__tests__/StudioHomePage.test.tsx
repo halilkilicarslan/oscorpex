@@ -9,6 +9,7 @@ import type { Project, TeamTemplate } from '../lib/studio-api';
 // studio-api modulunu mockla
 vi.mock('../lib/studio-api', () => ({
   fetchProjects: vi.fn(),
+  fetchProjectsPaginated: vi.fn(),
   createProject: vi.fn(),
   createProjectFromTemplate: vi.fn(),
   importProject: vi.fn(),
@@ -70,7 +71,7 @@ describe('StudioHomePage — proje listesi', () => {
 
   it('projeler yuklenirken spinner gosterilmeli', () => {
     // Promise hic cozulmesin — yukleme durumunu test et
-    vi.mocked(studioApi.fetchProjects).mockReturnValue(new Promise(() => {}));
+    vi.mocked(studioApi.fetchProjectsPaginated).mockReturnValue(new Promise(() => {}));
 
     renderSayfa();
 
@@ -80,7 +81,7 @@ describe('StudioHomePage — proje listesi', () => {
   });
 
   it('projeler yuklendikten sonra liste gosterilmeli', async () => {
-    vi.mocked(studioApi.fetchProjects).mockResolvedValue(ORNEK_PROJELER);
+    vi.mocked(studioApi.fetchProjectsPaginated).mockResolvedValue({ data: ORNEK_PROJELER, total: ORNEK_PROJELER.length });
 
     renderSayfa();
 
@@ -91,7 +92,7 @@ describe('StudioHomePage — proje listesi', () => {
   });
 
   it('proje aciklamasi gosterilmeli', async () => {
-    vi.mocked(studioApi.fetchProjects).mockResolvedValue(ORNEK_PROJELER);
+    vi.mocked(studioApi.fetchProjectsPaginated).mockResolvedValue({ data: ORNEK_PROJELER, total: ORNEK_PROJELER.length });
 
     renderSayfa();
 
@@ -101,7 +102,7 @@ describe('StudioHomePage — proje listesi', () => {
   });
 
   it('tech stack etiketleri gosterilmeli', async () => {
-    vi.mocked(studioApi.fetchProjects).mockResolvedValue(ORNEK_PROJELER);
+    vi.mocked(studioApi.fetchProjectsPaginated).mockResolvedValue({ data: ORNEK_PROJELER, total: ORNEK_PROJELER.length });
 
     renderSayfa();
 
@@ -113,7 +114,7 @@ describe('StudioHomePage — proje listesi', () => {
   });
 
   it('planning durumundaki proje "Start Planning" butonu gostermeli', async () => {
-    vi.mocked(studioApi.fetchProjects).mockResolvedValue([ORNEK_PROJELER[0]]);
+    vi.mocked(studioApi.fetchProjectsPaginated).mockResolvedValue({ data: [ORNEK_PROJELER[0]], total: 1 });
 
     renderSayfa();
 
@@ -123,7 +124,7 @@ describe('StudioHomePage — proje listesi', () => {
   });
 
   it('running durumundaki proje "Open" butonu gostermeli', async () => {
-    vi.mocked(studioApi.fetchProjects).mockResolvedValue([ORNEK_PROJELER[1]]);
+    vi.mocked(studioApi.fetchProjectsPaginated).mockResolvedValue({ data: [ORNEK_PROJELER[1]], total: 1 });
 
     renderSayfa();
 
@@ -143,7 +144,7 @@ describe('StudioHomePage — bos durum', () => {
   });
 
   it('proje yoksa bos durum mesaji gosterilmeli', async () => {
-    vi.mocked(studioApi.fetchProjects).mockResolvedValue([]);
+    vi.mocked(studioApi.fetchProjectsPaginated).mockResolvedValue({ data: [], total: 0 });
 
     renderSayfa();
 
@@ -153,7 +154,7 @@ describe('StudioHomePage — bos durum', () => {
   });
 
   it('bos durumda "Create Project" butonu gosterilmeli', async () => {
-    vi.mocked(studioApi.fetchProjects).mockResolvedValue([]);
+    vi.mocked(studioApi.fetchProjectsPaginated).mockResolvedValue({ data: [], total: 0 });
 
     renderSayfa();
 
@@ -163,7 +164,7 @@ describe('StudioHomePage — bos durum', () => {
   });
 
   it('API hatasi durumunda bos durum gosterilmeli', async () => {
-    vi.mocked(studioApi.fetchProjects).mockRejectedValue(new Error('API hatasi'));
+    vi.mocked(studioApi.fetchProjectsPaginated).mockRejectedValue(new Error('API hatasi'));
 
     renderSayfa();
 
@@ -180,7 +181,7 @@ describe('StudioHomePage — header', () => {
     vi.mocked(studioApi.fetchCustomTeams).mockResolvedValue([]);
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
     vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completedTasks: 0, inProgressTasks: 0, blockedTasks: 0, totalFailures: 0, totalReviewRejections: 0, tasksPerAgent: [], avgCompletionTimeMs: null, pipelineRunCount: 0, pipelineSuccessRate: 0 });
-    vi.mocked(studioApi.fetchProjects).mockResolvedValue([]);
+    vi.mocked(studioApi.fetchProjectsPaginated).mockResolvedValue({ data: [], total: 0 });
   });
 
   it('sayfa basligi gosterilmeli', async () => {
@@ -207,7 +208,7 @@ describe('StudioHomePage — proje olusturma modali', () => {
     vi.mocked(studioApi.fetchCustomTeams).mockResolvedValue([]);
     vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
     vi.mocked(studioApi.fetchProjectAnalytics).mockResolvedValue({ totalTasks: 0, completedTasks: 0, inProgressTasks: 0, blockedTasks: 0, totalFailures: 0, totalReviewRejections: 0, tasksPerAgent: [], avgCompletionTimeMs: null, pipelineRunCount: 0, pipelineSuccessRate: 0 });
-    vi.mocked(studioApi.fetchProjects).mockResolvedValue([]);
+    vi.mocked(studioApi.fetchProjectsPaginated).mockResolvedValue({ data: [], total: 0 });
   });
 
   it('"New Project" butonuna tiklaninca modal acilmali', async () => {
@@ -336,7 +337,7 @@ describe('StudioHomePage — proje silme', () => {
   });
 
   it('onay verilince deleteProject API cagrisi yapilmali', async () => {
-    vi.mocked(studioApi.fetchProjects).mockResolvedValue([ORNEK_PROJELER[0]]);
+    vi.mocked(studioApi.fetchProjectsPaginated).mockResolvedValue({ data: [ORNEK_PROJELER[0]], total: 1 });
     vi.mocked(confirm).mockReturnValue(true);
 
     renderSayfa();

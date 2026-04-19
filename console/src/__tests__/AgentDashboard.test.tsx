@@ -27,6 +27,7 @@ vi.mock('../lib/studio-api', () => ({
   fetchAgentHeatMap: vi.fn().mockResolvedValue([]),
   fetchAgentComparison: vi.fn().mockResolvedValue([]),
   fetchAgentDailyStats: vi.fn().mockResolvedValue([]),
+  fetchAgentTimeline: vi.fn().mockResolvedValue([]),
   roleLabel: vi.fn((role: string) => role.charAt(0).toUpperCase() + role.slice(1)),
 }));
 

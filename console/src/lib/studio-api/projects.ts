@@ -1,5 +1,5 @@
 import type { Project, ProjectTemplateInfo } from './types.js';
-import { API, json } from './base.js';
+import { API, json, fetchPaginated, type PaginatedResult } from './base.js';
 
 export interface PlatformStats {
   projects: { total: number; active: number; completed: number; failed: number };
@@ -59,6 +59,10 @@ export async function fetchPlatformAnalytics(): Promise<PlatformAnalytics> {
 
 export async function fetchProjects(): Promise<Project[]> {
   return json(`${API}/projects`);
+}
+
+export async function fetchProjectsPaginated(limit = 50, offset = 0): Promise<PaginatedResult<Project>> {
+	return fetchPaginated<Project>(`${API}/projects`, limit, offset);
 }
 
 export async function fetchProject(id: string): Promise<Project> {

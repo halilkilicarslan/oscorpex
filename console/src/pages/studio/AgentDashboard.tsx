@@ -2,8 +2,11 @@
 // Oscorpex — Agent Dashboard (Metrikler ve Analizler)
 // ---------------------------------------------------------------------------
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
+
+const CostTrendChart = lazy(() => import('./charts/CostTrendChart'));
+const AgentTimelineChart = lazy(() => import('./charts/AgentTimelineChart'));
 import {
   Loader2,
   RefreshCw,
@@ -353,6 +356,7 @@ export default function AgentDashboard({ projectId }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -372,6 +376,7 @@ export default function AgentDashboard({ projectId }: Props) {
       ]);
       setOverview(ov);
       setAgents(ag);
+      setSelectedAgentId((cur) => cur || ag[0]?.agentId || '');
       setTimeline(tl);
       setCosts(cs);
       setCostBreakdown(cb);
@@ -850,6 +855,53 @@ export default function AgentDashboard({ projectId }: Props) {
           <AgentHeatMap projectId={projectId} />
         </div>
       </div>
+
+      {/* Cost Trend Chart */}
+      <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <DollarSign size={14} className="text-[#22c55e]" />
+          <h3 className="text-[12px] font-semibold text-[#fafafa]">Cost Trend (14 Days)</h3>
+        </div>
+        <Suspense fallback={<div className="h-[250px] animate-pulse bg-[#1a1a1a] rounded-lg" />}>
+          <CostTrendChart projectId={projectId} />
+        </Suspense>
+      </div>
+
+      {/* Agent Timeline Chart */}
+      {agents.length > 0 && (
+        <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity size={14} className="text-[#3b82f6]" />
+            <h3 className="text-[12px] font-semibold text-[#fafafa]">Agent Timeline</h3>
+            <div className="ml-auto">
+              <select
+                value={selectedAgentId}
+                onChange={(e) => setSelectedAgentId(e.target.value)}
+                className="appearance-none bg-[#0a0a0a] border border-[#262626] rounded px-2 py-1 text-[11px] text-[#e5e5e5] focus:outline-none focus:border-[#22c55e]/50"
+              >
+                {agents.map((a) => (
+                  <option key={a.agentId} value={a.agentId}>{a.agentName}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <Suspense fallback={<div className="h-[250px] animate-pulse bg-[#1a1a1a] rounded-lg" />}>
+            {selectedAgentId && (
+              <AgentTimelineChart projectId={projectId} agentId={selectedAgentId} />
+            )}
+          </Suspense>
+          <div className="flex items-center gap-4 mt-3">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
+              <span className="text-[10px] text-[#525252]">Tokens used</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-[#3b82f6]" />
+              <span className="text-[10px] text-[#525252]">Cost (USD)</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

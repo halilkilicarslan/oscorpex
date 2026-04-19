@@ -1,5 +1,5 @@
 import type { AgentMessage, SendMessageData, BroadcastMessageData } from './types.js';
-import { API, json } from './base.js';
+import { API, json, fetchPaginated, type PaginatedResult } from './base.js';
 
 // Proje mesajlarını listele (opsiyonel: agentId ve status filtresi)
 export async function fetchProjectMessages(
@@ -82,6 +82,14 @@ export async function fetchMessageThread(
   messageId: string,
 ): Promise<AgentMessage[]> {
   return json(`${API}/projects/${projectId}/messages/${messageId}/thread`);
+}
+
+export async function fetchProjectMessagesPaginated(
+	projectId: string,
+	limit = 50,
+	offset = 0,
+): Promise<PaginatedResult<AgentMessage>> {
+	return fetchPaginated<AgentMessage>(`${API}/projects/${projectId}/messages`, limit, offset);
 }
 
 // Tüm ekibe yayın mesajı gönder

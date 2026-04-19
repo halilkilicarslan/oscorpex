@@ -4,9 +4,6 @@
 // ---------------------------------------------------------------------------
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
-
-const MESSAGE_CENTER_WS_EVENTS = ['message:created'];
 import {
   MessageSquare,
   Send,
@@ -22,6 +19,7 @@ import {
 import {
   fetchProjectAgents,
   fetchProjectMessages,
+  fetchProjectMessagesPaginated,
   fetchMessageThread,
   sendAgentMessage,
   markMessageRead,
@@ -34,6 +32,10 @@ import {
   type SendMessageData,
 } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
+import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
+
+const MESSAGE_CENTER_WS_EVENTS = ['message:created'];
+const PAGE_SIZE = 50;
 
 // ---- Sabitler -----------------------------------------------------------
 
@@ -589,6 +591,11 @@ export default function MessageCenter({ projectId }: { projectId: string }) {
   const [replyState, setReplyState] = useState<Partial<ComposeState>>({});
   // Polling referansı
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Pagination state
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [msgOffset, setMsgOffset] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Ajanları yükle
   const loadAgents = useCallback(async () => {
@@ -600,21 +607,50 @@ export default function MessageCenter({ projectId }: { projectId: string }) {
     }
   }, [projectId]);
 
-  // Mesajları yükle
+  // Mesajları yükle (ilk sayfa, pagination sıfırlanır)
   const loadMessages = useCallback(async () => {
     try {
-      const data = await fetchProjectMessages(
-        projectId,
-        filterAgentId ?? undefined,
-        statusFilter === 'unread' ? 'unread' : undefined,
-      );
-      setMessages(data);
+      const hasFilters = filterAgentId !== null || statusFilter === 'unread';
+      if (hasFilters) {
+        // Filtre aktifken paginated olmayan endpoint kullan
+        const data = await fetchProjectMessages(
+          projectId,
+          filterAgentId ?? undefined,
+          statusFilter === 'unread' ? 'unread' : undefined,
+        );
+        setMessages(data);
+        setHasMore(false);
+        setTotal(data.length);
+        setMsgOffset(data.length);
+      } else {
+        const result = await fetchProjectMessagesPaginated(projectId, PAGE_SIZE, 0);
+        setMessages(result.data);
+        setTotal(result.total);
+        setMsgOffset(PAGE_SIZE);
+        setHasMore(result.data.length < result.total);
+      }
     } catch {
       // hata sessizce geçilir
     } finally {
       setLoadingMessages(false);
     }
   }, [projectId, filterAgentId, statusFilter]);
+
+  // Daha fazla mesaj yükle (load more)
+  const handleLoadMoreMessages = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const result = await fetchProjectMessagesPaginated(projectId, PAGE_SIZE, msgOffset);
+      setMessages((prev) => [...prev, ...result.data]);
+      setMsgOffset((prev) => prev + PAGE_SIZE);
+      setHasMore(messages.length + result.data.length < result.total);
+    } catch {
+      // sessizce geç
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [projectId, msgOffset, hasMore, loadingMore, messages.length]);
 
   // Okunmamış sayıları yükle (tüm ajanlar için)
   const loadUnreadCounts = useCallback(async () => {
@@ -880,7 +916,7 @@ export default function MessageCenter({ projectId }: { projectId: string }) {
               <p className="text-[11px] text-[#525252]">Mesaj yok</p>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto flex flex-col">
               {messages.map((msg) => (
                 <MessageRow
                   key={msg.id}
@@ -891,6 +927,15 @@ export default function MessageCenter({ projectId }: { projectId: string }) {
                   onArchive={(e) => handleArchive(e, msg)}
                 />
               ))}
+              {hasMore && (
+                <button
+                  onClick={handleLoadMoreMessages}
+                  disabled={loadingMore}
+                  className="w-full py-2 text-sm text-gray-400 hover:text-white bg-[#1a1a1a] border border-[#262626] rounded-lg hover:bg-[#222] transition-colors mx-0 mt-1"
+                >
+                  {loadingMore ? 'Loading...' : `Load more (${messages.length} of ${total})`}
+                </button>
+              )}
             </div>
           )}
         </div>

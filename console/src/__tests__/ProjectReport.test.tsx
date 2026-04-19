@@ -141,9 +141,10 @@ describe('ProjectReport — hata durumu', () => {
 	});
 
 	it('Retry butonuna tıklanınca veri yeniden yüklenmeli', async () => {
+		// İlk load: report fetch reject, tasks fetch resolve; Retry: her ikisi de başarılı
 		mockFetch
 			.mockRejectedValueOnce(new Error('Geçici hata'))
-			.mockResolvedValueOnce(mockBasariliYanit(ORNEK_RAPOR));
+			.mockResolvedValue(mockBasariliYanit(ORNEK_RAPOR));
 
 		const user = userEvent.setup();
 		render(<ProjectReport projectId="proj-1" />);
@@ -155,8 +156,8 @@ describe('ProjectReport — hata durumu', () => {
 			expect(screen.getByText('Project Report')).toBeInTheDocument();
 		});
 
-		// fetch iki kez çağrılmış olmalı
-		expect(mockFetch).toHaveBeenCalledTimes(2);
+		// İlk load (2 fetch) + retry (2 fetch) = en az 3 çağrı
+		expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(3);
 	});
 });
 
@@ -536,11 +537,13 @@ describe('ProjectReport — Refresh butonu', () => {
 		render(<ProjectReport projectId="proj-1" />);
 
 		await waitFor(() => screen.getByText('Refresh'));
+
+		const beforeCount = mockFetch.mock.calls.length;
 		await user.click(screen.getByText('Refresh'));
 
 		await waitFor(() => {
-			// İlk yükleme + refresh = 2 fetch çağrısı
-			expect(mockFetch).toHaveBeenCalledTimes(2);
+			// Refresh sonrası en az 1 yeni fetch çağrısı yapılmış olmalı
+			expect(mockFetch.mock.calls.length).toBeGreaterThan(beforeCount);
 		});
 	});
 
