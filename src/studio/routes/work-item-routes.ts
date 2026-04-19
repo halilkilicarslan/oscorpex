@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { createWorkItem, deleteWorkItem, getWorkItem, getWorkItems, updateWorkItem } from "../db.js";
+import { createWorkItem, deleteWorkItem, getWorkItem, getWorkItems, getWorkItemsPaginated, updateWorkItem } from "../db.js";
 import { planWorkItem } from "../work-item-planner.js";
 import type { WorkItemPriority, WorkItemSource, WorkItemStatus, WorkItemType } from "../types.js";
 
@@ -14,15 +14,23 @@ workItemRoutes.get("/projects/:id/work-items", async (c) => {
 	try {
 		const projectId = c.req.param("id");
 		const { type, priority, status, sprint_id, source } = c.req.query();
+		const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+		const offset = Number(c.req.query("offset") ?? 0);
 
-		const items = await getWorkItems(projectId, {
-			type: type as WorkItemType | undefined,
-			priority: priority as WorkItemPriority | undefined,
-			status: status as WorkItemStatus | undefined,
-			sprintId: sprint_id,
-			source: source as WorkItemSource | undefined,
-		});
+		const [items, total] = await getWorkItemsPaginated(
+			projectId,
+			{
+				type: type as WorkItemType | undefined,
+				priority: priority as WorkItemPriority | undefined,
+				status: status as WorkItemStatus | undefined,
+				sprintId: sprint_id,
+				source: source as WorkItemSource | undefined,
+			},
+			limit,
+			offset,
+		);
 
+		c.header("X-Total-Count", String(total));
 		return c.json(items);
 	} catch (err) {
 		console.error("[work-item-routes] list items failed:", err);

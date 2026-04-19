@@ -27,6 +27,7 @@ import {
 	listIntakeQuestions,
 	listProjectAgents,
 	listProjects,
+	listProjectsPaginated,
 	listTeamTemplates,
 	query,
 	queryOne,
@@ -370,7 +371,11 @@ projectRoutes.get("/platform/analytics", async (c) => {
 
 projectRoutes.get("/projects", async (c) => {
 	try {
-		return c.json(await listProjects());
+		const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+		const offset = Number(c.req.query("offset") ?? 0);
+		const [projects, total] = await listProjectsPaginated(limit, offset);
+		c.header("X-Total-Count", String(total));
+		return c.json(projects);
 	} catch (err) {
 		console.error("[project-routes] list projects failed:", err);
 		return c.json({ error: "Failed to list projects" }, 500);
@@ -1226,7 +1231,14 @@ projectRoutes.get("/projects/:id/events", async (c) => {
 // ---- Recent events (REST) -------------------------------------------------
 
 projectRoutes.get("/projects/:id/events/recent", async (c) => {
-	const { listEvents } = await import("../db.js");
-	const limit = Number(c.req.query("limit") ?? 50);
-	return c.json(await listEvents(c.req.param("id"), limit));
+	const { listEvents, countEvents } = await import("../db.js");
+	const projectId = c.req.param("id");
+	const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+	const offset = Number(c.req.query("offset") ?? 0);
+	const [events, total] = await Promise.all([
+		listEvents(projectId, limit, offset),
+		countEvents(projectId),
+	]);
+	c.header("X-Total-Count", String(total));
+	return c.json(events);
 });

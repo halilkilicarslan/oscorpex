@@ -105,6 +105,8 @@ export function rowToTask(row: any): Task {
 		parentTaskId: row.parent_task_id ?? undefined,
 		targetFiles: row.target_files ? JSON.parse(row.target_files) : undefined,
 		estimatedLines: row.estimated_lines ?? undefined,
+		// v4.2: Direct project reference
+		projectId: row.project_id ?? undefined,
 	};
 }
 

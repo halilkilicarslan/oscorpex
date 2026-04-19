@@ -19,19 +19,35 @@ export async function createTask(
 		targetFiles?: string[];
 		estimatedLines?: number;
 		assignedAgentId?: string;
+		/** Direct project reference. When omitted it is resolved from phaseId. */
+		projectId?: string;
 	},
 ): Promise<Task> {
 	const id = randomUUID();
 	const taskType = data.taskType ?? "ai";
 	const requiresApproval = data.requiresApproval ?? false;
+
+	// Resolve projectId: prefer caller-supplied value, fall back to phase lookup.
+	let projectId = data.projectId ?? null;
+	if (!projectId) {
+		const phaseRow = await queryOne<{ project_id: string }>(
+			`SELECT pp.project_id FROM phases ph
+			 JOIN project_plans pp ON ph.plan_id = pp.id
+			 WHERE ph.id = $1`,
+			[data.phaseId],
+		);
+		projectId = phaseRow?.project_id ?? null;
+	}
+
 	await execute(
 		`
-    INSERT INTO tasks (id, phase_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type, requires_approval, parent_task_id, target_files, estimated_lines, assigned_agent_id)
-    VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7, $8, 0, $9, $10, $11, $12, $13, $14)
+    INSERT INTO tasks (id, phase_id, project_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type, requires_approval, parent_task_id, target_files, estimated_lines, assigned_agent_id)
+    VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9, 0, $10, $11, $12, $13, $14, $15)
   `,
 		[
 			id,
 			data.phaseId,
+			projectId,
 			data.title,
 			data.description,
 			data.assignedAgent,
@@ -50,6 +66,7 @@ export async function createTask(
 	return {
 		id,
 		phaseId: data.phaseId,
+		projectId: projectId ?? undefined,
 		title: data.title,
 		description: data.description,
 		assignedAgent: data.assignedAgent,
@@ -78,7 +95,21 @@ export async function listTasks(phaseId: string): Promise<Task[]> {
 	return rows.map(rowToTask);
 }
 
-export async function listProjectTasks(projectId: string): Promise<Task[]> {
+export async function listProjectTasks(projectId: string, limit?: number, offset?: number): Promise<Task[]> {
+	if (limit !== undefined && offset !== undefined) {
+		const rows = await query<any>(
+			`
+      SELECT t.* FROM tasks t
+      JOIN phases p ON t.phase_id = p.id
+      JOIN project_plans pp ON p.plan_id = pp.id
+      WHERE pp.project_id = $1
+      ORDER BY p."order", t.id
+      LIMIT $2 OFFSET $3
+    `,
+			[projectId, limit, offset],
+		);
+		return rows.map(rowToTask);
+	}
 	const rows = await query<any>(
 		`
     SELECT t.* FROM tasks t
@@ -90,6 +121,26 @@ export async function listProjectTasks(projectId: string): Promise<Task[]> {
 		[projectId],
 	);
 	return rows.map(rowToTask);
+}
+
+export async function countProjectTasks(projectId: string): Promise<number> {
+	const row = await queryOne<{ cnt: string }>(
+		`SELECT COUNT(*) AS cnt FROM tasks t
+		 JOIN phases p ON t.phase_id = p.id
+		 JOIN project_plans pp ON p.plan_id = pp.id
+		 WHERE pp.project_id = $1`,
+		[projectId],
+	);
+	return Number(row?.cnt ?? 0);
+}
+
+/** Paginated variant returning [tasks, total] — used by task-routes. */
+export async function listProjectTasksPaginated(projectId: string, limit: number, offset: number): Promise<[Task[], number]> {
+	const [tasks, total] = await Promise.all([
+		listProjectTasks(projectId, limit, offset),
+		countProjectTasks(projectId),
+	]);
+	return [tasks, total];
 }
 
 export async function updateTask(

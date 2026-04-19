@@ -99,6 +99,8 @@ export interface Task {
 	parentTaskId?: string;
 	targetFiles?: string[];
 	estimatedLines?: number;
+	// v4.2: Direct project reference (eliminates JOIN chain for lookups)
+	projectId?: string;
 }
 
 // ---- Agent Configuration ---------------------------------------------------

@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS projects (
   status        TEXT NOT NULL DEFAULT 'planning',
   tech_stack    TEXT NOT NULL DEFAULT '[]',
   repo_path     TEXT NOT NULL DEFAULT '',
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL
+  created_at    TIMESTAMPTZ NOT NULL,
+  updated_at    TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS project_plans (
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS project_plans (
   project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   version     INTEGER NOT NULL DEFAULT 1,
   status      TEXT NOT NULL DEFAULT 'draft',
-  created_at  TEXT NOT NULL
+  created_at  TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS phases (
@@ -50,8 +50,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   branch                    TEXT NOT NULL DEFAULT '',
   output                    TEXT,
   retry_count               INTEGER NOT NULL DEFAULT 0,
-  started_at                TEXT,
-  completed_at              TEXT,
+  started_at                TIMESTAMPTZ,
+  completed_at              TIMESTAMPTZ,
   requires_approval         INTEGER NOT NULL DEFAULT 0,
   approval_status           TEXT,
   approval_rejection_reason TEXT,
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS events (
   agent_id    TEXT,
   task_id     TEXT,
   payload     TEXT NOT NULL DEFAULT '{}',
-  timestamp   TEXT NOT NULL
+  timestamp   TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS project_agents (
   cli_tool        TEXT NOT NULL DEFAULT 'claude-code',
   skills          TEXT NOT NULL DEFAULT '[]',
   system_prompt   TEXT NOT NULL DEFAULT '',
-  created_at      TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL,
   reports_to      TEXT,
   color           TEXT NOT NULL DEFAULT '#22c55e',
   pipeline_order  INTEGER NOT NULL DEFAULT 0,
@@ -161,8 +161,8 @@ CREATE TABLE IF NOT EXISTS agent_messages (
   metadata          TEXT NOT NULL DEFAULT '{}',
   status            TEXT NOT NULL DEFAULT 'unread',
   parent_message_id TEXT,
-  created_at        TEXT NOT NULL,
-  read_at           TEXT
+  created_at        TIMESTAMPTZ NOT NULL,
+  read_at           TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS pipeline_runs (
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS agent_dependencies (
   from_agent_id   TEXT NOT NULL REFERENCES project_agents(id) ON DELETE CASCADE,
   to_agent_id     TEXT NOT NULL REFERENCES project_agents(id) ON DELETE CASCADE,
   type            TEXT NOT NULL DEFAULT 'workflow',
-  created_at      TEXT NOT NULL
+  created_at      TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS agent_capabilities (
@@ -217,9 +217,9 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   output_summary  TEXT,
   pid             INTEGER,
   exit_code       INTEGER,
-  started_at      TEXT,
-  stopped_at      TEXT,
-  created_at      TEXT NOT NULL
+  started_at      TIMESTAMPTZ,
+  stopped_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS token_usage (
@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS token_usage (
   cost_usd               REAL NOT NULL DEFAULT 0,
   cache_creation_tokens  INTEGER NOT NULL DEFAULT 0,
   cache_read_tokens      INTEGER NOT NULL DEFAULT 0,
-  created_at             TEXT NOT NULL
+  created_at             TIMESTAMPTZ NOT NULL
 );
 
 -- Migration: add cache token columns to existing token_usage tables
@@ -301,8 +301,8 @@ CREATE TABLE IF NOT EXISTS work_items (
   source_task_id    TEXT,
   planned_task_id   TEXT,
   sprint_id         TEXT,
-  created_at        TEXT NOT NULL,
-  updated_at        TEXT NOT NULL
+  created_at        TIMESTAMPTZ NOT NULL,
+  updated_at        TIMESTAMPTZ NOT NULL
 );
 
 -- ---------------------------------------------------------------------------
@@ -354,7 +354,7 @@ CREATE TABLE IF NOT EXISTS sprints (
   start_date      TEXT NOT NULL,
   end_date        TEXT NOT NULL,
   status          TEXT NOT NULL DEFAULT 'planned',
-  created_at      TEXT NOT NULL
+  created_at      TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sonar_scans (
@@ -372,7 +372,7 @@ CREATE TABLE IF NOT EXISTS project_settings (
   category        TEXT NOT NULL,
   key             TEXT NOT NULL,
   value           TEXT NOT NULL DEFAULT '',
-  updated_at      TEXT NOT NULL
+  updated_at      TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
@@ -768,8 +768,8 @@ CREATE TABLE IF NOT EXISTS intake_questions (
   status        TEXT NOT NULL DEFAULT 'pending',   -- pending|answered|skipped
   answer        TEXT,
   plan_version  INTEGER,                            -- which plan iteration asked it
-  created_at    TEXT NOT NULL,
-  answered_at   TEXT
+  created_at    TIMESTAMPTZ NOT NULL,
+  answered_at   TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_intake_project ON intake_questions(project_id, status);
@@ -785,7 +785,7 @@ CREATE TABLE IF NOT EXISTS context_sources (
   label           TEXT NOT NULL,
   chunk_count     INTEGER NOT NULL DEFAULT 0,
   code_chunk_count INTEGER NOT NULL DEFAULT 0,
-  indexed_at      TEXT NOT NULL
+  indexed_at      TIMESTAMPTZ NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ctx_sources_project_label ON context_sources(project_id, label);
@@ -829,7 +829,7 @@ CREATE TABLE IF NOT EXISTS context_events (
   priority        INTEGER NOT NULL DEFAULT 2,
   data            TEXT NOT NULL,
   data_hash       TEXT NOT NULL,
-  created_at      TEXT NOT NULL
+  created_at      TIMESTAMPTZ NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_ctx_events_session ON context_events(session_key, created_at DESC);
@@ -851,7 +851,7 @@ CREATE TABLE IF NOT EXISTS task_diffs (
   diff_type       TEXT NOT NULL CHECK (diff_type IN ('created', 'modified', 'deleted')),
   lines_added     INTEGER NOT NULL DEFAULT 0,
   lines_removed   INTEGER NOT NULL DEFAULT 0,
-  created_at      TEXT NOT NULL
+  created_at      TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_task_diffs_task ON task_diffs(task_id);
 
@@ -865,7 +865,7 @@ CREATE TABLE IF NOT EXISTS context_search_log (
   latency_ms      INTEGER NOT NULL DEFAULT 0,
   source_filter   TEXT,
   content_type    TEXT,
-  created_at      TEXT NOT NULL
+  created_at      TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ctx_search_log_project ON context_search_log(project_id, created_at DESC);
 
@@ -880,10 +880,19 @@ CREATE TABLE IF NOT EXISTS agent_daily_stats (
   tokens_used     INTEGER NOT NULL DEFAULT 0,
   cost_usd        REAL NOT NULL DEFAULT 0,
   avg_task_time_ms INTEGER NOT NULL DEFAULT 0,
-  created_at      TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL,
   UNIQUE(project_id, agent_id, stat_date)
 );
 CREATE INDEX IF NOT EXISTS idx_agent_daily_stats_lookup ON agent_daily_stats(project_id, stat_date);
+
+-- v4.2: Add project_id to tasks for direct lookup (eliminates JOIN chain)
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_id TEXT REFERENCES projects(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+
+-- Backfill existing tasks that don't yet have project_id set
+UPDATE tasks SET project_id = pp.project_id
+FROM phases p JOIN project_plans pp ON p.plan_id = pp.id
+WHERE tasks.phase_id = p.id AND tasks.project_id IS NULL;
 
 -- v4.1: Fix FK constraints to CASCADE (idempotent migration)
 DO $$
@@ -930,4 +939,126 @@ BEGIN
     ALTER TABLE context_search_stats DROP CONSTRAINT context_search_stats_project_id_fkey;
     ALTER TABLE context_search_stats ADD CONSTRAINT context_search_stats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
   END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- Migration: TEXT -> TIMESTAMPTZ for date columns
+-- Converts all existing TEXT date columns to TIMESTAMPTZ on existing databases.
+-- New installations get correct types from CREATE TABLE definitions above.
+-- Safe to run multiple times: checks data_type = 'text' before altering.
+-- ISO 8601 strings (new Date().toISOString()) cast cleanly to TIMESTAMPTZ.
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+
+  -- projects
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE projects ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'updated_at' AND data_type = 'text') THEN
+    ALTER TABLE projects ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at::timestamptz;
+  END IF;
+
+  -- project_plans
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'project_plans' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE project_plans ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+
+  -- tasks (nullable: NULLIF guards against empty strings)
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'started_at' AND data_type = 'text') THEN
+    ALTER TABLE tasks ALTER COLUMN started_at TYPE TIMESTAMPTZ USING NULLIF(started_at, '')::timestamptz;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'completed_at' AND data_type = 'text') THEN
+    ALTER TABLE tasks ALTER COLUMN completed_at TYPE TIMESTAMPTZ USING NULLIF(completed_at, '')::timestamptz;
+  END IF;
+
+  -- events
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'events' AND column_name = 'timestamp' AND data_type = 'text') THEN
+    ALTER TABLE events ALTER COLUMN timestamp TYPE TIMESTAMPTZ USING timestamp::timestamptz;
+  END IF;
+
+  -- project_agents
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'project_agents' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE project_agents ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+
+  -- agent_messages
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_messages' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE agent_messages ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_messages' AND column_name = 'read_at' AND data_type = 'text') THEN
+    ALTER TABLE agent_messages ALTER COLUMN read_at TYPE TIMESTAMPTZ USING NULLIF(read_at, '')::timestamptz;
+  END IF;
+
+  -- agent_dependencies
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_dependencies' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE agent_dependencies ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+
+  -- intake_questions
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'intake_questions' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE intake_questions ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'intake_questions' AND column_name = 'answered_at' AND data_type = 'text') THEN
+    ALTER TABLE intake_questions ALTER COLUMN answered_at TYPE TIMESTAMPTZ USING NULLIF(answered_at, '')::timestamptz;
+  END IF;
+
+  -- project_settings
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'project_settings' AND column_name = 'updated_at' AND data_type = 'text') THEN
+    ALTER TABLE project_settings ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at::timestamptz;
+  END IF;
+
+  -- work_items
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'work_items' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE work_items ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'work_items' AND column_name = 'updated_at' AND data_type = 'text') THEN
+    ALTER TABLE work_items ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at::timestamptz;
+  END IF;
+
+  -- sprints
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sprints' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE sprints ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+
+  -- token_usage
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'token_usage' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE token_usage ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+
+  -- agent_runs (nullable started_at / stopped_at)
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_runs' AND column_name = 'started_at' AND data_type = 'text') THEN
+    ALTER TABLE agent_runs ALTER COLUMN started_at TYPE TIMESTAMPTZ USING NULLIF(started_at, '')::timestamptz;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_runs' AND column_name = 'stopped_at' AND data_type = 'text') THEN
+    ALTER TABLE agent_runs ALTER COLUMN stopped_at TYPE TIMESTAMPTZ USING NULLIF(stopped_at, '')::timestamptz;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_runs' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE agent_runs ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+
+  -- context_sources
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'context_sources' AND column_name = 'indexed_at' AND data_type = 'text') THEN
+    ALTER TABLE context_sources ALTER COLUMN indexed_at TYPE TIMESTAMPTZ USING indexed_at::timestamptz;
+  END IF;
+
+  -- context_events
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'context_events' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE context_events ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+
+  -- task_diffs
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'task_diffs' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE task_diffs ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+
+  -- agent_daily_stats
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_daily_stats' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE agent_daily_stats ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+
+  -- context_search_log
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'context_search_log' AND column_name = 'created_at' AND data_type = 'text') THEN
+    ALTER TABLE context_search_log ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz;
+  END IF;
+
 END $$;

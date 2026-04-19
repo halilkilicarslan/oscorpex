@@ -5,7 +5,7 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { containerManager } from "../container-manager.js";
-import { appendTaskLogs, getProject, getTask, getTaskDiffs, getTaskDiffSummary, listPendingApprovals, listProjectTasks, updateTask } from "../db.js";
+import { appendTaskLogs, countProjectTasks, getProject, getTask, getTaskDiffs, getTaskDiffSummary, listPendingApprovals, listProjectTasks, updateTask } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { executionEngine } from "../execution-engine.js";
 import { taskEngine } from "../task-engine.js";
@@ -16,7 +16,14 @@ export const taskRoutes = new Hono();
 
 taskRoutes.get("/projects/:id/tasks", async (c) => {
 	try {
-		const tasks = await listProjectTasks(c.req.param("id"));
+		const projectId = c.req.param("id");
+		const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+		const offset = Number(c.req.query("offset") ?? 0);
+
+		const [tasks, total] = await Promise.all([
+			listProjectTasks(projectId, limit, offset),
+			countProjectTasks(projectId),
+		]);
 
 		const tasksWithSummary = tasks.map((task) => ({
 			...task,
@@ -30,6 +37,7 @@ taskRoutes.get("/projects/:id/tasks", async (c) => {
 				: null,
 		}));
 
+		c.header("X-Total-Count", String(total));
 		return c.json(tasksWithSummary);
 	} catch (err) {
 		console.error("[task-routes] list tasks failed:", err);
