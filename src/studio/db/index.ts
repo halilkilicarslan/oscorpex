@@ -35,6 +35,8 @@ export * from "./plugin-repo.js";
 export * from "./tenant-repo.js";
 // V6 M1: In-App Notifications
 export * from "./notification-repo.js";
+// V6 M2: Automated Test Results
+export * from "./test-results-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";
