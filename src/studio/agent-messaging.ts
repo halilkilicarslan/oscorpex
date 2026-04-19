@@ -4,6 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { listProjectAgents } from "./db.js";
+import { eventBus } from "./event-bus.js";
 import { execute, query, queryOne } from "./pg.js";
 import type { AgentMessage, MessageStatus, MessageType } from "./types.js";
 
@@ -92,7 +93,16 @@ export async function sendMessage(
 		],
 	);
 
-	return (await getMessage(id))!;
+	const message = (await getMessage(id))!;
+
+	eventBus.emit({
+		projectId,
+		type: "message:created",
+		agentId: toAgentId,
+		payload: { messageId: id, from: fromAgentId },
+	});
+
+	return message;
 }
 
 /**

@@ -1,5 +1,6 @@
 // Pipeline Dashboard — Oscorpex projesinin pipeline görselleştirme ve yönetim bileşeni
 import { useState, useEffect, useCallback } from 'react';
+import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
 import {
   Play,
   Pause,
@@ -521,6 +522,15 @@ function StageDetailPanel({
 
 // ---- Ana bileşen -----------------------------------------------------------
 
+const PIPELINE_WS_EVENTS = [
+	'task:completed',
+	'task:failed',
+	'task:started',
+	'phase:completed',
+	'phase:started',
+	'pipeline:completed',
+];
+
 export default function PipelineDashboard({ projectId }: { projectId: string }) {
   // Pipeline durumu
   const [pipelineState, setPipelineState] = useState<PipelineState | null>(null);
@@ -580,14 +590,20 @@ export default function PipelineDashboard({ projectId }: { projectId: string }) 
     fetchStatus();
   }, [fetchStatus]);
 
-  // Pipeline aktifken (running, paused, failed ama task'lar devam ediyorsa) otomatik yenile
+  // WS event-driven refresh — eşleşen event geldiğinde fetchStatus'u tetikle
+  const { isWsActive } = useWsEventRefresh(projectId, PIPELINE_WS_EVENTS, fetchStatus, {
+    debounceMs: 300,
+  });
+
+  // Pipeline aktifken otomatik yenile — yalnızca WS bağlantısı yokken polling yap
   useEffect(() => {
+    if (isWsActive) return; // WS handles it
     if (!pipelineState) return;
     // Sadece tamamlandığında polling'i durdur
     if (pipelineState.status === 'completed') return;
     const interval = setInterval(fetchStatus, 3000);
     return () => clearInterval(interval);
-  }, [pipelineState?.status, fetchStatus]);
+  }, [isWsActive, pipelineState?.status, fetchStatus]);
 
   // Pipeline başlatma işlemi
   const handleStart = async () => {

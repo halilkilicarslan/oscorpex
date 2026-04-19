@@ -4,6 +4,9 @@
 // ---------------------------------------------------------------------------
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
+
+const MESSAGE_CENTER_WS_EVENTS = ['message:created'];
 import {
   MessageSquare,
   Send,
@@ -641,8 +644,15 @@ export default function MessageCenter({ projectId }: { projectId: string }) {
     loadMessages();
   }, [filterAgentId, statusFilter, loadMessages]);
 
-  // 5 saniyede bir polling
+  // WS-driven refresh — yeni mesaj olaylarında yeniden yükler
+  const { isWsActive } = useWsEventRefresh(projectId, MESSAGE_CENTER_WS_EVENTS, () => {
+    loadMessages();
+    loadUnreadCounts();
+  }, { debounceMs: 500 });
+
+  // Polling — yalnızca WS bağlantısı yoksa çalışır
   useEffect(() => {
+    if (isWsActive) return;
     pollRef.current = setInterval(() => {
       loadMessages();
       loadUnreadCounts();
@@ -650,7 +660,7 @@ export default function MessageCenter({ projectId }: { projectId: string }) {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [loadMessages, loadUnreadCounts]);
+  }, [isWsActive, loadMessages, loadUnreadCounts]);
 
   // Mesaja tıklandığında thread'i yükle ve okundu işaretle
   const handleSelectMessage = useCallback(

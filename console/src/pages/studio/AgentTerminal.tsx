@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -207,18 +208,29 @@ export default function AgentTerminal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, agentId]);
 
-  // Ajan çalışırken durumu 3 saniyede bir güncelle
+  // Ajan durum bilgisini yenile
+  const refreshAgentStatus = useCallback(() => {
+    getAgentStatus(projectId, agentId)
+      .then(setProcessInfo)
+      .catch(() => { /* Polling hatalarını sessizce atla */ });
+  }, [projectId, agentId]);
+
+  const isAgentRunning = processInfo?.status === 'running';
+
+  // WS event-driven refresh — agent:output eventi geldiğinde durum bilgisini güncelle
+  const { isWsActive } = useWsEventRefresh(projectId, ['agent:output'], refreshAgentStatus, {
+    debounceMs: 300,
+    enabled: isAgentRunning,
+  });
+
+  // Ajan çalışırken durumu güncelle — yalnızca WS bağlantısı yokken polling yap
   useEffect(() => {
-    if (!processInfo || processInfo.status !== 'running') return;
+    if (!isAgentRunning) return;
+    if (isWsActive) return; // WS handles it
 
-    const interval = setInterval(() => {
-      getAgentStatus(projectId, agentId)
-        .then(setProcessInfo)
-        .catch(() => { /* Polling hatalarını sessizce atla */ });
-    }, 3000);
-
+    const interval = setInterval(refreshAgentStatus, 3000);
     return () => clearInterval(interval);
-  }, [projectId, agentId, processInfo]);
+  }, [projectId, agentId, isAgentRunning, isWsActive, refreshAgentStatus]);
 
   return (
     <div className="flex flex-col h-full">

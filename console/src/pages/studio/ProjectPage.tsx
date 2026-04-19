@@ -53,6 +53,10 @@ import PipelineDashboard from './PipelineDashboard';
 import PlannerSettingsModal from './PlannerSettingsModal';
 import { useStudioWebSocket } from '../../hooks/useStudioWebSocket';
 import { useNotifications } from '../../hooks/useNotifications';
+import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
+
+const APP_STATUS_WS_EVENTS = ['execution:started', 'pipeline:completed'];
+const UNREAD_COUNT_WS_EVENTS = ['message:created'];
 
 // Secondary tabs — lazy loaded to reduce initial bundle size.
 // These chunks download on first navigation to each tab.
@@ -217,25 +221,54 @@ export default function ProjectPage() {
     }
   }, [previewEnabled, activeTab]);
 
-  // Proje yüklendikten sonra okunmamış sayıları çek ve polling başlat
+  // App status fetch fonksiyonu
+  const refreshAppStatus = useCallback(() => {
+    if (!projectId) return;
+    fetchAppStatus(projectId).then(setAppStatus).catch(() => {});
+  }, [projectId]);
+
+  // WS-driven refresh — execution/pipeline olaylarında app durumunu günceller
+  const { isWsActive: isAppStatusWsActive } = useWsEventRefresh(
+    projectId ?? '',
+    APP_STATUS_WS_EVENTS,
+    refreshAppStatus,
+    { debounceMs: 500, enabled: !!projectId },
+  );
+
+  // WS-driven refresh — yeni mesaj olaylarında okunmamış sayıları günceller
+  const { isWsActive: isUnreadWsActive } = useWsEventRefresh(
+    projectId ?? '',
+    UNREAD_COUNT_WS_EVENTS,
+    refreshUnreadTotal,
+    { debounceMs: 500, enabled: !!projectId },
+  );
+
+  // Proje yüklendikten sonra okunmamış sayıları çek
   useEffect(() => {
     if (!project) return;
     refreshUnreadTotal();
+  }, [project, refreshUnreadTotal]);
+
+  // Unread polling — yalnızca WS bağlantısı yoksa çalışır
+  useEffect(() => {
+    if (!project || isUnreadWsActive) return;
     unreadPollRef.current = setInterval(refreshUnreadTotal, 10000);
     return () => {
       if (unreadPollRef.current) clearInterval(unreadPollRef.current);
     };
-  }, [project, refreshUnreadTotal]);
+  }, [project, isUnreadWsActive, refreshUnreadTotal]);
 
-  // App status polling
+  // App status ilk yükleme
   useEffect(() => {
-    if (!projectId) return;
-    fetchAppStatus(projectId).then(setAppStatus).catch(() => {});
-    const interval = setInterval(() => {
-      fetchAppStatus(projectId).then(setAppStatus).catch(() => {});
-    }, 5000);
+    refreshAppStatus();
+  }, [refreshAppStatus]);
+
+  // App status polling — yalnızca WS bağlantısı yoksa çalışır
+  useEffect(() => {
+    if (isAppStatusWsActive) return;
+    const interval = setInterval(refreshAppStatus, 5000);
     return () => clearInterval(interval);
-  }, [projectId]);
+  }, [isAppStatusWsActive, refreshAppStatus]);
 
   const handleToggleApp = async () => {
     if (!projectId) return;

@@ -15,6 +15,9 @@ import TaskCard from './TaskCard';
 import TaskDetailModal from './TaskDetailModal';
 import TerminalSheet from './TerminalSheet';
 import ModalOverlay from './ModalOverlay';
+import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
+
+const KANBAN_WS_EVENTS = ['task:completed', 'task:failed', 'task:started', 'task:assigned', 'task:retry'];
 
 const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
   { key: 'queued', label: 'Queued', color: 'border-[#525252]' },
@@ -212,17 +215,27 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
       .catch(() => {});
   }, [projectId]);
 
+  // WS-driven refresh — task olaylarında yeniden yükler
+  const { isWsActive } = useWsEventRefresh(projectId, KANBAN_WS_EVENTS, () => {
+    load();
+    loadAutoStartStatus();
+  }, { debounceMs: 500 });
+
+  // İlk yükleme
   useEffect(() => {
     load();
     loadAutoStartStatus();
+  }, [load, loadAutoStartStatus]);
 
+  // Polling — yalnızca WS bağlantısı yoksa çalışır
+  useEffect(() => {
+    if (isWsActive) return;
     const interval = setInterval(() => {
       load();
       loadAutoStartStatus();
     }, 15000);
-
     return () => clearInterval(interval);
-  }, [projectId, load, loadAutoStartStatus]);
+  }, [isWsActive, load, loadAutoStartStatus]);
 
   const handleRetry = async (taskId: string): Promise<void> => {
     // Optimistik guncelleme: task'i queued'a tasiyalim
