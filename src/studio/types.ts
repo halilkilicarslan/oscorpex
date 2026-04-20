@@ -94,7 +94,7 @@ export interface Task {
 	taskType?: TaskType;
 	output?: TaskOutput;
 	retryCount: number;
-	error?: string;
+	error?: string | null;
 	startedAt?: string;
 	completedAt?: string;
 	// v2: review loop fields

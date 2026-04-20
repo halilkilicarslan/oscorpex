@@ -518,7 +518,7 @@ class TaskEngine {
 			output,
 			completedAt: new Date().toISOString(),
 			reviewStatus: "approved",
-			error: null as any,
+			error: null,
 		}))!;
 
 		eventBus.emit({
@@ -641,7 +641,7 @@ class TaskEngine {
 				status: "done",
 				reviewStatus: "approved",
 				completedAt: new Date().toISOString(),
-				error: null as any,
+				error: null,
 			}))!;
 
 			eventBus.emit({
@@ -851,9 +851,9 @@ class TaskEngine {
 					assignedAgentId: fallbackEdge.toAgentId,
 					assignedAgent: fallbackEdge.toAgentId,
 					status: "queued",
-					error: null as any,
+					error: null,
 					retryCount: (task.retryCount ?? 0) + 1,
-				} as any);
+				});
 				this.notifyCompleted(taskId, projectId);
 				return (await getTask(taskId))!;
 			}
@@ -867,8 +867,8 @@ class TaskEngine {
 					assignedAgentId: escalationEdge.toAgentId,
 					assignedAgent: escalationEdge.toAgentId,
 					status: "queued",
-					error: null as any,
-				} as any);
+					error: null,
+				});
 				this.notifyCompleted(taskId, projectId);
 				return (await getTask(taskId))!;
 			}
@@ -924,7 +924,7 @@ class TaskEngine {
 		const updated = (await updateTask(taskId, {
 			status: "queued",
 			retryCount: task.retryCount + 1,
-			error: null as any,
+			error: null,
 		}))!;
 
 		const projectId = await this.getProjectIdForTask(task);
