@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentCliTool } from "./types.js";
+import { eventBus } from "./event-bus.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,6 +42,12 @@ class ProviderStateManager {
 		if (state) {
 			state.rateLimited = true;
 			state.cooldownUntil = new Date(Date.now() + cooldownMs);
+			// Emit provider:degraded event (v7.0 Section 13)
+			eventBus.emit({
+				projectId: "",
+				type: "provider:degraded",
+				payload: { provider: adapter, cooldownMs, reason: "rate_limited" },
+			});
 		}
 	}
 

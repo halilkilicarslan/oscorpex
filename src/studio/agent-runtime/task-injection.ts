@@ -4,7 +4,7 @@
 // Proposals are governed by approval rules.
 // ---------------------------------------------------------------------------
 
-import { autoApproveProposal, createProposal, createTask } from "../db.js";
+import { autoApproveProposal, createProposal, createTask, hasCapability } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import type { ProposalType, Task, TaskProposal } from "../types.js";
 import { canAutoApprove } from "./agent-constraints.js";
@@ -45,6 +45,24 @@ export interface InjectionResult {
  */
 export async function proposeTask(request: InjectionRequest): Promise<InjectionResult> {
 	// Create the proposal record
+	// Capability check (Section 14.3) — non-blocking, defaults allow if no explicit deny
+	const agentRole = request.suggestedRole ?? "tech_lead";
+	const canPropose = await hasCapability(request.projectId, agentRole, "can_propose_task");
+	if (!canPropose) {
+		// Create proposal in rejected state instead of blocking entirely
+		const proposal = await createProposal({
+			projectId: request.projectId,
+			originatingTaskId: request.originatingTaskId,
+			originatingAgentId: request.originatingAgentId,
+			proposalType: request.proposalType,
+			title: request.title,
+			description: request.description,
+			severity: request.severity,
+			suggestedRole: request.suggestedRole,
+		});
+		return { proposal, autoApproved: false };
+	}
+
 	const proposal = await createProposal({
 		projectId: request.projectId,
 		originatingTaskId: request.originatingTaskId,
@@ -80,7 +98,7 @@ export async function proposeTask(request: InjectionRequest): Promise<InjectionR
 
 		eventBus.emit({
 			projectId: request.projectId,
-			type: "task:injected" as any,
+			type: "task:proposal_approved",
 			agentId: request.originatingAgentId,
 			taskId: task.id,
 			payload: {
@@ -98,7 +116,7 @@ export async function proposeTask(request: InjectionRequest): Promise<InjectionR
 	// Requires human approval — emit event for UI notification
 	eventBus.emit({
 		projectId: request.projectId,
-		type: "task:proposal_pending" as any,
+		type: "task:proposal_created",
 		agentId: request.originatingAgentId,
 		payload: {
 			proposalId: proposal.id,

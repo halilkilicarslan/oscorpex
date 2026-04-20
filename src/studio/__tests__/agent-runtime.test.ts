@@ -57,6 +57,7 @@ vi.mock("../db.js", () => ({
 	})),
 	getApprovalRule: vi.fn().mockResolvedValue(null),
 	requiresApproval: vi.fn().mockResolvedValue(false),
+	hasCapability: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock("../event-bus.js", () => ({

@@ -8,6 +8,7 @@ import { existsSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join, isAbsolute } from "node:path";
 import { execute } from "./pg.js";
+import { eventBus } from "./event-bus.js";
 import type { TaskOutput } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -146,5 +147,18 @@ export async function verifyTaskOutput(
 	}
 
 	const allPassed = results.every((r) => r.passed);
+
+	// Emit verification event (v7.0 Section 13)
+	eventBus.emit({
+		projectId: "",
+		type: allPassed ? "verification:passed" : "verification:failed",
+		taskId,
+		payload: {
+			allPassed,
+			checks: results.length,
+			failed: results.filter((r) => !r.passed).map((r) => r.type),
+		},
+	});
+
 	return { taskId, allPassed, results };
 }

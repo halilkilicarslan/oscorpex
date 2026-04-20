@@ -58,10 +58,10 @@ export async function signalBlocker(
 	});
 	eventBus.emit({
 		projectId,
-		type: "agent:error" as any,
+		type: "agent:requested_help",
 		agentId: fromAgentId,
 		taskId: relatedTaskId,
-		payload: { error: `Blocker: ${description}` },
+		payload: { description, messageType: "blocker_alert" },
 	});
 	return msg;
 }

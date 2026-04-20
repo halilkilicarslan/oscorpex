@@ -73,6 +73,26 @@ export async function initSession(
 	const behavioralCtx = await loadBehavioralContext(projectId, agentId, agentRole, task.taskType ?? "ai");
 	const behavioralPrompt = formatBehavioralPrompt(behavioralCtx);
 
+	// Emit structured agentic events (v7.0 Section 13)
+	eventBus.emit({
+		projectId,
+		type: "agent:session_started",
+		agentId,
+		taskId: task.id,
+		payload: { sessionId: session.id, strategy: strategySelection.strategy.name },
+	});
+	eventBus.emit({
+		projectId,
+		type: "agent:strategy_selected",
+		agentId,
+		taskId: task.id,
+		payload: {
+			strategy: strategySelection.strategy.name,
+			confidence: strategySelection.confidence,
+			reason: strategySelection.reason,
+		},
+	});
+
 	eventBus.emitTransient({
 		projectId,
 		type: "agent:output",

@@ -72,7 +72,7 @@ export async function enforceBudgetGuard(projectId: string): Promise<boolean> {
 
 	eventBus.emit({
 		projectId,
-		type: "pipeline:budget_exceeded" as any,
+		type: "budget:halted",
 		payload: {
 			totalSpentUsd: check.totalSpentUsd,
 			budgetMaxUsd: check.budgetMaxUsd,

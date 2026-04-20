@@ -70,7 +70,7 @@ export async function insertNode(
 
 	eventBus.emit({
 		projectId: ctx.projectId,
-		type: "pipeline:graph_mutated" as any,
+		type: "graph:mutation_applied",
 		agentId: ctx.causedByAgentId,
 		payload: { mutationType: "insert_node", taskId: task.id, title: params.title },
 	});
@@ -127,7 +127,7 @@ export async function splitTask(
 
 	eventBus.emit({
 		projectId: ctx.projectId,
-		type: "pipeline:graph_mutated" as any,
+		type: "graph:mutation_applied",
 		agentId: ctx.causedByAgentId,
 		payload: { mutationType: "split_task", parentTaskId: params.parentTaskId, childIds },
 	});
@@ -215,7 +215,7 @@ export async function deferBranch(
 
 	eventBus.emit({
 		projectId: ctx.projectId,
-		type: "pipeline:graph_mutated" as any,
+		type: "graph:mutation_applied",
 		agentId: ctx.causedByAgentId,
 		payload: { mutationType: "defer_branch", phaseId: params.phaseId, deferredCount: deferredIds.length },
 	});
@@ -261,7 +261,7 @@ export async function mergeIntoPhase(
 
 	eventBus.emit({
 		projectId: ctx.projectId,
-		type: "pipeline:graph_mutated" as any,
+		type: "graph:mutation_applied",
 		agentId: ctx.causedByAgentId,
 		payload: { mutationType: "merge_into_phase", targetPhaseId: params.targetPhaseId, taskCount: createdIds.length },
 	});

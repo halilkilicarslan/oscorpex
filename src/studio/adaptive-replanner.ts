@@ -281,7 +281,7 @@ export async function evaluateReplan(ctx: ReplanContext): Promise<ReplanResult |
 
 	eventBus.emit({
 		projectId: ctx.projectId,
-		type: "pipeline:replanned" as any,
+		type: "plan:replanned",
 		payload: {
 			trigger: ctx.trigger,
 			patchCount: patches.length,
