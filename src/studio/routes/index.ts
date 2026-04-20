@@ -153,6 +153,20 @@ const ALL_PLUGIN_EVENTS: EventType[] = [
 	"policy:violation",
 	"lifecycle:transition",
 	"message:created",
+	// v7.0: agentic platform events
+	"agent:session_started",
+	"agent:strategy_selected",
+	"agent:requested_help",
+	"agent:memory_written",
+	"task:proposal_created",
+	"task:proposal_approved",
+	"graph:mutation_proposed",
+	"graph:mutation_applied",
+	"plan:replanned",
+	"verification:passed",
+	"verification:failed",
+	"budget:halted",
+	"provider:degraded",
 ];
 
 for (const eventType of ALL_PLUGIN_EVENTS) {

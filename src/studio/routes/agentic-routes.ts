@@ -20,11 +20,17 @@ import {
 	rejectProposal,
 	listApprovalRules,
 	createApprovalRule,
+	upsertCapabilityGrant,
+	getCapabilityGrants,
+	hasCapability,
+	deleteCapabilityGrant,
+	getDefaultGrantsForRole,
 } from "../db.js";
 import { proposeTask } from "../agent-runtime/task-injection.js";
 import { classifyRisk, canAutoApprove } from "../agent-runtime/agent-constraints.js";
 import { loadBehavioralContext, formatBehavioralPrompt } from "../agent-runtime/agent-memory.js";
 import { BUILTIN_STRATEGIES } from "../agent-runtime/agent-strategy.js";
+import { getAgenticMetrics } from "../agentic-metrics.js";
 
 export const agenticRoutes = new Hono();
 
@@ -261,6 +267,79 @@ agenticRoutes.post("/projects/:projectId/approval-rules", async (c) => {
 			description: body.description,
 		});
 		return c.json(rule, 201);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Capability Grants (Section 14.3)
+// ---------------------------------------------------------------------------
+
+agenticRoutes.get("/projects/:projectId/capability-grants", async (c) => {
+	try {
+		const agentRole = c.req.query("agentRole");
+		const grants = await getCapabilityGrants(c.req.param("projectId"), agentRole);
+		return c.json(grants);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.get("/projects/:projectId/capability-grants/:agentRole/check/:capability", async (c) => {
+	try {
+		const { projectId, agentRole, capability } = c.req.param();
+		const granted = await hasCapability(projectId, agentRole, capability as any);
+		return c.json({ capability, agentRole, granted });
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.get("/capability-grants/defaults/:agentRole", async (c) => {
+	try {
+		const defaults = getDefaultGrantsForRole(c.req.param("agentRole"));
+		return c.json({ agentRole: c.req.param("agentRole"), defaults });
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.put("/projects/:projectId/capability-grants", async (c) => {
+	try {
+		const body = await c.req.json();
+		const grant = await upsertCapabilityGrant({
+			projectId: c.req.param("projectId"),
+			agentRole: body.agentRole,
+			capability: body.capability,
+			granted: body.granted ?? true,
+			grantedBy: body.grantedBy ?? "human",
+		});
+		return c.json(grant);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.delete("/projects/:projectId/capability-grants/:agentRole/:capability", async (c) => {
+	try {
+		const { projectId, agentRole, capability } = c.req.param();
+		const deleted = await deleteCapabilityGrant(projectId, agentRole, capability as any);
+		if (!deleted) return c.json({ error: "Grant not found" }, 404);
+		return c.json({ deleted: true });
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Observability Metrics (Section 18)
+// ---------------------------------------------------------------------------
+
+agenticRoutes.get("/projects/:projectId/agentic-metrics", async (c) => {
+	try {
+		const metrics = await getAgenticMetrics(c.req.param("projectId"));
+		return c.json(metrics);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
 	}

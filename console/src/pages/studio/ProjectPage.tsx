@@ -25,6 +25,7 @@ import {
   CalendarDays,
   Users2,
   FileBarChart,
+  Cpu,
 } from 'lucide-react';
 import {
   fetchProject,
@@ -72,6 +73,7 @@ const BacklogBoard   = lazy(() => import('./BacklogBoard'));
 const SprintBoard    = lazy(() => import('./SprintBoard'));
 const CeremonyPanel  = lazy(() => import('./CeremonyPanel'));
 const ProjectReport  = lazy(() => import('./ProjectReport'));
+const AgenticPanel   = lazy(() => import('./AgenticPanel'));
 
 // Inline fallback for tab panels — matches the page's dark theme
 function TabLoader() {
@@ -86,7 +88,7 @@ function TabLoader() {
 type BoardView = 'kanban' | 'pipeline';
 
 // Sekme türü tanımı — settings sekmesi eklendi
-type Tab = 'chat' | 'team' | 'board' | 'preview' | 'files' | 'events' | 'messages' | 'dashboard' | 'logs' | 'diff' | 'settings' | 'backlog' | 'sprint' | 'ceremonies' | 'report';
+type Tab = 'chat' | 'team' | 'board' | 'preview' | 'files' | 'events' | 'messages' | 'dashboard' | 'logs' | 'diff' | 'settings' | 'backlog' | 'sprint' | 'ceremonies' | 'report' | 'agentic';
 
 // Sabit sekme listesi (messages badge'i dinamik olarak eklenir)
 const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -105,6 +107,7 @@ const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'sprint', label: 'Sprint', icon: <CalendarDays size={16} /> },
   { id: 'ceremonies', label: 'Ceremonies', icon: <Users2 size={16} /> },
   { id: 'report', label: 'Report', icon: <FileBarChart size={16} /> },
+  { id: 'agentic', label: 'Agentic', icon: <Cpu size={16} /> },
 ];
 
 export default function ProjectPage() {
@@ -564,6 +567,11 @@ export default function ProjectPage() {
         {activeTab === 'report' && (
           <Suspense fallback={<TabLoader />}>
             <ProjectReport projectId={project.id} />
+          </Suspense>
+        )}
+        {activeTab === 'agentic' && (
+          <Suspense fallback={<TabLoader />}>
+            <AgenticPanel projectId={project.id} />
           </Suspense>
         )}
       </div>

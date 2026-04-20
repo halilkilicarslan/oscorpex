@@ -1619,6 +1619,20 @@ CREATE TABLE IF NOT EXISTS sandbox_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_project ON sandbox_sessions(project_id);
 
+-- 3.6 Agent capability grants — explicit token-based permissions per role
+CREATE TABLE IF NOT EXISTS agent_capability_grants (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  agent_role    TEXT NOT NULL,
+  capability    TEXT NOT NULL,
+  granted       BOOLEAN NOT NULL DEFAULT true,
+  granted_by    TEXT NOT NULL DEFAULT 'system',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (project_id, agent_role, capability)
+);
+CREATE INDEX IF NOT EXISTS idx_capability_grants_project ON agent_capability_grants(project_id);
+CREATE INDEX IF NOT EXISTS idx_capability_grants_role ON agent_capability_grants(project_id, agent_role);
+
 -- 3.5 Learning patterns — cross-project reusable patterns
 CREATE TABLE IF NOT EXISTS learning_patterns (
   id                TEXT PRIMARY KEY,

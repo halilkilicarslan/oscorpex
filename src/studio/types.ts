@@ -215,7 +215,21 @@ export type EventType =
 	| "ceremony:retrospective"
 	| "policy:violation"
 	| "lifecycle:transition"
-	| "message:created";
+	| "message:created"
+	// v7.0: agentic platform events
+	| "agent:session_started"
+	| "agent:strategy_selected"
+	| "agent:requested_help"
+	| "agent:memory_written"
+	| "task:proposal_created"
+	| "task:proposal_approved"
+	| "graph:mutation_proposed"
+	| "graph:mutation_applied"
+	| "plan:replanned"
+	| "verification:passed"
+	| "verification:failed"
+	| "budget:halted"
+	| "provider:degraded";
 
 export interface StudioEvent {
 	id: string;
@@ -548,6 +562,28 @@ export interface AgentCapability {
 	scopeType: CapabilityScopeType;
 	pattern: string;
 	permission: CapabilityPermission;
+}
+
+// ---- Agent Capability Grants (v7.0 Section 14.3) ---------------------------
+
+export type CapabilityToken =
+	| "can_propose_task"
+	| "can_inject_task_low_risk"
+	| "can_request_replan"
+	| "can_modify_graph_same_phase"
+	| "can_trigger_tests"
+	| "can_request_human_review"
+	| "can_commit_code"
+	| "can_open_deploy_request";
+
+export interface CapabilityGrant {
+	id: string;
+	projectId: string;
+	agentRole: string;
+	capability: CapabilityToken;
+	granted: boolean;
+	grantedBy: string;
+	createdAt: string;
 }
 
 // ---- Work Items (v3.2 Backlog) ---------------------------------------------

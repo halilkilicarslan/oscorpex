@@ -1,8 +1,47 @@
 # Oscorpex — Status
 
-## Current: V6 Roadmap Complete (2026-04-20)
+## Current: v7.0 Agentic Refactor — ALL 3 PHASES COMPLETE (2026-04-20)
 
-All V6 milestones delivered. Backend 921/921, Frontend 514/514, typecheck clean.
+Master Plan fully executed. 18 workstreams across 3 phases. 50 dedicated unit tests + 40 API endpoints added.
+971/971 tests, typecheck clean.
+Master Plan: `.planning/Oscorpex_Agentic_Refactor_Master_Plan.md`.
+Architecture Analysis: `.planning/ARCHITECTURE_ANALYSIS.md`.
+
+**Phase 1 Stabilization** (`fb906a2`): 7 workstreams (A–G), 15 files, +2891 lines.
+- A: Pipeline State Consistency — DB-authoritative mutatePipelineState() (SELECT FOR UPDATE + version)
+- B: Distributed Task Dispatch — claimTask() SKIP LOCKED, releaseTaskClaim(), worker ID
+- C: Output Verification Gate — output-verifier.ts (files_exist, files_modified, output_non_empty)
+- D: Test Gate — test-gate.ts (required/optional/skip policy, auto-detect vitest/jest)
+- E: RLS Enablement — 14 tables enabled, setTenantContext() in auth middleware
+- F: Cost Circuit Breaker — budget-guard.ts (auto-pause on budget breach)
+- G: Graceful Provider Failure — isAllExhausted() + deferred retry instead of fail
+
+**Phase 2 Agentic Core** (`bded3d2`): 6 workstreams (H–M), 18 files, +1807 lines.
+- H: Episodic Memory — episode-repo.ts + agent-memory.ts (behavioral context for prompt injection)
+- I: Strategy-Based Agents — strategy-repo.ts + agent-strategy.ts (9 builtin strategies, pattern-derived selection)
+- J: Observation-Action Loop — session-repo.ts + agent-session.ts (bounded lifecycle, strategy init + memory)
+- K: Dynamic Task Injection — proposal-repo.ts + task-injection.ts (runtime proposals, auto-approve low-risk)
+- L: Structured Inter-Agent Protocol — protocol-repo.ts + agent-protocol.ts (request_info, blocker_alert, handoff, decision)
+- M: Governance Upgrade — approval-repo.ts + agent-constraints.ts (risk classification, approval rules)
+
+**Phase 3 Dynamic Platform** (`4d23268`): 5 workstreams (N–R), 11 files, +1516 lines.
+- N: Dynamic Coordination Graph — graph-mutation-repo.ts + graph-coordinator.ts (insert/split/edge/defer/merge, audit trail)
+- O: Adaptive Replanning — adaptive-replanner.ts (phase-boundary triggers, plan patches, auto/approval)
+- P: Goal-Based Execution — goal-engine.ts (goals with constraints + success criteria, prompt injection)
+- Q: Sandbox & Capability Isolation — sandbox-manager.ts (policies, sessions, violation tracking)
+- R: Cross-Project Learning — cross-project-learning.ts (anonymized pattern extraction, tenant→global promotion)
+
+**Phase 2+3 Unit Tests** (`2dfb8a1`): 50 tests total.
+- `agent-runtime.test.ts`: 26 tests — Memory (3), Strategy (3), Session (4), Protocol (7), Constraints (6), Injection (3)
+- `phase3-modules.test.ts`: 24 tests — Graph (6), Goals (4), Sandbox (6), Replanner (3), Learning (2), Policy Resolution (3)
+
+**Phase 2+3 API Routes** (`d3e3eea`): 3 route files, ~40 endpoints.
+- `agentic-routes.ts`: Sessions, Episodes, Strategies, Protocol, Proposals, Risk, Approval Rules
+- `graph-routes.ts`: Graph Mutations, Goals, Replanning, Cross-Project Learning
+- `sandbox-routes.ts`: Sandbox Policies, Session Violations
+- All registered in `routes/index.ts`
+
+Previous: V6 Roadmap Complete. All V6 milestones delivered. Backend 921/921, Frontend 514/514.
 Roadmap: `.planning/V6_ROADMAP.md`. Completion report: `.planning/V6_COMPLETION_REPORT.md`.
 
 ### Session 2026-04-15 — v3.0 B1+B2+B3 + v3.1 + v3.2 + v3.3 + v3.4 + v3.5 + v3.6 + v3.7 + v3.8 + v3.9

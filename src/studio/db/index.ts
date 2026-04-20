@@ -56,6 +56,8 @@ export * from "./approval-repo.js";
 
 // v7.0 Phase 3: Dynamic Agentic Platform
 export * from "./graph-mutation-repo.js";
+// v7.0 Section 14.3: Capability Grants
+export * from "./capability-grant-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";
