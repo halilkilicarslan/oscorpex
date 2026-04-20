@@ -1428,3 +1428,119 @@ DO $$ BEGIN
       USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- v7.0 Phase 2: Agentic Core — Agent Runtime Tables
+-- ---------------------------------------------------------------------------
+
+-- 2.1 Agent sessions — bounded runtime execution context
+CREATE TABLE IF NOT EXISTS agent_sessions (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  agent_id          TEXT NOT NULL,
+  task_id           TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  strategy          TEXT,
+  status            TEXT NOT NULL DEFAULT 'active',
+  steps_completed   INTEGER NOT NULL DEFAULT 0,
+  max_steps         INTEGER NOT NULL DEFAULT 10,
+  observations      JSONB DEFAULT '[]',
+  started_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at      TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_project ON agent_sessions(project_id);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_task ON agent_sessions(task_id);
+
+-- 2.2 Episodic memory — per-agent execution episodes for behavioral learning
+CREATE TABLE IF NOT EXISTS agent_episodes (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  agent_id          TEXT NOT NULL,
+  task_id           TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  task_type         TEXT NOT NULL,
+  strategy          TEXT NOT NULL,
+  action_summary    TEXT NOT NULL,
+  outcome           TEXT NOT NULL,
+  failure_reason    TEXT,
+  quality_score     REAL,
+  cost_usd          REAL,
+  duration_ms       INTEGER,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_agent_episodes_agent ON agent_episodes(project_id, agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_episodes_type ON agent_episodes(task_type, outcome);
+
+-- 2.3 Strategy patterns — aggregated success rates derived from episodes
+CREATE TABLE IF NOT EXISTS agent_strategy_patterns (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  agent_role        TEXT NOT NULL,
+  task_type         TEXT NOT NULL,
+  strategy          TEXT NOT NULL,
+  success_rate      REAL NOT NULL DEFAULT 0,
+  avg_cost_usd      REAL,
+  avg_quality       REAL,
+  sample_count      INTEGER NOT NULL DEFAULT 0,
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (project_id, agent_role, task_type, strategy)
+);
+CREATE INDEX IF NOT EXISTS idx_strategy_patterns_lookup ON agent_strategy_patterns(project_id, agent_role, task_type);
+
+-- 2.4 Agent strategies catalog — per-role strategy definitions
+CREATE TABLE IF NOT EXISTS agent_strategies (
+  id                TEXT PRIMARY KEY,
+  agent_role        TEXT NOT NULL,
+  name              TEXT NOT NULL,
+  description       TEXT NOT NULL,
+  prompt_addendum   TEXT,
+  allowed_task_types TEXT[] NOT NULL DEFAULT '{}',
+  is_default        BOOLEAN NOT NULL DEFAULT false,
+  UNIQUE (agent_role, name)
+);
+
+-- 2.5 Task proposals — runtime task injection by agents
+CREATE TABLE IF NOT EXISTS task_proposals (
+  id                   TEXT PRIMARY KEY,
+  project_id           TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  originating_task_id  TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  originating_agent_id TEXT NOT NULL,
+  proposal_type        TEXT NOT NULL,
+  title                TEXT NOT NULL,
+  description          TEXT NOT NULL,
+  severity             TEXT,
+  suggested_role       TEXT,
+  status               TEXT NOT NULL DEFAULT 'pending',
+  approved_by          TEXT,
+  rejected_reason      TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_task_proposals_project ON task_proposals(project_id, status);
+
+-- 2.6 Structured inter-agent protocol messages
+CREATE TABLE IF NOT EXISTS agent_protocol_messages (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  from_agent_id     TEXT NOT NULL,
+  to_agent_id       TEXT,
+  related_task_id   TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  message_type      TEXT NOT NULL,
+  payload           JSONB NOT NULL DEFAULT '{}',
+  status            TEXT NOT NULL DEFAULT 'unread',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_protocol_messages_project ON agent_protocol_messages(project_id);
+CREATE INDEX IF NOT EXISTS idx_protocol_messages_to ON agent_protocol_messages(to_agent_id, status);
+
+-- 2.7 Approval matrix — risk-based governance rules
+CREATE TABLE IF NOT EXISTS approval_rules (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  action_type       TEXT NOT NULL,
+  risk_level        TEXT NOT NULL DEFAULT 'low',
+  requires_approval BOOLEAN NOT NULL DEFAULT false,
+  auto_approve      BOOLEAN NOT NULL DEFAULT false,
+  max_per_run       INTEGER,
+  description       TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (project_id, action_type, risk_level)
+);

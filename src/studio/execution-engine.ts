@@ -37,6 +37,14 @@ import {
 import { updateDocsAfterTask } from "./docs-generator.js";
 import { eventBus } from "./event-bus.js";
 import { runLintFix } from "./lint-runner.js";
+import {
+	acknowledgeMessages,
+	completeSession,
+	failSession,
+	initSession,
+	loadProtocolContext,
+	recordStep,
+} from "./agent-runtime/index.js";
 import { resolveModel } from "./model-router.js";
 import { verifyTaskOutput } from "./output-verifier.js";
 import { runTestGate } from "./test-gate.js";
@@ -580,7 +588,30 @@ class ExecutionEngine {
 			// status === "running" → already started (e.g. revision restart), skip both
 		}
 
-		const prompt = await this.buildTaskPrompt(task, project, agent.role);
+		// --- Agent Runtime: init session + behavioral memory + protocol ---
+		let sessionId: string | undefined;
+		let promptSuffix = "";
+		try {
+			const sessionCtx = await initSession(projectId, agent.id, agent.role, task);
+			sessionId = sessionCtx.session.id;
+			promptSuffix += sessionCtx.behavioralPrompt;
+
+			// Strategy prompt addendum
+			if (sessionCtx.strategySelection.strategy.promptAddendum) {
+				promptSuffix += `\n\n## EXECUTION STRATEGY: ${sessionCtx.strategySelection.strategy.name}\n${sessionCtx.strategySelection.strategy.promptAddendum}\n`;
+			}
+
+			// Load inter-agent protocol messages
+			const protocolCtx = await loadProtocolContext(projectId, agent.id);
+			if (protocolCtx.prompt) {
+				promptSuffix += protocolCtx.prompt;
+				await acknowledgeMessages(protocolCtx.messageIds);
+			}
+		} catch (err) {
+			console.warn("[execution-engine] Agent runtime init failed (non-blocking):", err);
+		}
+
+		const prompt = await this.buildTaskPrompt(task, project, agent.role) + promptSuffix;
 
 		// Complexity ve proje timeout_multiplier ayarına göre efektif timeout hesapla
 		const timeoutMs = await resolveTaskTimeoutMs(projectId, task.complexity, agent.taskTimeout);
@@ -845,6 +876,13 @@ class ExecutionEngine {
 
 			await taskEngine.completeTask(task.id, output);
 
+			// --- Agent Runtime: record successful session ---
+			if (sessionId) {
+				completeSession(sessionId, projectId, agent.id, agent.role, task, {
+					costUsd: cliResult?.totalCostUsd,
+				}).catch((e) => console.warn("[execution-engine] Session complete failed:", e));
+			}
+
 			// Review task dispatch: task-engine creates a review task which
 			// will be picked up by dispatchReadyTasks below.
 		} catch (err) {
@@ -914,6 +952,13 @@ class ExecutionEngine {
 			}
 
 			await taskEngine.failTask(task.id, errorMsg);
+
+			// --- Agent Runtime: record failed session ---
+			if (sessionId) {
+				failSession(sessionId, projectId, agent.id, agent.role, task, errorMsg).catch((e) =>
+					console.warn("[execution-engine] Session fail record failed:", e),
+				);
+			}
 
 			// --- Self-healing: auto-retry with error context ---
 			const MAX_AUTO_RETRIES = 2;

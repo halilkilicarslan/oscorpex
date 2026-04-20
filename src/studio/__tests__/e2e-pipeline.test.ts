@@ -50,8 +50,30 @@ vi.mock("../agent-runtime.js", () => ({
 		markVirtualStopped: vi.fn(),
 	},
 }));
+vi.mock("../agent-runtime/index.js", () => ({
+	initSession: vi.fn().mockResolvedValue({
+		session: { id: "mock-session" },
+		strategySelection: { strategy: { name: "scaffold_then_refine", promptAddendum: "" }, reason: "mock", confidence: 0.5 },
+		behavioralPrompt: "",
+	}),
+	completeSession: vi.fn().mockResolvedValue(undefined),
+	failSession: vi.fn().mockResolvedValue(undefined),
+	loadProtocolContext: vi.fn().mockResolvedValue({ prompt: "", messageIds: [], hasBlockers: false }),
+	acknowledgeMessages: vi.fn().mockResolvedValue(undefined),
+	recordStep: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("../agent-log-store.js", () => ({
 	persistAgentLog: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../output-verifier.js", () => ({
+	verifyTaskOutput: vi.fn().mockResolvedValue({ taskId: "mock", allPassed: true, results: [] }),
+}));
+vi.mock("../test-gate.js", () => ({
+	runTestGate: vi.fn().mockResolvedValue({ policy: "skip", passed: true, summary: "skipped" }),
+}));
+vi.mock("../budget-guard.js", () => ({
+	enforceBudgetGuard: vi.fn().mockResolvedValue(undefined),
+	checkBudget: vi.fn().mockResolvedValue({ totalCost: 0, budgetLimit: 100, exceeded: false }),
 }));
 vi.mock("../lint-runner.js", () => ({
 	runLintFix: vi.fn().mockResolvedValue({ eslint: { errors: [] }, prettier: { errors: [] } }),

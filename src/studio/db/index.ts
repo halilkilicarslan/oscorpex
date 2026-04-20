@@ -46,5 +46,13 @@ export * from "./job-repo.js";
 // V6 M6 F6: Agent Marketplace
 export * from "./marketplace-repo.js";
 
+// v7.0 Phase 2: Agentic Core
+export * from "./episode-repo.js";
+export * from "./session-repo.js";
+export * from "./strategy-repo.js";
+export * from "./proposal-repo.js";
+export * from "./protocol-repo.js";
+export * from "./approval-repo.js";
+
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";
