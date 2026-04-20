@@ -1307,3 +1307,124 @@ CREATE TABLE IF NOT EXISTS marketplace_items (
 CREATE INDEX IF NOT EXISTS idx_marketplace_type      ON marketplace_items(type);
 CREATE INDEX IF NOT EXISTS idx_marketplace_category  ON marketplace_items(category);
 CREATE INDEX IF NOT EXISTS idx_marketplace_downloads ON marketplace_items(downloads DESC);
+
+-- ---------------------------------------------------------------------------
+-- v7.0 Phase 1: Stabilization & Production Hardening
+-- ---------------------------------------------------------------------------
+
+-- 1.1 Pipeline state consistency — version column for optimistic locking
+ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+
+-- 1.2 Distributed task dispatch — claim fields
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS claimed_by TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS dispatch_attempts INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_tasks_claim ON tasks(status, claimed_by) WHERE status = 'queued';
+
+-- 1.3 Output verification results
+CREATE TABLE IF NOT EXISTS verification_results (
+  id                TEXT PRIMARY KEY,
+  task_id           TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  verification_type TEXT NOT NULL,
+  status            TEXT NOT NULL,
+  details           JSONB DEFAULT '{}',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_verification_task ON verification_results(task_id);
+
+-- 1.5 Cost circuit breaker — project-level budget settings (uses existing project_settings)
+-- No new table needed; budget_max_usd stored in project_settings category='budget'
+
+-- 1.6 RLS enablement for tenant-scoped tables
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_id TEXT;
+
+-- Enable RLS on core tenant-scoped tables
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE phases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_agents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_dependencies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pipeline_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE token_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE work_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sprints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies: allow access when tenant matches OR when no tenant context set (backward compat)
+DO $$ BEGIN
+  -- projects
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_projects') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_projects ON projects
+      USING (tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true))';
+  END IF;
+  -- project_plans (via project join)
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_project_plans') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_project_plans ON project_plans
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- tasks (via phase → plan → project)
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_tasks') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_tasks ON tasks
+      USING (project_id IS NULL OR project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- phases
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_phases') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_phases ON phases
+      USING (plan_id IN (SELECT id FROM project_plans WHERE project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true))))';
+  END IF;
+  -- events
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_events') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_events ON events
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- project_agents
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_project_agents') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_project_agents ON project_agents
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- agent_dependencies
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_agent_deps') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_agent_deps ON agent_dependencies
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- pipeline_runs
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_pipeline_runs') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_pipeline_runs ON pipeline_runs
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- token_usage
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_token_usage') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_token_usage ON token_usage
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- work_items
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_work_items') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_work_items ON work_items
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- sprints
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_sprints') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_sprints ON sprints
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- notifications
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_notifications') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_notifications ON notifications
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- agent_messages
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_agent_messages') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_agent_messages ON agent_messages
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+  -- chat_messages
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_chat_messages') THEN
+    EXECUTE 'CREATE POLICY tenant_isolation_chat_messages ON chat_messages
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+  END IF;
+END $$;

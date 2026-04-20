@@ -23,6 +23,7 @@ import {
 	listAgentDependencies,
 	listPhases,
 	listProjectAgents,
+	mutatePipelineState,
 	updatePipelineRun,
 	updateTask,
 } from "./db.js";
@@ -45,9 +46,11 @@ import type {
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
-// Bellek içi durum haritası (projectId → PipelineState)
+// Read-through cache (projectId → PipelineState)
+// This is a PERFORMANCE CACHE ONLY. DB is the single source of truth.
+// Cache is invalidated after every mutation via mutatePipelineState().
 // ---------------------------------------------------------------------------
-const _states = new Map<string, PipelineState>();
+const _cache = new Map<string, PipelineState>();
 
 // ---------------------------------------------------------------------------
 // Yardımcı fonksiyonlar
@@ -57,6 +60,19 @@ function now(): string {
 	return new Date().toISOString();
 }
 
+/** Convert PipelineRun (DB row) to PipelineState (runtime model) */
+function runToState(run: { projectId: string; stagesJson: string; currentStage: number; status: PipelineStatus; startedAt?: string; completedAt?: string }): PipelineState {
+	return {
+		projectId: run.projectId,
+		stages: JSON.parse(run.stagesJson) as PipelineStage[],
+		currentStage: run.currentStage,
+		status: run.status,
+		startedAt: run.startedAt,
+		completedAt: run.completedAt,
+	};
+}
+
+/** Persist state to DB and update cache. Used for simple non-locked writes. */
 async function persistState(state: PipelineState): Promise<void> {
 	await updatePipelineRun(state.projectId, {
 		currentStage: state.currentStage,
@@ -65,19 +81,28 @@ async function persistState(state: PipelineState): Promise<void> {
 		startedAt: state.startedAt,
 		completedAt: state.completedAt,
 	});
+	_cache.set(state.projectId, state);
 }
 
-async function hydrateState(projectId: string): Promise<PipelineState | null> {
+/** Load state from DB (single source of truth). Updates cache. */
+async function loadState(projectId: string): Promise<PipelineState | null> {
 	const run = await getPipelineRun(projectId);
 	if (!run) return null;
-	return {
-		projectId,
-		stages: JSON.parse(run.stagesJson) as PipelineStage[],
-		currentStage: run.currentStage,
-		status: run.status,
-		startedAt: run.startedAt,
-		completedAt: run.completedAt,
-	};
+	const state = runToState(run);
+	_cache.set(projectId, state);
+	return state;
+}
+
+/** Invalidate cache for a project — forces next read from DB */
+function invalidateCache(projectId: string): void {
+	_cache.delete(projectId);
+}
+
+/** Get state: cache first, then DB. Never trust cache for mutations. */
+async function getState(projectId: string): Promise<PipelineState | null> {
+	const cached = _cache.get(projectId);
+	if (cached) return cached;
+	return loadState(projectId);
 }
 
 // ---------------------------------------------------------------------------
@@ -416,6 +441,7 @@ class PipelineEngine {
 		state.status = "running";
 		state.startedAt = now();
 
+		// DB-first: create pipeline run in DB, then populate cache
 		await createPipelineRun({
 			projectId,
 			status: "running",
@@ -427,7 +453,8 @@ class PipelineEngine {
 			startedAt: state.startedAt,
 		});
 
-		_states.set(projectId, state);
+		// Refresh cache from DB to ensure consistency
+		await loadState(projectId);
 
 		if (state.stages.length > 0) {
 			await this.startStage(projectId, 0);
@@ -435,7 +462,7 @@ class PipelineEngine {
 			await this.markCompleted(projectId);
 		}
 
-		return _states.get(projectId)!;
+		return (await getState(projectId))!;
 	}
 
 	// -------------------------------------------------------------------------
@@ -443,18 +470,27 @@ class PipelineEngine {
 	// -------------------------------------------------------------------------
 
 	private async startStage(projectId: string, stageIndex: number): Promise<void> {
-		const state = _states.get(projectId);
-		if (!state) return;
+		// DB-first: mutate via locked transaction
+		const run = await mutatePipelineState(projectId, async (run) => {
+			const stages = JSON.parse(run.stagesJson) as PipelineStage[];
+			if (stageIndex >= stages.length) return {};
+			stages[stageIndex].status = "running";
+			return {
+				currentStage: stageIndex,
+				stagesJson: JSON.stringify(stages),
+			};
+		});
+		invalidateCache(projectId);
+
+		const state = runToState(run);
+		_cache.set(projectId, state);
+
 		if (stageIndex >= state.stages.length) {
 			await this.markCompleted(projectId);
 			return;
 		}
 
 		const stage = state.stages[stageIndex];
-		stage.status = "running";
-		state.currentStage = stageIndex;
-
-		await persistState(state);
 
 		// Phase başlarken otomatik git branch oluştur — pipeline'ı bloklamaz
 		this.createPhaseBranch(projectId, stageIndex, stage).catch((err) =>
@@ -513,14 +549,20 @@ class PipelineEngine {
 	}
 
 	private async completeStage(projectId: string, stageIndex: number): Promise<void> {
-		const state = _states.get(projectId);
-		if (!state) return;
+		// DB-first: mark stage completed via locked transaction
+		const run = await mutatePipelineState(projectId, async (dbRun) => {
+			const stages = JSON.parse(dbRun.stagesJson) as PipelineStage[];
+			if (!stages[stageIndex]) return {};
+			stages[stageIndex].status = "completed";
+			return { stagesJson: JSON.stringify(stages) };
+		});
+		invalidateCache(projectId);
+
+		const state = runToState(run);
+		_cache.set(projectId, state);
 
 		const stage = state.stages[stageIndex];
 		if (!stage) return;
-
-		stage.status = "completed";
-		await persistState(state);
 
 		// Phase tamamlanınca branch'i main'e merge et — pipeline'ı bloklamaz
 		this.mergePhaseBranchToMain(projectId, stageIndex, stage).catch((err) =>
@@ -592,12 +634,14 @@ class PipelineEngine {
 	}
 
 	private async markCompleted(projectId: string): Promise<void> {
-		const state = _states.get(projectId);
+		const completedAt = now();
+		await mutatePipelineState(projectId, async () => ({
+			status: "completed" as PipelineStatus,
+			completedAt,
+		}));
+		invalidateCache(projectId);
+		const state = await loadState(projectId);
 		if (!state) return;
-
-		state.status = "completed";
-		state.completedAt = now();
-		await persistState(state);
 
 		eventBus.emit({
 			projectId,
@@ -671,15 +715,20 @@ class PipelineEngine {
 	}
 
 	private async markFailed(projectId: string, reason: string): Promise<void> {
-		const state = _states.get(projectId);
+		const completedAt = now();
+		await mutatePipelineState(projectId, async (dbRun) => {
+			const stages = JSON.parse(dbRun.stagesJson) as PipelineStage[];
+			const currentStage = stages[dbRun.currentStage];
+			if (currentStage) currentStage.status = "failed";
+			return {
+				status: "failed" as PipelineStatus,
+				stagesJson: JSON.stringify(stages),
+				completedAt,
+			};
+		});
+		invalidateCache(projectId);
+		const state = await loadState(projectId);
 		if (!state) return;
-
-		const currentStage = state.stages[state.currentStage];
-		if (currentStage) currentStage.status = "failed";
-
-		state.status = "failed";
-		state.completedAt = now();
-		await persistState(state);
 
 		eventBus.emit({
 			projectId,
@@ -701,12 +750,9 @@ class PipelineEngine {
 	 *   - Sadece 'done' durumundakiler tamamlanmış sayılır
 	 */
 	async advanceStage(projectId: string): Promise<PipelineState> {
-		let state: PipelineState | null | undefined = _states.get(projectId);
-		if (!state) {
-			state = await hydrateState(projectId);
-			if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
-			_states.set(projectId, state);
-		}
+		// Always read from DB for correctness (cache is just performance)
+		const state = await loadState(projectId);
+		if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
 
 		if (state.status === "paused" || state.status === "completed" || state.status === "failed") {
 			return state;
@@ -720,7 +766,7 @@ class PipelineEngine {
 
 		if (freshTaskIds.length === 0) {
 			await this.completeStage(projectId, currentIndex);
-			return _states.get(projectId)!;
+			return (await getState(projectId))!;
 		}
 
 		const statuses = await Promise.all(freshTaskIds.map((id) => this.getTaskStatus(id)));
@@ -733,13 +779,10 @@ class PipelineEngine {
 		if (anyFailed) {
 			await this.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
 		} else if (allDone) {
-			for (const t of currentStage.tasks) {
-				t.status = "done";
-			}
 			await this.completeStage(projectId, currentIndex);
 		}
 
-		return _states.get(projectId)!;
+		return (await getState(projectId))!;
 	}
 
 	private async resolveStageTaskIds(projectId: string, stageIndex: number, state: PipelineState): Promise<string[]> {
@@ -771,16 +814,7 @@ class PipelineEngine {
 	// -------------------------------------------------------------------------
 
 	async getPipelineState(projectId: string): Promise<PipelineState | null> {
-		const cached = _states.get(projectId);
-		if (cached) return cached;
-
-		const hydrated = await hydrateState(projectId);
-		if (hydrated) {
-			_states.set(projectId, hydrated);
-			return hydrated;
-		}
-
-		return null;
+		return getState(projectId);
 	}
 
 	async getEnrichedPipelineStatus(projectId: string): Promise<{
@@ -828,16 +862,15 @@ class PipelineEngine {
 	// -------------------------------------------------------------------------
 
 	async pausePipeline(projectId: string): Promise<void> {
-		const state = _states.get(projectId) ?? (await hydrateState(projectId));
-		if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
-
-		if (state.status !== "running") {
-			throw new Error(`Pipeline duraklatılamaz — mevcut durum: ${state.status}`);
-		}
-
-		state.status = "paused";
-		_states.set(projectId, state);
-		await persistState(state);
+		// DB-first: lock + validate + mutate atomically
+		const run = await mutatePipelineState(projectId, async (dbRun) => {
+			if (dbRun.status !== "running") {
+				throw new Error(`Pipeline duraklatılamaz — mevcut durum: ${dbRun.status}`);
+			}
+			return { status: "paused" as PipelineStatus };
+		});
+		invalidateCache(projectId);
+		_cache.set(projectId, runToState(run));
 
 		// Actually stop running agent processes and abort in-flight tasks
 		const cancelledCount = await executionEngine.cancelRunningTasks(projectId);
@@ -846,26 +879,25 @@ class PipelineEngine {
 		eventBus.emit({
 			projectId,
 			type: "pipeline:paused" as any,
-			payload: { pausedAt: now(), currentStage: state.currentStage, cancelledTasks: cancelledCount },
+			payload: { pausedAt: now(), currentStage: run.currentStage, cancelledTasks: cancelledCount },
 		});
 	}
 
 	async resumePipeline(projectId: string): Promise<void> {
-		const state = _states.get(projectId) ?? (await hydrateState(projectId));
-		if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
-
-		if (state.status !== "paused") {
-			throw new Error(`Pipeline devam ettirilemiyor — mevcut durum: ${state.status}`);
-		}
-
-		state.status = "running";
-		_states.set(projectId, state);
-		await persistState(state);
+		// DB-first: lock + validate + mutate atomically
+		const run = await mutatePipelineState(projectId, async (dbRun) => {
+			if (dbRun.status !== "paused") {
+				throw new Error(`Pipeline devam ettirilemiyor — mevcut durum: ${dbRun.status}`);
+			}
+			return { status: "running" as PipelineStatus };
+		});
+		invalidateCache(projectId);
+		_cache.set(projectId, runToState(run));
 
 		eventBus.emit({
 			projectId,
 			type: "pipeline:resumed" as any,
-			payload: { resumedAt: now(), currentStage: state.currentStage },
+			payload: { resumedAt: now(), currentStage: run.currentStage },
 		});
 
 		// Re-dispatch queued tasks that were paused
@@ -881,21 +913,23 @@ class PipelineEngine {
 	 * pipeline stage'i running'e döndürür ve advanceStage ile devam eder.
 	 */
 	async retryFailedPipeline(projectId: string): Promise<void> {
-		const state = _states.get(projectId) ?? (await hydrateState(projectId));
-		if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
-
-		if (state.status !== "failed") {
-			throw new Error(`Pipeline retry edilemiyor — mevcut durum: ${state.status}`);
-		}
-
-		// Failed stage'i running'e çevir
-		const currentStage = state.stages[state.currentStage];
-		if (currentStage) currentStage.status = "running";
-
-		state.status = "running";
-		state.completedAt = undefined;
-		_states.set(projectId, state);
-		await persistState(state);
+		// DB-first: lock + validate + mutate atomically
+		const run = await mutatePipelineState(projectId, async (dbRun) => {
+			if (dbRun.status !== "failed") {
+				throw new Error(`Pipeline retry edilemiyor — mevcut durum: ${dbRun.status}`);
+			}
+			const stages = JSON.parse(dbRun.stagesJson) as PipelineStage[];
+			const currentStage = stages[dbRun.currentStage];
+			if (currentStage) currentStage.status = "running";
+			return {
+				status: "running" as PipelineStatus,
+				stagesJson: JSON.stringify(stages),
+				completedAt: undefined,
+			};
+		});
+		invalidateCache(projectId);
+		const state = runToState(run);
+		_cache.set(projectId, state);
 
 		// Failed task'ları queued'e çevir
 		const taskIds = await this.resolveStageTaskIds(projectId, state.currentStage, state);
@@ -917,47 +951,42 @@ class PipelineEngine {
 
 	// v3.3: Refresh pipeline — rebuild DAG waves without resetting completed stages
 	async refreshPipeline(projectId: string): Promise<void> {
-		const state = _states.get(projectId) ?? (await hydrateState(projectId));
-		if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
-
-		// Sadece running pipeline'lar yeniden hesaplanabilir
-		if (state.status !== "running") {
-			throw new Error(`Pipeline refresh edilemiyor — mevcut durum: ${state.status}`);
-		}
-
 		// Mevcut agent ve dependency bilgilerini çek
 		const agents = await listProjectAgents(projectId);
 		const deps = await listAgentDependencies(projectId);
-
-		// Yeni wave'leri hesapla
 		const newWaves = buildDAGWaves(agents, deps);
 
-		// Completed stage'leri koru, yeni stage'leri ekle
-		const completedStageCount = state.stages.filter((s) => s.status === "completed").length;
-
-		// Yeni stage'leri oluştur (completed olanları atla)
-		for (let i = completedStageCount; i < newWaves.length; i++) {
-			const waveAgentIds = newWaves[i];
-			const waveAgents = agents.filter((a) => waveAgentIds.includes(a.id));
-
-			if (i < state.stages.length) {
-				// Mevcut stage'i güncelle
-				state.stages[i].agents = waveAgents;
-			} else {
-				// Yeni stage ekle
-				state.stages.push({
-					order: i,
-					agents: waveAgents,
-					tasks: [],
-					status: "pending",
-				});
+		// DB-first: lock + validate + mutate atomically
+		await mutatePipelineState(projectId, async (dbRun) => {
+			if (dbRun.status !== "running") {
+				throw new Error(`Pipeline refresh edilemiyor — mevcut durum: ${dbRun.status}`);
 			}
-		}
 
-		await persistState(state);
-		console.log(
-			`[pipeline-engine] Pipeline refresh — ${newWaves.length} stage (${completedStageCount} completed korundu)`,
-		);
+			const stages = JSON.parse(dbRun.stagesJson) as PipelineStage[];
+			const completedStageCount = stages.filter((s) => s.status === "completed").length;
+
+			for (let i = completedStageCount; i < newWaves.length; i++) {
+				const waveAgentIds = newWaves[i];
+				const waveAgents = agents.filter((a) => waveAgentIds.includes(a.id));
+
+				if (i < stages.length) {
+					stages[i].agents = waveAgents;
+				} else {
+					stages.push({
+						order: i,
+						agents: waveAgents,
+						tasks: [],
+						status: "pending",
+					});
+				}
+			}
+
+			console.log(
+				`[pipeline-engine] Pipeline refresh — ${newWaves.length} stage (${completedStageCount} completed korundu)`,
+			);
+			return { stagesJson: JSON.stringify(stages) };
+		});
+		invalidateCache(projectId);
 	}
 
 	// -------------------------------------------------------------------------

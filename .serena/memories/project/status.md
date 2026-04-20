@@ -1,8 +1,9 @@
 # Oscorpex — Status
 
-## Current: v3.0–v3.9 Stabilization Complete (2026-04-15)
+## Current: V6 Roadmap Complete (2026-04-20)
 
-v3.0-v3.9 platformu `db2427e` ile stub olarak landed. Tüm milestones gerçek implementasyonla tamamlandı.
+All V6 milestones delivered. Backend 921/921, Frontend 514/514, typecheck clean.
+Roadmap: `.planning/V6_ROADMAP.md`. Completion report: `.planning/V6_COMPLETION_REPORT.md`.
 
 ### Session 2026-04-15 — v3.0 B1+B2+B3 + v3.1 + v3.2 + v3.3 + v3.4 + v3.5 + v3.6 + v3.7 + v3.8 + v3.9
 
@@ -347,6 +348,18 @@ Backend 531/531, Frontend 433/433, typecheck clean.
 - logTenantActivity() audit log on register, role change, API key ops
 - 28 new tests
 - Backend 633/633, Frontend 433/433, typecheck clean
+
+### V6 ROADMAP COMPLETE (2026-04-20)
+
+All 6 V6 milestones delivered in single session:
+- M1 Auth UI + Notifications (`f11afa0`) — 22 new tests
+- M2 Cost Intelligence + Auto Testing (`081c8fe`) — 45 new tests
+- M3 Templates v2 + GitHub/GitLab v2 (`aa9239a`) — 66 new tests
+- M4 pg-boss Durable Queue (`b95877b`) — 32 new tests
+- M5 CLI Tool + OpenTelemetry (`df91c25`) — 67 new tests
+- M6 Scale Foundation (`9e64eee`) — 122 new tests
+Total: ~55 new files, ~15,500 new LOC, 354 new tests.
+Backend: 921/921, Frontend: 514/514, typecheck clean.
 
 ### V5 ROADMAP COMPLETE
 All 6 milestones delivered:

@@ -83,6 +83,28 @@ class ProviderStateManager {
 	getAllStates(): ProviderState[] {
 		return Array.from(this.states.values());
 	}
+
+	/** Check if all known providers are currently exhausted (rate-limited or in cooldown) */
+	isAllExhausted(): boolean {
+		for (const state of this.states.values()) {
+			if (this.isAvailable(state.adapter)) return false;
+		}
+		return true;
+	}
+
+	/** Get the earliest cooldown expiry across all providers (for retry scheduling) */
+	getEarliestRecoveryMs(): number {
+		let earliest = Infinity;
+		for (const state of this.states.values()) {
+			if (state.cooldownUntil) {
+				const remaining = state.cooldownUntil.getTime() - Date.now();
+				if (remaining > 0 && remaining < earliest) {
+					earliest = remaining;
+				}
+			}
+		}
+		return earliest === Infinity ? 60_000 : earliest;
+	}
 }
 
 export const providerState = new ProviderStateManager();

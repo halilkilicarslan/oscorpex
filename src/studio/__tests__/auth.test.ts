@@ -14,6 +14,7 @@ vi.mock("../pg.js", () => ({
 	queryOne: vi.fn(),
 	execute: vi.fn(),
 	withTransaction: vi.fn(),
+	setTenantContext: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { execute, queryOne } from "../pg.js";

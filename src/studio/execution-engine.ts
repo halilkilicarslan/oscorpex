@@ -8,6 +8,7 @@ import { persistAgentLog } from "./agent-log-store.js";
 import { agentRuntime } from "./agent-runtime.js";
 import { startApp, stopApp } from "./app-runner.js";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
+import { enforceBudgetGuard } from "./budget-guard.js";
 import { resolveAllowedTools } from "./capability-resolver.js";
 import { getAdapter, getAdapterChain } from "./cli-adapter.js";
 import { executeWithCLI, isClaudeCliAvailable, resolveFilePaths } from "./cli-runtime.js";
@@ -16,6 +17,7 @@ import { buildRAGContext, formatRAGContext } from "./context-builder.js";
 import { compactCrossAgentContext } from "./context-sandbox.js";
 import { buildResumeSnapshot, formatResumeSnapshot } from "./context-session.js";
 import {
+	claimTask,
 	getAgentConfig,
 	getLatestPlan,
 	getProject,
@@ -27,6 +29,7 @@ import {
 	listProjectTasks,
 	listProjects,
 	recordTokenUsage,
+	releaseTaskClaim,
 	updatePhaseStatus,
 	updateProject,
 	updateTask,
@@ -35,6 +38,8 @@ import { updateDocsAfterTask } from "./docs-generator.js";
 import { eventBus } from "./event-bus.js";
 import { runLintFix } from "./lint-runner.js";
 import { resolveModel } from "./model-router.js";
+import { verifyTaskOutput } from "./output-verifier.js";
+import { runTestGate } from "./test-gate.js";
 import { execute as pgExecute } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { providerState } from "./provider-state.js";
@@ -223,6 +228,9 @@ class ExecutionEngine {
 	/** Semaphore limiting concurrent CLI executions */
 	private _semaphore = new Semaphore(MAX_CONCURRENT_TASKS);
 
+	/** Unique worker ID for distributed task claiming (PID-based) */
+	private _workerId = `worker-${process.pid}-${Date.now()}`;
+
 	constructor() {
 		// Register completion callback: when a task completes and a new phase starts,
 		// dispatch the newly ready tasks automatically
@@ -270,6 +278,7 @@ class ExecutionEngine {
 				for (const task of phase.tasks ?? []) {
 					if (task.status === "running" || task.status === "assigned") {
 						await updateTask(task.id, { status: "queued", startedAt: undefined });
+						await releaseTaskClaim(task.id);
 						console.log(`[execution-engine] Recovery: "${task.title}" → queued (was ${task.status})`);
 						phaseRecovered = true;
 					}
@@ -329,6 +338,7 @@ class ExecutionEngine {
 					) {
 						console.log(`[execution-engine] Recovery: orphaned running task "${task.title}" → queued`);
 						await updateTask(task.id, { status: "queued", startedAt: undefined });
+						await releaseTaskClaim(task.id);
 						hasRecovered = true;
 					}
 				}
@@ -473,12 +483,12 @@ class ExecutionEngine {
 			return;
 		}
 
-		// Re-fetch task to get current status — another caller may have already started it
-		const freshTask = await getTask(task.id);
-		const executableStatuses = new Set(["queued", "assigned", "running"]);
-		if (!freshTask || !executableStatuses.has(freshTask.status)) {
+		// Distributed claim: atomically lock the task row using SELECT FOR UPDATE SKIP LOCKED.
+		// If another worker already claimed this task, claimTask returns null.
+		const freshTask = await claimTask(task.id, this._workerId);
+		if (!freshTask) {
 			console.log(
-				`[execution-engine] Task "${task.title}" çalıştırılabilir durumda değil (${freshTask?.status}), skip.`,
+				`[execution-engine] Task "${task.title}" could not be claimed (already taken or not queued), skip.`,
 			);
 			return;
 		}
@@ -493,6 +503,7 @@ class ExecutionEngine {
 					if (subTasks.length > 0) {
 						// Parent becomes a container — update status to track sub-tasks
 						await updateTask(freshTask.id, { status: "running" } as any);
+						await releaseTaskClaim(freshTask.id);
 						// Dispatch sub-tasks
 						for (const sub of subTasks) {
 							this.executeTask(projectId, sub).catch((err) =>
@@ -516,6 +527,7 @@ class ExecutionEngine {
 			this._semaphore.release();
 			this._dispatchingTasks.delete(task.id);
 			this._activeControllers.delete(`${projectId}:${task.id}`);
+			await releaseTaskClaim(task.id);
 		}
 	}
 
@@ -554,9 +566,9 @@ class ExecutionEngine {
 			return;
 		}
 
-		// Assign + start — guard against concurrent dispatch from onTaskCompleted callback.
-		// Two callers may race to assign the same task; catch and re-read on conflict.
-		try {
+		// Assign + start — task is already claimed via SELECT FOR UPDATE SKIP LOCKED,
+		// so no concurrent dispatch race is possible. Transition status based on current state.
+		{
 			const currentTask = await getTask(task.id);
 			const currentStatus = currentTask?.status ?? task.status;
 			if (currentStatus === "queued") {
@@ -565,22 +577,7 @@ class ExecutionEngine {
 			} else if (currentStatus === "assigned") {
 				await taskEngine.startTask(task.id);
 			}
-			// status === "running" → already started, skip both
-		} catch (err) {
-			// Another concurrent dispatch won the race — re-check if task is still runnable
-			const retryTask = await getTask(task.id);
-			if (!retryTask || (retryTask.status !== "running" && retryTask.status !== "assigned")) {
-				console.log(
-					`[execution-engine] Concurrent dispatch conflict for "${task.title}" (${retryTask?.status}), skip.`,
-				);
-				return;
-			}
-			// If running/assigned, the winner is already executing — we should skip too
-			if (retryTask.status === "running") {
-				// Another caller is executing, bail out
-				console.log(`[execution-engine] Task "${task.title}" already running from concurrent dispatch, skip.`);
-				return;
-			}
+			// status === "running" → already started (e.g. revision restart), skip both
 		}
 
 		const prompt = await this.buildTaskPrompt(task, project, agent.role);
@@ -682,6 +679,34 @@ class ExecutionEngine {
 			}
 
 			if (cliResult === null) {
+				// Graceful degraded mode: if all providers are exhausted, defer the task
+				// instead of failing it. Reset to queued and schedule a retry.
+				if (providerState.isAllExhausted()) {
+					const retryMs = providerState.getEarliestRecoveryMs();
+					console.warn(
+						`[execution-engine] All providers exhausted — deferring "${task.title}" for ${Math.round(retryMs / 1000)}s`,
+					);
+					await updateTask(task.id, { status: "queued" } as any);
+					eventBus.emit({
+						projectId,
+						type: "pipeline:degraded" as any,
+						agentId: agent.id,
+						taskId: task.id,
+						payload: {
+							message: `All providers exhausted. Task "${task.title}" deferred. Retry in ${Math.round(retryMs / 1000)}s.`,
+							retryMs,
+						},
+					});
+					// Schedule a retry after cooldown expires
+					setTimeout(() => {
+						getTask(task.id).then((t) => {
+							if (t && t.status === "queued") {
+								this.executeTask(projectId, t).catch(() => {});
+							}
+						});
+					}, retryMs + 1000);
+					return;
+				}
 				throw lastAdapterError ?? new Error("All CLI adapters exhausted — no provider available.");
 			}
 
@@ -707,6 +732,13 @@ class ExecutionEngine {
 					cacheCreationTokens: cliResult.cacheCreationTokens,
 					cacheReadTokens: cliResult.cacheReadTokens,
 				});
+
+				// Cost circuit breaker: check budget after recording spend
+				const budgetExceeded = await enforceBudgetGuard(projectId);
+				if (budgetExceeded) {
+					// Complete current task normally but stop dispatching further
+					console.warn(`[execution-engine] Budget exceeded — completing "${task.title}" but pausing pipeline`);
+				}
 			}
 
 			eventBus.emitTransient({
@@ -757,6 +789,58 @@ class ExecutionEngine {
 			const agentOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
 			if (agentOutputLines.length > 0) {
 				persistAgentLog(projectId, agent.id, agentOutputLines).catch(() => {});
+			}
+
+			// --- Output verification gate: verify artifacts before completion ---
+			if (project.repoPath) {
+				const verification = await verifyTaskOutput(task.id, project.repoPath, output);
+				if (!verification.allPassed) {
+					const failedChecks = verification.results
+						.filter((r) => !r.passed)
+						.map((r) => `${r.type}: ${r.details.map((d) => d.file ?? d.actual).join(", ")}`)
+						.join("; ");
+					console.warn(`[execution-engine] Output verification failed for "${task.title}": ${failedChecks}`);
+					eventBus.emitTransient({
+						projectId,
+						type: "agent:output",
+						agentId: agent.id,
+						taskId: task.id,
+						payload: { output: `[verify] Output verification failed: ${failedChecks}` },
+					});
+					// Non-empty check failure is a hard fail — the agent produced nothing
+					const hasHardFail = verification.results.some(
+						(r) => !r.passed && r.type === "output_non_empty",
+					);
+					if (hasHardFail) {
+						throw new Error(`Output verification failed: agent produced no artifacts — ${failedChecks}`);
+					}
+					// File existence failures: log warning but allow completion (files may be in git)
+				}
+			}
+
+			// --- Test gate: run project tests before allowing completion ---
+			if (project.repoPath) {
+				const testResult = await runTestGate(projectId, task, project.repoPath, output, agent.role);
+				if (!testResult.passed) {
+					console.warn(`[execution-engine] Test gate failed for "${task.title}": ${testResult.summary}`);
+					eventBus.emitTransient({
+						projectId,
+						type: "agent:output",
+						agentId: agent.id,
+						taskId: task.id,
+						payload: { output: `[test-gate] ${testResult.summary}` },
+					});
+					// Required policy → fail the task so it enters retry/review flow
+					if (testResult.policy === "required") {
+						throw new Error(`Test gate failed (required): ${testResult.summary}`);
+					}
+				} else if (testResult.testsTotal > 0) {
+					output.testResults = {
+						passed: testResult.testsPassed,
+						failed: testResult.testsFailed,
+						total: testResult.testsTotal,
+					};
+				}
 			}
 
 			await taskEngine.completeTask(task.id, output);

@@ -10,7 +10,7 @@
 
 import { createHash } from "node:crypto";
 import type { Context, Next } from "hono";
-import { queryOne } from "../pg.js";
+import { queryOne, setTenantContext } from "../pg.js";
 import { verifyJwt } from "./jwt.js";
 
 // Context variables populated by this middleware
@@ -52,6 +52,9 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<void 
 			c.set("email", payload.email);
 			c.set("tenantId", payload.tenantId);
 			c.set("userRole", payload.role);
+			if (payload.tenantId) {
+				await setTenantContext(payload.tenantId);
+			}
 			return next();
 		}
 	}
@@ -87,6 +90,9 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<void 
 			}
 			// Non-blocking last_used_at update
 			queryOne("UPDATE api_keys SET last_used_at = now() WHERE id = $1", [row.id]).catch(() => {});
+			if (row.tenant_id) {
+				await setTenantContext(row.tenant_id);
+			}
 			return next();
 		}
 	}

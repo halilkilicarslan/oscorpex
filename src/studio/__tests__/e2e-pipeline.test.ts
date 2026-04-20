@@ -105,6 +105,8 @@ vi.mock("../provider-state.js", () => ({
 		markFailure: vi.fn(),
 		markRateLimited: vi.fn(),
 		getAllStates: vi.fn().mockReturnValue([]),
+		isAllExhausted: vi.fn().mockReturnValue(false),
+		getEarliestRecoveryMs: vi.fn().mockReturnValue(60_000),
 	},
 }));
 

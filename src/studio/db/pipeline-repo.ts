@@ -3,7 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { execute, query, queryOne } from "../pg.js";
+import type pg from "pg";
+import { execute, query, queryOne, withTransaction } from "../pg.js";
 import type { AgentRun, PipelineRun } from "../types.js";
 import { now, rowToAgentRun, rowToPipelineRun } from "./helpers.js";
 
@@ -21,12 +22,13 @@ export async function createPipelineRun(
 	// Projeye ait tek bir pipeline_run kaydı olur; varsa güncelle
 	await execute(
 		`
-    INSERT INTO pipeline_runs (id, project_id, current_stage, status, stages_json, started_at, completed_at, created_at)
-    VALUES ($1, $2, 0, $3, $4, NULL, NULL, $5)
+    INSERT INTO pipeline_runs (id, project_id, current_stage, status, stages_json, version, started_at, completed_at, created_at)
+    VALUES ($1, $2, 0, $3, $4, 1, NULL, NULL, $5)
     ON CONFLICT(project_id) DO UPDATE SET
       current_stage = 0,
       status = EXCLUDED.status,
       stages_json = EXCLUDED.stages_json,
+      version = 1,
       started_at = NULL,
       completed_at = NULL
   `,
@@ -42,7 +44,20 @@ export async function getPipelineRun(projectId: string): Promise<PipelineRun | u
 	return row ? rowToPipelineRun(row) : undefined;
 }
 
-/** Pipeline run kaydını günceller */
+/**
+ * Projenin pipeline run kaydını SELECT FOR UPDATE ile kilitleyerek getirir.
+ * Transaction içinde kullanılmalıdır.
+ */
+export async function getPipelineRunForUpdate(
+	client: pg.PoolClient,
+	projectId: string,
+): Promise<PipelineRun | undefined> {
+	const result = await client.query("SELECT * FROM pipeline_runs WHERE project_id = $1 FOR UPDATE", [projectId]);
+	const row = result.rows[0];
+	return row ? rowToPipelineRun(row) : undefined;
+}
+
+/** Pipeline run kaydını günceller — version bump ile optimistic locking */
 export async function updatePipelineRun(
 	projectId: string,
 	data: Partial<Pick<PipelineRun, "currentStage" | "status" | "stagesJson" | "startedAt" | "completedAt">>,
@@ -74,9 +89,65 @@ export async function updatePipelineRun(
 
 	if (fields.length === 0) return getPipelineRun(projectId);
 
+	// Always bump version on update
+	fields.push(`version = version + 1`);
+
 	values.push(projectId);
 	await execute(`UPDATE pipeline_runs SET ${fields.join(", ")} WHERE project_id = $${idx}`, values);
 	return getPipelineRun(projectId);
+}
+
+/**
+ * Transactional pipeline state mutation — locks the row, applies the updater function,
+ * and persists the result atomically. This is the primary write path for pipeline state.
+ */
+export async function mutatePipelineState(
+	projectId: string,
+	updater: (run: PipelineRun, client: pg.PoolClient) => Promise<Partial<Pick<PipelineRun, "currentStage" | "status" | "stagesJson" | "startedAt" | "completedAt">>>,
+): Promise<PipelineRun> {
+	return withTransaction(async (client) => {
+		const run = await getPipelineRunForUpdate(client, projectId);
+		if (!run) throw new Error(`Pipeline run bulunamadı: ${projectId}`);
+
+		const updates = await updater(run, client);
+
+		const fields: string[] = [];
+		const values: any[] = [];
+		let idx = 1;
+
+		if (updates.currentStage !== undefined) {
+			fields.push(`current_stage = $${idx++}`);
+			values.push(updates.currentStage);
+		}
+		if (updates.status !== undefined) {
+			fields.push(`status = $${idx++}`);
+			values.push(updates.status);
+		}
+		if (updates.stagesJson !== undefined) {
+			fields.push(`stages_json = $${idx++}`);
+			values.push(updates.stagesJson);
+		}
+		if (updates.startedAt !== undefined) {
+			fields.push(`started_at = $${idx++}`);
+			values.push(updates.startedAt);
+		}
+		if (updates.completedAt !== undefined) {
+			fields.push(`completed_at = $${idx++}`);
+			values.push(updates.completedAt);
+		}
+
+		if (fields.length > 0) {
+			fields.push(`version = version + 1`);
+			values.push(projectId);
+			await client.query(
+				`UPDATE pipeline_runs SET ${fields.join(", ")} WHERE project_id = $${idx}`,
+				values,
+			);
+		}
+
+		const result = await client.query("SELECT * FROM pipeline_runs WHERE project_id = $1", [projectId]);
+		return rowToPipelineRun(result.rows[0]);
+	});
 }
 
 // ---------------------------------------------------------------------------

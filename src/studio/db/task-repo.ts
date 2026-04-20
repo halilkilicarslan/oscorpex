@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { execute, query, queryOne } from "../pg.js";
+import { execute, query, queryOne, withTransaction } from "../pg.js";
 import type { Task, TaskOutput } from "../types.js";
 import { rowToTask } from "./helpers.js";
 
@@ -236,6 +236,69 @@ export async function updateTask(
 		values as any[],
 	);
 	return row ? rowToTask(row) : undefined;
+}
+
+/**
+ * Atomically claim a queued task for dispatch using SELECT FOR UPDATE SKIP LOCKED.
+ * Returns the claimed task, or null if already claimed by another worker.
+ * This prevents duplicate dispatch under concurrent workers.
+ */
+export async function claimTask(taskId: string, claimedBy: string): Promise<Task | null> {
+	return withTransaction(async (client) => {
+		// Lock the row — SKIP LOCKED means if another worker already holds this row, return nothing
+		const lockResult = await client.query(
+			`SELECT id FROM tasks WHERE id = $1 AND status = 'queued' AND claimed_by IS NULL FOR UPDATE SKIP LOCKED`,
+			[taskId],
+		);
+		if (lockResult.rows.length === 0) return null;
+
+		// Claim it
+		const result = await client.query(
+			`UPDATE tasks SET claimed_by = $1, claimed_at = now(), dispatch_attempts = dispatch_attempts + 1 WHERE id = $2 RETURNING *`,
+			[claimedBy, taskId],
+		);
+		return result.rows[0] ? rowToTask(result.rows[0]) : null;
+	});
+}
+
+/**
+ * Release a task claim (e.g. after execution completes or fails).
+ * Clears claimed_by/claimed_at so the task can be reclaimed on retry.
+ */
+export async function releaseTaskClaim(taskId: string): Promise<void> {
+	await execute(`UPDATE tasks SET claimed_by = NULL, claimed_at = NULL WHERE id = $1`, [taskId]);
+}
+
+/**
+ * Claim multiple queued tasks at once for batch dispatch.
+ * Uses SKIP LOCKED to avoid contention with concurrent workers.
+ */
+export async function claimReadyTasks(
+	phaseId: string,
+	claimedBy: string,
+	limit: number,
+): Promise<Task[]> {
+	return withTransaction(async (client) => {
+		const lockResult = await client.query(
+			`SELECT id FROM tasks
+			 WHERE phase_id = $1 AND status = 'queued' AND claimed_by IS NULL
+			 ORDER BY id
+			 LIMIT $2
+			 FOR UPDATE SKIP LOCKED`,
+			[phaseId, limit],
+		);
+		if (lockResult.rows.length === 0) return [];
+
+		const ids = lockResult.rows.map((r: any) => r.id);
+		const placeholders = ids.map((_: string, i: number) => `$${i + 2}`).join(", ");
+
+		const result = await client.query(
+			`UPDATE tasks SET claimed_by = $1, claimed_at = now(), dispatch_attempts = dispatch_attempts + 1
+			 WHERE id IN (${placeholders}) RETURNING *`,
+			[claimedBy, ...ids],
+		);
+		return result.rows.map((r: any) => rowToTask(r));
+	});
 }
 
 /**

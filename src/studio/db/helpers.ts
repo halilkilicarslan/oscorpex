@@ -207,6 +207,7 @@ export function rowToPipelineRun(row: any): PipelineRun {
 		currentStage: row.current_stage,
 		status: row.status as PipelineStatus,
 		stagesJson: row.stages_json,
+		version: row.version ?? 1,
 		startedAt: row.started_at ?? undefined,
 		completedAt: row.completed_at ?? undefined,
 		createdAt: row.created_at,

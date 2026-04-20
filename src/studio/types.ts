@@ -385,6 +385,7 @@ export interface PipelineRun {
 	currentStage: number;
 	status: PipelineStatus;
 	stagesJson: string; // PipelineStage[] JSON olarak serileştirilmiş hali
+	version: number;
 	startedAt?: string;
 	completedAt?: string;
 	createdAt: string;
