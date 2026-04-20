@@ -512,7 +512,7 @@ class ExecutionEngine {
 					const subTasks = await decomposeTask(freshTask, projectId);
 					if (subTasks.length > 0) {
 						// Parent becomes a container — update status to track sub-tasks
-						await updateTask(freshTask.id, { status: "running" } as any);
+						await updateTask(freshTask.id, { status: "running" });
 						await releaseTaskClaim(freshTask.id);
 						// Dispatch sub-tasks
 						for (const sub of subTasks) {
@@ -748,10 +748,10 @@ class ExecutionEngine {
 					console.warn(
 						`[execution-engine] All providers exhausted — deferring "${task.title}" for ${Math.round(retryMs / 1000)}s`,
 					);
-					await updateTask(task.id, { status: "queued" } as any);
+					await updateTask(task.id, { status: "queued" });
 					eventBus.emit({
 						projectId,
-						type: "pipeline:degraded" as any,
+						type: "pipeline:degraded",
 						agentId: agent.id,
 						taskId: task.id,
 						payload: {
@@ -951,11 +951,11 @@ class ExecutionEngine {
 				console.warn(`[execution-engine] Rate limit detected — pausing pipeline for ${projectId}`);
 
 				// Reset task back to queued so it can resume later
-				await updateTask(task.id, { status: "queued" } as any);
+				await updateTask(task.id, { status: "queued" });
 
 				eventBus.emit({
 					projectId,
-					type: "pipeline:rate_limited" as any,
+					type: "pipeline:rate_limited",
 					agentId: agent.id,
 					taskId: task.id,
 					payload: { message: errorMsg, taskTitle: task.title },

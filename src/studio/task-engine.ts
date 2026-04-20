@@ -480,7 +480,7 @@ class TaskEngine {
 
 			eventBus.emit({
 				projectId,
-				type: "task:completed" as any,
+				type: "task:completed",
 				taskId,
 				payload: {
 					title: task.title,
@@ -680,7 +680,7 @@ class TaskEngine {
 
 		eventBus.emit({
 			projectId,
-			type: "task:review_rejected" as any,
+			type: "task:review_rejected",
 			agentId: task.assignedAgent,
 			taskId,
 			payload: {
@@ -718,7 +718,7 @@ class TaskEngine {
 
 		eventBus.emit({
 			projectId,
-			type: "escalation:user" as any,
+			type: "escalation:user",
 			taskId,
 			payload: {
 				title: task.title,

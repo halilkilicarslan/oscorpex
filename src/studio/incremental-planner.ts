@@ -65,7 +65,7 @@ export async function appendPhaseToPlan(
 
 	eventBus.emit({
 		projectId,
-		type: "plan:phase_added" as any,
+		type: "plan:phase_added",
 		payload: { planId: plan.id, phaseId: phase.id, name: phase.name, order: phase.order },
 	});
 
@@ -112,7 +112,7 @@ export async function appendTaskToPhase(projectId: string, phaseId: string, inpu
 
 	eventBus.emit({
 		projectId,
-		type: "task:added" as any,
+		type: "task:added",
 		taskId: task.id,
 		payload: { title: task.title, phaseId, complexity: task.complexity },
 	});
@@ -158,7 +158,7 @@ export async function replanUnfinishedTasks(projectId: string, reason: string): 
 
 	eventBus.emit({
 		projectId,
-		type: "plan:replanned" as any,
+		type: "plan:replanned",
 		payload: { reason, cancelledCount: cancelledTaskIds.length, keptCompletedCount },
 	});
 

@@ -500,7 +500,7 @@ class PipelineEngine {
 
 		eventBus.emit({
 			projectId,
-			type: "pipeline:stage_started" as any,
+			type: "pipeline:stage_started",
 			payload: {
 				stageIndex,
 				stageOrder: stage.order,
@@ -541,7 +541,7 @@ class PipelineEngine {
 
 			eventBus.emit({
 				projectId,
-				type: "pipeline:branch_created" as any,
+				type: "pipeline:branch_created",
 				payload: { branch: branchName, stageIndex },
 			});
 		} catch (err) {
@@ -572,7 +572,7 @@ class PipelineEngine {
 
 		eventBus.emit({
 			projectId,
-			type: "pipeline:stage_completed" as any,
+			type: "pipeline:stage_completed",
 			payload: {
 				stageIndex,
 				stageOrder: stage.order,
@@ -626,7 +626,7 @@ class PipelineEngine {
 			if (result.success) {
 				eventBus.emit({
 					projectId,
-					type: "pipeline:branch_merged" as any,
+					type: "pipeline:branch_merged",
 					payload: { branch: branchName, target: "main", stageIndex },
 				});
 			} else {
@@ -651,7 +651,7 @@ class PipelineEngine {
 
 		eventBus.emit({
 			projectId,
-			type: "pipeline:completed" as any,
+			type: "pipeline:completed",
 			payload: { completedAt: state.completedAt },
 		});
 
@@ -674,7 +674,7 @@ class PipelineEngine {
 			console.warn("[pipeline-engine] lifecycle transition → completed failed:", err);
 			eventBus.emit({
 				projectId,
-				type: "lifecycle:transition" as any,
+				type: "lifecycle:transition",
 				payload: { to: "completed", trigger: "pipeline_completed", skipped: true, error: String(err) },
 			});
 		});
@@ -738,7 +738,7 @@ class PipelineEngine {
 
 		eventBus.emit({
 			projectId,
-			type: "pipeline:failed" as any,
+			type: "pipeline:failed",
 			payload: { reason, failedAt: state.completedAt },
 		});
 	}
@@ -884,7 +884,7 @@ class PipelineEngine {
 
 		eventBus.emit({
 			projectId,
-			type: "pipeline:paused" as any,
+			type: "pipeline:paused",
 			payload: { pausedAt: now(), currentStage: run.currentStage, cancelledTasks: cancelledCount },
 		});
 	}
@@ -902,7 +902,7 @@ class PipelineEngine {
 
 		eventBus.emit({
 			projectId,
-			type: "pipeline:resumed" as any,
+			type: "pipeline:resumed",
 			payload: { resumedAt: now(), currentStage: run.currentStage },
 		});
 
@@ -942,13 +942,13 @@ class PipelineEngine {
 		for (const taskId of taskIds) {
 			const status = await this.getTaskStatus(taskId);
 			if (status === "failed") {
-				await updateTask(taskId, { status: "queued", error: null, retryCount: 0 } as any);
+				await updateTask(taskId, { status: "queued", error: undefined, retryCount: 0 });
 			}
 		}
 
 		eventBus.emit({
 			projectId,
-			type: "pipeline:resumed" as any,
+			type: "pipeline:resumed",
 			payload: { resumedAt: now(), currentStage: state.currentStage, reason: "retry_failed" },
 		});
 

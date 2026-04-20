@@ -115,7 +115,7 @@ export async function splitTask(
 	}
 
 	// Mark parent as blocked until children complete
-	await updateTask(params.parentTaskId, { status: "blocked" } as any);
+	await updateTask(params.parentTaskId, { status: "blocked" });
 
 	const mutation = await recordGraphMutation({
 		projectId: ctx.projectId,
@@ -148,7 +148,7 @@ export async function addEdge(
 
 	const currentDeps = toTask.dependsOn ?? [];
 	if (!currentDeps.includes(params.fromTaskId)) {
-		await updateTask(params.toTaskId, { dependsOn: [...currentDeps, params.fromTaskId] } as any);
+		await updateTask(params.toTaskId, { dependsOn: [...currentDeps, params.fromTaskId] });
 	}
 
 	const mutation = await recordGraphMutation({
@@ -175,7 +175,7 @@ export async function removeEdge(
 
 	const currentDeps = toTask.dependsOn ?? [];
 	const filtered = currentDeps.filter((d) => d !== params.fromTaskId);
-	await updateTask(params.toTaskId, { dependsOn: filtered } as any);
+	await updateTask(params.toTaskId, { dependsOn: filtered });
 
 	const mutation = await recordGraphMutation({
 		projectId: ctx.projectId,
@@ -201,7 +201,7 @@ export async function deferBranch(
 	const deferredIds: string[] = [];
 
 	for (const task of phaseTasks) {
-		await updateTask(task.id, { status: "deferred" } as any);
+		await updateTask(task.id, { status: "deferred" });
 		deferredIds.push(task.id);
 	}
 

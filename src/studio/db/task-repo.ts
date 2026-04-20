@@ -163,6 +163,7 @@ export async function updateTask(
 			| "requiresApproval"
 			| "approvalStatus"
 			| "approvalRejectionReason"
+			| "dependsOn"
 		>
 	>,
 ): Promise<Task | undefined> {
@@ -226,6 +227,10 @@ export async function updateTask(
 	if (data.approvalRejectionReason !== undefined) {
 		fields.push(`approval_rejection_reason = $${idx++}`);
 		values.push(data.approvalRejectionReason);
+	}
+	if (data.dependsOn !== undefined) {
+		fields.push(`depends_on = $${idx++}`);
+		values.push(JSON.stringify(data.dependsOn));
 	}
 
 	if (fields.length === 0) return getTask(id);

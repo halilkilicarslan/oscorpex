@@ -141,7 +141,7 @@ export async function evaluateGoal(
 
 	eventBus.emit({
 		projectId: goal.projectId,
-		type: "goal:evaluated" as any,
+		type: "goal:evaluated",
 		taskId: goal.taskId,
 		payload: {
 			goalId,

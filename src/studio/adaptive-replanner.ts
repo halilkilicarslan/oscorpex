@@ -209,7 +209,7 @@ async function applyPatch(projectId: string, patch: PlanPatchEntry): Promise<boo
 	switch (patch.action) {
 		case "remove_task": {
 			if (patch.targetId) {
-				await updateTask(patch.targetId, { status: "cancelled" } as any);
+				await updateTask(patch.targetId, { status: "cancelled" });
 			}
 			return true;
 		}
@@ -220,7 +220,7 @@ async function applyPatch(projectId: string, patch: PlanPatchEntry): Promise<boo
 				const tasks = await listProjectTasks(projectId);
 				const queuedInPhase = tasks.filter((t) => t.phaseId === phaseId && t.status === "queued");
 				for (const t of queuedInPhase) {
-					await updateTask(t.id, { status: "deferred" } as any);
+					await updateTask(t.id, { status: "deferred" });
 				}
 			}
 			return true;
