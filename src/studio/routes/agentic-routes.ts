@@ -1,0 +1,267 @@
+// ---------------------------------------------------------------------------
+// Oscorpex — Agentic Routes: Agent sessions, episodes, strategies, protocol, proposals, approvals
+// Phase 2 API endpoints for agentic capabilities.
+// ---------------------------------------------------------------------------
+
+import { Hono } from "hono";
+import {
+	listAgentSessions,
+	getAgentSession,
+	getRecentEpisodes,
+	getFailureEpisodes,
+	getBestStrategies,
+	getStrategiesForRole,
+	listStrategies,
+	getUnreadMessages,
+	getTaskMessages,
+	listProposals,
+	getProposal,
+	approveProposal,
+	rejectProposal,
+	listApprovalRules,
+	createApprovalRule,
+} from "../db.js";
+import { proposeTask } from "../agent-runtime/task-injection.js";
+import { classifyRisk, canAutoApprove } from "../agent-runtime/agent-constraints.js";
+import { loadBehavioralContext, formatBehavioralPrompt } from "../agent-runtime/agent-memory.js";
+import { BUILTIN_STRATEGIES } from "../agent-runtime/agent-strategy.js";
+
+export const agenticRoutes = new Hono();
+
+// ---------------------------------------------------------------------------
+// Agent Sessions
+// ---------------------------------------------------------------------------
+
+agenticRoutes.get("/projects/:projectId/sessions", async (c) => {
+	try {
+		const sessions = await listAgentSessions(c.req.param("projectId"), undefined, 50);
+		return c.json(sessions);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.get("/sessions/:sessionId", async (c) => {
+	try {
+		const session = await getAgentSession(c.req.param("sessionId"));
+		if (!session) return c.json({ error: "Session not found" }, 404);
+		return c.json(session);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Episodes (Behavioral Memory)
+// ---------------------------------------------------------------------------
+
+agenticRoutes.get("/projects/:projectId/agents/:agentId/episodes", async (c) => {
+	try {
+		const { projectId, agentId } = c.req.param();
+		const taskType = c.req.query("taskType") ?? "ai";
+		const limit = Number(c.req.query("limit") ?? "10");
+		const episodes = await getRecentEpisodes(projectId, agentId, taskType, limit);
+		return c.json(episodes);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.get("/projects/:projectId/agents/:agentId/failures", async (c) => {
+	try {
+		const { projectId, agentId } = c.req.param();
+		const limit = Number(c.req.query("limit") ?? "5");
+		const failures = await getFailureEpisodes(projectId, agentId, limit);
+		return c.json(failures);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.get("/projects/:projectId/agents/:agentId/behavioral-context", async (c) => {
+	try {
+		const { projectId, agentId } = c.req.param();
+		const role = c.req.query("role") ?? "backend_dev";
+		const taskType = c.req.query("taskType") ?? "ai";
+		const ctx = await loadBehavioralContext(projectId, agentId, role, taskType);
+		return c.json({ context: ctx, formattedPrompt: formatBehavioralPrompt(ctx) });
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Strategies
+// ---------------------------------------------------------------------------
+
+agenticRoutes.get("/strategies", async (c) => {
+	try {
+		const strategies = await listStrategies();
+		return c.json({ db: strategies, builtin: BUILTIN_STRATEGIES });
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.get("/strategies/:role", async (c) => {
+	try {
+		const role = c.req.param("role");
+		const taskType = c.req.query("taskType");
+		const strategies = await getStrategiesForRole(role, taskType);
+		const builtin = BUILTIN_STRATEGIES.filter((s) => s.agentRole === role);
+		return c.json({ db: strategies, builtin });
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.get("/projects/:projectId/strategy-patterns", async (c) => {
+	try {
+		const { projectId } = c.req.param();
+		const role = c.req.query("role") ?? "backend_dev";
+		const taskType = c.req.query("taskType") ?? "ai";
+		const limit = Number(c.req.query("limit") ?? "10");
+		const patterns = await getBestStrategies(projectId, role, taskType, limit);
+		return c.json(patterns);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Protocol Messages
+// ---------------------------------------------------------------------------
+
+agenticRoutes.get("/projects/:projectId/agents/:agentId/messages", async (c) => {
+	try {
+		const { projectId, agentId } = c.req.param();
+		const limit = Number(c.req.query("limit") ?? "20");
+		const messages = await getUnreadMessages(projectId, agentId, limit);
+		return c.json(messages);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.get("/projects/:projectId/tasks/:taskId/protocol-messages", async (c) => {
+	try {
+		const messages = await getTaskMessages(c.req.param("projectId"), c.req.param("taskId"));
+		return c.json(messages);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Task Proposals
+// ---------------------------------------------------------------------------
+
+agenticRoutes.get("/projects/:projectId/proposals", async (c) => {
+	try {
+		const status = c.req.query("status");
+		const proposals = await listProposals(c.req.param("projectId"), status as any);
+		return c.json(proposals);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.get("/proposals/:proposalId", async (c) => {
+	try {
+		const proposal = await getProposal(c.req.param("proposalId"));
+		if (!proposal) return c.json({ error: "Proposal not found" }, 404);
+		return c.json(proposal);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.post("/projects/:projectId/proposals", async (c) => {
+	try {
+		const body = await c.req.json();
+		const result = await proposeTask({
+			projectId: c.req.param("projectId"),
+			originatingAgentId: body.originatingAgentId,
+			proposalType: body.proposalType,
+			title: body.title,
+			description: body.description,
+			severity: body.severity,
+			suggestedRole: body.suggestedRole,
+			phaseId: body.phaseId,
+			complexity: body.complexity,
+		});
+		return c.json(result, result.autoApproved ? 201 : 200);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.post("/proposals/:proposalId/approve", async (c) => {
+	try {
+		const body = await c.req.json().catch(() => ({}));
+		const proposal = await approveProposal(c.req.param("proposalId"), (body as any).approvedBy ?? "human");
+		if (!proposal) return c.json({ error: "Proposal not found" }, 404);
+		return c.json(proposal);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.post("/proposals/:proposalId/reject", async (c) => {
+	try {
+		const body = await c.req.json();
+		const proposal = await rejectProposal(c.req.param("proposalId"), body.reason);
+		if (!proposal) return c.json({ error: "Proposal not found" }, 404);
+		return c.json(proposal);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Risk Classification (utility endpoint)
+// ---------------------------------------------------------------------------
+
+agenticRoutes.post("/classify-risk", async (c) => {
+	try {
+		const body = await c.req.json();
+		const riskLevel = classifyRisk(body);
+		const autoApproveResult = body.projectId
+			? await canAutoApprove(body.projectId, body)
+			: { autoApprove: riskLevel === "low", riskLevel, reason: "No project context" };
+		return c.json(autoApproveResult);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Approval Rules
+// ---------------------------------------------------------------------------
+
+agenticRoutes.get("/projects/:projectId/approval-rules", async (c) => {
+	try {
+		const rules = await listApprovalRules(c.req.param("projectId"));
+		return c.json(rules);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.post("/projects/:projectId/approval-rules", async (c) => {
+	try {
+		const body = await c.req.json();
+		const rule = await createApprovalRule({
+			projectId: c.req.param("projectId"),
+			actionType: body.actionType,
+			riskLevel: body.riskLevel,
+			requiresApproval: body.requiresApproval,
+			autoApprove: body.autoApprove,
+			maxPerRun: body.maxPerRun,
+			description: body.description,
+		});
+		return c.json(rule, 201);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});

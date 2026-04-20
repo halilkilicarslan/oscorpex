@@ -41,6 +41,10 @@ import { telemetryRoutes } from "./telemetry-routes.js";
 import { clusterRoutes } from "./cluster-routes.js";
 import { collaborationRoutes } from "./collaboration-routes.js";
 import { marketplaceRoutes } from "./marketplace-routes.js";
+// v7.0 Phase 2+3: Agentic platform routes
+import { agenticRoutes } from "./agentic-routes.js";
+import { graphRoutes } from "./graph-routes.js";
+import { sandboxRoutes } from "./sandbox-routes.js";
 // import { tracingMiddleware } from "../middleware/tracing-middleware.js";
 // NOTE: Uncomment the line above and apply below to enable global HTTP tracing:
 //   studio.use("*", tracingMiddleware());
@@ -300,5 +304,9 @@ if (process.env.OSCORPEX_TRACE_ENABLED === "true") {
 studio.route("/cluster", clusterRoutes);
 studio.route("/collaboration", collaborationRoutes);
 studio.route("/marketplace", marketplaceRoutes);
+// v7.0 Phase 2+3: Agentic platform
+studio.route("/", agenticRoutes);
+studio.route("/", graphRoutes);
+studio.route("/", sandboxRoutes);
 
 export { studio as studioRoutes };
