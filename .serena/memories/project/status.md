@@ -84,6 +84,12 @@ Architecture Analysis: `.planning/ARCHITECTURE_ANALYSIS.md`.
 - `graph-approval.test.ts`: insertNode, splitTask (blocks parent + creates children), addEdge, removeEdge, deferBranch (queued-only filtering), mutation audit trail, event emission, requiresApproval high/low risk
 - Backend 1009/1009 (5 skip), Frontend 541/541, typecheck clean
 - **Master Plan Section 17 COMPLETE — all regression test categories covered**
+
+**Serena Memory Update** (`805d1ec`): Section 17 status update pushed.
+
+## Tooling
+- Context-Mode plugin v1.0.89 installed and verified (doctor: all PASS)
+- See Serena memory `context-mode/setup` for full details
 - Section 13: 13 new EventType values + ALL_PLUGIN_EVENTS bridge registration
 - Section 14.3: `agent_capability_grants` table + `capability-grant-repo.ts` (8 tokens, role defaults) + REST endpoints
 - Section 18: `agentic-metrics.ts` — 10 observability metrics (claim latency, verification rate, strategy success, retries, rejection by role, proposals, graph stats, replan freq)
