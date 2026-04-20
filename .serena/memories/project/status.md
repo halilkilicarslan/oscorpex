@@ -41,6 +41,46 @@ Architecture Analysis: `.planning/ARCHITECTURE_ANALYSIS.md`.
 - `sandbox-routes.ts`: Sandbox Policies, Session Violations
 - All registered in `routes/index.ts`
 
+**Supplementary Sections + Frontend** (`436797c`): 12 files, +1055 lines.
+- Section 13: 13 new EventType values + ALL_PLUGIN_EVENTS bridge registration
+- Section 14.3: `agent_capability_grants` table + `capability-grant-repo.ts` (8 tokens, role defaults) + REST endpoints
+- Section 18: `agentic-metrics.ts` — 10 observability metrics (claim latency, verification rate, strategy success, retries, rejection by role, proposals, graph stats, replan freq)
+- Frontend: `AgenticPanel.tsx` tab (metrics, proposals, goals, mutations, sessions, grants) + `studio-api/agentic.ts` (full API client)
+
+**Runtime Wiring** (`be2e630`): 9 files, event types + capability enforcement.
+- 8 `as any` event type casts replaced with proper v7.0 typed events
+- agent-session: emits `agent:session_started` + `agent:strategy_selected`
+- task-injection: `hasCapability()` gate before proposal auto-approve
+- graph-coordinator: `pipeline:graph_mutated` → `graph:mutation_applied` (4 sites)
+- budget-guard: `pipeline:budget_exceeded` → `budget:halted`
+- adaptive-replanner: `pipeline:replanned` → `plan:replanned`
+- output-verifier: emits `verification:passed` / `verification:failed`
+- provider-state: emits `provider:degraded` on rate limit
+- agent-protocol: `agent:error` → `agent:requested_help` for blockers
+- Test fix: `hasCapability` added to agent-runtime.test.ts db mock
+
+**v7.0 Supplementary Unit Tests** (`4b89671`): 19 new tests.
+- `capability-grant-repo.test.ts`: 11 DB-backed tests (upsert, conflict update, list by role/all, hasCapability explicit/default/unknown, delete, getDefaultGrantsForRole)
+- `agentic-metrics.test.ts`: 8 mock-based tests (zero defaults, claim latency parsing, strategy rates, rejection by role, graph mutations, replan triggers, zero-division, parallel query count)
+- Total test count: 990/990 passing, typecheck clean.
+
+**Type Safety Cleanup** (`8b9a1f1`): 25+ `as any` casts eliminated across 9 files.
+- EventType: +12 variants (pipeline:stage_started/stage_completed/paused/resumed/failed/degraded/rate_limited/branch_created/branch_merged, plan:phase_added, task:added, goal:evaluated)
+- TaskStatus: +3 variants (blocked, deferred, cancelled)
+- updateTask Pick: +dependsOn field with JSON handler
+- 19 event type casts, 5 status casts, 2 dependsOn casts removed
+- Remaining as-any: reviewTaskId (no DB column), cli-usage JSON parse, container/app-runner runtime, pm-agent taskType
+
+**AgenticPanel Frontend Tests + Error Type Fix** (`6a8272a`): 27 new frontend tests + 7 more `as any` eliminated.
+- `AgenticPanel.test.tsx`: 27 tests — metrics (stat cards, strategy rates, rejection bars, injected volume), proposals (approve/reject/empty), goals (constraints, empty), graph mutations (expand/empty), sessions (expand/empty), capability grants (toggle/empty), refresh, error resilience, pending counts in section titles
+- Task.error type: `string | undefined` → `string | null | undefined` — eliminates 5 null-as-any in task-engine
+- 2 additional as-any removed (fallback/escalation updateTask calls)
+- Backend 990/990, Frontend 541/541, typecheck clean
+- Section 13: 13 new EventType values + ALL_PLUGIN_EVENTS bridge registration
+- Section 14.3: `agent_capability_grants` table + `capability-grant-repo.ts` (8 tokens, role defaults) + REST endpoints
+- Section 18: `agentic-metrics.ts` — 10 observability metrics (claim latency, verification rate, strategy success, retries, rejection by role, proposals, graph stats, replan freq)
+- Frontend: `AgenticPanel.tsx` tab (metrics, proposals, goals, mutations, sessions, grants) + `studio-api/agentic.ts` (full API client)
+
 Previous: V6 Roadmap Complete. All V6 milestones delivered. Backend 921/921, Frontend 514/514.
 Roadmap: `.planning/V6_ROADMAP.md`. Completion report: `.planning/V6_COMPLETION_REPORT.md`.
 
