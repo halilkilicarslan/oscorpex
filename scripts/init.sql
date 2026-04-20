@@ -1544,3 +1544,95 @@ CREATE TABLE IF NOT EXISTS approval_rules (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (project_id, action_type, risk_level)
 );
+
+-- =========================================================================
+-- Phase 3: Dynamic Agentic Platform
+-- =========================================================================
+
+-- 3.1 Graph mutations — auditable runtime DAG changes
+CREATE TABLE IF NOT EXISTS graph_mutations (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  pipeline_run_id   TEXT NOT NULL,
+  caused_by_agent_id TEXT,
+  mutation_type     TEXT NOT NULL,
+  payload           JSONB NOT NULL DEFAULT '{}',
+  approved_by       TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_graph_mutations_project ON graph_mutations(project_id);
+CREATE INDEX IF NOT EXISTS idx_graph_mutations_run ON graph_mutations(pipeline_run_id);
+
+-- 3.2 Replan events — adaptive replanning audit trail
+CREATE TABLE IF NOT EXISTS replan_events (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  trigger           TEXT NOT NULL,
+  patch_entries     JSONB NOT NULL DEFAULT '[]',
+  auto_applied      INTEGER NOT NULL DEFAULT 0,
+  pending_approval  INTEGER NOT NULL DEFAULT 0,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_replan_events_project ON replan_events(project_id);
+
+-- 3.3 Execution goals — goal-based execution model
+CREATE TABLE IF NOT EXISTS execution_goals (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  task_id           TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  definition        JSONB NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'pending',
+  criteria_results  JSONB NOT NULL DEFAULT '[]',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at      TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_execution_goals_project ON execution_goals(project_id);
+CREATE INDEX IF NOT EXISTS idx_execution_goals_task ON execution_goals(task_id);
+
+-- 3.4 Sandbox policies — capability isolation per project
+CREATE TABLE IF NOT EXISTS sandbox_policies (
+  id                    TEXT PRIMARY KEY,
+  project_id            TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  isolation_level       TEXT NOT NULL DEFAULT 'workspace',
+  allowed_tools         JSONB NOT NULL DEFAULT '[]',
+  denied_tools          JSONB NOT NULL DEFAULT '[]',
+  filesystem_scope      JSONB NOT NULL DEFAULT '[]',
+  network_policy        TEXT NOT NULL DEFAULT 'project_only',
+  max_execution_time_ms INTEGER NOT NULL DEFAULT 300000,
+  max_output_size_bytes INTEGER NOT NULL DEFAULT 10485760,
+  elevated_capabilities JSONB NOT NULL DEFAULT '[]',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sandbox_policies_project ON sandbox_policies(project_id);
+
+-- 3.4b Sandbox sessions — per-task isolation sessions
+CREATE TABLE IF NOT EXISTS sandbox_sessions (
+  id                TEXT PRIMARY KEY,
+  project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  task_id           TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  agent_id          TEXT NOT NULL,
+  policy            JSONB NOT NULL,
+  workspace_path    TEXT NOT NULL,
+  violations        JSONB NOT NULL DEFAULT '[]',
+  started_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ended_at          TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_project ON sandbox_sessions(project_id);
+
+-- 3.5 Learning patterns — cross-project reusable patterns
+CREATE TABLE IF NOT EXISTS learning_patterns (
+  id                TEXT PRIMARY KEY,
+  tenant_id         TEXT,
+  learning_type     TEXT NOT NULL,
+  task_type         TEXT NOT NULL,
+  agent_role        TEXT NOT NULL,
+  pattern           JSONB NOT NULL DEFAULT '{}',
+  sample_count      INTEGER NOT NULL DEFAULT 0,
+  success_rate      NUMERIC(5,4) NOT NULL DEFAULT 0,
+  is_global         BOOLEAN NOT NULL DEFAULT false,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, learning_type, task_type, agent_role)
+);
+CREATE INDEX IF NOT EXISTS idx_learning_patterns_lookup ON learning_patterns(task_type, agent_role);
+CREATE INDEX IF NOT EXISTS idx_learning_patterns_global ON learning_patterns(is_global) WHERE is_global = true;

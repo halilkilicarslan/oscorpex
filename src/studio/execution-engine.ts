@@ -45,8 +45,10 @@ import {
 	loadProtocolContext,
 	recordStep,
 } from "./agent-runtime/index.js";
+import { getGoalForTask, formatGoalPrompt, validateCriteriaFromOutput, evaluateGoal } from "./goal-engine.js";
 import { resolveModel } from "./model-router.js";
 import { verifyTaskOutput } from "./output-verifier.js";
+import { resolveTaskPolicy, startSandboxSession, endSandboxSession, checkToolAllowed, checkPathAllowed } from "./sandbox-manager.js";
 import { runTestGate } from "./test-gate.js";
 import { execute as pgExecute } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
@@ -611,7 +613,36 @@ class ExecutionEngine {
 			console.warn("[execution-engine] Agent runtime init failed (non-blocking):", err);
 		}
 
+		// --- Goal-based execution: inject goal prompt if task has an associated goal ---
+		let goalId: string | undefined;
+		try {
+			const goal = await getGoalForTask(task.id);
+			if (goal && goal.status !== "achieved") {
+				promptSuffix += "\n" + formatGoalPrompt(goal);
+				goalId = goal.id;
+			}
+		} catch (err) {
+			console.warn("[execution-engine] Goal lookup failed (non-blocking):", err);
+		}
+
 		const prompt = await this.buildTaskPrompt(task, project, agent.role) + promptSuffix;
+
+		// --- Sandbox: resolve policy for this task ---
+		let sandboxSessionId: string | undefined;
+		try {
+			const policy = await resolveTaskPolicy(projectId, task, agent.role);
+			if (project.repoPath) {
+				const sbSession = await startSandboxSession({
+					projectId,
+					taskId: task.id,
+					agentId: agent.id,
+					workspacePath: project.repoPath,
+				});
+				sandboxSessionId = sbSession.id;
+			}
+		} catch (err) {
+			console.warn("[execution-engine] Sandbox init failed (non-blocking):", err);
+		}
 
 		// Complexity ve proje timeout_multiplier ayarına göre efektif timeout hesapla
 		const timeoutMs = await resolveTaskTimeoutMs(projectId, task.complexity, agent.taskTimeout);
@@ -875,6 +906,24 @@ class ExecutionEngine {
 			}
 
 			await taskEngine.completeTask(task.id, output);
+
+			// --- Sandbox: end session ---
+			if (sandboxSessionId) {
+				endSandboxSession(sandboxSessionId).catch((e) => console.warn("[execution-engine] Sandbox end failed:", e));
+			}
+
+			// --- Goal evaluation: validate success criteria ---
+			if (goalId) {
+				try {
+					const goal = await getGoalForTask(task.id);
+					if (goal) {
+						const results = validateCriteriaFromOutput(goal, output);
+						await evaluateGoal(goalId, results);
+					}
+				} catch (e) {
+					console.warn("[execution-engine] Goal evaluation failed (non-blocking):", e);
+				}
+			}
 
 			// --- Agent Runtime: record successful session ---
 			if (sessionId) {

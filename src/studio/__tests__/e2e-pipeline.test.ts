@@ -75,6 +75,22 @@ vi.mock("../budget-guard.js", () => ({
 	enforceBudgetGuard: vi.fn().mockResolvedValue(undefined),
 	checkBudget: vi.fn().mockResolvedValue({ totalCost: 0, budgetLimit: 100, exceeded: false }),
 }));
+vi.mock("../goal-engine.js", () => ({
+	getGoalForTask: vi.fn().mockResolvedValue(null),
+	formatGoalPrompt: vi.fn().mockReturnValue(""),
+	validateCriteriaFromOutput: vi.fn().mockReturnValue([]),
+	evaluateGoal: vi.fn().mockResolvedValue(null),
+}));
+vi.mock("../sandbox-manager.js", () => ({
+	resolveTaskPolicy: vi.fn().mockResolvedValue({ id: "default", isolationLevel: "workspace", allowedTools: [], deniedTools: [], filesystemScope: [], networkPolicy: "project_only", maxExecutionTimeMs: 300000, maxOutputSizeBytes: 10485760, elevatedCapabilities: [] }),
+	startSandboxSession: vi.fn().mockResolvedValue({ id: "mock-sandbox" }),
+	endSandboxSession: vi.fn().mockResolvedValue(undefined),
+	checkToolAllowed: vi.fn().mockReturnValue({ allowed: true, reason: "allowed" }),
+	checkPathAllowed: vi.fn().mockReturnValue({ allowed: true, reason: "allowed" }),
+}));
+vi.mock("../adaptive-replanner.js", () => ({
+	evaluateReplan: vi.fn().mockResolvedValue(null),
+}));
 vi.mock("../lint-runner.js", () => ({
 	runLintFix: vi.fn().mockResolvedValue({ eslint: { errors: [] }, prettier: { errors: [] } }),
 }));

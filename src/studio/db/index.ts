@@ -54,5 +54,8 @@ export * from "./proposal-repo.js";
 export * from "./protocol-repo.js";
 export * from "./approval-repo.js";
 
+// v7.0 Phase 3: Dynamic Agentic Platform
+export * from "./graph-mutation-repo.js";
+
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";

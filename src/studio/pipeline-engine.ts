@@ -35,6 +35,7 @@ import { GitHubIntegration } from "./github-integration.js";
 import { transitionProject } from "./lifecycle-manager.js";
 import { decrypt, isEncrypted } from "./secret-vault.js";
 import { taskEngine } from "./task-engine.js";
+import { evaluateReplan } from "./adaptive-replanner.js";
 import type {
 	AgentDependency,
 	Phase,
@@ -577,6 +578,11 @@ class PipelineEngine {
 				stageOrder: stage.order,
 			},
 		});
+
+		// --- Adaptive Replanning: evaluate at phase boundary ---
+		evaluateReplan({ projectId, trigger: "phase_end", phaseId: stage.phaseId }).catch((err) =>
+			console.warn(`[pipeline-engine] Adaptive replan failed (non-blocking):`, err),
+		);
 
 		const nextIndex = stageIndex + 1;
 		if (nextIndex < state.stages.length) {
