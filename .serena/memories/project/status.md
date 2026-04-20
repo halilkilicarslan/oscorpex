@@ -76,6 +76,14 @@ Architecture Analysis: `.planning/ARCHITECTURE_ANALYSIS.md`.
 - Task.error type: `string | undefined` → `string | null | undefined` — eliminates 5 null-as-any in task-engine
 - 2 additional as-any removed (fallback/escalation updateTask calls)
 - Backend 990/990, Frontend 541/541, typecheck clean
+
+**Section 17 Regression Tests** (`d541ea4`): 4 test files, 25 tests.
+- `concurrent-dispatch.test.ts`: SKIP LOCKED race condition (two workers, exactly one wins), already-claimed blocked, release+reclaim, independent multi-task claims
+- `restart-recovery.test.ts`: mutatePipelineState persistence after cold restart, version increment (optimistic concurrency), concurrent mutations via SELECT FOR UPDATE, cold-read survives process restart
+- `tenant-rls.test.ts`: RLS isolation suite (skip if FORCE ROW LEVEL SECURITY not set), tenant A/B cross-visibility blocked, setTenantContext transaction-scoped validation
+- `graph-approval.test.ts`: insertNode, splitTask (blocks parent + creates children), addEdge, removeEdge, deferBranch (queued-only filtering), mutation audit trail, event emission, requiresApproval high/low risk
+- Backend 1009/1009 (5 skip), Frontend 541/541, typecheck clean
+- **Master Plan Section 17 COMPLETE — all regression test categories covered**
 - Section 13: 13 new EventType values + ALL_PLUGIN_EVENTS bridge registration
 - Section 14.3: `agent_capability_grants` table + `capability-grant-repo.ts` (8 tokens, role defaults) + REST endpoints
 - Section 18: `agentic-metrics.ts` — 10 observability metrics (claim latency, verification rate, strategy success, retries, rejection by role, proposals, graph stats, replan freq)
