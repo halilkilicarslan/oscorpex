@@ -164,6 +164,7 @@ export async function updateTask(
 			| "approvalStatus"
 			| "approvalRejectionReason"
 			| "dependsOn"
+			| "riskLevel"
 		>
 	>,
 ): Promise<Task | undefined> {
@@ -231,6 +232,10 @@ export async function updateTask(
 	if (data.dependsOn !== undefined) {
 		fields.push(`depends_on = $${idx++}`);
 		values.push(JSON.stringify(data.dependsOn));
+	}
+	if (data.riskLevel !== undefined) {
+		fields.push(`risk_level = $${idx++}`);
+		values.push(data.riskLevel);
 	}
 
 	if (fields.length === 0) return getTask(id);

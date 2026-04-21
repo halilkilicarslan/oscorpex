@@ -112,6 +112,8 @@ export interface Task {
 	estimatedLines?: number;
 	// v4.2: Direct project reference (eliminates JOIN chain for lookups)
 	projectId?: string;
+	// v8.0: Auto-classified risk level for governance enforcement
+	riskLevel?: RiskLevel;
 }
 
 // ---- Agent Configuration ---------------------------------------------------

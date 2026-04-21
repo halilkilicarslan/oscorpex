@@ -509,6 +509,31 @@ class ExecutionEngine {
 			return;
 		}
 
+		// v8.0: Agent constraint check — verify governance rules allow this task to execute
+		try {
+			const { classifyRisk, checkConstraints } = await import("./agent-runtime/agent-constraints.js");
+			const riskLevel = classifyRisk({
+				proposalType: freshTask.parentTaskId ? "sub_task" : "fix_task",
+				severity: undefined,
+				title: freshTask.title,
+			});
+			const constraint = await checkConstraints(projectId, "execute_task", riskLevel);
+			if (!constraint.allowed && constraint.requiresApproval) {
+				console.warn(`[execution-engine] Task "${freshTask.title}" blocked by constraints (${riskLevel} risk — requires approval)`);
+				await updateTask(freshTask.id, { status: "waiting_approval", requiresApproval: true });
+				await releaseTaskClaim(freshTask.id);
+				eventBus.emit({
+					projectId,
+					type: "task:approval_required",
+					taskId: freshTask.id,
+					payload: { title: freshTask.title, riskLevel, reason: constraint.reason },
+				});
+				return;
+			}
+		} catch (err) {
+			console.warn("[execution-engine] Constraint check failed (non-blocking):", err);
+		}
+
 		// v3.0: Auto-decompose L/XL tasks into micro-tasks
 		if ((freshTask.complexity === "L" || freshTask.complexity === "XL") && !freshTask.parentTaskId) {
 			try {

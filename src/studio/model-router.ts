@@ -23,6 +23,31 @@ const TIERS = ["S", "M", "L", "XL"] as const;
 type Tier = (typeof TIERS)[number];
 
 // ---------------------------------------------------------------------------
+// Model context window limits (tokens)
+// ---------------------------------------------------------------------------
+
+const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+	"claude-haiku-4-5-20251001": 200_000,
+	"claude-sonnet-4-6": 200_000,
+	"claude-opus-4-6": 200_000,
+	"gpt-4o": 128_000,
+	"gpt-4o-mini": 128_000,
+	"o3": 200_000,
+	"cursor-small": 128_000,
+	"cursor-large": 200_000,
+};
+
+const DEFAULT_CONTEXT_LIMIT = 200_000;
+
+/**
+ * Returns the context window limit (in tokens) for a given model.
+ * Used by prompt-budget to enforce model-aware truncation.
+ */
+export function getModelContextLimit(model: string): number {
+	return MODEL_CONTEXT_LIMITS[model] ?? DEFAULT_CONTEXT_LIMIT;
+}
+
+// ---------------------------------------------------------------------------
 // Default routing config
 // ---------------------------------------------------------------------------
 

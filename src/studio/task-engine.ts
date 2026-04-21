@@ -32,6 +32,7 @@ import { recordAgentStep } from "./memory-bridge.js";
 import { updateWorkingMemory } from "./memory-manager.js";
 import { queryOne } from "./pg.js";
 import { evaluatePolicies } from "./policy-engine.js";
+import { classifyRisk } from "./agent-runtime/agent-constraints.js";
 import type { Phase, ProjectAgent, Task, TaskOutput } from "./types.js";
 
 // Default onay keyword'leri — proje bazlı override yoksa bunlar kullanılır
@@ -213,6 +214,20 @@ class TaskEngine {
 		}
 
 		const projectId = await this.getProjectIdForTask(task);
+
+		// v8.0: Auto-classify risk level and persist to task record
+		try {
+			const riskLevel = classifyRisk({
+				proposalType: task.parentTaskId ? "sub_task" : "fix_task",
+				severity: undefined,
+				title: task.title,
+			});
+			if (!task.riskLevel) {
+				await updateTask(taskId, { riskLevel });
+			}
+		} catch (err) {
+			console.warn("[task-engine] Risk classification failed (non-blocking):", err);
+		}
 
 		// v3.7: Policy enforcement — governance rules can block or warn before execution.
 		try {

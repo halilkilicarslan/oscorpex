@@ -924,6 +924,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_daily_stats_lookup ON agent_daily_stats(pro
 -- v4.2: Add project_id to tasks for direct lookup (eliminates JOIN chain)
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_id TEXT REFERENCES projects(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS risk_level TEXT DEFAULT NULL;
 
 -- Backfill existing tasks that don't yet have project_id set
 UPDATE tasks SET project_id = pp.project_id

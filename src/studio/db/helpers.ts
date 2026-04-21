@@ -107,6 +107,8 @@ export function rowToTask(row: any): Task {
 		estimatedLines: row.estimated_lines ?? undefined,
 		// v4.2: Direct project reference
 		projectId: row.project_id ?? undefined,
+		// v8.0: Auto-classified risk level
+		riskLevel: row.risk_level ?? undefined,
 	};
 }
 
