@@ -20,6 +20,7 @@ import {
 	claimTask,
 	getAgentConfig,
 	getLatestPlan,
+	getPipelineRun,
 	getProject,
 	getProjectSetting,
 	getTask,
@@ -55,6 +56,7 @@ import {
 	SandboxViolationError,
 	type SandboxPolicy,
 } from "./sandbox-manager.js";
+import { prepareIsolatedWorkspace } from "./isolated-workspace.js";
 import { runTestGate } from "./test-gate.js";
 import { execute as pgExecute } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
@@ -62,6 +64,7 @@ import { providerState } from "./provider-state.js";
 import { taskEngine } from "./task-engine.js";
 import { runIntegrationTest } from "./task-runners.js";
 import type { AgentConfig, Project, Task, TaskOutput } from "./types.js";
+import { canonicalizeAgentRole, roleMatches } from "./roles.js";
 
 // ---------------------------------------------------------------------------
 // Rate-limit detection
@@ -248,24 +251,9 @@ class ExecutionEngine {
 	private _workerId = `worker-${process.pid}-${Date.now()}`;
 
 	constructor() {
-		// Register completion callback: when a task completes and a new phase starts,
-		// dispatch the newly ready tasks automatically
-		taskEngine.onTaskCompleted(async (_taskId, projectId) => {
-			// After checkAndAdvancePhase runs, check all phases for ready tasks
-			const plan = await getLatestPlan(projectId);
-			if (!plan) return;
-			const phases = await listPhases(plan.id);
-			for (const phase of phases) {
-				// Review task'ları completed phase'lerde de çalışabilir —
-				// pipeline stage advance olmuş olsa bile review devam etmeli
-				if (phase.status === "running" || phase.status === "completed") {
-					const ready = await taskEngine.getReadyTasks(phase.id);
-					if (ready.length > 0) {
-						Promise.allSettled(ready.map((task: any) => this.executeTask(projectId, task))).catch(() => {});
-					}
-				}
-			}
-		});
+		// Ready-task dispatch is handled explicitly at the end of task execution.
+		// Avoiding an onTaskCompleted callback here prevents duplicate dispatch
+		// races with the inline dispatch path.
 	}
 
 	// -------------------------------------------------------------------------
@@ -636,6 +624,25 @@ class ExecutionEngine {
 
 			// Load inter-agent protocol messages
 			const protocolCtx = await loadProtocolContext(projectId, agent.id);
+			if (protocolCtx.hasBlockers) {
+				await updateTask(task.id, {
+					status: "blocked",
+				});
+				eventBus.emit({
+					projectId,
+					type: "agent:requested_help",
+					agentId: agent.id,
+					taskId: task.id,
+					payload: {
+						title: task.title,
+						taskTitle: task.title,
+						agentName: agent.name,
+						reason: "Execution blocked by unresolved inter-agent protocol messages",
+						protocolBlocked: true,
+					},
+				});
+				return;
+			}
 			if (protocolCtx.prompt) {
 				promptSuffix += protocolCtx.prompt;
 				await acknowledgeMessages(protocolCtx.messageIds);
@@ -661,14 +668,20 @@ class ExecutionEngine {
 		// --- Sandbox: resolve policy for this task ---
 		let sandboxSessionId: string | undefined;
 		let sandboxPolicy: SandboxPolicy | undefined;
+		let isolatedWorkspace:
+			| Awaited<ReturnType<typeof prepareIsolatedWorkspace>>
+			| undefined;
+		let runtimeRepoPath = project.repoPath;
 		try {
 			sandboxPolicy = await resolveTaskPolicy(projectId, task, agent.role);
 			if (project.repoPath) {
+				isolatedWorkspace = await prepareIsolatedWorkspace(project.repoPath, task.id, sandboxPolicy);
+				runtimeRepoPath = isolatedWorkspace.repoPath || project.repoPath;
 				const sbSession = await startSandboxSession({
 					projectId,
 					taskId: task.id,
 					agentId: agent.id,
-					workspacePath: project.repoPath,
+					workspacePath: runtimeRepoPath,
 				});
 				sandboxSessionId = sbSession.id;
 			}
@@ -755,12 +768,17 @@ class ExecutionEngine {
 					continue;
 				}
 
+				// Session step: CLI execution started
+				if (sessionId) {
+					recordStep(sessionId, { step: 1, type: "action_executed", summary: `CLI execution started: ${adapter.name}` }).catch(() => {});
+				}
+
 				try {
 					cliResult = await adapter.execute({
 						projectId,
 						agentId: agent.id,
 						agentName: agent.name,
-						repoPath: project.repoPath,
+						repoPath: runtimeRepoPath,
 						prompt,
 						systemPrompt: agent.systemPrompt
 							? composeSystemPrompt(agent.systemPrompt)
@@ -818,10 +836,25 @@ class ExecutionEngine {
 			}
 
 			const output: TaskOutput = {
-				filesCreated: resolveFilePaths(cliResult.filesCreated, project.repoPath),
-				filesModified: resolveFilePaths(cliResult.filesModified, project.repoPath),
+				filesCreated: resolveFilePaths(cliResult.filesCreated, runtimeRepoPath),
+				filesModified: resolveFilePaths(cliResult.filesModified, runtimeRepoPath),
 				logs: cliResult.logs,
 			};
+
+			// Session step: CLI output received
+			if (sessionId) {
+				const fileCount = (output.filesCreated?.length ?? 0) + (output.filesModified?.length ?? 0);
+				recordStep(sessionId, { step: 2, type: "result_inspected", summary: `Output received: ${fileCount} files (${output.filesCreated?.length ?? 0} created, ${output.filesModified?.length ?? 0} modified)` }).catch(() => {});
+			}
+
+			if (isolatedWorkspace?.isolated) {
+				const synced = await isolatedWorkspace.writeBack([
+					...(output.filesCreated ?? []),
+					...(output.filesModified ?? []),
+				]);
+				output.filesCreated = output.filesCreated.filter((file) => synced.includes(file));
+				output.filesModified = output.filesModified.filter((file) => synced.includes(file));
+			}
 
 			// Record token usage from CLI result
 			if (cliResult.inputTokens || cliResult.outputTokens) {
@@ -923,7 +956,10 @@ class ExecutionEngine {
 			// --- Output verification gate: verify artifacts before completion ---
 			if (project.repoPath) {
 				const strictness = await resolveStrictness(projectId);
-				const verification = await verifyTaskOutput(task.id, project.repoPath, output, { strictness });
+				const verification = await verifyTaskOutput(task.id, project.repoPath, output, {
+					projectId,
+					strictness,
+				});
 				if (!verification.allPassed) {
 					const failedChecks = verification.results
 						.filter((r) => !r.passed)
@@ -950,6 +986,12 @@ class ExecutionEngine {
 					}
 					// Lenient mode: file existence failures are warnings only
 				}
+
+				// Session step: verification result
+				if (sessionId) {
+					const status = verification.allPassed ? "passed" : "failed";
+					recordStep(sessionId, { step: 3, type: "decision_made", summary: `Verification: ${status}` }).catch(() => {});
+				}
 			}
 
 			// --- Test gate: run project tests before allowing completion ---
@@ -975,6 +1017,12 @@ class ExecutionEngine {
 						total: testResult.testsTotal,
 					};
 				}
+
+				// Session step: test gate result
+				if (sessionId) {
+					const status = testResult.passed ? `passed (${testResult.testsTotal} tests)` : `failed: ${testResult.summary}`;
+					recordStep(sessionId, { step: 4, type: "decision_made", summary: `Test gate: ${status}` }).catch(() => {});
+				}
 			}
 
 			await taskEngine.completeTask(task.id, output);
@@ -982,6 +1030,9 @@ class ExecutionEngine {
 			// --- Sandbox: end session ---
 			if (sandboxSessionId) {
 				endSandboxSession(sandboxSessionId).catch((e) => console.warn("[execution-engine] Sandbox end failed:", e));
+			}
+			if (isolatedWorkspace?.isolated) {
+				isolatedWorkspace.cleanup().catch((e) => console.warn("[execution-engine] Workspace cleanup failed:", e));
 			}
 
 			// --- Goal evaluation: validate success criteria (v8.0: LLM + enforcement) ---
@@ -1110,6 +1161,9 @@ class ExecutionEngine {
 					console.warn("[execution-engine] Session fail record failed:", e),
 				);
 			}
+			if (isolatedWorkspace?.isolated) {
+				isolatedWorkspace.cleanup().catch((e) => console.warn("[execution-engine] Workspace cleanup failed:", e));
+			}
 
 			// --- Self-healing: auto-retry with error context ---
 			const MAX_AUTO_RETRIES = 2;
@@ -1211,15 +1265,18 @@ class ExecutionEngine {
 					console.warn("[execution-engine] Agent message failed:", err);
 				}
 			} else if (proposal.type === "graph_mutation") {
-				// Graph mutations queued for future sprint (Sprint 7)
-				console.log(`[execution-engine] Graph mutation proposal from ${agent.name} (queued for manual review)`);
-				eventBus.emit({
+				const { proposeGraphMutation } = await import("./graph-coordinator.js");
+				const pipelineRun = await getPipelineRun(projectId);
+				const payload = proposal.payload as Record<string, unknown>;
+				const mutationType = String(payload.mutationType ?? "");
+				await proposeGraphMutation({
 					projectId,
-					type: "pipeline:graph_mutated" as any,
-					agentId: agent.id,
-					taskId: task.id,
-					payload: { mutation: proposal.payload, source: "agent_proposal", status: "pending_review" },
+					causedByAgentId: agent.id,
+					pipelineRunId: pipelineRun?.id,
+					mutationType: mutationType as any,
+					payload,
 				});
+				console.log(`[execution-engine] Graph mutation proposal from ${agent.name} persisted for approval`);
 			}
 		}
 	}
@@ -1487,6 +1544,9 @@ class ExecutionEngine {
 		}
 
 		let reviewPrompt: string;
+		let reviewWorkspace:
+			| Awaited<ReturnType<typeof prepareIsolatedWorkspace>>
+			| undefined;
 
 		if (isZeroFileDecision) {
 			termLog(`[review] "${originalTask.title}" — zero-file decision inceleniyor...`);
@@ -1562,12 +1622,25 @@ class ExecutionEngine {
 		try {
 			const reviewTools = await resolveAllowedTools(projectId, reviewer.id, reviewer.role);
 			const reviewAdapter = getAdapter(reviewer.cliTool ?? "claude-code");
+			reviewWorkspace = await prepareIsolatedWorkspace(project.repoPath, reviewTask.id, {
+				id: "review-workspace",
+				projectId,
+				isolationLevel: "workspace",
+				allowedTools: [],
+				deniedTools: [],
+				filesystemScope: [],
+				networkPolicy: "project_only",
+				maxExecutionTimeMs: reviewer.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS,
+				maxOutputSizeBytes: 10_485_760,
+				elevatedCapabilities: [],
+				enforcementMode: "hard",
+			});
 
 			const cliResult = await reviewAdapter.execute({
 				projectId,
 				agentId: reviewer.id,
 				agentName: reviewer.name,
-				repoPath: project.repoPath,
+				repoPath: reviewWorkspace.repoPath,
 				prompt: reviewPrompt,
 				systemPrompt: reviewer.systemPrompt
 					? composeSystemPrompt(reviewer.systemPrompt)
@@ -1576,6 +1649,10 @@ class ExecutionEngine {
 				model: "sonnet",
 				allowedTools: reviewTools,
 			});
+
+			if (reviewWorkspace.isolated) {
+				await reviewWorkspace.writeBack(cliResult.filesModified ?? []);
+			}
 
 			// Record token usage
 			if (cliResult.inputTokens || cliResult.outputTokens) {
@@ -1617,6 +1694,7 @@ class ExecutionEngine {
 			// Submit review result on the original task
 			await taskEngine.submitReview(originalTaskId!, approved, feedback);
 			agentRuntime.markVirtualStopped(projectId, reviewer.id);
+			await reviewWorkspace.cleanup().catch(() => {});
 
 			// Auto-restart revision: if rejected, restart the original task for the dev agent
 			if (!approved) {
@@ -1624,24 +1702,15 @@ class ExecutionEngine {
 				if (revisedTask?.status === "revision") {
 					console.log(`[execution-engine] Review rejected — restarting "${revisedTask.title}" for revision`);
 					await taskEngine.restartRevision(originalTaskId!);
-					const freshTask = await getTask(originalTaskId!);
-					if (freshTask) {
-						this.executeTask(projectId, freshTask).catch(async (e) => {
-							console.error(`[execution-engine] Revision re-execution failed:`, e);
-							try {
-								const msg = e instanceof Error ? e.message : String(e);
-								await taskEngine.failTask(originalTaskId!, `Revision re-execution failed: ${msg}`);
-							} catch {
-								/* task zaten fail olmuş olabilir */
-							}
-						});
-					}
 				}
 			}
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			termLog(`[review] Hata: ${msg.slice(0, 200)}`);
 			agentRuntime.markVirtualStopped(projectId, reviewer.id);
+			if (reviewWorkspace?.isolated) {
+				await reviewWorkspace.cleanup().catch(() => {});
+			}
 
 			// Fail the review task but auto-approve original so it doesn't get stuck
 			await taskEngine.failTask(reviewTask.id, msg);
@@ -1660,6 +1729,8 @@ class ExecutionEngine {
 	private async dispatchReadyTasks(projectId: string, phaseId: string): Promise<void> {
 		const project = await getProject(projectId);
 		if (!project || project.status === "failed") return;
+		const pipelineRun = await getPipelineRun(projectId);
+		if (pipelineRun && ["paused", "failed", "completed"].includes(pipelineRun.status)) return;
 
 		const phaseFailed = await taskEngine.isPhaseFailed(phaseId);
 		const ready = await taskEngine.getReadyTasks(phaseId);
@@ -1745,20 +1816,21 @@ class ExecutionEngine {
 	 */
 	private async resolveAgent(projectId: string, assignment: string): Promise<AgentConfig | undefined> {
 		if (!assignment) return undefined;
+		const normalizedAssignment = canonicalizeAgentRole(assignment);
 
 		// 1. Try project-scoped agents first (by ID, role, or name)
 		const projectAgents = await listProjectAgents(projectId);
 		const pById = projectAgents.find((a) => a.id === assignment);
 		if (pById) return pById as unknown as AgentConfig;
 
-		const pByRole = projectAgents.find((a) => a.role.toLowerCase() === assignment.toLowerCase());
+		const pByRole = projectAgents.find((a) => roleMatches(a.role, normalizedAssignment));
 		if (pByRole) return pByRole as unknown as AgentConfig;
 
 		const pByName = projectAgents.find((a) => a.name.toLowerCase() === assignment.toLowerCase());
 		if (pByName) return pByName as unknown as AgentConfig;
 
 		// 1b. Category match (öncelikli): "backend"→"backend-dev", "frontend"→"frontend-dev"
-		const aLower = assignment.toLowerCase();
+		const aLower = normalizedAssignment.toLowerCase();
 		const categoryMap: Record<string, string[]> = {
 			backend: ["backend-dev", "backend-developer"],
 			frontend: ["frontend-dev", "frontend-developer"],
@@ -1782,7 +1854,7 @@ class ExecutionEngine {
 		if (byId) return byId;
 
 		const all = await listAgentConfigs();
-		const byRole = all.find((a) => a.role.toLowerCase() === assignment.toLowerCase());
+		const byRole = all.find((a) => roleMatches(a.role, normalizedAssignment));
 		if (byRole) return byRole;
 
 		const byName = all.find((a) => a.name.toLowerCase() === assignment.toLowerCase());
@@ -1808,8 +1880,8 @@ Complete the task described in the user message. Be precise and produce working 
 	 * Return a snapshot of currently running tasks and active containers for a
 	 * project. Used by the GET /projects/:id/execution/status endpoint.
 	 */
-	getExecutionStatus(projectId: string) {
-		const progress = taskEngine.getProgress(projectId);
+	async getExecutionStatus(projectId: string) {
+		const progress = await taskEngine.getProgress(projectId);
 
 		return {
 			projectId,
@@ -1827,6 +1899,8 @@ Complete the task described in the user message. Be precise and produce working 
 export const executionEngine = new ExecutionEngine();
 
 // Uygulama başlangıcında yarıda kalmış görevleri kurtart
-executionEngine.recoverStuckTasks().catch((err) => {
-	console.error("[execution-engine] Startup recovery failed:", err);
-});
+if (process.env.VITEST !== "true") {
+	executionEngine.recoverStuckTasks().catch((err) => {
+		console.error("[execution-engine] Startup recovery failed:", err);
+	});
+}

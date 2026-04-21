@@ -50,6 +50,7 @@ vi.mock("../db.js", () => ({
 		id,
 		status: "approved",
 	})),
+	listProjectAgents: vi.fn().mockResolvedValue([]),
 	createTask: vi.fn().mockImplementation(async (params: any) => ({
 		id: "task-injected-1",
 		...params,
@@ -132,9 +133,9 @@ describe("Strategy Selection", () => {
 	it("should have builtin strategies for key roles", () => {
 		expect(BUILTIN_STRATEGIES.length).toBeGreaterThanOrEqual(5);
 		const roles = [...new Set(BUILTIN_STRATEGIES.map((s) => s.agentRole))];
-		expect(roles).toContain("backend_dev");
-		expect(roles).toContain("frontend_dev");
-		expect(roles).toContain("qa_engineer");
+		expect(roles).toContain("backend-dev");
+		expect(roles).toContain("frontend-dev");
+		expect(roles).toContain("reviewer");
 	});
 
 	it("should fall back to generic strategy when no history exists", async () => {
@@ -206,6 +207,54 @@ describe("Agent Session", () => {
 		await failSession("session-1", "proj-1", "agent-1", "backend_dev", task, "timeout");
 		expect(updateAgentSession).toHaveBeenCalledWith("session-1", expect.objectContaining({ status: "failed" }));
 		expect(recordEpisode).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failure", failureReason: "timeout" }));
+	});
+
+	it("should record multiple steps with correct observation types", async () => {
+		const { addObservation } = await import("../db.js");
+		vi.mocked(addObservation).mockClear();
+
+		await recordStep("session-1", { step: 1, type: "action_executed", summary: "CLI execution started: claude-code" });
+		await recordStep("session-1", { step: 2, type: "result_inspected", summary: "Output received: 3 files" });
+		await recordStep("session-1", { step: 3, type: "decision_made", summary: "Verification: passed" });
+		await recordStep("session-1", { step: 4, type: "decision_made", summary: "Test gate: passed (12 tests)" });
+
+		expect(addObservation).toHaveBeenCalledTimes(4);
+		expect(addObservation).toHaveBeenNthCalledWith(1, "session-1", expect.objectContaining({ step: 1, type: "action_executed" }));
+		expect(addObservation).toHaveBeenNthCalledWith(2, "session-1", expect.objectContaining({ step: 2, type: "result_inspected" }));
+		expect(addObservation).toHaveBeenNthCalledWith(3, "session-1", expect.objectContaining({ step: 3, type: "decision_made" }));
+		expect(addObservation).toHaveBeenNthCalledWith(4, "session-1", expect.objectContaining({ step: 4, type: "decision_made" }));
+	});
+
+	it("should auto-assign timestamp to recorded steps", async () => {
+		const { addObservation } = await import("../db.js");
+		vi.mocked(addObservation).mockClear();
+
+		await recordStep("session-1", { step: 1, type: "action_executed", summary: "test" });
+		expect(addObservation).toHaveBeenCalledWith(
+			"session-1",
+			expect.objectContaining({ timestamp: expect.any(String) }),
+		);
+	});
+
+	it("should include stepsCompleted in completed session episode summary", async () => {
+		const { recordEpisode, updateAgentSession } = await import("../db.js");
+		vi.mocked(updateAgentSession).mockResolvedValueOnce({
+			id: "session-1",
+			strategy: "scaffold_then_refine",
+			stepsCompleted: 4,
+			status: "completed",
+			completedAt: new Date().toISOString(),
+		} as any);
+		vi.mocked(recordEpisode).mockClear();
+
+		const task = { id: "t1", title: "Build API", complexity: "M", taskType: "ai" } as any;
+		await completeSession("session-1", "proj-1", "agent-1", "backend_dev", task, {});
+
+		expect(recordEpisode).toHaveBeenCalledWith(
+			expect.objectContaining({
+				actionSummary: expect.stringContaining("4 steps"),
+			}),
+		);
 	});
 });
 
