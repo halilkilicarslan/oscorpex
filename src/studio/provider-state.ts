@@ -5,6 +5,7 @@
 
 import type { AgentCliTool } from "./types.js";
 import { eventBus } from "./event-bus.js";
+import { query, execute as pgExec } from "./pg.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,6 +49,7 @@ class ProviderStateManager {
 				type: "provider:degraded",
 				payload: { provider: adapter, cooldownMs, reason: "rate_limited" },
 			});
+			this.persistToDb().catch(() => {});
 		}
 	}
 
@@ -58,6 +60,7 @@ class ProviderStateManager {
 			state.cooldownUntil = null;
 			state.consecutiveFailures = 0;
 			state.lastSuccess = new Date();
+			this.persistToDb().catch(() => {});
 		}
 	}
 
@@ -67,6 +70,8 @@ class ProviderStateManager {
 			state.consecutiveFailures++;
 			if (state.consecutiveFailures >= 3) {
 				this.markRateLimited(adapter, 120_000);
+			} else {
+				this.persistToDb().catch(() => {});
 			}
 		}
 	}
@@ -111,6 +116,60 @@ class ProviderStateManager {
 			}
 		}
 		return earliest === Infinity ? 60_000 : earliest;
+	}
+
+	// --- v8.0: Persistence —  survive process restarts ---
+
+	/** Persist current state to DB. Called after every state change. */
+	async persistToDb(): Promise<void> {
+		try {
+			for (const state of this.states.values()) {
+				await pgExec(
+					`INSERT INTO provider_state (adapter, rate_limited, cooldown_until, consecutive_failures, last_success)
+					 VALUES ($1, $2, $3, $4, $5)
+					 ON CONFLICT (adapter) DO UPDATE SET
+					   rate_limited = $2, cooldown_until = $3,
+					   consecutive_failures = $4, last_success = $5,
+					   updated_at = now()`,
+					[
+						state.adapter,
+						state.rateLimited,
+						state.cooldownUntil?.toISOString() ?? null,
+						state.consecutiveFailures,
+						state.lastSuccess?.toISOString() ?? null,
+					],
+				);
+			}
+		} catch (err) {
+			console.warn("[provider-state] Failed to persist state:", err);
+		}
+	}
+
+	/** Load state from DB on startup. Restores cooldowns that haven't expired. */
+	async loadFromDb(): Promise<void> {
+		try {
+			const rows = await query<{
+				adapter: string;
+				rate_limited: boolean;
+				cooldown_until: string | null;
+				consecutive_failures: number;
+				last_success: string | null;
+			}>("SELECT * FROM provider_state");
+			for (const row of rows) {
+				const adapter = row.adapter as AgentCliTool;
+				const existing = this.states.get(adapter);
+				if (!existing) continue;
+				const cooldownUntil = row.cooldown_until ? new Date(row.cooldown_until) : null;
+				const stillCooling = cooldownUntil && cooldownUntil > new Date();
+				existing.rateLimited = stillCooling ? row.rate_limited : false;
+				existing.cooldownUntil = stillCooling ? cooldownUntil : null;
+				existing.consecutiveFailures = row.consecutive_failures;
+				existing.lastSuccess = row.last_success ? new Date(row.last_success) : null;
+			}
+			console.log("[provider-state] Loaded state from DB");
+		} catch {
+			// Table may not exist yet on first run — non-blocking
+		}
 	}
 }
 

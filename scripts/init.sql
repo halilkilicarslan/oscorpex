@@ -1431,6 +1431,18 @@ DO $$ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
+-- v8.0: Provider State Persistence
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS provider_state (
+  adapter               TEXT PRIMARY KEY,
+  rate_limited          BOOLEAN NOT NULL DEFAULT false,
+  cooldown_until        TIMESTAMPTZ,
+  consecutive_failures  INTEGER NOT NULL DEFAULT 0,
+  last_success          TIMESTAMPTZ,
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------------------
 -- v7.0 Phase 2: Agentic Core — Agent Runtime Tables
 -- ---------------------------------------------------------------------------
 

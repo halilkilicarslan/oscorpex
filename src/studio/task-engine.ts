@@ -1220,6 +1220,69 @@ class TaskEngine {
 
 		return projectId;
 	}
+
+
+	// --- v8.0: Approval timeout check ---
+
+	/**
+	 * Check for tasks stuck in waiting_approval beyond timeout.
+	 * Emits warning at 80% threshold, escalates at 100%.
+	 * Should be called periodically (e.g., every 15 minutes via setInterval).
+	 */
+	async checkApprovalTimeouts(projectId: string): Promise<{ warned: string[]; expired: string[] }> {
+		const timeoutHours = Number(
+			(await getProjectSetting(projectId, "approval", "timeout_hours")) ?? 24,
+		);
+		const timeoutMs = timeoutHours * 3600_000;
+		const warnMs = timeoutMs * 0.8;
+		const now = Date.now();
+
+		const tasks = await listTasks(projectId);
+		const waiting = tasks.filter((t) => t.status === "waiting_approval");
+
+		const warned: string[] = [];
+		const expired: string[] = [];
+
+		for (const task of waiting) {
+			const startedAt = task.startedAt ? new Date(task.startedAt).getTime() : 0;
+			if (!startedAt) continue;
+			const elapsed = now - startedAt;
+
+			if (elapsed >= timeoutMs) {
+				// Expired — auto-escalate: fail with timeout reason
+				await updateTask(task.id, {
+					status: "failed",
+					error: `Approval timeout: waited ${timeoutHours}h without response`,
+				});
+				eventBus.emit({
+					projectId,
+					type: "task:failed",
+					taskId: task.id,
+					payload: {
+						title: task.title,
+						error: `Approval expired after ${timeoutHours}h`,
+						approvalTimeout: true,
+					},
+				});
+				expired.push(task.id);
+			} else if (elapsed >= warnMs) {
+				// Warning threshold
+				eventBus.emit({
+					projectId,
+					type: "task:approval_required",
+					taskId: task.id,
+					payload: {
+						title: task.title,
+						warning: `Approval timeout in ${Math.round((timeoutMs - elapsed) / 3600_000)}h`,
+						approvalTimeoutWarning: true,
+					},
+				});
+				warned.push(task.id);
+			}
+		}
+
+		return { warned, expired };
+	}
 }
 
 export const taskEngine = new TaskEngine();

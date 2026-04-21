@@ -96,15 +96,34 @@ export async function withTransaction<T>(fn: (client: pg.PoolClient) => Promise<
  * This is used by RLS policies when Row Level Security is enabled.
  * The setting is transaction-scoped (true = reset after transaction end).
  *
- * Currently called as a no-op stub — RLS is not yet enabled (M6.4).
- * When RLS is activated in a future migration, this function will enforce
- * tenant isolation at the database level automatically.
- *
  * @example
  *   await setTenantContext("tenant-uuid");
  */
 export async function setTenantContext(tenantId: string): Promise<void> {
 	await execute("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
+}
+
+/**
+ * v8.0: Run a callback inside a transaction with tenant context enforced.
+ * When OSCORPEX_AUTH_ENABLED=true, this ensures every query in the transaction
+ * has the correct tenant_id set, closing the RLS backward-compat hole.
+ *
+ * When auth is disabled, tenant context is skipped (backward compat).
+ */
+export async function withTenantTransaction<T>(
+	tenantId: string | undefined,
+	fn: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> {
+	const authEnabled = process.env.OSCORPEX_AUTH_ENABLED === "true";
+	return withTransaction(async (client) => {
+		if (authEnabled && tenantId) {
+			await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
+		} else if (authEnabled && !tenantId) {
+			// Strict mode: auth enabled but no tenant → set empty to prevent NULL-tenant row access
+			await client.query("SELECT set_config('app.current_tenant_id', '', true)");
+		}
+		return fn(client);
+	});
 }
 
 /**
