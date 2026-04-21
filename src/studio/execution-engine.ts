@@ -48,7 +48,13 @@ import {
 import { getGoalForTask, formatGoalPrompt, validateCriteriaFromOutput, evaluateGoal } from "./goal-engine.js";
 import { resolveModel } from "./model-router.js";
 import { verifyTaskOutput } from "./output-verifier.js";
-import { resolveTaskPolicy, startSandboxSession, endSandboxSession, checkToolAllowed, checkPathAllowed } from "./sandbox-manager.js";
+import {
+	resolveTaskPolicy, startSandboxSession, endSandboxSession,
+	checkToolAllowed, checkPathAllowed,
+	enforceToolCheck, enforcePathChecks, enforceOutputSizeCheck,
+	SandboxViolationError,
+	type SandboxPolicy,
+} from "./sandbox-manager.js";
 import { runTestGate } from "./test-gate.js";
 import { execute as pgExecute } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
@@ -629,8 +635,9 @@ class ExecutionEngine {
 
 		// --- Sandbox: resolve policy for this task ---
 		let sandboxSessionId: string | undefined;
+		let sandboxPolicy: SandboxPolicy | undefined;
 		try {
-			const policy = await resolveTaskPolicy(projectId, task, agent.role);
+			sandboxPolicy = await resolveTaskPolicy(projectId, task, agent.role);
 			if (project.repoPath) {
 				const sbSession = await startSandboxSession({
 					projectId,
@@ -673,6 +680,19 @@ class ExecutionEngine {
 			}
 
 			const allowedTools = await resolveAllowedTools(projectId, agent.id, agent.role);
+
+			// --- Sandbox pre-execution: enforce tool restrictions ---
+			if (sandboxPolicy && sandboxPolicy.enforcementMode !== "off") {
+				for (const tool of allowedTools) {
+					await enforceToolCheck(sandboxPolicy, tool, sandboxSessionId);
+				}
+				// Also enforce denied tools list against any critical tool names
+				for (const denied of sandboxPolicy.deniedTools) {
+					if (allowedTools.includes(denied)) {
+						await enforceToolCheck(sandboxPolicy, denied, sandboxSessionId);
+					}
+				}
+			}
 
 			// v3.4 + M4: Model routing — complexity + prior failures + review rejections + provider-native models.
 			const primaryCliTool = agent.cliTool ?? "claude-code";
@@ -853,6 +873,19 @@ class ExecutionEngine {
 				persistAgentLog(projectId, agent.id, agentOutputLines).catch(() => {});
 			}
 
+			// --- Sandbox post-execution: enforce path + output size restrictions ---
+			if (sandboxPolicy && sandboxPolicy.enforcementMode !== "off") {
+				const allPaths = [
+					...(output.filesCreated ?? []),
+					...(output.filesModified ?? []),
+				];
+				if (allPaths.length > 0) {
+					await enforcePathChecks(sandboxPolicy, allPaths, sandboxSessionId);
+				}
+				const outputSizeEstimate = JSON.stringify(output).length;
+				await enforceOutputSizeCheck(sandboxPolicy, outputSizeEstimate, sandboxSessionId);
+			}
+
 			// --- Output verification gate: verify artifacts before completion ---
 			if (project.repoPath) {
 				const verification = await verifyTaskOutput(task.id, project.repoPath, output);
@@ -940,6 +973,23 @@ class ExecutionEngine {
 			if (taskController.signal.aborted) {
 				console.log(`[execution-engine] Task "${task.title}" aborted (pipeline paused)`);
 				return;
+			}
+
+			// --- Sandbox violation: emit specific event for observability ---
+			if (err instanceof SandboxViolationError) {
+				eventBus.emit({
+					projectId,
+					type: "verification:failed",
+					agentId: agent.id,
+					taskId: task.id,
+					payload: {
+						source: "sandbox",
+						violationType: err.violation.type,
+						detail: err.violation.detail,
+						enforcementMode: sandboxPolicy?.enforcementMode ?? "hard",
+						taskTitle: task.title,
+					},
+				});
 			}
 
 			const isTimeout = err instanceof TaskTimeoutError;

@@ -41,6 +41,7 @@ sandboxRoutes.post("/projects/:projectId/sandbox-policy", async (c) => {
 			maxExecutionTimeMs: body.maxExecutionTimeMs ?? 300_000,
 			maxOutputSizeBytes: body.maxOutputSizeBytes ?? 10_485_760,
 			elevatedCapabilities: body.elevatedCapabilities ?? [],
+			enforcementMode: body.enforcementMode ?? "hard",
 		});
 		return c.json(policy, 201);
 	} catch (err) {

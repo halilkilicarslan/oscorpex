@@ -219,6 +219,7 @@ describe("Sandbox Manager", () => {
 		maxExecutionTimeMs: 300_000,
 		maxOutputSizeBytes: 10_485_760,
 		elevatedCapabilities: [],
+		enforcementMode: "hard",
 	};
 
 	describe("checkToolAllowed", () => {

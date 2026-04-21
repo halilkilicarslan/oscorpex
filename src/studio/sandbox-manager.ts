@@ -14,6 +14,7 @@ import type { Task } from "./types.js";
 
 export type IsolationLevel = "none" | "workspace" | "container" | "vm";
 export type NetworkPolicy = "unrestricted" | "project_only" | "no_network";
+export type EnforcementMode = "hard" | "soft" | "off";
 
 export interface SandboxPolicy {
 	id: string;
@@ -26,6 +27,20 @@ export interface SandboxPolicy {
 	maxExecutionTimeMs: number;
 	maxOutputSizeBytes: number;
 	elevatedCapabilities: string[];
+	enforcementMode: EnforcementMode;
+}
+
+/**
+ * Thrown when sandbox enforcement blocks an operation in "hard" mode.
+ * Caught by execution-engine to fail the task and trigger retry/escalation.
+ */
+export class SandboxViolationError extends Error {
+	public readonly violation: SandboxViolation;
+	constructor(violation: SandboxViolation) {
+		super(`Sandbox violation (${violation.type}): ${violation.detail}`);
+		this.name = "SandboxViolationError";
+		this.violation = violation;
+	}
 }
 
 export interface SandboxSession {
@@ -62,6 +77,7 @@ function rowToPolicy(row: Record<string, unknown>): SandboxPolicy {
 		maxExecutionTimeMs: (row.max_execution_time_ms as number) ?? 300_000,
 		maxOutputSizeBytes: (row.max_output_size_bytes as number) ?? 10_485_760,
 		elevatedCapabilities: (row.elevated_capabilities as string[]) ?? [],
+		enforcementMode: (row.enforcement_mode as EnforcementMode) ?? "hard",
 	};
 }
 
@@ -87,8 +103,8 @@ export async function createSandboxPolicy(params: Omit<SandboxPolicy, "id">): Pr
 	const id = randomUUID();
 	const row = await queryOne(
 		`INSERT INTO sandbox_policies (id, project_id, isolation_level, allowed_tools, denied_tools,
-		  filesystem_scope, network_policy, max_execution_time_ms, max_output_size_bytes, elevated_capabilities)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		  filesystem_scope, network_policy, max_execution_time_ms, max_output_size_bytes, elevated_capabilities, enforcement_mode)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 RETURNING *`,
 		[
 			id, params.projectId, params.isolationLevel,
@@ -96,6 +112,7 @@ export async function createSandboxPolicy(params: Omit<SandboxPolicy, "id">): Pr
 			JSON.stringify(params.filesystemScope), params.networkPolicy,
 			params.maxExecutionTimeMs, params.maxOutputSizeBytes,
 			JSON.stringify(params.elevatedCapabilities),
+			params.enforcementMode ?? "hard",
 		],
 	);
 	return rowToPolicy(row!);
@@ -199,12 +216,13 @@ function buildDefaultPolicy(projectId: string): SandboxPolicy {
 		maxExecutionTimeMs: 300_000,
 		maxOutputSizeBytes: 10_485_760,
 		elevatedCapabilities: [],
+		enforcementMode: "hard",
 	};
 }
 
 /**
  * Resolve effective sandbox policy for a task.
- * Merges project policy with task-level overrides.
+ * Merges project policy with task-level overrides and project_settings enforcement_mode.
  */
 export async function resolveTaskPolicy(
 	projectId: string,
@@ -213,6 +231,12 @@ export async function resolveTaskPolicy(
 ): Promise<SandboxPolicy> {
 	const projectPolicy = await getSandboxPolicy(projectId);
 	const base = projectPolicy ?? buildDefaultPolicy(projectId);
+
+	// Project-level enforcement_mode override from project_settings
+	const settingOverride = await getProjectSetting(projectId, "sandbox", "enforcement_mode");
+	if (settingOverride && (settingOverride === "hard" || settingOverride === "soft" || settingOverride === "off")) {
+		base.enforcementMode = settingOverride as EnforcementMode;
+	}
 
 	// Security-sensitive tasks get stricter isolation
 	const isSecurityTask = /security|auth|permission|secret/i.test(task.title);
@@ -233,4 +257,85 @@ export async function resolveTaskPolicy(
 	}
 
 	return base;
+}
+
+// ---------------------------------------------------------------------------
+// Enforcement helpers — enforce policy checks based on enforcement_mode
+// ---------------------------------------------------------------------------
+
+/**
+ * Enforce tool check: In hard mode, throws SandboxViolationError.
+ * In soft mode, records violation and returns. In off mode, skips.
+ */
+export async function enforceToolCheck(
+	policy: SandboxPolicy,
+	toolName: string,
+	sessionId?: string,
+): Promise<void> {
+	if (policy.enforcementMode === "off") return;
+	const result = checkToolAllowed(policy, toolName);
+	if (result.allowed) return;
+	const violation: SandboxViolation = {
+		type: "tool_denied",
+		detail: result.reason,
+		timestamp: new Date().toISOString(),
+	};
+	if (sessionId) await recordViolation(sessionId, violation).catch(() => {});
+	if (policy.enforcementMode === "hard") {
+		throw new SandboxViolationError(violation);
+	}
+	// soft mode: log only
+	console.warn(`[sandbox] Soft violation — tool denied: ${toolName} — ${result.reason}`);
+}
+
+/**
+ * Enforce path check on a list of file paths.
+ * Returns list of violations. In hard mode, throws on first violation.
+ */
+export async function enforcePathChecks(
+	policy: SandboxPolicy,
+	filePaths: string[],
+	sessionId?: string,
+): Promise<SandboxViolation[]> {
+	if (policy.enforcementMode === "off") return [];
+	const violations: SandboxViolation[] = [];
+	for (const filePath of filePaths) {
+		const result = checkPathAllowed(policy, filePath);
+		if (result.allowed) continue;
+		const violation: SandboxViolation = {
+			type: "path_traversal",
+			detail: result.reason,
+			timestamp: new Date().toISOString(),
+		};
+		violations.push(violation);
+		if (sessionId) await recordViolation(sessionId, violation).catch(() => {});
+		if (policy.enforcementMode === "hard") {
+			throw new SandboxViolationError(violation);
+		}
+		console.warn(`[sandbox] Soft violation — path blocked: ${filePath}`);
+	}
+	return violations;
+}
+
+/**
+ * Enforce output size check. Hard mode throws, soft mode logs.
+ */
+export async function enforceOutputSizeCheck(
+	policy: SandboxPolicy,
+	sizeBytes: number,
+	sessionId?: string,
+): Promise<void> {
+	if (policy.enforcementMode === "off") return;
+	const result = checkOutputSize(policy, sizeBytes);
+	if (result.allowed) return;
+	const violation: SandboxViolation = {
+		type: "output_overflow",
+		detail: result.reason,
+		timestamp: new Date().toISOString(),
+	};
+	if (sessionId) await recordViolation(sessionId, violation).catch(() => {});
+	if (policy.enforcementMode === "hard") {
+		throw new SandboxViolationError(violation);
+	}
+	console.warn(`[sandbox] Soft violation — output size exceeded: ${sizeBytes} bytes`);
 }

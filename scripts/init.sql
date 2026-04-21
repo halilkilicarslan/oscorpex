@@ -1601,8 +1601,10 @@ CREATE TABLE IF NOT EXISTS sandbox_policies (
   max_execution_time_ms INTEGER NOT NULL DEFAULT 300000,
   max_output_size_bytes INTEGER NOT NULL DEFAULT 10485760,
   elevated_capabilities JSONB NOT NULL DEFAULT '[]',
+  enforcement_mode      TEXT NOT NULL DEFAULT 'hard',
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE sandbox_policies ADD COLUMN IF NOT EXISTS enforcement_mode TEXT NOT NULL DEFAULT 'hard';
 CREATE INDEX IF NOT EXISTS idx_sandbox_policies_project ON sandbox_policies(project_id);
 
 -- 3.4b Sandbox sessions — per-task isolation sessions
