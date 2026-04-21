@@ -365,6 +365,7 @@ describe("Sandbox Manager", () => {
 // Adaptive Replanner
 // ---------------------------------------------------------------------------
 import { shouldReplan, evaluateReplan, approveReplanEvent, type ReplanTrigger } from "../adaptive-replanner.js";
+import { eventBus } from "../event-bus.js";
 import { queryOne, getProjectSetting, getLatestPlan, listPhases, listProjectTasks } from "../db.js";
 
 describe("Adaptive Replanner", () => {
@@ -404,6 +405,65 @@ describe("Adaptive Replanner", () => {
 		const result = await evaluateReplan({ projectId: "proj-1", trigger: "phase_end" });
 		expect(result?.status).toBe("pending");
 		expect(result?.pendingApproval).toBeGreaterThan(0);
+	});
+
+	it("should generate queue bottleneck patch when queueRatio > 0.4", async () => {
+		vi.mocked(getLatestPlan).mockResolvedValueOnce({ id: "plan-1" } as any);
+		vi.mocked(listPhases).mockResolvedValueOnce([
+			{ id: "phase-2", name: "Build", status: "running", tasks: [], order: 1, dependsOn: [] } as any,
+		]);
+		// 5 queued out of 10 total → queueRatio = 0.5 > 0.4
+		vi.mocked(listProjectTasks).mockResolvedValueOnce([
+			...Array.from({ length: 5 }, (_, i) => ({ id: `q-${i}`, phaseId: "phase-2", status: "queued" } as any)),
+			...Array.from({ length: 3 }, (_, i) => ({ id: `d-${i}`, phaseId: "phase-2", status: "done" } as any)),
+			...Array.from({ length: 2 }, (_, i) => ({ id: `r-${i}`, phaseId: "phase-2", status: "running" } as any)),
+		]);
+		vi.mocked(queryOne).mockResolvedValueOnce(null);
+
+		const result = await evaluateReplan({ projectId: "proj-1", trigger: "phase_end" });
+		expect(result).not.toBeNull();
+		const bottleneckPatch = result!.patchEntries.find((p) => p.reason.includes("bottleneck"));
+		expect(bottleneckPatch).toBeDefined();
+		expect(bottleneckPatch!.action).toBe("add_task");
+	});
+
+	it("should generate defer_phase patch for repeated_provider_failure", async () => {
+		vi.mocked(getLatestPlan).mockResolvedValueOnce({ id: "plan-1" } as any);
+		vi.mocked(listPhases).mockResolvedValueOnce([
+			{ id: "phase-1", name: "Deploy", status: "running", tasks: [], order: 1, dependsOn: [] } as any,
+		]);
+		vi.mocked(listProjectTasks).mockResolvedValueOnce([
+			{ id: "t-1", phaseId: "phase-1", status: "queued" } as any,
+		]);
+		vi.mocked(queryOne).mockResolvedValueOnce(null);
+
+		const result = await evaluateReplan({ projectId: "proj-1", trigger: "repeated_provider_failure" });
+		expect(result).not.toBeNull();
+		const deferPatch = result!.patchEntries.find((p) => p.action === "defer_phase");
+		expect(deferPatch).toBeDefined();
+		expect(deferPatch!.riskLevel).toBe("medium");
+	});
+
+	it("should include replanEventId in event payload", async () => {
+		vi.mocked(getLatestPlan).mockResolvedValueOnce({ id: "plan-1" } as any);
+		vi.mocked(listPhases).mockResolvedValueOnce([
+			{ id: "phase-2", name: "Next", status: "pending", tasks: [], order: 2, dependsOn: [] } as any,
+		]);
+		vi.mocked(listProjectTasks).mockResolvedValueOnce([
+			{ id: "t-1", phaseId: "phase-1", status: "done", reviewStatus: "rejected" } as any,
+		]);
+		vi.mocked(queryOne).mockResolvedValueOnce(null);
+
+		const result = await evaluateReplan({ projectId: "proj-1", trigger: "phase_end" });
+		expect(result).not.toBeNull();
+
+		const emitCalls = vi.mocked(eventBus.emit).mock.calls;
+		const replanEvent = emitCalls.find((c) => (c[0] as any).type === "plan:replanned");
+		expect(replanEvent).toBeDefined();
+		expect((replanEvent![0] as any).payload.replanEventId).toBeDefined();
+		expect(typeof (replanEvent![0] as any).payload.replanEventId).toBe("string");
+		expect((replanEvent![0] as any).payload.patchSummary).toBeDefined();
+		expect(Array.isArray((replanEvent![0] as any).payload.patchSummary)).toBe(true);
 	});
 
 	it("should approve and apply pending replan patches", async () => {

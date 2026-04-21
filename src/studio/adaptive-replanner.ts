@@ -169,6 +169,8 @@ interface ProjectStateSnapshot {
 	reviewRejections: number;
 	queuedTasks: number;
 	blockedTasks: number;
+	queueRatio: number;
+	blockRatio: number;
 	phases: Array<{ id: string; title: string; status: string; taskCount: number; completedCount: number }>;
 }
 
@@ -194,6 +196,7 @@ async function snapshotProjectState(projectId: string): Promise<ProjectStateSnap
 		};
 	});
 
+	const total = Math.max(tasks.length, 1);
 	return {
 		totalTasks: tasks.length,
 		completedTasks,
@@ -201,6 +204,8 @@ async function snapshotProjectState(projectId: string): Promise<ProjectStateSnap
 		reviewRejections,
 		queuedTasks,
 		blockedTasks,
+		queueRatio: queuedTasks / total,
+		blockRatio: blockedTasks / total,
 		phases: phaseSnapshots,
 	};
 }
@@ -259,6 +264,61 @@ function generatePatches(snapshot: ProjectStateSnapshot, trigger: ReplanTrigger)
 		});
 	}
 
+	// Queue bottleneck: too many tasks stuck in queued state
+	if (trigger === "phase_end" && futurePhase && snapshot.queueRatio > 0.4) {
+		patches.push({
+			action: "add_task",
+			payload: {
+				phaseId: futurePhase.id,
+				title: "Triage queued task bottleneck",
+				description: `Queue ratio is ${Math.round(snapshot.queueRatio * 100)}%. Review blocked dependencies and reassign stalled tasks.`,
+				assignedAgent: "tech-lead",
+			},
+			riskLevel: "low",
+			reason: `Queue bottleneck detected (${snapshot.queuedTasks}/${snapshot.totalTasks} queued) — add triage task.`,
+		});
+	}
+
+	// Provider failure: defer active phase until provider recovers
+	if (trigger === "repeated_provider_failure" && futurePhase) {
+		patches.push({
+			action: "defer_phase",
+			targetId: futurePhase.id,
+			payload: { phaseId: futurePhase.id, phaseTitle: futurePhase.title },
+			riskLevel: "medium",
+			reason: "Repeated provider failures — deferring phase until provider recovery.",
+		});
+	}
+
+	// Blocked tasks: too many tasks waiting on dependencies or approval
+	if (trigger === "phase_end" && futurePhase && snapshot.blockedTasks > 3) {
+		patches.push({
+			action: "add_task",
+			payload: {
+				phaseId: futurePhase.id,
+				title: "Resolve blocked task dependencies",
+				description: `${snapshot.blockedTasks} tasks are blocked/waiting_approval. Review and unblock before proceeding.`,
+				assignedAgent: "tech-lead",
+			},
+			riskLevel: "low",
+			reason: `${snapshot.blockedTasks} blocked tasks — add dependency resolution sweep.`,
+		});
+	}
+
+	// Design drift: modify task complexity when drift detected
+	if (trigger === "design_drift" && snapshot.phases.length > 0) {
+		const runningPhase = snapshot.phases.find((p) => p.status === "running");
+		if (runningPhase) {
+			patches.push({
+				action: "modify_task",
+				targetId: runningPhase.id,
+				payload: { complexity: "L" },
+				riskLevel: "medium",
+				reason: "Design drift detected — escalating remaining work complexity.",
+			});
+		}
+	}
+
 	return patches;
 }
 
@@ -299,6 +359,25 @@ async function applyPatch(projectId: string, patch: PlanPatchEntry): Promise<boo
 					branch: "main",
 					projectId,
 				});
+			}
+			return true;
+		}
+		case "modify_task": {
+			if (patch.targetId) {
+				const updates: Record<string, unknown> = {};
+				if (patch.payload.complexity) updates.complexity = patch.payload.complexity;
+				if (patch.payload.assignedAgent) updates.assignedAgent = patch.payload.assignedAgent;
+				if (patch.payload.title) updates.title = patch.payload.title;
+				if (patch.payload.description) updates.description = patch.payload.description;
+				if (Object.keys(updates).length > 0) {
+					await updateTask(patch.targetId, updates as any);
+				}
+			}
+			return true;
+		}
+		case "reorder": {
+			if (patch.targetId && Array.isArray(patch.payload.dependsOn)) {
+				await updateTask(patch.targetId, { dependsOn: patch.payload.dependsOn as string[] });
 			}
 			return true;
 		}
@@ -350,6 +429,8 @@ export async function evaluateReplan(ctx: ReplanContext): Promise<ReplanResult |
 			patchCount: patches.length,
 			autoApplied,
 			pendingApproval,
+			replanEventId: result.id,
+			patchSummary: patches.map((p) => ({ action: p.action, targetId: p.targetId, riskLevel: p.riskLevel })),
 		},
 	});
 

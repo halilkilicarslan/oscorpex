@@ -47,6 +47,7 @@ import {
 	recordStep,
 } from "./agent-runtime/index.js";
 import { getGoalForTask, formatGoalPrompt, validateCriteriaFromOutput, validateCriteriaWithLLM, evaluateGoal, resolveGoalEnforcement, shouldEnforceGoalFailure } from "./goal-engine.js";
+import { evaluateReplan } from "./adaptive-replanner.js";
 import { resolveModel } from "./model-router.js";
 import { verifyTaskOutput, resolveStrictness } from "./output-verifier.js";
 import {
@@ -58,7 +59,7 @@ import {
 } from "./sandbox-manager.js";
 import { prepareIsolatedWorkspace } from "./isolated-workspace.js";
 import { runTestGate } from "./test-gate.js";
-import { execute as pgExecute } from "./pg.js";
+import { execute as pgExecute, queryOne as pgQueryOne } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { providerState } from "./provider-state.js";
 import { taskEngine } from "./task-engine.js";
@@ -1195,6 +1196,23 @@ class ExecutionEngine {
 				// Re-execute with error context — bypass guard since we're retrying within the same dispatch
 				await this._executeTaskInner(projectId, { ...retried, error: errorMsg });
 				return; // skip dispatchReadyTasks — executeTask will handle it
+			}
+		}
+
+		// Replan trigger: if 3+ tasks failed in this phase, consider replanning
+		{
+			const currentTask = await getTask(task.id);
+			if (currentTask?.status === "failed") {
+				const failCountRow = await pgQueryOne<{ cnt: number }>(
+					`SELECT COUNT(*) AS cnt FROM tasks WHERE phase_id = $1 AND status = 'failed'`,
+					[task.phaseId],
+				);
+				const phaseFailures = Number(failCountRow?.cnt ?? 0);
+				if (phaseFailures >= 3) {
+					evaluateReplan({ projectId, trigger: "repeated_review_failure", phaseId: task.phaseId }).catch((err) =>
+						console.warn("[execution-engine] Replan trigger failed (non-blocking):", err),
+					);
+				}
 			}
 		}
 

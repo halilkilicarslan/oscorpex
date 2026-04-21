@@ -25,6 +25,7 @@ import {
 	listProjectAgents,
 	listTasks,
 	mutatePipelineState,
+	queryOne,
 	updatePipelineRun,
 	updateTask,
 } from "./db.js";
@@ -762,6 +763,21 @@ class PipelineEngine {
 		if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
 
 		if (state.status === "paused" || state.status === "completed" || state.status === "failed") {
+			return state;
+		}
+
+		// Block advance if there's a pending replan awaiting approval
+		const pendingReplan = await queryOne(
+			`SELECT id FROM replan_events WHERE project_id = $1 AND status = 'pending' LIMIT 1`,
+			[projectId],
+		);
+		if (pendingReplan) {
+			console.log(`[pipeline-engine] advanceStage blocked — pending replan ${pendingReplan.id} awaiting approval`);
+			eventBus.emit({
+				projectId,
+				type: "plan:replanned",
+				payload: { awaiting_approval: true, replanEventId: pendingReplan.id },
+			});
 			return state;
 		}
 
