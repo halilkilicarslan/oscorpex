@@ -13,9 +13,12 @@ import {
 	updateTask,
 	createTask,
 	listProjectTasks,
+	getProjectSetting,
 } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import type { Task } from "./types.js";
+
+export type GoalEnforcementMode = "enforce" | "advisory";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -201,7 +204,7 @@ export function validateCriteriaFromOutput(
 	].join("\n").toLowerCase();
 
 	return goal.definition.successCriteria.map((criterion) => {
-		// Simple keyword-based heuristic — can be enhanced with LLM evaluation
+		// Keyword-based heuristic — fast fallback when LLM validation unavailable
 		const keywords = criterion.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
 		const matchCount = keywords.filter((kw) => allText.includes(kw)).length;
 		const confidence = keywords.length > 0 ? matchCount / keywords.length : 0;
@@ -209,9 +212,100 @@ export function validateCriteriaFromOutput(
 		return {
 			criterion,
 			met: confidence >= 0.5,
+			confidence,
 			evidence: confidence >= 0.5
 				? `Keyword match: ${Math.round(confidence * 100)}% of criteria terms found in output`
 				: `Low match: only ${Math.round(confidence * 100)}% of criteria terms found`,
 		};
 	});
+}
+
+// ---------------------------------------------------------------------------
+// v8.0: LLM-enhanced goal validation
+// Uses a lightweight model (Haiku) to validate output against criteria.
+// Falls back to keyword heuristic if LLM call fails.
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate goal criteria using LLM for higher accuracy.
+ * Only called when task has explicit goals — skip for goalless tasks.
+ */
+export async function validateCriteriaWithLLM(
+	goal: ExecutionGoal,
+	output: { filesCreated?: string[]; filesModified?: string[]; logs?: string[]; testResults?: { passed: number; failed: number; total: number } },
+): Promise<CriterionResult[]> {
+	try {
+		const { getAIModelWithFallback } = await import("./ai-provider-factory.js");
+		const { generateObject } = await import("ai");
+		const { z } = await import("zod");
+
+		const outputSummary = [
+			output.filesCreated?.length ? `Files created: ${output.filesCreated.join(", ")}` : "",
+			output.filesModified?.length ? `Files modified: ${output.filesModified.join(", ")}` : "",
+			output.logs?.slice(0, 10).join("\n") ?? "",
+			output.testResults ? `Tests: ${output.testResults.passed}/${output.testResults.total} passed` : "",
+		].filter(Boolean).join("\n").slice(0, 3000); // Cap for token budget
+
+		const result = await getAIModelWithFallback(async (model: any) => {
+			return generateObject({
+				model,
+				schema: z.object({
+					criteria: z.array(z.object({
+						criterion: z.string(),
+						met: z.boolean(),
+						confidence: z.number().min(0).max(1),
+						evidence: z.string(),
+					})),
+				}),
+				system: "You are a goal validation assistant. Evaluate whether the given output satisfies each success criterion. Be precise and evidence-based.",
+				prompt: `Goal: ${goal.definition.goal}\n\nSuccess Criteria:\n${goal.definition.successCriteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}\n\nTask Output:\n${outputSummary}\n\nFor each criterion, determine if it was met and provide evidence.`,
+				maxOutputTokens: 500,
+			});
+		});
+
+		return result.object.criteria.map((c: any) => ({
+			criterion: c.criterion,
+			met: c.met,
+			confidence: c.confidence,
+			evidence: c.evidence,
+		}));
+	} catch (err) {
+		console.warn("[goal-engine] LLM validation failed, falling back to keyword heuristic:", err);
+		return validateCriteriaFromOutput(goal, output);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// v8.0: Goal enforcement — make goal failures actionable
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve goal enforcement mode from project settings.
+ * Default: "enforce" — goal failure triggers task revision.
+ */
+export async function resolveGoalEnforcement(projectId: string): Promise<GoalEnforcementMode> {
+	const setting = await getProjectSetting(projectId, "goals", "enforcement");
+	if (setting === "advisory") return "advisory";
+	return "enforce";
+}
+
+/**
+ * Check if goal results indicate failure and whether enforcement should trigger.
+ * Returns true if goal failed AND enforcement mode requires action.
+ */
+export function shouldEnforceGoalFailure(
+	results: CriterionResult[],
+	mode: GoalEnforcementMode,
+): boolean {
+	if (mode !== "enforce") return false;
+	// All criteria must be met for goal success
+	const allMet = results.every((r) => r.met);
+	if (allMet) return false;
+	// Only enforce if at least one criterion has high confidence of failure
+	const hasConfidentFailure = results.some(
+		(r) => !r.met && (r as any).confidence !== undefined && (r as any).confidence >= 0.7,
+	);
+	// If no confidence data (keyword heuristic), enforce based on met/not-met
+	const hasAnyConfidence = results.some((r) => (r as any).confidence !== undefined);
+	return hasConfidentFailure || !hasAnyConfidence;
 }

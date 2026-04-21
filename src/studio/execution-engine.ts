@@ -45,7 +45,7 @@ import {
 	loadProtocolContext,
 	recordStep,
 } from "./agent-runtime/index.js";
-import { getGoalForTask, formatGoalPrompt, validateCriteriaFromOutput, evaluateGoal } from "./goal-engine.js";
+import { getGoalForTask, formatGoalPrompt, validateCriteriaFromOutput, validateCriteriaWithLLM, evaluateGoal, resolveGoalEnforcement, shouldEnforceGoalFailure } from "./goal-engine.js";
 import { resolveModel } from "./model-router.js";
 import { verifyTaskOutput, resolveStrictness } from "./output-verifier.js";
 import {
@@ -984,15 +984,28 @@ class ExecutionEngine {
 				endSandboxSession(sandboxSessionId).catch((e) => console.warn("[execution-engine] Sandbox end failed:", e));
 			}
 
-			// --- Goal evaluation: validate success criteria ---
+			// --- Goal evaluation: validate success criteria (v8.0: LLM + enforcement) ---
 			if (goalId) {
 				try {
 					const goal = await getGoalForTask(task.id);
 					if (goal) {
-						const results = validateCriteriaFromOutput(goal, output);
+						// v8.0: Try LLM validation first, fall back to keyword heuristic
+						const results = await validateCriteriaWithLLM(goal, output).catch(() =>
+							validateCriteriaFromOutput(goal, output),
+						);
 						await evaluateGoal(goalId, results);
+
+						// v8.0: Enforce goal failure if configured
+						const enforcement = await resolveGoalEnforcement(projectId);
+						if (shouldEnforceGoalFailure(results, enforcement)) {
+							const failedCriteria = results.filter((r) => !r.met).map((r) => r.criterion).join("; ");
+							console.warn(`[execution-engine] Goal enforcement: "${task.title}" failed criteria — triggering revision`);
+							throw new Error(`Goal validation failed (${enforcement}): ${failedCriteria}`);
+						}
 					}
 				} catch (e) {
+					// Re-throw goal enforcement errors (they start with "Goal validation failed")
+					if (e instanceof Error && e.message.startsWith("Goal validation failed")) throw e;
 					console.warn("[execution-engine] Goal evaluation failed (non-blocking):", e);
 				}
 			}
