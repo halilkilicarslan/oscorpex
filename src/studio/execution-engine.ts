@@ -911,6 +911,15 @@ class ExecutionEngine {
 				await enforceOutputSizeCheck(sandboxPolicy, outputSizeEstimate, sandboxSessionId);
 			}
 
+			// --- v8.0: Process structured proposals from agent output ---
+			if (cliResult?.proposals && cliResult.proposals.length > 0) {
+				try {
+					await this.processAgentProposals(projectId, task, agent, cliResult.proposals);
+				} catch (err) {
+					console.warn("[execution-engine] Proposal processing failed (non-blocking):", err);
+				}
+			}
+
 			// --- Output verification gate: verify artifacts before completion ---
 			if (project.repoPath) {
 				const strictness = await resolveStrictness(projectId);
@@ -1129,6 +1138,78 @@ class ExecutionEngine {
 	// -------------------------------------------------------------------------
 	// Prompt builder
 	// -------------------------------------------------------------------------
+
+	/**
+	 * v8.0: Process structured proposals extracted from agent CLI output.
+	 * Task proposals → risk classify → auto-approve low-risk → create task.
+	 * Agent messages → persist to protocol → target agent sees in next execution.
+	 * Graph mutations → risk classify → auto-apply low-risk → queue medium+.
+	 */
+	private async processAgentProposals(
+		projectId: string,
+		task: Task,
+		agent: { id: string; name: string; role: string },
+		proposals: import("./cli-runtime.js").AgentOutputProposal[],
+	): Promise<void> {
+		const { proposeTask } = await import("./agent-runtime/task-injection.js");
+		const { requestInfo, signalBlocker, handoffArtifact, recordDesignDecision } = await import("./agent-runtime/agent-protocol.js");
+
+		for (const proposal of proposals) {
+			if (proposal.type === "task_proposal") {
+				const p = proposal.payload as {
+					title?: string; description?: string; severity?: string;
+					suggestedRole?: string; proposalType?: string;
+				};
+				if (!p.title) continue;
+				try {
+					await proposeTask({
+						projectId,
+						originatingTaskId: task.id,
+						originatingAgentId: agent.id,
+						proposalType: (p.proposalType as any) ?? "fix_task",
+						title: p.title,
+						description: p.description ?? "",
+						severity: p.severity,
+						suggestedRole: p.suggestedRole ?? agent.role,
+						phaseId: task.phaseId,
+					});
+					console.log(`[execution-engine] Task proposal accepted: "${p.title}" from ${agent.name}`);
+				} catch (err) {
+					console.warn(`[execution-engine] Task proposal failed: "${p.title}"`, err);
+				}
+			} else if (proposal.type === "agent_message") {
+				const m = proposal.payload as {
+					targetAgentId?: string; messageType?: string; content?: string;
+				};
+				if (!m.content || !m.targetAgentId) continue;
+				try {
+					const msgType = m.messageType ?? "request_info";
+					if (msgType === "blocker_alert") {
+						await signalBlocker(projectId, agent.id, m.content, task.id);
+					} else if (msgType === "handoff_artifact") {
+						await handoffArtifact(projectId, agent.id, m.targetAgentId, "artifact", m.content, task.id);
+					} else if (msgType === "design_decision") {
+						await recordDesignDecision(projectId, agent.id, m.content, m.content, task.id);
+					} else {
+						await requestInfo(projectId, agent.id, m.targetAgentId, m.content, m.content, task.id);
+					}
+					console.log(`[execution-engine] Agent message sent (${msgType}): ${agent.name} → ${m.targetAgentId ?? "broadcast"}`);
+				} catch (err) {
+					console.warn("[execution-engine] Agent message failed:", err);
+				}
+			} else if (proposal.type === "graph_mutation") {
+				// Graph mutations queued for future sprint (Sprint 7)
+				console.log(`[execution-engine] Graph mutation proposal from ${agent.name} (queued for manual review)`);
+				eventBus.emit({
+					projectId,
+					type: "pipeline:graph_mutated" as any,
+					agentId: agent.id,
+					taskId: task.id,
+					payload: { mutation: proposal.payload, source: "agent_proposal", status: "pending_review" },
+				});
+			}
+		}
+	}
 
 	/**
 	 * Build the execution prompt that is sent to the AI tool (Claude Code or

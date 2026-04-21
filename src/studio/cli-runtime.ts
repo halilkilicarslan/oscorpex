@@ -80,6 +80,12 @@ type CLIStreamEvent = CLIInitEvent | CLIAssistantEvent | CLIToolResultEvent | CL
 // Execution result
 // ---------------------------------------------------------------------------
 
+/** v8.0: Structured proposal extracted from agent output markers */
+export interface AgentOutputProposal {
+	type: "task_proposal" | "agent_message" | "graph_mutation";
+	payload: Record<string, unknown>;
+}
+
 export interface CLIExecutionResult {
 	text: string;
 	filesCreated: string[];
@@ -92,6 +98,8 @@ export interface CLIExecutionResult {
 	totalCostUsd: number;
 	durationMs: number;
 	model: string;
+	/** v8.0: Structured proposals extracted from agent output markers */
+	proposals?: AgentOutputProposal[];
 }
 
 // ---------------------------------------------------------------------------
@@ -262,6 +270,7 @@ export function executeWithCLI(opts: {
 			totalCostUsd: 0,
 			durationMs: 0,
 			model: "",
+			proposals: [],
 		};
 
 		let buffer = "";
@@ -364,6 +373,12 @@ export function executeWithCLI(opts: {
 					settle(new Error(`Rate limit: ${allLogs.match(RATE_LIMIT_RX)?.[0] ?? "limit reached"}`));
 					return;
 				}
+			}
+
+			// v8.0: Extract structured proposals from accumulated text before settling
+			result.proposals = extractProposals(result.text);
+			if (result.proposals.length > 0) {
+				termLog(`[${agentName}] Extracted ${result.proposals.length} proposal(s) from output`);
 			}
 
 			if (code !== 0 && !settled) {
@@ -683,6 +698,49 @@ export function streamWithCLI(
 			proc.kill();
 		}
 	};
+}
+
+// ---------------------------------------------------------------------------
+// v8.0: Structured output marker extraction
+// Agents can emit markers in their text output to propose tasks, send messages,
+// or suggest graph mutations. These are extracted post-execution.
+// ---------------------------------------------------------------------------
+
+const MARKER_PATTERNS = {
+	task_proposal: /<!--\s*TASK_PROPOSAL:\s*(\{[\s\S]*?\})\s*-->/g,
+	agent_message: /<!--\s*AGENT_MESSAGE:\s*(\{[\s\S]*?\})\s*-->/g,
+	graph_mutation: /<!--\s*GRAPH_MUTATION:\s*(\{[\s\S]*?\})\s*-->/g,
+} as const;
+
+const MAX_PROPOSALS_PER_TYPE = 3;
+
+/**
+ * Extract structured proposals from CLI output text.
+ * Parses <!-- TASK_PROPOSAL: {...} -->, <!-- AGENT_MESSAGE: {...} -->,
+ * and <!-- GRAPH_MUTATION: {...} --> markers.
+ */
+export function extractProposals(text: string): AgentOutputProposal[] {
+	const proposals: AgentOutputProposal[] = [];
+
+	for (const [type, pattern] of Object.entries(MARKER_PATTERNS)) {
+		let match: RegExpExecArray | null;
+		let count = 0;
+		// Reset lastIndex for global regex
+		pattern.lastIndex = 0;
+		while ((match = pattern.exec(text)) !== null && count < MAX_PROPOSALS_PER_TYPE) {
+			try {
+				const payload = JSON.parse(match[1]);
+				if (typeof payload === "object" && payload !== null) {
+					proposals.push({ type: type as AgentOutputProposal["type"], payload });
+					count++;
+				}
+			} catch {
+				// Invalid JSON in marker — skip
+			}
+		}
+	}
+
+	return proposals;
 }
 
 export function resolveFilePaths(files: string[], repoPath: string): string[] {
