@@ -161,6 +161,9 @@ export async function completeSession(
 		task.taskType ?? "ai",
 		session.strategy ?? "unknown",
 	);
+
+	// v8.0: Trigger cross-project learning extraction (non-blocking)
+	triggerLearningExtraction(projectId).catch(() => {});
 }
 
 /**
@@ -202,11 +205,49 @@ export async function failSession(
 		task.taskType ?? "ai",
 		session.strategy ?? "unknown",
 	);
+
+	// v8.0: Trigger cross-project learning extraction (non-blocking)
+	triggerLearningExtraction(projectId).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * v8.0: Trigger cross-project learning extraction.
+ * Rate-limited: only extracts if enough new episodes accumulated (≥5 since last extraction).
+ */
+const _lastExtractionCount = new Map<string, number>();
+async function triggerLearningExtraction(projectId: string): Promise<void> {
+	const { extractPatternsFromEpisodes, autoPromotePatterns } = await import("../cross-project-learning.js");
+	const { queryOne: qo } = await import("../pg.js");
+
+	// Count episodes since last extraction
+	const countRow = await qo<{ cnt: number }>(
+		"SELECT COUNT(*) as cnt FROM agent_episodes WHERE project_id = $1",
+		[projectId],
+	);
+	const currentCount = (countRow?.cnt ?? 0) as number;
+	const lastCount = _lastExtractionCount.get(projectId) ?? 0;
+
+	if (currentCount - lastCount < 5) return; // Not enough new episodes
+
+	// Get tenant_id for the project
+	const projRow = await qo<{ tenant_id: string | null }>(
+		"SELECT tenant_id FROM projects WHERE id = $1",
+		[projectId],
+	);
+	const tenantId = projRow?.tenant_id ?? projectId; // fallback to projectId for single-tenant
+
+	const patternsCreated = await extractPatternsFromEpisodes(tenantId);
+	_lastExtractionCount.set(projectId, currentCount);
+
+	if (patternsCreated > 0) {
+		await autoPromotePatterns(tenantId).catch(() => {});
+		console.log(`[agent-session] Extracted ${patternsCreated} learning patterns for project ${projectId}`);
+	}
+}
 
 /** Resolve max steps based on task complexity */
 function resolveMaxSteps(task: Task): number {

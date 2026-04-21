@@ -3,6 +3,10 @@
 // Lightweight durable job queue backed by PostgreSQL.
 // Uses SELECT FOR UPDATE SKIP LOCKED for crash-safe job claiming.
 // No external pg-boss dependency — raw SQL only.
+//
+// @reserved — This module is reserved for v8.0 Phase 3 (Sprint 6+).
+// Planned integration: async task injection dispatch via durable queue.
+// Do not delete — schema and implementation are complete and tested.
 // ---------------------------------------------------------------------------
 
 import {

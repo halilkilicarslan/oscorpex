@@ -73,6 +73,34 @@ export async function selectStrategy(
 		}
 	}
 
+	// 1b. v8.0: Check cross-project learning patterns (weighted lower than project-local)
+	try {
+		const { getLearningPatterns } = await import("../cross-project-learning.js");
+		const { queryOne: qo } = await import("../pg.js");
+		const projRow = await qo<{ tenant_id: string | null }>(
+			"SELECT tenant_id FROM projects WHERE id = $1",
+			[projectId],
+		);
+		const learningPatterns = await getLearningPatterns(taskType, agentRole, projRow?.tenant_id ?? undefined);
+		if (learningPatterns.length > 0 && learningPatterns[0].sampleCount >= 5 && learningPatterns[0].successRate >= 0.65) {
+			const lpBest = learningPatterns[0];
+			const strategyName = (lpBest.pattern as { strategy?: string }).strategy;
+			if (strategyName) {
+				const strategies = await getStrategiesForRole(agentRole, taskType);
+				const match = strategies.find((s) => s.name === strategyName);
+				if (match) {
+					return {
+						strategy: match,
+						reason: `Cross-project learning: ${(lpBest.successRate * 100).toFixed(0)}% success (${lpBest.sampleCount} samples, ${lpBest.isGlobal ? "global" : "tenant"})`,
+						confidence: lpBest.successRate * 0.8, // 20% discount vs project-local
+					};
+				}
+			}
+		}
+	} catch {
+		// Cross-project learning unavailable — continue with defaults
+	}
+
 	// 2. Check role-specific default strategy from DB
 	const defaultStrategy = await getDefaultStrategy(agentRole);
 	if (defaultStrategy) {

@@ -195,6 +195,36 @@ export async function extractPatternsFromEpisodes(tenantId: string): Promise<num
 // Promote tenant pattern to global (anonymized)
 // ---------------------------------------------------------------------------
 
+/**
+ * v8.0: Auto-promote patterns that meet quality threshold.
+ * Patterns with ≥10 samples and ≥70% success are automatically promoted to global.
+ */
+export async function autoPromotePatterns(tenantId: string): Promise<number> {
+	const candidates = await query(
+		`SELECT id FROM learning_patterns
+		 WHERE tenant_id = $1 AND is_global = false
+		   AND sample_count >= 10 AND success_rate >= 0.7`,
+		[tenantId],
+	);
+
+	let promoted = 0;
+	for (const row of candidates) {
+		const result = await promoteToGlobal(row.id as string);
+		if (result) promoted++;
+	}
+
+	if (promoted > 0) {
+		const { eventBus } = await import("./event-bus.js");
+		eventBus.emit({
+			projectId: "",
+			type: "task:completed" as any, // Use closest event type for learning:pattern_promoted
+			payload: { learningPatternsPromoted: promoted, tenantId },
+		});
+	}
+
+	return promoted;
+}
+
 export async function promoteToGlobal(patternId: string): Promise<LearningPattern | null> {
 	const pattern = await queryOne(`SELECT * FROM learning_patterns WHERE id = $1`, [patternId]);
 	if (!pattern) return null;

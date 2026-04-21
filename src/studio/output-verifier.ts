@@ -9,7 +9,10 @@ import { randomUUID } from "node:crypto";
 import { join, isAbsolute } from "node:path";
 import { execute } from "./pg.js";
 import { eventBus } from "./event-bus.js";
+import { getProjectSetting } from "./db.js";
 import type { TaskOutput } from "./types.js";
+
+export type VerificationStrictness = "strict" | "lenient";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,14 +120,28 @@ function verifyOutputNonEmpty(output: TaskOutput): VerificationResult {
 // ---------------------------------------------------------------------------
 
 /**
+ * Resolve verification strictness from project settings.
+ * Default: "strict" (v8.0 — file existence failures are hard fails).
+ */
+export async function resolveStrictness(projectId: string): Promise<VerificationStrictness> {
+	const setting = await getProjectSetting(projectId, "verification", "strictness");
+	if (setting === "lenient") return "lenient";
+	return "strict"; // default: strict
+}
+
+/**
  * Verify execution artifacts before allowing task completion.
  * Returns a report with all verification results.
  * Does NOT throw — caller decides how to handle failures.
+ *
+ * v8.0: Added strictness parameter. In "strict" mode (default), file existence
+ * failures are treated as hard fails by the caller.
  */
 export async function verifyTaskOutput(
 	taskId: string,
 	repoPath: string,
 	output: TaskOutput,
+	options?: { strictness?: VerificationStrictness },
 ): Promise<OutputVerificationReport> {
 	const results: VerificationResult[] = [];
 

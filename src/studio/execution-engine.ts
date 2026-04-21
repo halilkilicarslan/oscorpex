@@ -47,7 +47,7 @@ import {
 } from "./agent-runtime/index.js";
 import { getGoalForTask, formatGoalPrompt, validateCriteriaFromOutput, evaluateGoal } from "./goal-engine.js";
 import { resolveModel } from "./model-router.js";
-import { verifyTaskOutput } from "./output-verifier.js";
+import { verifyTaskOutput, resolveStrictness } from "./output-verifier.js";
 import {
 	resolveTaskPolicy, startSandboxSession, endSandboxSession,
 	checkToolAllowed, checkPathAllowed,
@@ -913,7 +913,8 @@ class ExecutionEngine {
 
 			// --- Output verification gate: verify artifacts before completion ---
 			if (project.repoPath) {
-				const verification = await verifyTaskOutput(task.id, project.repoPath, output);
+				const strictness = await resolveStrictness(projectId);
+				const verification = await verifyTaskOutput(task.id, project.repoPath, output, { strictness });
 				if (!verification.allPassed) {
 					const failedChecks = verification.results
 						.filter((r) => !r.passed)
@@ -927,14 +928,18 @@ class ExecutionEngine {
 						taskId: task.id,
 						payload: { output: `[verify] Output verification failed: ${failedChecks}` },
 					});
-					// Non-empty check failure is a hard fail — the agent produced nothing
-					const hasHardFail = verification.results.some(
+					// Non-empty check failure is always a hard fail
+					const hasEmptyFail = verification.results.some(
 						(r) => !r.passed && r.type === "output_non_empty",
 					);
-					if (hasHardFail) {
-						throw new Error(`Output verification failed: agent produced no artifacts — ${failedChecks}`);
+					// v8.0: In strict mode, file existence/modification failures are also hard fails
+					const hasFileFail = verification.results.some(
+						(r) => !r.passed && (r.type === "files_exist" || r.type === "files_modified"),
+					);
+					if (hasEmptyFail || (strictness === "strict" && hasFileFail)) {
+						throw new Error(`Output verification failed (${strictness}): ${failedChecks}`);
 					}
-					// File existence failures: log warning but allow completion (files may be in git)
+					// Lenient mode: file existence failures are warnings only
 				}
 			}
 
