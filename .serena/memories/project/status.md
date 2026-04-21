@@ -1,6 +1,38 @@
 # Oscorpex — Status
 
-## Current: v7.0 Agentic Refactor — ALL 3 PHASES COMPLETE (2026-04-20)
+## Current: v8.0 Hardened Collaborative Autonomy (2026-04-21)
+
+Branch: `feat/v8-sprint1-sandbox-enforcement` — 7 commits, +1053 LOC, 52 new tests.
+Audit: `.planning/IMPLEMENTATION_TRUTH_AUDIT.md`. Plan: `.planning/REFACTOR_PLAN_V8.md`.
+
+**Phase 1 — Hard Enforcement** (3 sprints):
+- Sprint 1 (`9bd2a1e`): Sandbox hard enforcement — `enforceToolCheck`/`enforcePathChecks`/`enforceOutputSizeCheck` wired into execution-engine pre/post CLI execution. `EnforcementMode` (hard/soft/off), `SandboxViolationError`, project-level override. 26 tests.
+- Sprint 2 (`9367ebc`): Agent constraints wired — `checkConstraints()` in execution-engine after claim (blocks → waiting_approval). `classifyRisk()` auto-persists to tasks.risk_level. `getModelContextLimit()` per-model context map.
+- Sprint 3 (`dff8960`): `withTenantTransaction()` RLS guard (empty tenant context when auth enabled + no tenantId). `checkApprovalTimeouts()` 24h auto-escalation. Provider state DB persistence (load on startup, persist on mark*).
+
+**Phase 2 — Cleanup + Learning** (2 sprints):
+- Sprint 4-5 (`e0c74fe`): Cross-project learning activated — `triggerLearningExtraction()` after episode recording (≥5 new episodes), `getLearningPatterns()` wired into `selectStrategy()` (0.8x confidence discount), `autoPromotePatterns()` (≥10 samples, ≥70% success). Output verification strict mode (file existence = hard fail). Job queue `@reserved` for Phase 3.
+
+**Phase 3 — Collaborative Autonomy** (3 sprints):
+- Sprint 6 (`c237310`): Agent-initiated task injection — `extractProposals()` parses `<!-- TASK_PROPOSAL/AGENT_MESSAGE/GRAPH_MUTATION: {...} -->` markers from CLI output. `processAgentProposals()` routes to proposeTask/protocol/events. Max 3 per type. 14 tests.
+- Sprint 7-8 (`1a7b18e`): LLM goal validation — `validateCriteriaWithLLM()` (Haiku, structured output, falls back to keyword heuristic). `shouldEnforceGoalFailure()` with confidence ≥0.7 threshold. Goal failure in enforce mode → task revision. `resolveGoalEnforcement()` project setting.
+
+**v8.0 Before→After:**
+| Sandbox | cosmetic → hard enforcement (default-deny) |
+| Constraints | HTTP-only → execution-path blocking |
+| Risk | none → auto-classify + DB persist |
+| Learning | dormant → auto-extract + strategy consume + promote |
+| Verification | lenient → strict (configurable) |
+| Provider State | volatile → DB-persisted |
+| Approval | infinite stall → 24h auto-escalation |
+| RLS | backward-compat hole → tenant guard |
+| Task Injection | HTTP-only → structured output markers |
+| Protocol | read-only → bidirectional markers |
+| Goals | keyword heuristic → LLM + enforcement |
+
+Agentic maturity: ~50/100 → ~72/100. Safety: 6/9 → 9/9 enforced.
+
+## Previous: v7.0 Agentic Refactor — ALL 3 PHASES COMPLETE (2026-04-20)
 
 Master Plan fully executed. 18 workstreams across 3 phases. 50 dedicated unit tests + 40 API endpoints added.
 971/971 tests, typecheck clean.

@@ -12,6 +12,7 @@
 
 import { createPhase, createTask, getLatestPlan, listProjectAgents, updateTask } from "./db.js";
 import { eventBus } from "./event-bus.js";
+import { ensureGoalForTask, type GoalDefinition } from "./goal-engine.js";
 import { pipelineEngine } from "./pipeline-engine.js";
 import type { Phase, ProjectPlan, Task, TaskComplexity } from "./types.js";
 
@@ -33,6 +34,7 @@ export interface AppendTaskInput {
 	taskType?: "ai" | "integration-test" | "run-app";
 	requiresApproval?: boolean;
 	parentTaskId?: string;
+	goalDefinition?: GoalDefinition;
 }
 
 async function bestEffortRefresh(projectId: string): Promise<void> {
@@ -109,6 +111,14 @@ export async function appendTaskToPhase(projectId: string, phaseId: string, inpu
 		requiresApproval: input.requiresApproval ?? false,
 		parentTaskId: input.parentTaskId,
 	});
+
+	if (input.goalDefinition && input.goalDefinition.successCriteria.length > 0) {
+		await ensureGoalForTask({
+			projectId,
+			taskId: task.id,
+			definition: input.goalDefinition,
+		});
+	}
 
 	eventBus.emit({
 		projectId,

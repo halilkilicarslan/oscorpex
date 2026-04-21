@@ -215,8 +215,8 @@ export async function autoPromotePatterns(tenantId: string): Promise<number> {
 
 	if (promoted > 0) {
 		const { eventBus } = await import("./event-bus.js");
-		eventBus.emit({
-			projectId: "",
+		eventBus.emitTransient({
+			projectId: "__global__",
 			type: "task:completed" as any, // Use closest event type for learning:pattern_promoted
 			payload: { learningPatternsPromoted: promoted, tenantId },
 		});

@@ -8,6 +8,7 @@ import { observabilityRoutes } from "./observability-routes.js";
 import { containerPool } from "./studio/container-pool.js";
 import { applyDbBootstrap } from "./studio/db-bootstrap.js";
 import { authRoutes, studioRoutes } from "./studio/index.js";
+import { providerState } from "./studio/provider-state.js";
 import { webhookSender } from "./studio/webhook-sender.js";
 import { startWSServer } from "./studio/ws-server.js";
 import { calculatorTool, dateTimeTool, weatherTool, webSearchTool } from "./tools";
@@ -74,6 +75,9 @@ const summarizer = createSummarizer();
 
 // Apply DB schema migrations (idempotent — safe on every startup)
 await applyDbBootstrap();
+await providerState.loadFromDb().catch((err) => {
+	console.warn("[provider-state] Load skipped:", err instanceof Error ? err.message : err);
+});
 
 // Oscorpex WebSocket sunucusunu başlat (port 3142)
 startWSServer();

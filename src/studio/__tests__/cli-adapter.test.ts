@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ClaudeAdapter, CodexAdapter, CursorAdapter, getAdapter } from "../cli-adapter.js";
+import { ClaudeAdapter, CodexAdapter, CursorAdapter, buildToolGovernanceSection, getAdapter } from "../cli-adapter.js";
 
 vi.mock("../cli-runtime.js", () => ({
 	isClaudeCliAvailable: vi.fn().mockResolvedValue(true),
@@ -77,6 +77,19 @@ describe("CLI Adapter (Faz 4.1)", () => {
 
 		it('should fallback to ClaudeAdapter for "none"', () => {
 			expect(getAdapter("none").name).toBe("claude-code");
+		});
+	});
+
+	describe("buildToolGovernanceSection", () => {
+		it("returns empty string when no allowed tools are provided", () => {
+			expect(buildToolGovernanceSection()).toBe("");
+			expect(buildToolGovernanceSection([])).toBe("");
+		});
+
+		it("renders a restrictive tool list when allowed tools are provided", () => {
+			const text = buildToolGovernanceSection(["Read", "Write"]);
+			expect(text).toContain("Tool Governance");
+			expect(text).toContain("Read, Write");
 		});
 	});
 });

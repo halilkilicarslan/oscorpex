@@ -34,9 +34,33 @@ vi.mock("../db.js", () => ({
 		status: "queued",
 	})),
 	listProjectTasks: vi.fn().mockResolvedValue([]),
+	getPipelineRun: vi.fn().mockResolvedValue({ id: "run-1" }),
+	getGraphMutation: vi.fn().mockResolvedValue({
+		id: "mutation-1",
+		projectId: "proj-1",
+		pipelineRunId: "run-1",
+		causedByAgentId: "agent-1",
+		mutationType: "insert_node",
+		payload: { phaseId: "phase-1", title: "Pending task", description: "from proposal", assignedAgent: "backend_dev" },
+		status: "pending",
+		createdAt: new Date().toISOString(),
+	}),
+	updateGraphMutation: vi.fn().mockImplementation(async (_id: string, updates: any) => ({
+		id: "mutation-1",
+		projectId: "proj-1",
+		pipelineRunId: "run-1",
+		causedByAgentId: "agent-1",
+		mutationType: "insert_node",
+		payload: updates.payload ?? {},
+		status: updates.status ?? "applied",
+		approvedBy: updates.approvedBy,
+		appliedAt: updates.appliedAt,
+		createdAt: new Date().toISOString(),
+	})),
 	recordGraphMutation: vi.fn().mockImplementation(async (params: any) => ({
 		id: "mutation-1",
 		...params,
+		status: params.status ?? "applied",
 		createdAt: new Date().toISOString(),
 	})),
 	listGraphMutations: vi.fn().mockResolvedValue([]),
@@ -63,6 +87,8 @@ import {
 	removeEdge,
 	deferBranch,
 	mergeIntoPhase,
+	proposeGraphMutation,
+	approveGraphMutationRequest,
 } from "../graph-coordinator.js";
 
 describe("Graph Coordinator", () => {
@@ -122,6 +148,27 @@ describe("Graph Coordinator", () => {
 		expect(result.success).toBe(true);
 		expect(result.mutationType).toBe("merge_into_phase");
 	});
+
+	it("should persist pending graph mutation proposals", async () => {
+		const result = await proposeGraphMutation({
+			projectId: "proj-1",
+			causedByAgentId: "agent-1",
+			mutationType: "insert_node",
+			payload: {
+				phaseId: "phase-1",
+				title: "Pending task",
+				description: "Awaiting approval",
+				assignedAgent: "backend_dev",
+			},
+		});
+		expect(result.mutationId).toBe("mutation-1");
+	});
+
+	it("should approve and apply a pending graph mutation", async () => {
+		const result = await approveGraphMutationRequest("mutation-1", "human");
+		expect(result.success).toBe(true);
+		expect(result.mutationType).toBe("insert_node");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -129,6 +176,7 @@ describe("Graph Coordinator", () => {
 // ---------------------------------------------------------------------------
 import {
 	formatGoalPrompt,
+	ensureGoalForTask,
 	validateCriteriaFromOutput,
 	type ExecutionGoal,
 } from "../goal-engine.js";
@@ -194,6 +242,49 @@ describe("Goal Engine", () => {
 		for (const r of results) {
 			expect(r.evidence).toBeTruthy();
 		}
+	});
+
+	it("should create and activate a goal for a task", async () => {
+		vi.mocked(queryOne)
+			.mockResolvedValueOnce(undefined as any)
+			.mockResolvedValueOnce({
+				id: "goal-new",
+				project_id: "proj-1",
+				task_id: "task-1",
+				definition: {
+					goal: "Stabilize auth flow",
+					constraints: ["keep existing API"],
+					successCriteria: ["tests pass"],
+				},
+				status: "pending",
+				criteria_results: [],
+				created_at: new Date().toISOString(),
+			} as any)
+			.mockResolvedValueOnce({
+				id: "goal-new",
+				project_id: "proj-1",
+				task_id: "task-1",
+				definition: {
+					goal: "Stabilize auth flow",
+					constraints: ["keep existing API"],
+					successCriteria: ["tests pass"],
+				},
+				status: "active",
+				criteria_results: [],
+				created_at: new Date().toISOString(),
+			} as any);
+
+		const goal = await ensureGoalForTask({
+			projectId: "proj-1",
+			taskId: "task-1",
+			definition: {
+				goal: "Stabilize auth flow",
+				constraints: ["keep existing API"],
+				successCriteria: ["tests pass"],
+			},
+		});
+		expect(goal.status).toBe("active");
+		expect(goal.taskId).toBe("task-1");
 	});
 });
 
@@ -273,8 +364,8 @@ describe("Sandbox Manager", () => {
 // ---------------------------------------------------------------------------
 // Adaptive Replanner
 // ---------------------------------------------------------------------------
-import { shouldReplan, type ReplanTrigger } from "../adaptive-replanner.js";
-import { queryOne, getProjectSetting } from "../db.js";
+import { shouldReplan, evaluateReplan, approveReplanEvent, type ReplanTrigger } from "../adaptive-replanner.js";
+import { queryOne, getProjectSetting, getLatestPlan, listPhases, listProjectTasks } from "../db.js";
 
 describe("Adaptive Replanner", () => {
 	beforeEach(() => {
@@ -297,6 +388,75 @@ describe("Adaptive Replanner", () => {
 		vi.mocked(queryOne).mockResolvedValueOnce({ id: "recent-replan" } as any);
 		const result = await shouldReplan("proj-1", "phase_end");
 		expect(result).toBe(false);
+	});
+
+	it("should create a pending replan event when phase_end detects review rejections", async () => {
+		vi.mocked(getLatestPlan).mockResolvedValueOnce({ id: "plan-1" } as any);
+		vi.mocked(listPhases).mockResolvedValueOnce([
+			{ id: "phase-2", name: "Next", status: "pending", tasks: [], order: 2, dependsOn: [] } as any,
+		]);
+		vi.mocked(listProjectTasks).mockResolvedValueOnce([
+			{ id: "t-1", phaseId: "phase-1", status: "done", reviewStatus: "rejected" } as any,
+			{ id: "t-2", phaseId: "phase-2", status: "queued" } as any,
+		]);
+		vi.mocked(queryOne).mockResolvedValueOnce(null);
+
+		const result = await evaluateReplan({ projectId: "proj-1", trigger: "phase_end" });
+		expect(result?.status).toBe("pending");
+		expect(result?.pendingApproval).toBeGreaterThan(0);
+	});
+
+	it("should approve and apply pending replan patches", async () => {
+		vi.mocked(queryOne).mockResolvedValueOnce({
+			id: "replan-1",
+			project_id: "proj-1",
+			trigger: "phase_end",
+			patch_entries: [
+				{
+					action: "add_task",
+					payload: {
+						phaseId: "phase-2",
+						title: "Address review findings before next phase",
+						description: "follow-up",
+						assignedAgent: "tech-lead",
+					},
+					riskLevel: "medium",
+					reason: "review findings",
+				},
+			],
+			auto_applied: 0,
+			pending_approval: 1,
+			status: "pending",
+			created_at: new Date().toISOString(),
+		} as any);
+		vi.mocked(queryOne).mockResolvedValueOnce({
+			id: "replan-1",
+			project_id: "proj-1",
+			trigger: "phase_end",
+			patch_entries: [
+				{
+					action: "add_task",
+					payload: {
+						phaseId: "phase-2",
+						title: "Address review findings before next phase",
+						description: "follow-up",
+						assignedAgent: "tech-lead",
+					},
+					riskLevel: "medium",
+					reason: "review findings",
+				},
+			],
+			auto_applied: 1,
+			pending_approval: 1,
+			status: "applied",
+			approved_by: "human",
+			applied_at: new Date().toISOString(),
+			created_at: new Date().toISOString(),
+		} as any);
+
+		const result = await approveReplanEvent("replan-1", "human");
+		expect(result.status).toBe("applied");
+		expect(result.autoApplied).toBe(1);
 	});
 });
 

@@ -13,11 +13,14 @@ import {
 	getStrategiesForRole,
 	listStrategies,
 	getUnreadMessages,
+	getProtocolMessage,
 	getTaskMessages,
 	listProposals,
 	getProposal,
 	approveProposal,
 	rejectProposal,
+	markMessageActioned,
+	getTask,
 	listApprovalRules,
 	createApprovalRule,
 	upsertCapabilityGrant,
@@ -31,6 +34,9 @@ import { classifyRisk, canAutoApprove } from "../agent-runtime/agent-constraints
 import { loadBehavioralContext, formatBehavioralPrompt } from "../agent-runtime/agent-memory.js";
 import { BUILTIN_STRATEGIES } from "../agent-runtime/agent-strategy.js";
 import { getAgenticMetrics } from "../agentic-metrics.js";
+import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
+import { executionEngine } from "../execution-engine.js";
+import { taskEngine } from "../task-engine.js";
 
 export const agenticRoutes = new Hono();
 
@@ -87,7 +93,7 @@ agenticRoutes.get("/projects/:projectId/agents/:agentId/failures", async (c) => 
 agenticRoutes.get("/projects/:projectId/agents/:agentId/behavioral-context", async (c) => {
 	try {
 		const { projectId, agentId } = c.req.param();
-		const role = c.req.query("role") ?? "backend_dev";
+		const role = canonicalizeAgentRole(c.req.query("role") ?? "backend-dev");
 		const taskType = c.req.query("taskType") ?? "ai";
 		const ctx = await loadBehavioralContext(projectId, agentId, role, taskType);
 		return c.json({ context: ctx, formattedPrompt: formatBehavioralPrompt(ctx) });
@@ -111,10 +117,11 @@ agenticRoutes.get("/strategies", async (c) => {
 
 agenticRoutes.get("/strategies/:role", async (c) => {
 	try {
-		const role = c.req.param("role");
+		const role = canonicalizeAgentRole(c.req.param("role"));
 		const taskType = c.req.query("taskType");
-		const strategies = await getStrategiesForRole(role, taskType);
-		const builtin = BUILTIN_STRATEGIES.filter((s) => s.agentRole === role);
+		const strategyRole = getBehaviorRoleKey(role);
+		const strategies = await getStrategiesForRole(strategyRole, taskType);
+		const builtin = BUILTIN_STRATEGIES.filter((s) => s.agentRole === strategyRole);
 		return c.json({ db: strategies, builtin });
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
@@ -124,10 +131,10 @@ agenticRoutes.get("/strategies/:role", async (c) => {
 agenticRoutes.get("/projects/:projectId/strategy-patterns", async (c) => {
 	try {
 		const { projectId } = c.req.param();
-		const role = c.req.query("role") ?? "backend_dev";
+		const role = canonicalizeAgentRole(c.req.query("role") ?? "backend-dev");
 		const taskType = c.req.query("taskType") ?? "ai";
 		const limit = Number(c.req.query("limit") ?? "10");
-		const patterns = await getBestStrategies(projectId, role, taskType, limit);
+		const patterns = await getBestStrategies(projectId, getBehaviorRoleKey(role), taskType, limit);
 		return c.json(patterns);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
@@ -205,9 +212,54 @@ agenticRoutes.post("/projects/:projectId/proposals", async (c) => {
 agenticRoutes.post("/proposals/:proposalId/approve", async (c) => {
 	try {
 		const body = await c.req.json().catch(() => ({}));
-		const proposal = await approveProposal(c.req.param("proposalId"), (body as any).approvedBy ?? "human");
-		if (!proposal) return c.json({ error: "Proposal not found" }, 404);
-		return c.json(proposal);
+		const result = await approveProposal(c.req.param("proposalId"), (body as any).approvedBy ?? "human");
+		if (!result) return c.json({ error: "Proposal not found" }, 404);
+		if (result.taskId) {
+			const task = await getTask(result.taskId);
+			if (task) {
+				const ready = await taskEngine.getReadyTasks(task.phaseId);
+				if (ready.some((candidate) => candidate.id === task.id)) {
+					executionEngine.executeTask(result.proposal.projectId, task).catch(() => {});
+				}
+			}
+		}
+		return c.json(result);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+agenticRoutes.post("/protocol-messages/:messageId/actioned", async (c) => {
+	try {
+		const message = await getProtocolMessage(c.req.param("messageId"));
+		if (!message) return c.json({ error: "Protocol message not found" }, 404);
+
+		await markMessageActioned(message.id);
+
+		if (message.relatedTaskId) {
+			const remaining = await getTaskMessages(message.projectId, message.relatedTaskId);
+			const hasOpenBlockers = remaining.some(
+				(msg) =>
+					msg.id !== message.id &&
+					(msg.messageType === "blocker_alert" || msg.messageType === "request_info" || msg.messageType === "dependency_warning") &&
+					msg.status !== "actioned" &&
+					msg.status !== "dismissed",
+			);
+
+			const task = await getTask(message.relatedTaskId);
+			if (task && task.status === "blocked" && !hasOpenBlockers) {
+				await import("../db.js").then(({ updateTask }) => updateTask(task.id, { status: "queued" }));
+				const refreshed = await getTask(task.id);
+				if (refreshed) {
+					const ready = await taskEngine.getReadyTasks(refreshed.phaseId);
+					if (ready.some((candidate) => candidate.id === refreshed.id)) {
+						executionEngine.executeTask(message.projectId, refreshed).catch(() => {});
+					}
+				}
+			}
+		}
+
+		return c.json({ success: true });
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
 	}

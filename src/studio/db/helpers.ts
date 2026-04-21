@@ -50,6 +50,7 @@ import type {
 	WorkItemStatus,
 	WorkItemType,
 } from "../types.js";
+import { canonicalizeAgentRole } from "../roles.js";
 
 // ---------------------------------------------------------------------------
 // Utility
@@ -95,6 +96,7 @@ export function rowToTask(row: any): Task {
 		completedAt: row.completed_at ?? undefined,
 		reviewStatus: row.review_status ?? undefined,
 		reviewerAgentId: row.reviewer_agent_id ?? undefined,
+		reviewTaskId: row.review_task_id ?? undefined,
 		revisionCount: row.revision_count ?? 0,
 		assignedAgentId: row.assigned_agent_id ?? undefined,
 		// Human-in-the-Loop onay alanları
@@ -128,7 +130,7 @@ export function rowToAgentConfig(row: any): AgentConfig {
 	return {
 		id: row.id,
 		name: row.name,
-		role: row.role as AgentRole,
+		role: canonicalizeAgentRole(row.role) as AgentRole,
 		avatar: row.avatar,
 		gender: row.gender ?? "male",
 		personality: row.personality,
@@ -146,7 +148,7 @@ export function rowToProjectAgent(row: any): ProjectAgent {
 		projectId: row.project_id,
 		sourceAgentId: row.source_agent_id ?? undefined,
 		name: row.name,
-		role: row.role as AgentRole | string,
+		role: canonicalizeAgentRole(row.role) as AgentRole | string,
 		avatar: row.avatar,
 		gender: row.gender ?? "male",
 		personality: row.personality,

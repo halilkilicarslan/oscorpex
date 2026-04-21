@@ -48,6 +48,10 @@ export interface ReplanResult {
 	patchEntries: PlanPatchEntry[];
 	autoApplied: number;
 	pendingApproval: number;
+	status: "pending" | "applied" | "rejected";
+	approvedBy?: string;
+	rejectedReason?: string;
+	appliedAt?: string;
 	createdAt: string;
 }
 
@@ -61,12 +65,27 @@ export async function recordReplanEvent(params: {
 	patchEntries: PlanPatchEntry[];
 	autoApplied: number;
 	pendingApproval: number;
+	status: ReplanResult["status"];
+	approvedBy?: string;
+	rejectedReason?: string;
+	appliedAt?: string;
 }): Promise<ReplanResult> {
 	const id = randomUUID();
 	await execute(
-		`INSERT INTO replan_events (id, project_id, trigger, patch_entries, auto_applied, pending_approval)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		[id, params.projectId, params.trigger, JSON.stringify(params.patchEntries), params.autoApplied, params.pendingApproval],
+		`INSERT INTO replan_events (id, project_id, trigger, patch_entries, auto_applied, pending_approval, status, approved_by, rejected_reason, applied_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		[
+			id,
+			params.projectId,
+			params.trigger,
+			JSON.stringify(params.patchEntries),
+			params.autoApplied,
+			params.pendingApproval,
+			params.status,
+			params.approvedBy ?? null,
+			params.rejectedReason ?? null,
+			params.appliedAt ?? null,
+		],
 	);
 	return { id, ...params, createdAt: new Date().toISOString() };
 }
@@ -83,8 +102,30 @@ export async function listReplanEvents(projectId: string, limit = 20): Promise<R
 		patchEntries: (r.patch_entries as PlanPatchEntry[]) ?? [],
 		autoApplied: r.auto_applied as number,
 		pendingApproval: r.pending_approval as number,
+		status: (r.status as ReplanResult["status"]) ?? "applied",
+		approvedBy: (r.approved_by as string) ?? undefined,
+		rejectedReason: (r.rejected_reason as string) ?? undefined,
+		appliedAt: (r.applied_at as string) ?? undefined,
 		createdAt: r.created_at as string,
 	}));
+}
+
+export async function getReplanEvent(id: string): Promise<ReplanResult | null> {
+	const row = await queryOne(`SELECT * FROM replan_events WHERE id = $1`, [id]);
+	if (!row) return null;
+	return {
+		id: row.id as string,
+		projectId: row.project_id as string,
+		trigger: row.trigger as ReplanTrigger,
+		patchEntries: (row.patch_entries as PlanPatchEntry[]) ?? [],
+		autoApplied: row.auto_applied as number,
+		pendingApproval: row.pending_approval as number,
+		status: (row.status as ReplanResult["status"]) ?? "applied",
+		approvedBy: (row.approved_by as string) ?? undefined,
+		rejectedReason: (row.rejected_reason as string) ?? undefined,
+		appliedAt: (row.applied_at as string) ?? undefined,
+		createdAt: row.created_at as string,
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -133,14 +174,14 @@ interface ProjectStateSnapshot {
 
 async function snapshotProjectState(projectId: string): Promise<ProjectStateSnapshot> {
 	const tasks = await listProjectTasks(projectId);
-	const phases = await listPhases(projectId);
 	const plan = await getLatestPlan(projectId);
+	const phases = plan ? await listPhases(plan.id) : [];
 
 	const completedTasks = tasks.filter((t) => t.status === "done").length;
 	const failedTasks = tasks.filter((t) => t.status === "failed").length;
 	const reviewRejections = tasks.filter((t) => t.reviewStatus === "rejected").length;
 	const queuedTasks = tasks.filter((t) => t.status === "queued").length;
-	const blockedTasks = tasks.filter((t) => t.status === "waiting_approval").length;
+	const blockedTasks = tasks.filter((t) => t.status === "blocked" || t.status === "waiting_approval").length;
 
 	const phaseSnapshots = phases.map((p) => {
 		const phaseTasks = tasks.filter((t) => t.phaseId === p.id);
@@ -170,6 +211,7 @@ async function snapshotProjectState(projectId: string): Promise<ProjectStateSnap
 
 function generatePatches(snapshot: ProjectStateSnapshot, trigger: ReplanTrigger): PlanPatchEntry[] {
 	const patches: PlanPatchEntry[] = [];
+	const futurePhase = snapshot.phases.find((phase) => phase.status === "running" || phase.status === "pending");
 
 	// If too many failures, defer remaining tasks in struggling phases
 	for (const phase of snapshot.phases) {
@@ -188,13 +230,32 @@ function generatePatches(snapshot: ProjectStateSnapshot, trigger: ReplanTrigger)
 		}
 	}
 
-	// If injection threshold exceeded, suggest consolidation
-	if (trigger === "injection_threshold") {
+	if (trigger === "phase_end" && futurePhase && snapshot.reviewRejections > 0) {
 		patches.push({
-			action: "reorder",
-			payload: { action: "consolidate_injected_tasks" },
+			action: "add_task",
+			payload: {
+				phaseId: futurePhase.id,
+				title: "Address review findings before next phase",
+				description: `Review rejections detected (${snapshot.reviewRejections}). Validate unresolved concerns before downstream execution.`,
+				assignedAgent: "tech-lead",
+			},
+			riskLevel: "medium",
+			reason: `Phase ended with ${snapshot.reviewRejections} rejected review cycle(s) — add stabilization follow-up.`,
+		});
+	}
+
+	// If injection threshold exceeded, suggest consolidation
+	if (trigger === "injection_threshold" && futurePhase) {
+		patches.push({
+			action: "add_task",
+			payload: {
+				phaseId: futurePhase.id,
+				title: "Consolidate injected task backlog",
+				description: "Review and consolidate agent-injected tasks before continuing execution.",
+				assignedAgent: "tech-lead",
+			},
 			riskLevel: "low",
-			reason: "Task injection threshold exceeded — consolidating injected tasks into next phase",
+			reason: "Task injection threshold exceeded — add explicit consolidation checkpoint",
 		});
 	}
 
@@ -277,6 +338,8 @@ export async function evaluateReplan(ctx: ReplanContext): Promise<ReplanResult |
 		patchEntries: patches,
 		autoApplied,
 		pendingApproval,
+		status: pendingApproval > 0 ? "pending" : "applied",
+		appliedAt: pendingApproval > 0 ? undefined : new Date().toISOString(),
 	});
 
 	eventBus.emit({
@@ -291,4 +354,59 @@ export async function evaluateReplan(ctx: ReplanContext): Promise<ReplanResult |
 	});
 
 	return result;
+}
+
+export async function approveReplanEvent(eventId: string, approvedBy: string): Promise<ReplanResult> {
+	const event = await getReplanEvent(eventId);
+	if (!event) throw new Error(`Replan event ${eventId} not found`);
+	if (event.status !== "pending") return event;
+
+	let autoApplied = event.autoApplied;
+	for (const patch of event.patchEntries) {
+		if (patch.riskLevel === "low") continue;
+		const applied = await applyPatch(event.projectId, patch);
+		if (applied) autoApplied++;
+	}
+
+	await execute(
+		`UPDATE replan_events
+		 SET status = 'applied', approved_by = $2, applied_at = now(), auto_applied = $3
+		 WHERE id = $1`,
+		[eventId, approvedBy, autoApplied],
+	);
+
+	const updated = await getReplanEvent(eventId);
+	if (!updated) throw new Error(`Replan event ${eventId} disappeared after approval`);
+
+	eventBus.emit({
+		projectId: updated.projectId,
+		type: "plan:replanned",
+		payload: {
+			trigger: updated.trigger,
+			patchCount: updated.patchEntries.length,
+			autoApplied: updated.autoApplied,
+			pendingApproval: 0,
+			approvedBy,
+			replanEventId: updated.id,
+		},
+	});
+
+	return updated;
+}
+
+export async function rejectReplanEvent(eventId: string, reason: string): Promise<ReplanResult> {
+	const event = await getReplanEvent(eventId);
+	if (!event) throw new Error(`Replan event ${eventId} not found`);
+	if (event.status !== "pending") return event;
+
+	await execute(
+		`UPDATE replan_events
+		 SET status = 'rejected', rejected_reason = $2
+		 WHERE id = $1`,
+		[eventId, reason],
+	);
+
+	const updated = await getReplanEvent(eventId);
+	if (!updated) throw new Error(`Replan event ${eventId} disappeared after rejection`);
+	return updated;
 }

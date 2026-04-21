@@ -40,12 +40,17 @@ async function getProjectSpend(projectId: string): Promise<number> {
  * Returns the check result — caller decides whether to pause.
  */
 export async function checkBudget(projectId: string): Promise<BudgetCheck> {
-	const [totalSpentUsd, maxUsdStr] = await Promise.all([
+	const [totalSpentUsd, budgetKeys] = await Promise.all([
 		getProjectSpend(projectId),
-		getProjectSetting(projectId, "budget", "max_usd"),
+		Promise.all([
+			getProjectSetting(projectId, "budget", "maxCostUsd"),
+			getProjectSetting(projectId, "budget", "max_usd"),
+		]),
 	]);
 
-	const budgetMaxUsd = maxUsdStr ? Number(maxUsdStr) : null;
+	const [maxCostUsd, legacyMaxUsd] = budgetKeys;
+	const rawBudget = maxCostUsd ?? legacyMaxUsd;
+	const budgetMaxUsd = rawBudget ? Number(rawBudget) : null;
 
 	if (budgetMaxUsd === null || Number.isNaN(budgetMaxUsd)) {
 		return { totalSpentUsd, budgetMaxUsd: null, exceeded: false };

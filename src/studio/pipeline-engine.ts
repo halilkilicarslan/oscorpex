@@ -23,6 +23,7 @@ import {
 	listAgentDependencies,
 	listPhases,
 	listProjectAgents,
+	listTasks,
 	mutatePipelineState,
 	updatePipelineRun,
 	updateTask,
@@ -778,9 +779,7 @@ class PipelineEngine {
 		const statuses = await Promise.all(freshTaskIds.map((id) => this.getTaskStatus(id)));
 
 		const anyFailed = statuses.some((s) => s === "failed");
-		// v2: review durumundaki task'lar stage ilerlemesini bloklamaz —
-		// review task ayrı stage'de çalışır, orijinal task review bitince done olur
-		const allDone = statuses.every((s) => s === "done" || s === "review");
+		const allDone = statuses.every((s) => s === "done");
 
 		if (anyFailed) {
 			await this.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
@@ -794,6 +793,12 @@ class PipelineEngine {
 	private async resolveStageTaskIds(projectId: string, stageIndex: number, state: PipelineState): Promise<string[]> {
 		const stage = state.stages[stageIndex];
 		if (!stage) return [];
+
+		if (stage.phaseId) {
+			const latestTasks = await listTasks(stage.phaseId);
+			stage.tasks = latestTasks;
+			return latestTasks.map((t) => t.id);
+		}
 
 		if (stage.tasks.length > 0) {
 			return stage.tasks.map((t) => t.id);

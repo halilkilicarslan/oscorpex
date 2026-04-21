@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   task_type                 TEXT NOT NULL DEFAULT 'ai',
   review_status             TEXT,
   reviewer_agent_id         TEXT,
+  review_task_id            TEXT,
   revision_count            INTEGER NOT NULL DEFAULT 0,
   assigned_agent_id         TEXT
 );
@@ -280,6 +281,7 @@ ALTER TABLE team_templates ADD COLUMN IF NOT EXISTS dependencies TEXT NOT NULL D
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_task_id TEXT;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS target_files TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimated_lines INTEGER;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS review_task_id TEXT;
 
 -- ---------------------------------------------------------------------------
 -- v3.1 Migration: Edge type metadata on agent_dependencies
@@ -1522,12 +1524,18 @@ CREATE TABLE IF NOT EXISTS task_proposals (
   description          TEXT NOT NULL,
   severity             TEXT,
   suggested_role       TEXT,
+  phase_id             TEXT REFERENCES phases(id) ON DELETE SET NULL,
+  complexity           TEXT,
   status               TEXT NOT NULL DEFAULT 'pending',
   approved_by          TEXT,
+  created_task_id      TEXT REFERENCES tasks(id) ON DELETE SET NULL,
   rejected_reason      TEXT,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_task_proposals_project ON task_proposals(project_id, status);
+ALTER TABLE task_proposals ADD COLUMN IF NOT EXISTS phase_id TEXT;
+ALTER TABLE task_proposals ADD COLUMN IF NOT EXISTS complexity TEXT;
+ALTER TABLE task_proposals ADD COLUMN IF NOT EXISTS created_task_id TEXT;
 
 -- 2.6 Structured inter-agent protocol messages
 CREATE TABLE IF NOT EXISTS agent_protocol_messages (
@@ -1570,11 +1578,17 @@ CREATE TABLE IF NOT EXISTS graph_mutations (
   caused_by_agent_id TEXT,
   mutation_type     TEXT NOT NULL,
   payload           JSONB NOT NULL DEFAULT '{}',
+  status            TEXT NOT NULL DEFAULT 'applied',
   approved_by       TEXT,
+  rejected_reason   TEXT,
+  applied_at        TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_graph_mutations_project ON graph_mutations(project_id);
 CREATE INDEX IF NOT EXISTS idx_graph_mutations_run ON graph_mutations(pipeline_run_id);
+ALTER TABLE graph_mutations ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'applied';
+ALTER TABLE graph_mutations ADD COLUMN IF NOT EXISTS rejected_reason TEXT;
+ALTER TABLE graph_mutations ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
 
 -- 3.2 Replan events — adaptive replanning audit trail
 CREATE TABLE IF NOT EXISTS replan_events (
@@ -1584,9 +1598,17 @@ CREATE TABLE IF NOT EXISTS replan_events (
   patch_entries     JSONB NOT NULL DEFAULT '[]',
   auto_applied      INTEGER NOT NULL DEFAULT 0,
   pending_approval  INTEGER NOT NULL DEFAULT 0,
+  status            TEXT NOT NULL DEFAULT 'applied',
+  approved_by       TEXT,
+  rejected_reason   TEXT,
+  applied_at        TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_replan_events_project ON replan_events(project_id);
+ALTER TABLE replan_events ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'applied';
+ALTER TABLE replan_events ADD COLUMN IF NOT EXISTS approved_by TEXT;
+ALTER TABLE replan_events ADD COLUMN IF NOT EXISTS rejected_reason TEXT;
+ALTER TABLE replan_events ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
 
 -- 3.3 Execution goals — goal-based execution model
 CREATE TABLE IF NOT EXISTS execution_goals (

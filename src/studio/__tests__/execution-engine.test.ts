@@ -155,7 +155,7 @@ describe("Execution Engine", () => {
 				taskStatuses: ["queued"],
 			});
 
-			const status = executionEngine.getExecutionStatus(project.id);
+			const status = await executionEngine.getExecutionStatus(project.id);
 
 			expect(status.projectId).toBe(project.id);
 			expect(status.runtimes).toEqual([]);

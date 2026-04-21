@@ -1032,7 +1032,7 @@ projectRoutes.post("/projects/:id/plan/approve", async (c) => {
 			pipelineWarning = "Projeye atanmış agent bulunamadı; pipeline stage koordinasyonu devre dışı.";
 			console.warn(`[pipeline-engine] ${pipelineWarning} (proje=${projectId})`);
 		} else {
-			pipelineEngine.startPipeline(projectId);
+			await pipelineEngine.startPipeline(projectId);
 			pipelineStarted = true;
 			console.log(`[pipeline-engine] Plan onayı ile pipeline otomatik başlatıldı (proje=${projectId})`);
 		}
@@ -1102,7 +1102,7 @@ projectRoutes.get("/projects/:id/plans/:planId/cost-estimate", async (c) => {
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
 	try {
-		const estimate = estimatePlanCost(projectId, planId);
+		const estimate = await estimatePlanCost(projectId, planId);
 		return c.json(estimate);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : "Maliyet tahmini hesaplanamadı";
@@ -1129,7 +1129,7 @@ projectRoutes.get("/projects/:id/execution/status", async (c) => {
 		const projectId = c.req.param("id");
 		const project = await getProject(projectId);
 		if (!project) return c.json({ error: "Project not found" }, 404);
-		return c.json(executionEngine.getExecutionStatus(projectId));
+			return c.json(await executionEngine.getExecutionStatus(projectId));
 	} catch (err) {
 		console.error("[project-routes] execution status failed:", err);
 		return c.json({ error: "Failed to get execution status" }, 500);

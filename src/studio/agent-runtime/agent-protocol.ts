@@ -48,10 +48,12 @@ export async function signalBlocker(
 	fromAgentId: string,
 	description: string,
 	relatedTaskId?: string,
+	toAgentId?: string,
 ): Promise<AgentProtocolMessage> {
 	const msg = await sendProtocolMessage({
 		projectId,
 		fromAgentId,
+		toAgentId: toAgentId ?? fromAgentId,
 		relatedTaskId,
 		messageType: "blocker_alert",
 		payload: { description },
@@ -61,7 +63,7 @@ export async function signalBlocker(
 		type: "agent:requested_help",
 		agentId: fromAgentId,
 		taskId: relatedTaskId,
-		payload: { description, messageType: "blocker_alert" },
+		payload: { description, messageType: "blocker_alert", toAgentId: toAgentId ?? fromAgentId },
 	});
 	return msg;
 }

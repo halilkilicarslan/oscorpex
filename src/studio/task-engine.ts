@@ -121,7 +121,11 @@ class TaskEngine {
 			throw new Error(`Task ${taskId} is not queued (status: ${task.status})`);
 		}
 
-		const updated = (await updateTask(taskId, { status: "assigned", assignedAgent: agentId }))!;
+		const updated = (await updateTask(taskId, {
+			status: "assigned",
+			assignedAgent: agentId,
+			assignedAgentId: agentId,
+		}))!;
 		const projectId = await this.getProjectIdForTask(task);
 
 		eventBus.emit({
@@ -293,7 +297,8 @@ class TaskEngine {
 
 		// Budget limiti kontrolü — aşıldıysa task'ı blocked yap ve event emit et
 		// (projectId yukarıda zaten tanımlandı)
-		const budgetStatus = await this.checkProjectBudget(projectId, task.assignedAgentId);
+		const effectiveAgentId = task.assignedAgentId ?? task.assignedAgent;
+		const budgetStatus = await this.checkProjectBudget(projectId, effectiveAgentId);
 
 		if (budgetStatus && budgetStatus.exceeded) {
 			// Task'ı 'blocked' statüsüne al (failed yerine ayrı bir durum olarak işaretlenir)
@@ -485,13 +490,14 @@ class TaskEngine {
 				title: `Code Review: ${task.title}`,
 				description: `${reviewer.name} tarafından "${task.title}" task'ının kod incelemesi. Dosyalar: ${[...output.filesCreated, ...output.filesModified].slice(0, 5).join(", ") || "N/A"}`,
 				assignedAgent: reviewer.id,
+				assignedAgentId: reviewer.id,
 				complexity: "S" as any,
 				dependsOn: [taskId],
 				branch: task.branch || "main",
 			});
 
 			// Link the review task to the original task
-			await updateTask(taskId, { reviewTaskId: reviewTask.id } as any);
+			await updateTask(taskId, { reviewTaskId: reviewTask.id });
 
 			eventBus.emit({
 				projectId,
@@ -770,7 +776,7 @@ class TaskEngine {
 	}
 
 	/**
-	 * Revision durumundaki task'ı dev agent'a geri gönderir (running durumuna alır).
+	 * Revision durumundaki task'ı tekrar kuyruğa alır.
 	 */
 	async restartRevision(taskId: string): Promise<Task> {
 		const task = await this.requireTask(taskId);
@@ -779,8 +785,8 @@ class TaskEngine {
 		}
 
 		const updated = (await updateTask(taskId, {
-			status: "running",
-			startedAt: new Date().toISOString(),
+			status: "queued",
+			startedAt: undefined,
 			reviewStatus: undefined,
 		}))!;
 
@@ -788,7 +794,7 @@ class TaskEngine {
 
 		eventBus.emit({
 			projectId,
-			type: "task:started",
+			type: "task:retry",
 			taskId,
 			payload: {
 				title: task.title,
@@ -859,7 +865,8 @@ class TaskEngine {
 		// v3.1: Check for fallback edge — if primary agent fails, try fallback agent
 		try {
 			const deps = await listAgentDependencies(projectId);
-			const fallbackEdge = deps.find((d) => d.type === "fallback" && d.fromAgentId === task.assignedAgentId);
+			const effectiveAgentId = task.assignedAgentId ?? task.assignedAgent;
+			const fallbackEdge = deps.find((d) => d.type === "fallback" && d.fromAgentId === effectiveAgentId);
 			if (fallbackEdge && task.retryCount === 0) {
 				console.log(`[task-engine] Fallback edge found — re-assigning task "${task.title}" to fallback agent`);
 				await updateTask(taskId, {
@@ -874,7 +881,7 @@ class TaskEngine {
 			}
 
 			// v3.1: Check for escalation edge — if task fails N times, escalate
-			const escalationEdge = deps.find((d) => d.type === "escalation" && d.fromAgentId === task.assignedAgentId);
+			const escalationEdge = deps.find((d) => d.type === "escalation" && d.fromAgentId === effectiveAgentId);
 			const maxFailures = escalationEdge?.metadata?.maxFailures ?? 3;
 			if (escalationEdge && (task.retryCount ?? 0) >= maxFailures) {
 				console.log(`[task-engine] Escalation triggered — task "${task.title}" failed ${task.retryCount} times`);
@@ -991,9 +998,7 @@ class TaskEngine {
 	async isPhaseComplete(phaseId: string): Promise<boolean> {
 		const tasks = await listTasks(phaseId);
 		if (tasks.length === 0) return false;
-		// review durumundaki task'lar phase ilerlemesini bloklamaz —
-		// review task ayrı çalışır, bitince orijinal task done olur
-		return tasks.every((t) => t.status === "done" || t.status === "review");
+		return tasks.every((t) => t.status === "done");
 	}
 
 	async isPhaseFailed(phaseId: string): Promise<boolean> {

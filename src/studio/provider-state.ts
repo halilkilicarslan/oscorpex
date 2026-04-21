@@ -44,8 +44,8 @@ class ProviderStateManager {
 			state.rateLimited = true;
 			state.cooldownUntil = new Date(Date.now() + cooldownMs);
 			// Emit provider:degraded event (v7.0 Section 13)
-			eventBus.emit({
-				projectId: "",
+			eventBus.emitTransient({
+				projectId: "__global__",
 				type: "provider:degraded",
 				payload: { provider: adapter, cooldownMs, reason: "rate_limited" },
 			});

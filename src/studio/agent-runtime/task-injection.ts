@@ -4,10 +4,11 @@
 // Proposals are governed by approval rules.
 // ---------------------------------------------------------------------------
 
-import { autoApproveProposal, createProposal, createTask, hasCapability } from "../db.js";
+import { autoApproveProposal, createProposal, createTask, hasCapability, listProjectAgents } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import type { ProposalType, Task, TaskProposal } from "../types.js";
 import { canAutoApprove } from "./agent-constraints.js";
+import { canonicalizeAgentRole, roleMatches } from "../roles.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,7 +47,7 @@ export interface InjectionResult {
 export async function proposeTask(request: InjectionRequest): Promise<InjectionResult> {
 	// Create the proposal record
 	// Capability check (Section 14.3) — non-blocking, defaults allow if no explicit deny
-	const agentRole = request.suggestedRole ?? "tech_lead";
+	const agentRole = canonicalizeAgentRole(request.suggestedRole ?? "tech-lead");
 	const canPropose = await hasCapability(request.projectId, agentRole, "can_propose_task");
 	if (!canPropose) {
 		// Create proposal in rejected state instead of blocking entirely
@@ -58,7 +59,9 @@ export async function proposeTask(request: InjectionRequest): Promise<InjectionR
 			title: request.title,
 			description: request.description,
 			severity: request.severity,
-			suggestedRole: request.suggestedRole,
+			suggestedRole: canonicalizeAgentRole(request.suggestedRole),
+			phaseId: request.phaseId,
+			complexity: request.complexity,
 		});
 		return { proposal, autoApproved: false };
 	}
@@ -71,7 +74,9 @@ export async function proposeTask(request: InjectionRequest): Promise<InjectionR
 		title: request.title,
 		description: request.description,
 		severity: request.severity,
-		suggestedRole: request.suggestedRole,
+		suggestedRole: canonicalizeAgentRole(request.suggestedRole),
+		phaseId: request.phaseId,
+		complexity: request.complexity,
 	});
 
 	// Check if auto-approvable
@@ -84,12 +89,20 @@ export async function proposeTask(request: InjectionRequest): Promise<InjectionR
 	if (autoApprove && request.phaseId) {
 		// Auto-approve and create the task immediately
 		const approved = await autoApproveProposal(proposal.id);
+		const agents = await listProjectAgents(request.projectId);
+		const resolvedAssignee = agents.find(
+			(agent) =>
+				agent.id === request.suggestedRole ||
+				roleMatches(agent.role, request.suggestedRole) ||
+				agent.name.toLowerCase() === String(request.suggestedRole ?? "").toLowerCase(),
+		);
 
 		const task = await createTask({
 			phaseId: request.phaseId,
 			title: request.title,
 			description: request.description,
-			assignedAgent: request.suggestedRole ?? "tech_lead",
+			assignedAgent: resolvedAssignee?.id ?? canonicalizeAgentRole(request.suggestedRole ?? "tech-lead"),
+			assignedAgentId: resolvedAssignee?.id,
 			complexity: request.complexity ?? "S",
 			dependsOn: request.originatingTaskId ? [request.originatingTaskId] : [],
 			branch: "main",

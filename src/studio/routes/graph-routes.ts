@@ -13,6 +13,8 @@ import {
 	deferBranch,
 	mergeIntoPhase,
 	getMutationHistory,
+	approveGraphMutationRequest,
+	rejectGraphMutationRequest,
 } from "../graph-coordinator.js";
 import {
 	createGoal,
@@ -25,7 +27,10 @@ import {
 } from "../goal-engine.js";
 import {
 	evaluateReplan,
+	getReplanEvent,
 	listReplanEvents,
+	approveReplanEvent,
+	rejectReplanEvent,
 } from "../adaptive-replanner.js";
 import {
 	getLearningPatterns,
@@ -33,6 +38,7 @@ import {
 	extractPatternsFromEpisodes,
 	promoteToGlobal,
 } from "../cross-project-learning.js";
+import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
 
 export const graphRoutes = new Hono();
 
@@ -132,6 +138,26 @@ graphRoutes.post("/projects/:projectId/graph/merge-into-phase", async (c) => {
 			{ sourcePhaseId: body.sourcePhaseId, targetPhaseId: body.targetPhaseId, tasks: body.tasks },
 		);
 		return c.json(result, 201);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+graphRoutes.post("/graph-mutations/:mutationId/approve", async (c) => {
+	try {
+		const body = await c.req.json().catch(() => ({}));
+		const result = await approveGraphMutationRequest(c.req.param("mutationId"), body.approvedBy ?? "human");
+		return c.json(result);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+graphRoutes.post("/graph-mutations/:mutationId/reject", async (c) => {
+	try {
+		const body = await c.req.json().catch(() => ({}));
+		const result = await rejectGraphMutationRequest(c.req.param("mutationId"), body.reason ?? "Rejected by human");
+		return c.json(result);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
 	}
@@ -244,6 +270,36 @@ graphRoutes.post("/projects/:projectId/replan", async (c) => {
 	}
 });
 
+graphRoutes.get("/replan-events/:eventId", async (c) => {
+	try {
+		const event = await getReplanEvent(c.req.param("eventId"));
+		if (!event) return c.json({ error: "Replan event not found" }, 404);
+		return c.json(event);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+graphRoutes.post("/replan-events/:eventId/approve", async (c) => {
+	try {
+		const body = await c.req.json().catch(() => ({}));
+		const event = await approveReplanEvent(c.req.param("eventId"), body.approvedBy ?? "human");
+		return c.json(event);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
+graphRoutes.post("/replan-events/:eventId/reject", async (c) => {
+	try {
+		const body = await c.req.json().catch(() => ({}));
+		const event = await rejectReplanEvent(c.req.param("eventId"), body.reason ?? "Rejected by human");
+		return c.json(event);
+	} catch (err) {
+		return c.json({ error: String(err) }, 500);
+	}
+});
+
 // ---------------------------------------------------------------------------
 // Cross-Project Learning
 // ---------------------------------------------------------------------------
@@ -251,9 +307,9 @@ graphRoutes.post("/projects/:projectId/replan", async (c) => {
 graphRoutes.get("/learning/patterns", async (c) => {
 	try {
 		const taskType = c.req.query("taskType") ?? "ai";
-		const agentRole = c.req.query("agentRole") ?? "backend_dev";
+		const agentRole = canonicalizeAgentRole(c.req.query("agentRole") ?? "backend-dev");
 		const tenantId = c.req.query("tenantId");
-		const patterns = await getLearningPatterns(taskType, agentRole, tenantId);
+		const patterns = await getLearningPatterns(taskType, getBehaviorRoleKey(agentRole), tenantId);
 		return c.json(patterns);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);

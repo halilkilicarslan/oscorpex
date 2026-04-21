@@ -95,6 +95,33 @@ export async function getGoalForTask(taskId: string): Promise<ExecutionGoal | nu
 	return row ? rowToGoal(row) : null;
 }
 
+export async function ensureGoalForTask(params: {
+	projectId: string;
+	taskId: string;
+	definition: GoalDefinition;
+	activate?: boolean;
+}): Promise<ExecutionGoal> {
+	const existing = await getGoalForTask(params.taskId);
+	if (existing) {
+		const row = await queryOne(
+			`UPDATE execution_goals
+			 SET definition = $2, status = $3
+			 WHERE id = $1
+			 RETURNING *`,
+			[existing.id, JSON.stringify(params.definition), params.activate === false ? existing.status : "active"],
+		);
+		return rowToGoal(row!);
+	}
+
+	const created = await createGoal({
+		projectId: params.projectId,
+		taskId: params.taskId,
+		definition: params.definition,
+	});
+
+	return params.activate === false ? created : activateGoal(created.id);
+}
+
 export async function listGoals(projectId: string, status?: GoalStatus): Promise<ExecutionGoal[]> {
 	if (status) {
 		const rows = await query(

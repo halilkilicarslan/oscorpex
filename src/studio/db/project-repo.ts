@@ -210,6 +210,7 @@ export async function listPhases(planId: string): Promise<Phase[]> {
 			t.completed_at             AS completed_at,
 			t.review_status            AS review_status,
 			t.reviewer_agent_id        AS reviewer_agent_id,
+			t.review_task_id           AS review_task_id,
 			t.revision_count           AS revision_count,
 			t.assigned_agent_id        AS assigned_agent_id,
 			t.requires_approval        AS requires_approval,

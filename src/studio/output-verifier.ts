@@ -141,7 +141,7 @@ export async function verifyTaskOutput(
 	taskId: string,
 	repoPath: string,
 	output: TaskOutput,
-	options?: { strictness?: VerificationStrictness },
+	options?: { projectId?: string; strictness?: VerificationStrictness },
 ): Promise<OutputVerificationReport> {
 	const results: VerificationResult[] = [];
 
@@ -167,7 +167,7 @@ export async function verifyTaskOutput(
 
 	// Emit verification event (v7.0 Section 13)
 	eventBus.emit({
-		projectId: "",
+		projectId: options?.projectId ?? taskId,
 		type: allPassed ? "verification:passed" : "verification:failed",
 		taskId,
 		payload: {

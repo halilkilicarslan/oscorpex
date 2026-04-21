@@ -39,7 +39,7 @@ describe.skipIf(!dbReady)("Capability Grant Repo", () => {
 		});
 		expect(grant.id).toBeDefined();
 		expect(grant.projectId).toBe(PROJECT_ID);
-		expect(grant.agentRole).toBe("backend_dev");
+		expect(grant.agentRole).toBe("backend-dev");
 		expect(grant.capability).toBe("can_commit_code");
 		expect(grant.granted).toBe(true);
 		expect(grant.grantedBy).toBe("system");

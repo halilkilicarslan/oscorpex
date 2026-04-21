@@ -30,6 +30,25 @@ export interface CLIAdapter {
 	execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult>;
 }
 
+const FULL_TOOL_ACCESS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep"];
+
+export function buildToolGovernanceSection(allowedTools?: string[]): string {
+	if (!allowedTools || allowedTools.length === 0) return "";
+	return [
+		"## Tool Governance",
+		`Allowed tools only: ${allowedTools.join(", ")}`,
+		"If a required action is not possible with the allowed tools, stop and report the limitation instead of improvising with a forbidden tool.",
+	].join("\n");
+}
+
+function hasFullToolAccess(allowedTools?: string[]): boolean {
+	if (!allowedTools || allowedTools.length === 0) return true;
+	return (
+		allowedTools.length === FULL_TOOL_ACCESS.length &&
+		FULL_TOOL_ACCESS.every((tool) => allowedTools.includes(tool))
+	);
+}
+
 // ---------------------------------------------------------------------------
 // ClaudeAdapter — mevcut executeWithCLI üzerinden çalışır
 // ---------------------------------------------------------------------------
@@ -66,10 +85,15 @@ export class CodexAdapter implements CLIAdapter {
 	async execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult> {
 		const { spawn } = await import("node:child_process");
 		const startTime = Date.now();
+		if (!hasFullToolAccess(opts.allowedTools)) {
+			throw new Error("Codex adapter cannot honor restricted tool policies; fallback required");
+		}
+		const governanceSection = buildToolGovernanceSection(opts.allowedTools);
+		const prompt = governanceSection ? `${governanceSection}\n\n${opts.prompt}` : opts.prompt;
 
 		const args = ["--quiet", "--full-auto"];
 		if (opts.model) args.push("--model", opts.model);
-		args.push(opts.prompt);
+		args.push(prompt);
 
 		return new Promise((resolve, reject) => {
 			const proc = spawn("codex", args, {
@@ -175,8 +199,12 @@ export class CursorAdapter implements CLIAdapter {
 	async execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult> {
 		const { spawn } = await import("node:child_process");
 		const startTime = Date.now();
+		if (!hasFullToolAccess(opts.allowedTools)) {
+			throw new Error("Cursor adapter cannot honor restricted tool policies; fallback required");
+		}
 		const args = ["agent", "-p", "--output-format", "json", "--trust", "--force"];
 		if (opts.model) args.push("--model", opts.model);
+		const governanceSection = buildToolGovernanceSection(opts.allowedTools);
 
 		return new Promise((resolve, reject) => {
 			const proc = spawn("cursor", args, {
@@ -203,7 +231,7 @@ export class CursorAdapter implements CLIAdapter {
 				opts.signal.addEventListener("abort", () => proc.kill("SIGTERM"), { once: true });
 			}
 
-			const fullPrompt = opts.systemPrompt ? `${opts.systemPrompt}\n\n${opts.prompt}` : opts.prompt;
+			const fullPrompt = [opts.systemPrompt, governanceSection, opts.prompt].filter(Boolean).join("\n\n");
 			proc.stdin?.write(fullPrompt);
 			proc.stdin?.end();
 

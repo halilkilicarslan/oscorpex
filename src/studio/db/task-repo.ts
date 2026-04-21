@@ -158,6 +158,7 @@ export async function updateTask(
 			| "completedAt"
 			| "reviewStatus"
 			| "reviewerAgentId"
+			| "reviewTaskId"
 			| "revisionCount"
 			| "assignedAgentId"
 			| "requiresApproval"
@@ -207,6 +208,10 @@ export async function updateTask(
 	if (data.reviewerAgentId !== undefined) {
 		fields.push(`reviewer_agent_id = $${idx++}`);
 		values.push(data.reviewerAgentId);
+	}
+	if (data.reviewTaskId !== undefined) {
+		fields.push(`review_task_id = $${idx++}`);
+		values.push(data.reviewTaskId);
 	}
 	if (data.revisionCount !== undefined) {
 		fields.push(`revision_count = $${idx++}`);

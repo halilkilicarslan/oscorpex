@@ -194,6 +194,22 @@ describe("CodexAdapter.execute", () => {
 			}),
 		).rejects.toThrow("Codex exited with code 1");
 	});
+
+	it("rejects when restricted tool access is requested", async () => {
+		const adapter = new CodexAdapter();
+		await expect(
+			adapter.execute({
+				projectId: "p1",
+				agentId: "a1",
+				agentName: "Backend",
+				repoPath: "/tmp/repo",
+				prompt: "Do something",
+				systemPrompt: "",
+				timeoutMs: 30_000,
+				allowedTools: ["Read", "Glob", "Grep"],
+			}),
+		).rejects.toThrow("cannot honor restricted tool policies");
+	});
 });
 
 describe("resolveModel with cliTool", () => {

@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
 import type { TeamTemplate } from "../types.js";
 import { now, rowToTeamTemplate } from "./helpers.js";
+import { canonicalizeAgentRole } from "../roles.js";
 
 // ---------------------------------------------------------------------------
 // Custom Team Template interface — DB layer only
@@ -32,7 +33,9 @@ function rowToCustomTeamTemplate(row: any): CustomTeamTemplate {
 }
 
 function ensurePlannerRole(roles: string[]): string[] {
-	const deduped = Array.from(new Set(roles.map((role) => role.trim()).filter(Boolean)));
+	const deduped = Array.from(
+		new Set(roles.map((role) => canonicalizeAgentRole(role)).filter(Boolean)),
+	);
 	const hasPlanner = deduped.some((role) => role === "product-owner" || role === "pm");
 	return hasPlanner ? deduped : ["product-owner", ...deduped];
 }

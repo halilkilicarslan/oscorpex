@@ -15,6 +15,7 @@ import { eventBus } from "../event-bus.js";
 import type { AgentObservation, AgentSession, EpisodeOutcome, Task } from "../types.js";
 import { formatBehavioralPrompt, loadBehavioralContext } from "./agent-memory.js";
 import { selectStrategy, type StrategySelection } from "./agent-strategy.js";
+import { getBehaviorRoleKey } from "../roles.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,6 +42,7 @@ export async function initSession(
 	agentRole: string,
 	task: Task,
 ): Promise<SessionContext> {
+	const strategyRole = getBehaviorRoleKey(agentRole);
 	// Check for existing active session (e.g. retry/revision)
 	const existing = await getActiveSession(projectId, task.id);
 	if (existing) {
@@ -48,7 +50,7 @@ export async function initSession(
 	}
 
 	// Select strategy based on role, task type, and historical patterns
-	const strategySelection = await selectStrategy(projectId, agentRole, task);
+	const strategySelection = await selectStrategy(projectId, strategyRole, task);
 
 	// Create new session
 	const session = await createAgentSession({
@@ -70,7 +72,7 @@ export async function initSession(
 	});
 
 	// Load behavioral memory
-	const behavioralCtx = await loadBehavioralContext(projectId, agentId, agentRole, task.taskType ?? "ai");
+	const behavioralCtx = await loadBehavioralContext(projectId, agentId, strategyRole, task.taskType ?? "ai");
 	const behavioralPrompt = formatBehavioralPrompt(behavioralCtx);
 
 	// Emit structured agentic events (v7.0 Section 13)
@@ -157,7 +159,7 @@ export async function completeSession(
 	// Update strategy patterns (aggregated stats)
 	await updateStrategyPattern(
 		projectId,
-		agentRole,
+		getBehaviorRoleKey(agentRole),
 		task.taskType ?? "ai",
 		session.strategy ?? "unknown",
 	);
@@ -201,7 +203,7 @@ export async function failSession(
 	// Update strategy patterns
 	await updateStrategyPattern(
 		projectId,
-		agentRole,
+		getBehaviorRoleKey(agentRole),
 		task.taskType ?? "ai",
 		session.strategy ?? "unknown",
 	);

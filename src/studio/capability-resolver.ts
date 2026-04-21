@@ -5,10 +5,11 @@
 
 import { listAgentCapabilities } from "./db.js";
 import type { AgentCapability } from "./types.js";
+import { canonicalizeAgentRole } from "./roles.js";
 
 // Rol bazlı varsayılan araç listeleri
 function getDefaultToolsForRole(role: string): string[] {
-	switch (role) {
+	switch (canonicalizeAgentRole(role)) {
 		case "frontend-dev":
 		case "backend-dev":
 		case "coder":

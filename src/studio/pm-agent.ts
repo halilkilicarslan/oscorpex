@@ -27,6 +27,8 @@ import {
 } from "./incremental-planner.js";
 import { execute, queryOne } from "./pg.js";
 import type { TaskComplexity } from "./types.js";
+import { canonicalizeAgentRole, roleMatches } from "./roles.js";
+import { ensureGoalForTask } from "./goal-engine.js";
 
 // ---------------------------------------------------------------------------
 // Maliyet Tahmini — Model fiyat tablosu (USD / 1M token)
@@ -352,6 +354,11 @@ const phaseSchema = z.object({
 				.int()
 				.optional()
 				.describe("Estimated lines of code to change (S: 1-20, M: 20-80, L: 80-200)"),
+			constraints: z.array(z.string()).default([]).describe("Optional execution constraints for goal-driven validation"),
+			successCriteria: z
+				.array(z.string())
+				.default([])
+				.describe("Optional success criteria. When provided, an execution goal is created for this task."),
 		}),
 	),
 });
@@ -399,6 +406,13 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 	// --- PM Planning Task: create auto-completed task for the PM agent ---
 	// PM is the agent with the lowest pipelineOrder (typically 0)
 	const agents = await listProjectAgents(projectId);
+	const resolveAssignedAgentId = (assignment: string): string | undefined =>
+		agents.find(
+			(agent) =>
+				agent.id === assignment ||
+				roleMatches(agent.role, assignment) ||
+				agent.name.toLowerCase() === assignment.toLowerCase(),
+		)?.id;
 	const minOrder = Math.min(...agents.map((a) => a.pipelineOrder ?? 99));
 	const pmAgent = agents.find((a) => (a.pipelineOrder ?? 99) === minOrder);
 	if (pmAgent && createdPhases.length > 0) {
@@ -444,7 +458,8 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 				phaseId: created.id,
 				title: t.title,
 				description: t.description,
-				assignedAgent: t.assignedRole,
+				assignedAgent: canonicalizeAgentRole(t.assignedRole),
+				assignedAgentId: resolveAssignedAgentId(t.assignedRole),
 				complexity: t.complexity as TaskComplexity,
 				dependsOn: [],
 				branch: t.branch,
@@ -453,6 +468,17 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 				targetFiles: t.targetFiles ?? [],
 				estimatedLines: t.estimatedLines,
 			});
+			if (t.successCriteria && t.successCriteria.length > 0) {
+				await ensureGoalForTask({
+					projectId,
+					taskId: task.id,
+					definition: {
+						goal: t.title,
+						constraints: t.constraints ?? [],
+						successCriteria: t.successCriteria,
+					},
+				});
+			}
 			titleToId.set(t.title, task.id);
 		}
 	}
@@ -879,6 +905,8 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 								estimatedLines: z.number().int().optional(),
 								dependsOnTaskTitles: z.array(z.string()).default([]),
 								requiresApproval: z.boolean().default(false),
+								constraints: z.array(z.string()).default([]),
+								successCriteria: z.array(z.string()).default([]),
 							}),
 						)
 						.default([])
@@ -918,6 +946,14 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 					estimatedLines: t.estimatedLines,
 					dependsOnTaskIds,
 					requiresApproval: t.requiresApproval,
+					goalDefinition:
+						t.successCriteria && t.successCriteria.length > 0
+							? {
+									goal: t.title,
+									constraints: t.constraints ?? [],
+									successCriteria: t.successCriteria,
+								}
+							: undefined,
 				});
 				createdTasks.push({ id: created.id, title: created.title });
 				titleToId.set(t.title, created.id);
@@ -948,6 +984,8 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 				estimatedLines: z.number().int().optional(),
 				dependsOnTaskTitles: z.array(z.string()).default([]),
 				requiresApproval: z.boolean().default(false),
+				constraints: z.array(z.string()).default([]),
+				successCriteria: z.array(z.string()).default([]),
 			}),
 		}),
 		execute: async ({ projectId, phaseName, task }) => {
@@ -972,6 +1010,14 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 				estimatedLines: task.estimatedLines,
 				dependsOnTaskIds,
 				requiresApproval: task.requiresApproval,
+				goalDefinition:
+					task.successCriteria && task.successCriteria.length > 0
+						? {
+								goal: task.title,
+								constraints: task.constraints ?? [],
+								successCriteria: task.successCriteria,
+							}
+						: undefined,
 			});
 
 			return {

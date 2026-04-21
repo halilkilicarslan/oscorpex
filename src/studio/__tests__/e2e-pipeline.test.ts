@@ -67,6 +67,7 @@ vi.mock("../agent-log-store.js", () => ({
 }));
 vi.mock("../output-verifier.js", () => ({
 	verifyTaskOutput: vi.fn().mockResolvedValue({ taskId: "mock", allPassed: true, results: [] }),
+	resolveStrictness: vi.fn().mockResolvedValue("strict"),
 }));
 vi.mock("../test-gate.js", () => ({
 	runTestGate: vi.fn().mockResolvedValue({ policy: "skip", passed: true, summary: "skipped" }),
@@ -87,6 +88,10 @@ vi.mock("../sandbox-manager.js", () => ({
 	endSandboxSession: vi.fn().mockResolvedValue(undefined),
 	checkToolAllowed: vi.fn().mockReturnValue({ allowed: true, reason: "allowed" }),
 	checkPathAllowed: vi.fn().mockReturnValue({ allowed: true, reason: "allowed" }),
+	enforceToolCheck: vi.fn().mockResolvedValue(undefined),
+	enforcePathChecks: vi.fn().mockResolvedValue([]),
+	enforceOutputSizeCheck: vi.fn().mockResolvedValue(undefined),
+	SandboxViolationError: class SandboxViolationError extends Error {},
 }));
 vi.mock("../adaptive-replanner.js", () => ({
 	evaluateReplan: vi.fn().mockResolvedValue(null),
@@ -492,7 +497,7 @@ describe.skipIf(!dbReady)("E2E Pipeline", () => {
 			const task1 = await getTask(t1.id);
 			// After rejection → revision, task should eventually be done
 			// (or still in revision cycle if async hasn't settled)
-			expect(["done", "review", "revision", "running"]).toContain(task1?.status);
+			expect(["done", "review", "revision", "running", "queued"]).toContain(task1?.status);
 			if (task1?.status === "done") {
 				expect(task1?.revisionCount).toBeGreaterThanOrEqual(1);
 			}

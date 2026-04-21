@@ -4,9 +4,10 @@
 
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
-import type { AgentConfig, DependencyType, ProjectAgent } from "../types.js";
+import type { AgentConfig, AgentRole, DependencyType, ProjectAgent } from "../types.js";
 import { bulkCreateDependencies } from "./dependency-repo.js";
 import { now, rowToAgentConfig, rowToProjectAgent } from "./helpers.js";
+import { canonicalizeAgentRole } from "../roles.js";
 
 // ---------------------------------------------------------------------------
 // Agent Configs CRUD
@@ -14,6 +15,7 @@ import { now, rowToAgentConfig, rowToProjectAgent } from "./helpers.js";
 
 export async function createAgentConfig(data: Omit<AgentConfig, "id">): Promise<AgentConfig> {
 	const id = randomUUID();
+	const role = canonicalizeAgentRole(data.role);
 	await execute(
 		`
     INSERT INTO agent_configs (id, name, role, avatar, gender, personality, model, cli_tool, skills, system_prompt, is_preset)
@@ -22,7 +24,7 @@ export async function createAgentConfig(data: Omit<AgentConfig, "id">): Promise<
 		[
 			id,
 			data.name,
-			data.role,
+			role,
 			data.avatar,
 			data.gender ?? "male",
 			data.personality,
@@ -33,7 +35,7 @@ export async function createAgentConfig(data: Omit<AgentConfig, "id">): Promise<
 			data.isPreset ? 1 : 0,
 		],
 	);
-	return { id, ...data };
+	return { id, ...data, role: role as AgentRole };
 }
 
 export async function getAgentConfig(id: string): Promise<AgentConfig | undefined> {
@@ -65,7 +67,7 @@ export async function updateAgentConfig(
 	}
 	if (data.role !== undefined) {
 		fields.push(`role = $${idx++}`);
-		values.push(data.role);
+		values.push(canonicalizeAgentRole(data.role));
 	}
 	if (data.avatar !== undefined) {
 		fields.push(`avatar = $${idx++}`);
@@ -134,6 +136,7 @@ export async function createProjectAgent(data: {
 }): Promise<ProjectAgent> {
 	const id = randomUUID();
 	const ts = now();
+	const role = canonicalizeAgentRole(data.role);
 	await execute(
 		`INSERT INTO project_agents
       (id, project_id, source_agent_id, name, role, avatar, gender, personality, model, cli_tool, skills, system_prompt, created_at, reports_to, color, pipeline_order)
@@ -143,7 +146,7 @@ export async function createProjectAgent(data: {
 			data.projectId,
 			data.sourceAgentId ?? null,
 			data.name,
-			data.role,
+			role,
 			data.avatar,
 			data.gender ?? "male",
 			data.personality,
@@ -184,7 +187,7 @@ export async function updateProjectAgent(
 	}
 	if (data.role !== undefined) {
 		fields.push(`role = $${idx++}`);
-		values.push(data.role);
+		values.push(canonicalizeAgentRole(data.role));
 	}
 	if (data.avatar !== undefined) {
 		fields.push(`avatar = $${idx++}`);
@@ -286,8 +289,9 @@ export async function copyAgentsToProject(
 	const presets = await listPresetAgents();
 	const created: ProjectAgent[] = [];
 	const normalizedRoles = Array.from(new Set(roles));
-	if (!normalizedRoles.some((role) => role === "product-owner" || role === "pm")) {
-		normalizedRoles.unshift("product-owner");
+	const canonicalRoles = normalizedRoles.map((role) => canonicalizeAgentRole(role));
+	if (!canonicalRoles.some((role) => role === "product-owner" || role === "pm")) {
+		canonicalRoles.unshift("product-owner");
 	}
 
 	const colorMap: Record<string, string> = {
@@ -340,7 +344,7 @@ export async function copyAgentsToProject(
 		reviewer: 5,
 	};
 
-	for (const role of normalizedRoles) {
+	for (const role of canonicalRoles) {
 		const preset = presets.find((p) => p.role === role);
 		if (preset) {
 			const agent = await createProjectAgent({

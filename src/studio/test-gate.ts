@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { getProjectSetting, saveTestResult } from "./db.js";
 import type { Task, TaskOutput } from "./types.js";
+import { canonicalizeAgentRole, getBehaviorRoleKey } from "./roles.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,11 +32,12 @@ export interface TestGateResult {
 // ---------------------------------------------------------------------------
 
 const CODE_AGENT_ROLES = new Set([
-	"frontend_dev",
-	"backend_dev",
-	"fullstack_dev",
-	"tech_lead",
+	"frontend-dev",
+	"backend-dev",
+	"fullstack-dev",
+	"tech-lead",
 	"devops",
+	"coder",
 ]);
 
 /**
@@ -60,7 +62,8 @@ export async function resolveTestPolicy(
 	}
 
 	// Code-affecting agents → required by default
-	if (agentRole && CODE_AGENT_ROLES.has(agentRole)) return "required";
+	const normalizedRole = agentRole ? getBehaviorRoleKey(canonicalizeAgentRole(agentRole)) : "";
+	if (normalizedRole && CODE_AGENT_ROLES.has(normalizedRole)) return "required";
 
 	// All other tasks → optional
 	return "optional";
