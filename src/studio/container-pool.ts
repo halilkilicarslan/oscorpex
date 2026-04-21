@@ -61,6 +61,19 @@ const CONTAINER_PREFIX = "studio-pool-";
 const INTERNAL_NETWORK = "studio-agent-net";
 const BASE_PORT = 9900;
 
+/** Map sandbox NetworkPolicy to Docker NetworkMode */
+export function resolveNetworkMode(networkPolicy?: string): string {
+	switch (networkPolicy) {
+		case "no_network":
+			return "none";
+		case "project_only":
+			return INTERNAL_NETWORK;
+		case "unrestricted":
+		default:
+			return INTERNAL_NETWORK;
+	}
+}
+
 const DEFAULT_CONFIG: PoolConfig = {
 	minIdle: 2,
 	maxTotal: 8,

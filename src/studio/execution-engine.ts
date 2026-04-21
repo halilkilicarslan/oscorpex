@@ -57,7 +57,7 @@ import {
 	SandboxViolationError,
 	type SandboxPolicy,
 } from "./sandbox-manager.js";
-import { prepareIsolatedWorkspace } from "./isolated-workspace.js";
+import { resolveWorkspace, type ExecutionWorkspace } from "./execution-workspace.js";
 import { runTestGate } from "./test-gate.js";
 import { execute as pgExecute, queryOne as pgQueryOne } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
@@ -669,14 +669,12 @@ class ExecutionEngine {
 		// --- Sandbox: resolve policy for this task ---
 		let sandboxSessionId: string | undefined;
 		let sandboxPolicy: SandboxPolicy | undefined;
-		let isolatedWorkspace:
-			| Awaited<ReturnType<typeof prepareIsolatedWorkspace>>
-			| undefined;
+		let isolatedWorkspace: ExecutionWorkspace | undefined;
 		let runtimeRepoPath = project.repoPath;
 		try {
 			sandboxPolicy = await resolveTaskPolicy(projectId, task, agent.role);
 			if (project.repoPath) {
-				isolatedWorkspace = await prepareIsolatedWorkspace(project.repoPath, task.id, sandboxPolicy);
+				isolatedWorkspace = await resolveWorkspace(project.repoPath, task.id, sandboxPolicy);
 				runtimeRepoPath = isolatedWorkspace.repoPath || project.repoPath;
 				const sbSession = await startSandboxSession({
 					projectId,
@@ -746,6 +744,18 @@ class ExecutionEngine {
 				routedModel = resolved.model;
 			} catch (err) {
 				console.warn("[execution-engine] resolveModel failed, using fallback:", err);
+			}
+
+			// Sandbox pre-execution gate: in hard mode, verify tools before spawning CLI
+			if (sandboxPolicy?.enforcementMode === "hard" && sandboxPolicy.deniedTools.length > 0) {
+				const deniedInAllowed = allowedTools.filter((t) => sandboxPolicy!.deniedTools.includes(t));
+				if (deniedInAllowed.length > 0) {
+					throw new SandboxViolationError({
+						type: "tool_denied",
+						detail: `Pre-execution tool check: denied tools in allowedTools list: ${deniedInAllowed.join(", ")}`,
+						timestamp: new Date().toISOString(),
+					});
+				}
 			}
 
 			// M4: Adapter fallback chain — primary + fallback providers
@@ -1574,9 +1584,7 @@ class ExecutionEngine {
 		}
 
 		let reviewPrompt: string;
-		let reviewWorkspace:
-			| Awaited<ReturnType<typeof prepareIsolatedWorkspace>>
-			| undefined;
+		let reviewWorkspace: ExecutionWorkspace | undefined;
 
 		if (isZeroFileDecision) {
 			termLog(`[review] "${originalTask.title}" — zero-file decision inceleniyor...`);
@@ -1652,7 +1660,7 @@ class ExecutionEngine {
 		try {
 			const reviewTools = await resolveAllowedTools(projectId, reviewer.id, reviewer.role);
 			const reviewAdapter = getAdapter(reviewer.cliTool ?? "claude-code");
-			reviewWorkspace = await prepareIsolatedWorkspace(project.repoPath, reviewTask.id, {
+			reviewWorkspace = await resolveWorkspace(project.repoPath, reviewTask.id, {
 				id: "review-workspace",
 				projectId,
 				isolationLevel: "workspace",
