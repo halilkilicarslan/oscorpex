@@ -10,18 +10,23 @@ Oscorpex, kullanicinin bir fikir tanimlamasiyla 12 AI ajandan olusan bir Scrum t
 
 | Metrik | Deger |
 |--------|-------|
+| Backend TS Dosyasi | 176 (test haric) |
 | Backend LOC | 47,058 |
-| Frontend LOC | 51,828 |
-| **Toplam LOC** | **98,886** |
+| Frontend TS/TSX Dosyasi | 147 |
+| Frontend LOC | 41,593 |
+| **Toplam LOC** | **~89,000** |
 | Backend Test | 1,087 (5 skip) |
 | Frontend Test | 541 |
 | **Toplam Test** | **1,628** |
-| Route Dosyasi | 32 |
-| DB Repo Dosyasi | 38 |
-| DB Tablo | 83 |
-| Studio Sayfa | 49 |
+| Route Dosyasi (7,666 LOC) | 32 |
+| DB Repo Dosyasi (7,733 LOC) | 38 |
+| DB Tablo | 82 |
+| Export Edilen Tip/Interface | 94 |
+| Studio Sayfa | 57 |
 | API Client Dosyasi | 25 |
-| Event Type | 144 |
+| Shared Component | 13 |
+| Custom Hook | 5 |
+| Event Type | 67 |
 | Agent Runtime Modul | 7 |
 
 ---
@@ -249,12 +254,15 @@ En buyuk 10 dosya (karmasiklik riski):
 
 | Metrik | Deger | Degerlendirme |
 |--------|-------|---------------|
-| `as any` kullanimi | 95 | Orta — cogu DB row mapping |
-| `console.warn` (production) | 109 | Kabul edilebilir — non-blocking hata izleme |
-| TODO/FIXME/HACK | 1 | Cok iyi |
+| `as any` kullanimi | 64 | Orta — cogu DB row mapping ve route handler |
+| Silent catch bloklari | 248 | Yuksek — fire-and-forget `.catch(() => {})` pattern'i |
+| `console.*` (production) | 356 | Orta — structured logging'e gecilmeli |
+| TODO/FIXME/HACK | 1 | Cok iyi (notification-service.ts:62) |
 | SQL Injection riski | 0 | Temiz — tum sorgular $1 parametrik |
+| Hardcoded Secret | 0 | Temiz (JWT dev default haric) |
 | TypeCheck | Temiz | Hata yok |
-| Biome Lint | Yapilandirilmis | Tab, 120 char |
+| Circular Dependency | 0 | Temiz |
+| Biome Lint | Yapilandirilmis | Tab, 120 char, noExplicitAny: warn |
 | Test Coverage | 1,628 test | Guclu |
 
 ---
@@ -401,29 +409,31 @@ flowchart LR
 | # | Oneri | Etki |
 |---|-------|------|
 | 1 | **execution-engine.ts bolunmeli** (1,944 LOC) | Orkestrasyon, retry, review, proposal isleme ayri dosyalara |
-| 2 | **`as any` azaltma** (95 adet) | Tip guvenligi — ozellikle DB row mapping icin generic helper |
-| 3 | **Structured logging** | console.warn yerine pino/winston — severity, correlation ID |
+| 2 | **248 silent catch bloku duzeltilmeli** | `.catch(() => {})` yerine `.catch(err => log.warn(...))` — production debug icin kritik |
+| 3 | **Structured logging** | 356 console.* yerine pino/winston — severity, correlation ID, JSON format |
 
 ### Orta Oncelik
 | # | Oneri | Etki |
 |---|-------|------|
-| 4 | project-routes.ts bolunmeli (1,290 LOC) | Execution, pipeline, git, settings ayri route dosyalari |
-| 5 | Container pool execution-engine entegrasyonu | resolveWorkspace container branch'i gercek Docker kullansin |
-| 6 | Frontend test coverage artirmali | 541 test var ama 49 sayfa icin daha fazla integration test |
+| 4 | **`as any` azaltma** (64 adet) | Tip guvenligi — graph-coordinator (6), routes (15+), DB repos icin generic helper |
+| 5 | project-routes.ts bolunmeli (1,290 LOC) | Execution, pipeline, git, settings ayri route dosyalari |
+| 6 | Container pool execution-engine entegrasyonu | resolveWorkspace container branch'i gercek Docker kullansin |
+| 7 | **Biome `noExplicitAny: error`** | Warn'dan error'a yukseltilmeli — yeni `as any` girisi engellensin |
 
 ### Dusuk Oncelik
 | # | Oneri | Etki |
 |---|-------|------|
-| 7 | cli-usage.ts basitlestirme | 1,657 LOC OAuth probe — kullanilmayan provider'lar cikarilabilir |
-| 8 | Event type gruplama | 144 event type tek union'da — namespace'e bolunebilir |
-| 9 | OpenAPI spec olusturma | 32 route dosyasi icin swagger/scalar dokumantasyonu |
+| 8 | cli-usage.ts basitlestirme | 1,657 LOC OAuth probe — kullanilmayan provider'lar cikarilabilir |
+| 9 | Event type gruplama | 67 event type tek union'da — namespace'e bolunebilir |
+| 10 | OpenAPI spec olusturma | 32 route dosyasi icin swagger/scalar dokumantasyonu |
+| 11 | Frontend test coverage artirmali | 541 test / 57 sayfa — daha fazla integration test |
 
 ---
 
 ## 14. Sonuc
 
-Oscorpex, **~99K LOC** ve **1,628 test** ile olgun bir AI gelistirme platformudur. v8.0 ile agentic yetenekler (strateji secimi, episodik hafiza, cross-project ogrenme), guvenlik katmani (sandbox enforcement, budget guard, RLS) ve operasyonel kontrol (adaptive replanner, pipeline gate) production-ready seviyeye ulasmistir.
+Oscorpex, **~89K LOC** (176 backend + 147 frontend dosya) ve **1,628 test** ile olgun bir AI gelistirme platformudur. v8.0 ile agentic yetenekler (strateji secimi, episodik hafiza, cross-project ogrenme), guvenlik katmani (sandbox enforcement, budget guard, RLS) ve operasyonel kontrol (adaptive replanner, pipeline gate) production-ready seviyeye ulasmistir.
 
-**Guclu Yanlar**: Parametrik SQL, claim-based dispatch, multi-provider fallback, 6 asamali task lifecycle, comprehensive test suite.
+**Guclu Yanlar**: Parametrik SQL (0 injection riski), claim-based dispatch, multi-provider fallback, 82 tablo, 94 tip tanimi, 67 event type, 6 asamali task lifecycle, 32 route modulu, 38 DB repo.
 
-**Gelisim Alanlari**: Buyuk dosya bolumleme (execution-engine, project-routes), structured logging, container isolation tam entegrasyonu.
+**Gelisim Alanlari**: 248 silent catch bloku (production debug riski), buyuk dosya bolumleme (execution-engine 1,944 LOC), structured logging (356 console.*), 64 `as any` cast azaltma.
