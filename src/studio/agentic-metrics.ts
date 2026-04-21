@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { query, queryOne } from "./db.js";
+import { canonicalizeAgentRole } from "./roles.js";
 
 export interface AgenticMetrics {
 	taskClaimLatency: { avgMs: number; p95Ms: number; samples: number };
@@ -11,10 +12,11 @@ export interface AgenticMetrics {
 	strategySuccessRates: Array<{ strategy: string; taskType: string; successRate: number; samples: number }>;
 	avgRetriesBeforeCompletion: number;
 	reviewRejectionByRole: Array<{ agentRole: string; rejections: number; total: number; rate: number }>;
-	injectedTaskVolume: { total: number; autoApproved: number; pending: number; rejected: number };
+	injectedTaskVolume: { total: number; humanApproved: number; autoApproved: number; pending: number; rejected: number };
 	graphMutationStats: { total: number; byType: Record<string, number> };
-	replanTriggerFrequency: { total: number; byTrigger: Record<string, number> };
+	replanTriggerFrequency: { total: number; byTrigger: Record<string, number>; byStatus: Record<string, number> };
 	degradedProviderDuration: Array<{ provider: string; totalMs: number; incidents: number }>;
+	failureClassification: { transientFailures: number; terminalFailures: number; retryExhausted: number };
 }
 
 export async function getAgenticMetrics(projectId: string): Promise<AgenticMetrics> {
@@ -28,6 +30,8 @@ export async function getAgenticMetrics(projectId: string): Promise<AgenticMetri
 		proposalStats,
 		graphStats,
 		replanStats,
+		degradedProviders,
+		failureClass,
 	] = await Promise.all([
 		getTaskClaimLatency(projectId),
 		getDuplicateDispatchCount(projectId),
@@ -38,6 +42,8 @@ export async function getAgenticMetrics(projectId: string): Promise<AgenticMetri
 		getInjectedTaskVolume(projectId),
 		getGraphMutationStats(projectId),
 		getReplanTriggerFrequency(projectId),
+		getDegradedProviderDuration(projectId),
+		getFailureClassification(projectId),
 	]);
 
 	return {
@@ -50,7 +56,8 @@ export async function getAgenticMetrics(projectId: string): Promise<AgenticMetri
 		injectedTaskVolume: proposalStats,
 		graphMutationStats: graphStats,
 		replanTriggerFrequency: replanStats,
-		degradedProviderDuration: [],
+		degradedProviderDuration: degradedProviders,
+		failureClassification: failureClass,
 	};
 }
 
@@ -144,18 +151,19 @@ async function getReviewRejectionByRole(projectId: string): Promise<Array<{ agen
 		[projectId],
 	);
 	return rows.map((r) => ({
-		agentRole: r.agent_role as string,
+		agentRole: canonicalizeAgentRole(r.agent_role as string),
 		rejections: Number(r.rejections),
 		total: Number(r.total),
 		rate: Number(r.total) > 0 ? Math.round((Number(r.rejections) / Number(r.total)) * 10000) / 100 : 0,
 	}));
 }
 
-async function getInjectedTaskVolume(projectId: string): Promise<{ total: number; autoApproved: number; pending: number; rejected: number }> {
+async function getInjectedTaskVolume(projectId: string): Promise<{ total: number; humanApproved: number; autoApproved: number; pending: number; rejected: number }> {
 	const row = await queryOne(
 		`SELECT
 			COUNT(*) AS total,
 			COUNT(*) FILTER (WHERE status = 'approved') AS approved,
+			COUNT(*) FILTER (WHERE status = 'auto_approved') AS auto_approved,
 			COUNT(*) FILTER (WHERE status = 'pending') AS pending,
 			COUNT(*) FILTER (WHERE status = 'rejected') AS rejected
 		 FROM task_proposals
@@ -164,7 +172,8 @@ async function getInjectedTaskVolume(projectId: string): Promise<{ total: number
 	);
 	return {
 		total: Number(row?.total ?? 0),
-		autoApproved: Number(row?.approved ?? 0),
+		humanApproved: Number(row?.approved ?? 0),
+		autoApproved: Number((row as any)?.auto_approved ?? 0),
 		pending: Number(row?.pending ?? 0),
 		rejected: Number(row?.rejected ?? 0),
 	};
@@ -189,21 +198,69 @@ async function getGraphMutationStats(projectId: string): Promise<{ total: number
 	return { total, byType };
 }
 
-async function getReplanTriggerFrequency(projectId: string): Promise<{ total: number; byTrigger: Record<string, number> }> {
+async function getReplanTriggerFrequency(projectId: string): Promise<{ total: number; byTrigger: Record<string, number>; byStatus: Record<string, number> }> {
 	const rows = await query(
-		`SELECT trigger, COUNT(*) AS cnt
+		`SELECT trigger, status, COUNT(*) AS cnt
 		 FROM replan_events
 		 WHERE project_id = $1
-		 GROUP BY trigger
+		 GROUP BY trigger, status
 		 ORDER BY cnt DESC`,
 		[projectId],
 	);
 	const byTrigger: Record<string, number> = {};
+	const byStatus: Record<string, number> = {};
 	let total = 0;
 	for (const r of rows) {
 		const cnt = Number(r.cnt);
-		byTrigger[r.trigger as string] = cnt;
+		const trigger = r.trigger as string;
+		const status = r.status as string;
+		byTrigger[trigger] = (byTrigger[trigger] ?? 0) + cnt;
+		byStatus[status] = (byStatus[status] ?? 0) + cnt;
 		total += cnt;
 	}
-	return { total, byTrigger };
+	return { total, byTrigger, byStatus };
+}
+
+async function getDegradedProviderDuration(projectId: string): Promise<Array<{ provider: string; totalMs: number; incidents: number }>> {
+	const rows = await query(
+		`SELECT payload->>'provider' AS provider,
+			COUNT(*) AS incidents,
+			COALESCE(SUM((payload->>'cooldownMs')::numeric), 0) AS total_ms
+		 FROM events
+		 WHERE project_id = $1 AND type = 'provider:degraded'
+		 GROUP BY payload->>'provider'
+		 ORDER BY incidents DESC`,
+		[projectId],
+	);
+	return rows.map((r) => ({
+		provider: (r.provider as string) ?? "unknown",
+		totalMs: Math.round(Number(r.total_ms ?? 0)),
+		incidents: Number(r.incidents ?? 0),
+	}));
+}
+
+async function getFailureClassification(projectId: string): Promise<{ transientFailures: number; terminalFailures: number; retryExhausted: number }> {
+	const row = await queryOne(
+		`SELECT
+			COUNT(*) FILTER (WHERE type = 'task:transient_failure') AS transient,
+			COUNT(*) FILTER (WHERE type = 'task:failed') AS terminal
+		 FROM events
+		 WHERE project_id = $1 AND type IN ('task:transient_failure', 'task:failed')`,
+		[projectId],
+	);
+	const transient = Number(row?.transient ?? 0);
+	const terminal = Number(row?.terminal ?? 0);
+	// retry_exhausted = terminal failures that had prior transient failures (retry count > 0)
+	const exhaustedRow = await queryOne(
+		`SELECT COUNT(DISTINCT e.task_id) AS cnt
+		 FROM events e
+		 WHERE e.project_id = $1 AND e.type = 'task:failed'
+		   AND EXISTS (SELECT 1 FROM events e2 WHERE e2.task_id = e.task_id AND e2.type = 'task:transient_failure')`,
+		[projectId],
+	);
+	return {
+		transientFailures: transient,
+		terminalFailures: terminal,
+		retryExhausted: Number(exhaustedRow?.cnt ?? 0),
+	};
 }

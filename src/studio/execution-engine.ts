@@ -1170,6 +1170,18 @@ class ExecutionEngine {
 			const failedTask = await getTask(task.id);
 			if (!isTimeout && failedTask && failedTask.retryCount < MAX_AUTO_RETRIES) {
 				console.log(`[execution-engine] Self-healing: auto-retry #${failedTask.retryCount + 1} for "${task.title}"`);
+				// Transient failure: will be retried
+				eventBus.emit({
+					projectId,
+					type: "task:transient_failure",
+					agentId: agent.id,
+					taskId: task.id,
+					payload: {
+						error: errorMsg.slice(0, 500),
+						retryCount: failedTask.retryCount + 1,
+						maxRetries: MAX_AUTO_RETRIES,
+					},
+				});
 				eventBus.emitTransient({
 					projectId,
 					type: "agent:output",

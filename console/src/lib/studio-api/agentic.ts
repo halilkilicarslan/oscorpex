@@ -42,6 +42,9 @@ export interface TaskProposal {
 	proposalType: string;
 	title: string;
 	description: string;
+	phaseId?: string;
+	complexity?: string;
+	createdTaskId?: string;
 	status: string;
 	riskLevel: string;
 	createdAt: string;
@@ -75,10 +78,11 @@ export interface AgenticMetrics {
 	strategySuccessRates: Array<{ strategy: string; taskType: string; successRate: number; samples: number }>;
 	avgRetriesBeforeCompletion: number;
 	reviewRejectionByRole: Array<{ agentRole: string; rejections: number; total: number; rate: number }>;
-	injectedTaskVolume: { total: number; autoApproved: number; pending: number; rejected: number };
+	injectedTaskVolume: { total: number; humanApproved: number; autoApproved: number; pending: number; rejected: number };
 	graphMutationStats: { total: number; byType: Record<string, number> };
-	replanTriggerFrequency: { total: number; byTrigger: Record<string, number> };
+	replanTriggerFrequency: { total: number; byTrigger: Record<string, number>; byStatus: Record<string, number> };
 	degradedProviderDuration: Array<{ provider: string; totalMs: number; incidents: number }>;
+	failureClassification: { transientFailures: number; terminalFailures: number; retryExhausted: number };
 }
 
 export interface GraphMutation {
@@ -140,8 +144,8 @@ export function fetchProposals(projectId: string, status?: string): Promise<Task
 	return json<TaskProposal[]>(`${API}/projects/${projectId}/proposals${qs}`);
 }
 
-export function approveProposal(proposalId: string): Promise<TaskProposal> {
-	return json<TaskProposal>(`${API}/proposals/${proposalId}/approve`, {
+export function approveProposal(proposalId: string): Promise<{ proposal: TaskProposal; taskId?: string }> {
+	return json<{ proposal: TaskProposal; taskId?: string }>(`${API}/proposals/${proposalId}/approve`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ approvedBy: 'human' }),

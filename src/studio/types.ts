@@ -100,6 +100,7 @@ export interface Task {
 	// v2: review loop fields
 	reviewStatus?: "approved" | "rejected" | null;
 	reviewerAgentId?: string;
+	reviewTaskId?: string;
 	revisionCount: number;
 	assignedAgentId?: string; // FK to project_agents.id
 	// Human-in-the-Loop onay alanları
@@ -246,7 +247,9 @@ export type EventType =
 	| "verification:passed"
 	| "verification:failed"
 	| "budget:halted"
-	| "provider:degraded";
+	| "provider:degraded"
+	// v8.0: failure classification
+	| "task:transient_failure";
 
 export interface StudioEvent {
 	id: string;
@@ -837,6 +840,9 @@ export interface TaskProposal {
 	description: string;
 	severity?: string;
 	suggestedRole?: string;
+	phaseId?: string;
+	complexity?: TaskComplexity;
+	createdTaskId?: string;
 	status: ProposalStatus;
 	approvedBy?: string;
 	rejectedReason?: string;

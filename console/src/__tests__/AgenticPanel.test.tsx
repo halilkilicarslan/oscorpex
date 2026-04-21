@@ -18,10 +18,11 @@ const mockMetrics = {
 	reviewRejectionByRole: [
 		{ agentRole: 'frontend_dev', rejections: 3, total: 10, rate: 30 },
 	],
-	injectedTaskVolume: { total: 8, autoApproved: 5, pending: 2, rejected: 1 },
+	injectedTaskVolume: { total: 8, humanApproved: 3, autoApproved: 2, pending: 2, rejected: 1 },
 	graphMutationStats: { total: 4, byType: { insert_task: 3, add_edge: 1 } },
-	replanTriggerFrequency: { total: 2, byTrigger: { phase_end: 2 } },
+	replanTriggerFrequency: { total: 2, byTrigger: { phase_end: 2 }, byStatus: { applied: 2 } },
 	degradedProviderDuration: [],
+	failureClassification: { transientFailures: 3, terminalFailures: 1, retryExhausted: 1 },
 };
 
 const mockProposals = [

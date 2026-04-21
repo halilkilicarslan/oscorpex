@@ -30,20 +30,23 @@ describe("Agentic Metrics", () => {
 		expect(metrics.strategySuccessRates).toEqual([]);
 		expect(metrics.avgRetriesBeforeCompletion).toBe(0);
 		expect(metrics.reviewRejectionByRole).toEqual([]);
-		expect(metrics.injectedTaskVolume).toEqual({ total: 0, autoApproved: 0, pending: 0, rejected: 0 });
+		expect(metrics.injectedTaskVolume).toEqual({ total: 0, humanApproved: 0, autoApproved: 0, pending: 0, rejected: 0 });
 		expect(metrics.graphMutationStats).toEqual({ total: 0, byType: {} });
-		expect(metrics.replanTriggerFrequency).toEqual({ total: 0, byTrigger: {} });
+		expect(metrics.replanTriggerFrequency).toEqual({ total: 0, byTrigger: {}, byStatus: {} });
 		expect(metrics.degradedProviderDuration).toEqual([]);
+		expect(metrics.failureClassification).toEqual({ transientFailures: 0, terminalFailures: 0, retryExhausted: 0 });
 	});
 
 	it("should parse task claim latency from DB row", async () => {
-		// First queryOne call is for claim latency
+		// queryOne call order: claimLatency, duplicates, verificationRate, avgRetries, proposalStats, failureClass, failureClassExhausted
 		mockQueryOne
 			.mockResolvedValueOnce({ avg_ms: "150.5", p95_ms: "320.7", samples: "25" })
 			.mockResolvedValueOnce({ cnt: "3" })
 			.mockResolvedValueOnce({ failed: "2", total: "10" })
 			.mockResolvedValueOnce({ avg_retries: "1.45" })
-			.mockResolvedValueOnce({ total: "8", approved: "5", pending: "2", rejected: "1" });
+			.mockResolvedValueOnce({ total: "8", approved: "3", auto_approved: "2", pending: "2", rejected: "1" })
+			.mockResolvedValueOnce({ transient: "5", terminal: "2" })
+			.mockResolvedValueOnce({ cnt: "1" });
 		mockQuery.mockResolvedValue([]);
 
 		const metrics = await getAgenticMetrics("project-1");
@@ -52,7 +55,8 @@ describe("Agentic Metrics", () => {
 		expect(metrics.duplicateDispatchPrevented).toBe(3);
 		expect(metrics.verificationFailureRate).toBe(20);
 		expect(metrics.avgRetriesBeforeCompletion).toBe(1.45);
-		expect(metrics.injectedTaskVolume).toEqual({ total: 8, autoApproved: 5, pending: 2, rejected: 1 });
+		expect(metrics.injectedTaskVolume).toEqual({ total: 8, humanApproved: 3, autoApproved: 2, pending: 2, rejected: 1 });
+		expect(metrics.failureClassification).toEqual({ transientFailures: 5, terminalFailures: 2, retryExhausted: 1 });
 	});
 
 	it("should parse strategy success rates", async () => {
@@ -99,13 +103,13 @@ describe("Agentic Metrics", () => {
 
 		expect(metrics.reviewRejectionByRole).toHaveLength(2);
 		expect(metrics.reviewRejectionByRole[0]).toEqual({
-			agentRole: "frontend_dev",
+			agentRole: "frontend-dev",
 			rejections: 3,
 			total: 10,
 			rate: 30,
 		});
 		expect(metrics.reviewRejectionByRole[1]).toEqual({
-			agentRole: "backend_dev",
+			agentRole: "backend-dev",
 			rejections: 1,
 			total: 15,
 			rate: 6.67,
@@ -141,8 +145,9 @@ describe("Agentic Metrics", () => {
 			.mockResolvedValueOnce([]) // rejectionByRole
 			.mockResolvedValueOnce([]) // graphMutations
 			.mockResolvedValueOnce([
-				{ trigger: "phase_end", cnt: "4" },
-				{ trigger: "repeated_review_failure", cnt: "2" },
+				{ trigger: "phase_end", status: "applied", cnt: "3" },
+				{ trigger: "phase_end", status: "pending", cnt: "1" },
+				{ trigger: "repeated_review_failure", status: "applied", cnt: "2" },
 			]);
 
 		const metrics = await getAgenticMetrics("project-1");
@@ -151,6 +156,10 @@ describe("Agentic Metrics", () => {
 		expect(metrics.replanTriggerFrequency.byTrigger).toEqual({
 			phase_end: 4,
 			repeated_review_failure: 2,
+		});
+		expect(metrics.replanTriggerFrequency.byStatus).toEqual({
+			applied: 5,
+			pending: 1,
 		});
 	});
 
@@ -167,14 +176,15 @@ describe("Agentic Metrics", () => {
 		expect(metrics.verificationFailureRate).toBe(0);
 	});
 
-	it("should call all 9 queries in parallel via Promise.all", async () => {
+	it("should call all 12 queries in parallel via Promise.all", async () => {
 		mockQueryOne.mockResolvedValue(null);
 		mockQuery.mockResolvedValue([]);
 
 		await getAgenticMetrics("project-1");
 
-		// 5 queryOne calls + 4 query calls = 9 total
-		expect(mockQueryOne).toHaveBeenCalledTimes(5);
-		expect(mockQuery).toHaveBeenCalledTimes(4);
+		// 7 queryOne calls (claimLatency, duplicates, verification, avgRetries, proposals, failureClass, failureExhausted)
+		// + 5 query calls (strategies, rejectionByRole, graphMutations, replanTriggers, degradedProviders)
+		expect(mockQueryOne).toHaveBeenCalledTimes(7);
+		expect(mockQuery).toHaveBeenCalledTimes(5);
 	});
 });
