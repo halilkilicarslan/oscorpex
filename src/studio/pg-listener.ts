@@ -48,7 +48,7 @@ class PgListener {
 			await client.connect();
 		} catch (err) {
 			console.warn("[pg-listener] Connection failed:", err instanceof Error ? err.message : err);
-			client.end().catch(() => {});
+			client.end().catch((err) => console.warn("[pg-listener] Non-blocking operation failed:", err?.message ?? err));
 			this._scheduleReconnect();
 			return;
 		}
@@ -96,7 +96,7 @@ class PgListener {
 			console.warn("[pg-listener] LISTEN failed:", err instanceof Error ? err.message : err);
 			this.connected = false;
 			this.client = null;
-			client.end().catch(() => {});
+			client.end().catch((err) => console.warn("[pg-listener] Non-blocking operation failed:", err?.message ?? err));
 			this._scheduleReconnect();
 		}
 	}

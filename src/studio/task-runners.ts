@@ -106,6 +106,6 @@ export async function runIntegrationTest(
 			logs,
 		};
 	} finally {
-		await stopApp(projectId, log).catch(() => {});
+		await stopApp(projectId, log).catch((err) => console.warn("[task-runners] Non-blocking operation failed:", err?.message ?? err));
 	}
 }

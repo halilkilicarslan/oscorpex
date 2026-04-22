@@ -219,7 +219,7 @@ agenticRoutes.post("/proposals/:proposalId/approve", async (c) => {
 			if (task) {
 				const ready = await taskEngine.getReadyTasks(task.phaseId);
 				if (ready.some((candidate) => candidate.id === task.id)) {
-					executionEngine.executeTask(result.proposal.projectId, task).catch(() => {});
+					executionEngine.executeTask(result.proposal.projectId, task).catch((err) => console.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
 				}
 			}
 		}
@@ -253,7 +253,7 @@ agenticRoutes.post("/protocol-messages/:messageId/actioned", async (c) => {
 				if (refreshed) {
 					const ready = await taskEngine.getReadyTasks(refreshed.phaseId);
 					if (ready.some((candidate) => candidate.id === refreshed.id)) {
-						executionEngine.executeTask(message.projectId, refreshed).catch(() => {});
+						executionEngine.executeTask(message.projectId, refreshed).catch((err) => console.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
 					}
 				}
 			}

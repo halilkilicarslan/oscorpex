@@ -631,7 +631,7 @@ class TaskEngine {
 				agent?.name || task.assignedAgent,
 				task.title,
 				output.logs?.[0] || null,
-			).catch(() => {});
+			).catch((err) => console.warn("[task-engine] Non-blocking operation failed:", err?.message ?? err));
 		}
 
 		return updated;

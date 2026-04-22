@@ -51,7 +51,7 @@ class EventBus {
 				setTimeout(() => this._recentlyEmitted.delete(event.id), DEDUP_TTL_MS);
 
 				// PG LISTEN/NOTIFY — durable event notification (diğer process'ler için)
-				pgListener.notify({ id: event.id, projectId: event.projectId, type: event.type }).catch(() => {});
+				pgListener.notify({ id: event.id, projectId: event.projectId, type: event.type }).catch((err) => console.warn("[event-bus] Non-blocking operation failed:", err?.message ?? err));
 
 				// Notify project subscribers
 				const projectHandlers = this.handlers.get(`project:${event.projectId}`);
@@ -127,7 +127,7 @@ class EventBus {
 		setTimeout(() => this._recentlyEmitted.delete(event.id), DEDUP_TTL_MS);
 
 		// PG LISTEN/NOTIFY — durable event notification (diğer process'ler için)
-		pgListener.notify({ id: event.id, projectId: event.projectId, type: event.type }).catch(() => {});
+		pgListener.notify({ id: event.id, projectId: event.projectId, type: event.type }).catch((err) => console.warn("[event-bus] Non-blocking operation failed:", err?.message ?? err));
 
 		// Notify project subscribers
 		const projectHandlers = this.handlers.get(`project:${event.projectId}`);

@@ -290,7 +290,7 @@ export async function enforceToolCheck(
 		detail: result.reason,
 		timestamp: new Date().toISOString(),
 	};
-	if (sessionId) await recordViolation(sessionId, violation).catch(() => {});
+	if (sessionId) await recordViolation(sessionId, violation).catch((err) => console.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
 	if (policy.enforcementMode === "hard") {
 		throw new SandboxViolationError(violation);
 	}
@@ -318,7 +318,7 @@ export async function enforcePathChecks(
 			timestamp: new Date().toISOString(),
 		};
 		violations.push(violation);
-		if (sessionId) await recordViolation(sessionId, violation).catch(() => {});
+		if (sessionId) await recordViolation(sessionId, violation).catch((err) => console.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
 		if (policy.enforcementMode === "hard") {
 			throw new SandboxViolationError(violation);
 		}
@@ -343,7 +343,7 @@ export async function enforceOutputSizeCheck(
 		detail: result.reason,
 		timestamp: new Date().toISOString(),
 	};
-	if (sessionId) await recordViolation(sessionId, violation).catch(() => {});
+	if (sessionId) await recordViolation(sessionId, violation).catch((err) => console.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
 	if (policy.enforcementMode === "hard") {
 		throw new SandboxViolationError(violation);
 	}

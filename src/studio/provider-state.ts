@@ -49,7 +49,7 @@ class ProviderStateManager {
 				type: "provider:degraded",
 				payload: { provider: adapter, cooldownMs, reason: "rate_limited" },
 			});
-			this.persistToDb().catch(() => {});
+			this.persistToDb().catch((err) => console.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
 		}
 	}
 
@@ -60,7 +60,7 @@ class ProviderStateManager {
 			state.cooldownUntil = null;
 			state.consecutiveFailures = 0;
 			state.lastSuccess = new Date();
-			this.persistToDb().catch(() => {});
+			this.persistToDb().catch((err) => console.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
 		}
 	}
 
@@ -71,7 +71,7 @@ class ProviderStateManager {
 			if (state.consecutiveFailures >= 3) {
 				this.markRateLimited(adapter, 120_000);
 			} else {
-				this.persistToDb().catch(() => {});
+				this.persistToDb().catch((err) => console.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
 			}
 		}
 	}

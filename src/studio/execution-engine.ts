@@ -312,7 +312,7 @@ class ExecutionEngine {
 							await taskEngine.restartRevision(task.id);
 							const fresh = await getTask(task.id);
 							if (fresh) {
-								this.executeTask(project.id, fresh).catch(() => {});
+								this.executeTask(project.id, fresh).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 							}
 						} catch (e) {
 							console.error(`[execution-engine] Revision recovery failed for "${task.title}":`, e);
@@ -330,7 +330,7 @@ class ExecutionEngine {
 					console.log(
 						`[execution-engine] Recovery: ${ready.length} orphaned ready task(s) in phase "${phase.name}" — dispatching`,
 					);
-					Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch(() => {});
+					Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 				}
 
 				// Recover orphaned running tasks — stuck in "running" with no active CLI process
@@ -355,7 +355,7 @@ class ExecutionEngine {
 					if (phase.status !== "running") continue;
 					const ready = await taskEngine.getReadyTasks(phase.id);
 					if (ready.length > 0) {
-						Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch(() => {});
+						Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 					}
 				}
 			}
@@ -781,7 +781,7 @@ class ExecutionEngine {
 
 				// Session step: CLI execution started
 				if (sessionId) {
-					recordStep(sessionId, { step: 1, type: "action_executed", summary: `CLI execution started: ${adapter.name}` }).catch(() => {});
+					recordStep(sessionId, { step: 1, type: "action_executed", summary: `CLI execution started: ${adapter.name}` }).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 				}
 
 				try {
@@ -837,7 +837,7 @@ class ExecutionEngine {
 					setTimeout(() => {
 						getTask(task.id).then((t) => {
 							if (t && t.status === "queued") {
-								this.executeTask(projectId, t).catch(() => {});
+								this.executeTask(projectId, t).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 							}
 						});
 					}, retryMs + 1000);
@@ -855,7 +855,7 @@ class ExecutionEngine {
 			// Session step: CLI output received
 			if (sessionId) {
 				const fileCount = (output.filesCreated?.length ?? 0) + (output.filesModified?.length ?? 0);
-				recordStep(sessionId, { step: 2, type: "result_inspected", summary: `Output received: ${fileCount} files (${output.filesCreated?.length ?? 0} created, ${output.filesModified?.length ?? 0} modified)` }).catch(() => {});
+				recordStep(sessionId, { step: 2, type: "result_inspected", summary: `Output received: ${fileCount} files (${output.filesCreated?.length ?? 0} created, ${output.filesModified?.length ?? 0} modified)` }).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 			}
 
 			if (isolatedWorkspace?.isolated) {
@@ -939,7 +939,7 @@ class ExecutionEngine {
 			// Agent output buffer'ını log dosyasına persist et (restart sonrası terminal'de görünsün)
 			const agentOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
 			if (agentOutputLines.length > 0) {
-				persistAgentLog(projectId, agent.id, agentOutputLines).catch(() => {});
+				persistAgentLog(projectId, agent.id, agentOutputLines).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 			}
 
 			// --- Sandbox post-execution: enforce path + output size restrictions ---
@@ -1001,7 +1001,7 @@ class ExecutionEngine {
 				// Session step: verification result
 				if (sessionId) {
 					const status = verification.allPassed ? "passed" : "failed";
-					recordStep(sessionId, { step: 3, type: "decision_made", summary: `Verification: ${status}` }).catch(() => {});
+					recordStep(sessionId, { step: 3, type: "decision_made", summary: `Verification: ${status}` }).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 				}
 			}
 
@@ -1032,7 +1032,7 @@ class ExecutionEngine {
 				// Session step: test gate result
 				if (sessionId) {
 					const status = testResult.passed ? `passed (${testResult.testsTotal} tests)` : `failed: ${testResult.summary}`;
-					recordStep(sessionId, { step: 4, type: "decision_made", summary: `Test gate: ${status}` }).catch(() => {});
+					recordStep(sessionId, { step: 4, type: "decision_made", summary: `Test gate: ${status}` }).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 				}
 			}
 
@@ -1161,7 +1161,7 @@ class ExecutionEngine {
 			// Agent output buffer'ını log dosyasına persist et
 			const failOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
 			if (failOutputLines.length > 0) {
-				persistAgentLog(projectId, agent.id, failOutputLines).catch(() => {});
+				persistAgentLog(projectId, agent.id, failOutputLines).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 			}
 
 			await taskEngine.failTask(task.id, errorMsg);
@@ -1719,7 +1719,7 @@ class ExecutionEngine {
 			// Review agent output buffer'ını log dosyasına persist et
 			const reviewOutputLines = agentRuntime.getAgentOutput(projectId, reviewer.id);
 			if (reviewOutputLines.length > 0) {
-				persistAgentLog(projectId, reviewer.id, reviewOutputLines).catch(() => {});
+				persistAgentLog(projectId, reviewer.id, reviewOutputLines).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 			}
 
 			// Complete the review task with feedback as output
@@ -1732,7 +1732,7 @@ class ExecutionEngine {
 			// Submit review result on the original task
 			await taskEngine.submitReview(originalTaskId!, approved, feedback);
 			agentRuntime.markVirtualStopped(projectId, reviewer.id);
-			await reviewWorkspace.cleanup().catch(() => {});
+			await reviewWorkspace.cleanup().catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 
 			// Auto-restart revision: if rejected, restart the original task for the dev agent
 			if (!approved) {
@@ -1747,7 +1747,7 @@ class ExecutionEngine {
 			termLog(`[review] Hata: ${msg.slice(0, 200)}`);
 			agentRuntime.markVirtualStopped(projectId, reviewer.id);
 			if (reviewWorkspace?.isolated) {
-				await reviewWorkspace.cleanup().catch(() => {});
+				await reviewWorkspace.cleanup().catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
 			}
 
 			// Fail the review task but auto-approve original so it doesn't get stuck

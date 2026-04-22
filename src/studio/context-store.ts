@@ -387,7 +387,7 @@ export async function searchContext(opts: ContextSearchOptions): Promise<Context
 	}
 
 	// Track search call + hits (non-blocking)
-	recordSearchMetrics(projectId, results.length).catch(() => {});
+	recordSearchMetrics(projectId, results.length).catch((err) => console.warn("[context-store] Non-blocking operation failed:", err?.message ?? err));
 
 	return results;
 }

@@ -362,7 +362,7 @@ teamRoutes.delete("/projects/:id/team/:agentId", async (c) => {
 	}
 	const ok = await deleteProjectAgent(agentId);
 	if (!ok) return c.json({ error: "Agent not found" }, 404);
-	deleteAgentFiles(c.req.param("id"), existing.name).catch(() => {});
+	deleteAgentFiles(c.req.param("id"), existing.name).catch((err) => console.warn("[team-routes] Non-blocking operation failed:", err?.message ?? err));
 	return c.json({ success: true });
 });
 

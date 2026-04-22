@@ -87,7 +87,7 @@ taskRoutes.patch("/projects/:id/tasks/:taskId", async (c) => {
 taskRoutes.post("/projects/:id/tasks/:taskId/retry", async (c) => {
 	try {
 		const updated = await taskEngine.retryTask(c.req.param("taskId"));
-		executionEngine.executeTask(c.req.param("id"), updated).catch(() => {});
+		executionEngine.executeTask(c.req.param("id"), updated).catch((err) => console.warn("[task-routes] Non-blocking operation failed:", err?.message ?? err));
 		return c.json({ success: true, task: updated });
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : "Retry failed";
@@ -124,7 +124,7 @@ taskRoutes.post("/projects/:id/tasks/:taskId/approve", async (c) => {
 		const projectId = c.req.param("id");
 		const taskId = c.req.param("taskId");
 		const updated = await taskEngine.approveTask(taskId);
-		executionEngine.executeTask(projectId, updated).catch(() => {});
+		executionEngine.executeTask(projectId, updated).catch((err) => console.warn("[task-routes] Non-blocking operation failed:", err?.message ?? err));
 		return c.json({ success: true, task: updated });
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : "Onay işlemi başarısız";

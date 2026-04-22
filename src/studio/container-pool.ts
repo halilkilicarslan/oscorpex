@@ -272,8 +272,8 @@ class ContainerPool {
 			// Wait for health check to pass
 			const healthy = await this.waitForHealthy(port, 15_000);
 			if (!healthy) {
-				await container.stop({ t: 2 }).catch(() => {});
-				await container.remove({ force: true }).catch(() => {});
+				await container.stop({ t: 2 }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+				await container.remove({ force: true }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
 				return undefined;
 			}
 
@@ -301,8 +301,8 @@ class ContainerPool {
 
 		try {
 			const container = this.docker.getContainer(containerId);
-			await container.stop({ t: 3 }).catch(() => {});
-			await container.remove({ force: true }).catch(() => {});
+			await container.stop({ t: 3 }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+			await container.remove({ force: true }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
 		} catch {
 			/* already gone */
 		}
@@ -434,8 +434,8 @@ class ContainerPool {
 			});
 			for (const c of containers) {
 				const container = this.docker.getContainer(c.Id);
-				await container.stop({ t: 2 }).catch(() => {});
-				await container.remove({ force: true }).catch(() => {});
+				await container.stop({ t: 2 }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+				await container.remove({ force: true }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
 			}
 			if (containers.length > 0) {
 				console.log(`[pool] Cleaned up ${containers.length} stale containers`);

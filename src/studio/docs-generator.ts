@@ -32,10 +32,10 @@ export async function updateDocsAfterTask(
 
 	try {
 		// Always regenerate all docs on every task completion
-		await generateProjectMd(project, docsDir, log).catch(() => {});
-		await generateArchitectureMd(project, docsDir, log).catch(() => {});
-		await generateCodingStandardsMd(project, docsDir, log).catch(() => {});
-		await generateApiContractMd(project, task, docsDir, log).catch(() => {});
+		await generateProjectMd(project, docsDir, log).catch((err) => console.warn("[docs-generator] Non-blocking operation failed:", err?.message ?? err));
+		await generateArchitectureMd(project, docsDir, log).catch((err) => console.warn("[docs-generator] Non-blocking operation failed:", err?.message ?? err));
+		await generateCodingStandardsMd(project, docsDir, log).catch((err) => console.warn("[docs-generator] Non-blocking operation failed:", err?.message ?? err));
+		await generateApiContractMd(project, task, docsDir, log).catch((err) => console.warn("[docs-generator] Non-blocking operation failed:", err?.message ?? err));
 		await appendChangelog(project, task, agent, docsDir, log);
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);

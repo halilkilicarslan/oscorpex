@@ -660,7 +660,7 @@ projectRoutes.post("/projects/:id/chat", async (c) => {
 			: selectedProviderInfo.defaultEffort;
 
 	await insertChatMessage({ projectId, role: "user", content: userMessage });
-	recordChatToMemory(projectId, project.name, "user", userMessage).catch(() => {});
+	recordChatToMemory(projectId, project.name, "user", userMessage).catch((err) => console.warn("[project-routes] Non-blocking operation failed:", err?.message ?? err));
 
 	const history = await listChatMessages(projectId);
 	const settingsMap = await getProjectSettingsMap(projectId);
@@ -888,7 +888,7 @@ ${
 										role: "assistant",
 										content: fullText,
 									});
-									recordChatToMemory(projectId, project?.name, "assistant", fullText).catch(() => {});
+									recordChatToMemory(projectId, project?.name, "assistant", fullText).catch((err) => console.warn("[project-routes] Non-blocking operation failed:", err?.message ?? err));
 								}
 
 								await stream.writeSSE({

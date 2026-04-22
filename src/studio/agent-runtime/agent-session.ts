@@ -165,7 +165,7 @@ export async function completeSession(
 	);
 
 	// v8.0: Trigger cross-project learning extraction (non-blocking)
-	triggerLearningExtraction(projectId).catch(() => {});
+	triggerLearningExtraction(projectId).catch((err) => console.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
 }
 
 /**
@@ -209,7 +209,7 @@ export async function failSession(
 	);
 
 	// v8.0: Trigger cross-project learning extraction (non-blocking)
-	triggerLearningExtraction(projectId).catch(() => {});
+	triggerLearningExtraction(projectId).catch((err) => console.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +246,7 @@ async function triggerLearningExtraction(projectId: string): Promise<void> {
 	_lastExtractionCount.set(projectId, currentCount);
 
 	if (patternsCreated > 0) {
-		await autoPromotePatterns(tenantId).catch(() => {});
+		await autoPromotePatterns(tenantId).catch((err) => console.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
 		console.log(`[agent-session] Extracted ${patternsCreated} learning patterns for project ${projectId}`);
 	}
 }

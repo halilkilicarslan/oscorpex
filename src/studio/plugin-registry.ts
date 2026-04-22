@@ -152,7 +152,7 @@ class PluginRegistry {
 					durationMs,
 					success: true,
 					error: null,
-				}).catch(() => {});
+				}).catch((err) => console.warn("[plugin-registry] Non-blocking operation failed:", err?.message ?? err));
 			} catch (err) {
 				const durationMs = Date.now() - startTime;
 				const errorMsg = err instanceof Error ? err.message : String(err);
@@ -164,7 +164,7 @@ class PluginRegistry {
 					durationMs,
 					success: false,
 					error: errorMsg,
-				}).catch(() => {});
+				}).catch((err) => console.warn("[plugin-registry] Non-blocking operation failed:", err?.message ?? err));
 			}
 		}
 	}

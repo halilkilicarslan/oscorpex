@@ -89,7 +89,7 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<void 
 				c.set("apiKeyScopes", scopes);
 			}
 			// Non-blocking last_used_at update
-			queryOne("UPDATE api_keys SET last_used_at = now() WHERE id = $1", [row.id]).catch(() => {});
+			queryOne("UPDATE api_keys SET last_used_at = now() WHERE id = $1", [row.id]).catch((err) => console.warn("[auth-middleware] Non-blocking operation failed:", err?.message ?? err));
 			if (row.tenant_id) {
 				await setTenantContext(row.tenant_id);
 			}

@@ -634,7 +634,7 @@ class PipelineEngine {
 			} else {
 				// Conflict varsa main'e geri dön
 				console.warn(`[pipeline-engine] Merge conflict tespit edildi: ${branchName} → main`, result.conflicts);
-				await gitManager.checkout(project.repoPath, "main").catch(() => {});
+				await gitManager.checkout(project.repoPath, "main").catch((err) => console.warn("[pipeline-engine] Non-blocking operation failed:", err?.message ?? err));
 			}
 		} catch (err) {
 			console.warn(`[pipeline-engine] Branch merge atlandı: ${branchName}`, err);

@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Mock DB layer
 // ---------------------------------------------------------------------------
 vi.mock("../db.js", () => ({
+	query: vi.fn().mockResolvedValue([]),
 	getRecentEpisodes: vi.fn().mockResolvedValue([]),
 	getFailureEpisodes: vi.fn().mockResolvedValue([]),
 	getBestStrategies: vi.fn().mockResolvedValue([]),
