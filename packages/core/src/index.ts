@@ -93,6 +93,13 @@ export type {
 export type { EventType } from "./domain/events.js";
 export type { BaseEvent, LegacyStudioEvent } from "./domain/events.js";
 
+// --- State machines ---
+export { PROJECT_TRANSITIONS, canTransitionProject } from "./domain/state-machines.js";
+export { TASK_TRANSITIONS, canTransitionTask } from "./domain/state-machines.js";
+export { PIPELINE_STATUS_TRANSITIONS, canTransitionPipeline } from "./domain/state-machines.js";
+export { STAGE_STATUS_TRANSITIONS, canTransitionStage } from "./domain/state-machines.js";
+export { PHASE_STATUS_TRANSITIONS, canTransitionPhase } from "./domain/state-machines.js";
+
 // --- Contract interfaces ---
 export type { ProviderAdapter } from "./contracts/provider-adapter.js";
 export type { EventPublisher } from "./contracts/event-publisher.js";
@@ -110,6 +117,8 @@ export type { PolicyEngine } from "./contracts/policy-engine.js";
 export type { ReplayStore } from "./contracts/replay-store.js";
 export type { CostReporter } from "./contracts/cost-reporter.js";
 export type { MemoryProvider } from "./contracts/memory-provider.js";
+export type { HookPhase, HookContext, HookResult, SyncHook, AsyncHook, HookRegistration, HookRegistry } from "./contracts/hook-registry.js";
+export type { OscorpexKernel } from "./contracts/kernel.js";
 
 // --- Errors ---
 export {

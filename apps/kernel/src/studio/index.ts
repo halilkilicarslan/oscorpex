@@ -17,3 +17,8 @@ export { wsManager } from "./ws-manager.js";
 export { startWSServer } from "./ws-server.js";
 export * from "./agent-files.js";
 export * from "./agent-messaging.js";
+
+// Re-export typed event schema for consumer convenience.
+// Producers can use createEventInput() + EventPayloadMap for type-safe event creation.
+export type { EventPayloadMap, EmitInput, TypedEvent } from "@oscorpex/event-schema";
+export { createEventInput } from "@oscorpex/event-schema";

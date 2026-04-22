@@ -1,10 +1,17 @@
 // ---------------------------------------------------------------------------
 // Oscorpex — Event Bus (in-process pub/sub + PG LISTEN/NOTIFY durable bridge)
+//
+// Implements the EventPublisher contract from @oscorpex/core, using typed
+// event payloads from @oscorpex/event-schema. The class retains full backward
+// compatibility with the legacy StudioEvent-based API (emit/emitTransient/emitAsync
+// accept Omit<StudioEvent, "id" | "timestamp">) while the EventPublisher contract
+// uses BaseEvent with correlationId and causationId.
 // ---------------------------------------------------------------------------
 
 import { getEvent, insertEvent } from "./db.js";
 import { pgListener } from "./pg-listener.js";
 import type { EventType, StudioEvent } from "./types.js";
+import type { BaseEvent, EventPayloadMap } from "@oscorpex/event-schema";
 import { createLogger } from "./logger.js";
 const log = createLogger("event-bus");
 
@@ -18,6 +25,34 @@ class EventBus {
 	private handlers = new Map<string, Set<Handler>>();
 	/** Bu process'te emit edilmiş ve henüz TTL süresi dolmamış event ID'leri */
 	private _recentlyEmitted = new Set<string>();
+
+	// --- EventPublisher contract (BaseEvent with typed payloads) ---
+
+	/** Publish a typed event — persists to DB, notifies subscribers, returns the stored event */
+	async publish<T extends EventType>(event: BaseEvent<T, EventPayloadMap[T]>): Promise<void> {
+		const legacyData: Omit<StudioEvent, "id" | "timestamp"> = {
+			projectId: event.projectId,
+			type: event.type,
+			agentId: event.agentId,
+			taskId: event.taskId,
+			payload: event.payload as Record<string, unknown>,
+		};
+		this.emit(legacyData);
+	}
+
+	/** Publish a transient typed event — in-process only, no DB persistence */
+	publishTransient<T extends EventType>(event: BaseEvent<T, EventPayloadMap[T]>): void {
+		const legacyData: Omit<StudioEvent, "id" | "timestamp"> = {
+			projectId: event.projectId,
+			type: event.type,
+			agentId: event.agentId,
+			taskId: event.taskId,
+			payload: event.payload as Record<string, unknown>,
+		};
+		this.emitTransient(legacyData);
+	}
+
+	// --- Legacy API (backward compatible) ---
 
 	/** Subscribe to all events for a project */
 	onProject(projectId: string, handler: Handler): () => void {
