@@ -2,15 +2,21 @@
 // Oscorpex — Sandbox Manager: Capability isolation for agent execution
 // Protects the host environment as agent autonomy increases.
 // Controls workspace scope, tool access, filesystem bounds, network policy.
+// Pure enforcement logic is in @oscorpex/policy-kit; this module handles
+// persistence (DB) and session management (kernel layer).
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
 import { normalize, resolve, sep } from "node:path";
 import { query, queryOne, execute, getProjectSetting } from "./db.js";
 import type { Task } from "./types.js";
+import { checkToolAllowed, checkPathAllowed, checkOutputSize, buildDefaultSandboxPolicy, isSecurityTask } from "@oscorpex/policy-kit";
+import { SandboxViolationError as CoreSandboxViolationError } from "@oscorpex/core";
 import { createLogger } from "./logger.js";
-
 const log = createLogger("sandbox-manager");
+
+// Re-export for backward compatibility
+export { checkToolAllowed, checkPathAllowed, checkOutputSize } from "@oscorpex/policy-kit";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,10 +40,6 @@ export interface SandboxPolicy {
 	enforcementMode: EnforcementMode;
 }
 
-/**
- * Thrown when sandbox enforcement blocks an operation in "hard" mode.
- * Caught by execution-engine to fail the task and trigger retry/escalation.
- */
 export class SandboxViolationError extends Error {
 	public readonly violation: SandboxViolation;
 	constructor(violation: SandboxViolation) {
@@ -172,70 +174,9 @@ export async function getSessionViolations(sessionId: string): Promise<SandboxVi
 	return (row?.violations as SandboxViolation[]) ?? [];
 }
 
-// ---------------------------------------------------------------------------
-// Enforcement — check actions against policy
-// ---------------------------------------------------------------------------
-
-export function checkToolAllowed(policy: SandboxPolicy, toolName: string): { allowed: boolean; reason: string } {
-	if (policy.deniedTools.includes(toolName)) {
-		return { allowed: false, reason: `Tool "${toolName}" is explicitly denied by sandbox policy` };
-	}
-	if (policy.allowedTools.length > 0 && !policy.allowedTools.includes(toolName)) {
-		return { allowed: false, reason: `Tool "${toolName}" is not in the allowed tools list` };
-	}
-	return { allowed: true, reason: "allowed" };
-}
-
-export function checkPathAllowed(policy: SandboxPolicy, filePath: string): { allowed: boolean; reason: string } {
-	if (policy.filesystemScope.length === 0) {
-		return { allowed: true, reason: "no filesystem scope restriction" };
-	}
-
-	// Resolve canonical path to prevent prefix bypass (e.g. /repo/app-malicious matching /repo/app)
-	const canonical = normalize(resolve(filePath));
-
-	const withinScope = policy.filesystemScope.some((scope) => {
-		const canonicalScope = normalize(resolve(scope));
-		// Strict parent check: path must equal scope or start with scope + separator
-		return canonical === canonicalScope || canonical.startsWith(canonicalScope + sep);
-	});
-
-	if (!withinScope) {
-		return { allowed: false, reason: `Path "${filePath}" (resolved: ${canonical}) is outside sandbox scope` };
-	}
-	return { allowed: true, reason: "within scope" };
-}
-
-export function checkOutputSize(policy: SandboxPolicy, sizeBytes: number): { allowed: boolean; reason: string } {
-	if (sizeBytes > policy.maxOutputSizeBytes) {
-		return { allowed: false, reason: `Output size (${sizeBytes} bytes) exceeds limit (${policy.maxOutputSizeBytes} bytes)` };
-	}
-	return { allowed: true, reason: "within limit" };
-}
-
-// ---------------------------------------------------------------------------
-// Default policy builder
-// ---------------------------------------------------------------------------
-
-function buildDefaultPolicy(projectId: string): SandboxPolicy {
-	return {
-		id: "default",
-		projectId,
-		isolationLevel: "workspace",
-		allowedTools: [],
-		deniedTools: ["rm_rf", "format_disk", "sudo"],
-		filesystemScope: [],
-		networkPolicy: "project_only",
-		maxExecutionTimeMs: 300_000,
-		maxOutputSizeBytes: 10_485_760,
-		elevatedCapabilities: [],
-		enforcementMode: "hard",
-	};
-}
-
 /**
  * Resolve effective sandbox policy for a task.
- * Merges project policy with task-level overrides and project_settings enforcement_mode.
+ * Uses buildDefaultSandboxPolicy from @oscorpex/policy-kit for defaults.
  */
 export async function resolveTaskPolicy(
 	projectId: string,
@@ -243,7 +184,15 @@ export async function resolveTaskPolicy(
 	agentRole: string,
 ): Promise<SandboxPolicy> {
 	const projectPolicy = await getSandboxPolicy(projectId);
-	const base = projectPolicy ?? buildDefaultPolicy(projectId);
+	const defaultPolicy = buildDefaultSandboxPolicy(projectId);
+	const base = projectPolicy ?? {
+		id: "default",
+		projectId,
+		isolationLevel: "workspace" as IsolationLevel,
+		...defaultPolicy,
+		maxExecutionTimeMs: 300_000,
+		elevatedCapabilities: [] as string[],
+	};
 
 	// Project-level enforcement_mode override from project_settings
 	const settingOverride = await getProjectSetting(projectId, "sandbox", "enforcement_mode");
@@ -252,8 +201,7 @@ export async function resolveTaskPolicy(
 	}
 
 	// Security-sensitive tasks get stricter isolation
-	const isSecurityTask = /security|auth|permission|secret/i.test(task.title);
-	if (isSecurityTask) {
+	if (isSecurityTask(task.title)) {
 		return {
 			...base,
 			networkPolicy: "no_network",
@@ -273,7 +221,7 @@ export async function resolveTaskPolicy(
 }
 
 // ---------------------------------------------------------------------------
-// Enforcement helpers — enforce policy checks based on enforcement_mode
+// Enforcement — check actions against policy
 // ---------------------------------------------------------------------------
 
 /**
