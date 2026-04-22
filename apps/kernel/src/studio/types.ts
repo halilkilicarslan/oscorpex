@@ -182,84 +182,11 @@ export interface AgentRuntime {
 }
 
 // ---- Events ----------------------------------------------------------------
+// EventType and StudioEvent are now defined in @oscorpex/event-schema.
+// Re-exported here for backward compatibility — existing imports continue to work.
 
-export type EventType =
-	| "task:assigned"
-	| "task:started"
-	| "task:completed"
-	| "task:failed"
-	| "task:timeout"
-	| "task:retry"
-	| "task:approval_required"
-	| "task:approved"
-	| "task:rejected"
-	| "task:added"
-	| "agent:started"
-	| "agent:stopped"
-	| "agent:output"
-	| "agent:error"
-	| "phase:started"
-	| "phase:completed"
-	| "plan:created"
-	| "plan:approved"
-	| "plan:phase_added"
-	| "execution:started"
-	| "execution:error"
-	| "escalation:user"
-	| "git:commit"
-	| "git:pr-created"
-	| "task:timeout_warning"
-	| "task:review_rejected"
-	| "pipeline:completed"
-	| "pipeline:failed"
-	| "pipeline:paused"
-	| "pipeline:resumed"
-	| "pipeline:degraded"
-	| "pipeline:rate_limited"
-	| "pipeline:stage_started"
-	| "pipeline:stage_completed"
-	| "pipeline:branch_created"
-	| "pipeline:branch_merged"
-	| "budget:warning"
-	| "budget:exceeded"
-	| "prompt:size"
-	// v3.x: lifecycle & governance events
-	| "work_item:created"
-	| "work_item:planned"
-	| "sprint:started"
-	| "sprint:completed"
-	| "ceremony:standup"
-	| "ceremony:retrospective"
-	| "policy:violation"
-	| "lifecycle:transition"
-	| "message:created"
-	// v7.0: agentic platform events
-	| "agent:session_started"
-	| "agent:strategy_selected"
-	| "agent:requested_help"
-	| "agent:memory_written"
-	| "task:proposal_created"
-	| "task:proposal_approved"
-	| "graph:mutation_proposed"
-	| "graph:mutation_applied"
-	| "plan:replanned"
-	| "goal:evaluated"
-	| "verification:passed"
-	| "verification:failed"
-	| "budget:halted"
-	| "provider:degraded"
-	// v8.0: failure classification
-	| "task:transient_failure";
-
-export interface StudioEvent {
-	id: string;
-	projectId: string;
-	type: EventType;
-	agentId?: string;
-	taskId?: string;
-	payload: Record<string, unknown>;
-	timestamp: string;
-}
+export type { EventType } from "@oscorpex/event-schema";
+export type { StudioEvent } from "@oscorpex/event-schema";
 
 // ---- Chat Messages ---------------------------------------------------------
 

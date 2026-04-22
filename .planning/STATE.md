@@ -3,8 +3,8 @@
 ## Current Position
 
 **Milestone:** Core Kernel Extraction
-**Phase:** 02-workspace-transform (Complete)
-**Last Activity:** 2025-04-22 — Monorepo workspace migration complete
+**Phase:** 04-event-schema (Complete)
+**Last Activity:** 2025-04-22 — Event schema package created with typed payloads
 
 ## Status
 
@@ -25,6 +25,10 @@
 - [x] Root package.json → workspace orchestrator
 - [x] pnpm -r build passes (kernel + console + 3 packages)
 - [x] Kernel tests pass (74 files, 1098 tests)
+- [x] @oscorpex/core domain types and contract interfaces defined (Phase 3)
+- [x] @oscorpex/event-schema created with 52 typed event payloads (Phase 4)
+- [x] kernel types.ts re-exports EventType & StudioEvent from event-schema (Phase 4)
+- [x] All 1098 tests pass with event-schema migration
 
 ## Key Decisions
 
@@ -35,6 +39,7 @@
 5. **PostgreSQL stays** — Event store can start as Postgres, migrate later
 6. **apps/kernel/** — Backend code moved from src/ (history preserved via git mv)
 7. **apps/console/** — Frontend code moved from console/ (history preserved via git mv)
+8. **EventType/StudioEvent origin** — Canonical types now in @oscorpex/event-schema, re-exported from kernel types.ts for backward compatibility
 
 ## Known Issues
 
@@ -56,8 +61,10 @@
     /console         ← Frontend (ex-console/)
       /src           ← 52 studio pages + 25 API modules
   /packages
-    /core            ← @oscorpex/core (empty placeholder)
-    /event-schema   ← @oscorpex/event-schema (empty placeholder)
+    /core            ← @oscorpex/core (domain types, contracts, errors, utils)
+      /src           ← 29 source files: domain/, contracts/, errors/, utils/
+    /event-schema    ← @oscorpex/event-schema (52 typed payloads, EventPayloadMap)
+      /src           ← index.ts + 6 payload files
     /provider-sdk    ← @oscorpex/provider-sdk (empty placeholder)
   /adapters           ← Future home for provider adapters (.gitkeep)
   .planning/          ← GSD planning infrastructure
@@ -82,6 +89,8 @@
 - Event sourcing: Event table + PG LISTEN/NOTIFY
 - CLI adapters: Factory pattern with `getAdapter()` / `getAdapterChain()`
 - Monorepo: pnpm workspace with apps/, packages/, adapters/
+- Event types: Canonical in @oscorpex/event-schema, re-exported from kernel for backward compat
+- Event payloads: Typed per EventType via EventPayloadMap interface
 
 ---
 *Last updated: 2025-04-22*
