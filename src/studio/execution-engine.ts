@@ -52,6 +52,7 @@ import { resolveModel } from "./model-router.js";
 import { runVerificationGate, runTestGateCheck, runGoalEvaluation } from "./execution-gates.js";
 import { processAgentProposals } from "./proposal-processor.js";
 import { buildTaskPrompt, defaultSystemPrompt } from "./prompt-builder.js";
+import { executeReviewTask, resolveAgent } from "./review-dispatcher.js";
 import {
 	resolveTaskPolicy, startSandboxSession, endSandboxSession,
 	checkToolAllowed, checkPathAllowed,
@@ -580,13 +581,13 @@ class ExecutionEngine {
 
 		// --- Review task: "Code Review: X" — run review CLI and submit result ---
 		if (task.title.startsWith("Code Review: ")) {
-			await this.executeReviewTask(projectId, project, task);
+			await executeReviewTask(projectId, project, task, agentRuntime);
 			return;
 		}
 
 		// Resolve agent config — prefer the task's assignedAgent value, which may
 		// be an agent ID or a role name. Try both.
-		const agent = await this.resolveAgent(projectId, task.assignedAgent);
+		const agent = await resolveAgent(projectId, task.assignedAgent);
 		if (!agent) {
 			await taskEngine.assignTask(task.id, task.assignedAgent);
 			await taskEngine.startTask(task.id);
@@ -1238,9 +1239,8 @@ class ExecutionEngine {
 	// Dispatch newly ready tasks
 	// -------------------------------------------------------------------------
 
-	// -------------------------------------------------------------------------
-	// Review Loop: reviewer agent auto-reviews coding task output
-	// -------------------------------------------------------------------------
+	// Review dispatch → review-dispatcher.ts
+	// Agent resolution → review-dispatcher.ts
 
 	private async executeReviewTask(projectId: string, project: Project, reviewTask: Task): Promise<void> {
 		// Find the original task (review task depends on it)
@@ -1258,7 +1258,7 @@ class ExecutionEngine {
 			return;
 		}
 
-		const reviewer = await this.resolveAgent(projectId, reviewTask.assignedAgent);
+		const reviewer = await resolveAgent(projectId, reviewTask.assignedAgent);
 		if (!reviewer) {
 			await taskEngine.assignTask(reviewTask.id, reviewTask.assignedAgent);
 			await taskEngine.startTask(reviewTask.id);
