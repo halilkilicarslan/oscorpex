@@ -14,6 +14,14 @@
 // ---------------------------------------------------------------------------
 
 import {
+	buildDAGStages,
+	buildDAGWaves,
+	buildLinearStages,
+	findReviewerAgentId,
+	findDevAgentId,
+} from "@oscorpex/task-graph";
+import type { DependencyEdge, GraphAgent, PlanPhase, PlanTask, StagePlan } from "@oscorpex/task-graph";
+import {
 	createPipelineRun,
 	getLatestPlan,
 	getPipelineRun,
@@ -112,119 +120,10 @@ async function getState(projectId: string): Promise<PipelineState | null> {
 }
 
 // ---------------------------------------------------------------------------
-// DAG Helper: Agent dependency graph'ından paralel wave'ler oluştur
+// DAG wave generation is now in @oscorpex/task-graph (buildDAGWaves).
+// The kernel uses buildDAGStages/buildLinearStages from task-graph
+// for stage construction, and handles DB persistence + event emission locally.
 // ---------------------------------------------------------------------------
-
-interface DAGNode {
-	agentId: string;
-	agent: ProjectAgent;
-	predecessors: Set<string>; // agent IDs that must complete before this
-	successors: Set<string>; // agent IDs that depend on this
-}
-
-/**
- * Agent dependency'lerinden DAG wave'leri oluşturur.
- * Her wave, tüm predecessor'ları önceki wave'lerde bulunan agent'ları içerir.
- * Aynı wave'deki agent'lar birbirinden bağımsız → paralel çalışabilir.
- *
- * Returns: agent ID grupları (wave[0] = root agents, wave[1] = next, ...)
- */
-export function buildDAGWaves(agents: ProjectAgent[], deps: AgentDependency[]): string[][] {
-	// DAG node'larını oluştur
-	const nodes = new Map<string, DAGNode>();
-	for (const agent of agents) {
-		nodes.set(agent.id, {
-			agentId: agent.id,
-			agent,
-			predecessors: new Set(),
-			successors: new Set(),
-		});
-	}
-
-	// v3.1: Edge tipleri sınıflandırması
-	// DAG constraint olan tipler: workflow, review, gate, conditional, handoff, approval
-	// DAG constraint olmayan tipler: hierarchy, notification, mentoring, escalation, fallback
-	// Özel: pair — her iki agent aynı wave'e
-	const NON_BLOCKING_TYPES = new Set(["hierarchy", "notification", "mentoring", "escalation", "fallback"]);
-	const pairEdges: Array<{ a: string; b: string }> = [];
-
-	for (const dep of deps) {
-		if (NON_BLOCKING_TYPES.has(dep.type)) continue;
-
-		if (dep.type === "pair") {
-			pairEdges.push({ a: dep.fromAgentId, b: dep.toAgentId });
-			continue;
-		}
-
-		const from = nodes.get(dep.fromAgentId);
-		const to = nodes.get(dep.toAgentId);
-		if (from && to) {
-			// from → to: "to" depends on "from"
-			// yani from tamamlanmadan to başlayamaz
-			to.predecessors.add(from.agentId);
-			from.successors.add(to.agentId);
-		}
-	}
-
-	// Topological sort — Kahn's algorithm ile wave'lere ayır
-	const inDegree = new Map<string, number>();
-	for (const [id, node] of nodes) {
-		inDegree.set(id, node.predecessors.size);
-	}
-
-	const waves: string[][] = [];
-	const remaining = new Set(nodes.keys());
-
-	while (remaining.size > 0) {
-		// Bu wave'de: in-degree'si 0 olan node'lar
-		const wave: string[] = [];
-		for (const id of remaining) {
-			if ((inDegree.get(id) ?? 0) === 0) {
-				wave.push(id);
-			}
-		}
-
-		if (wave.length === 0) {
-			// Döngüsel bağımlılık — kalan agent'ları son wave'e at (graceful)
-			log.warn("[pipeline-engine] Döngüsel bağımlılık tespit edildi, kalan agent'lar zorla ekleniyor");
-			waves.push([...remaining]);
-			break;
-		}
-
-		waves.push(wave);
-
-		// Bu wave'deki node'ları remaining'den çıkar ve successor'ların in-degree'sini azalt
-		for (const id of wave) {
-			remaining.delete(id);
-			const node = nodes.get(id)!;
-			for (const succId of node.successors) {
-				inDegree.set(succId, (inDegree.get(succId) ?? 1) - 1);
-			}
-		}
-	}
-
-	// v3.1: Pair edge'leri — her iki agent'ı aynı wave'e taşı (en geç olanı baz al)
-	for (const { a, b } of pairEdges) {
-		let waveA = -1;
-		let waveB = -1;
-		for (let i = 0; i < waves.length; i++) {
-			if (waves[i].includes(a)) waveA = i;
-			if (waves[i].includes(b)) waveB = i;
-		}
-		if (waveA >= 0 && waveB >= 0 && waveA !== waveB) {
-			const targetWave = Math.max(waveA, waveB);
-			const sourceWave = Math.min(waveA, waveB);
-			const moveId = waveA < waveB ? a : b;
-			waves[sourceWave] = waves[sourceWave].filter((id) => id !== moveId);
-			if (!waves[targetWave].includes(moveId)) {
-				waves[targetWave].push(moveId);
-			}
-		}
-	}
-
-	// Boş wave'leri temizle
-	return waves.filter((w) => w.length > 0);
-}
 
 // ---------------------------------------------------------------------------
 // Pipeline Engine ana sınıfı
@@ -253,19 +152,20 @@ class PipelineEngine {
 		const plan = await getLatestPlan(projectId);
 		const phases: Phase[] = plan ? await listPhases(plan.id) : [];
 
-		// Dependency graph'ı oku
 		const deps = await listAgentDependencies(projectId);
 		const hasDeps = deps.some((d) => d.type !== "hierarchy");
 
-		let stages: PipelineStage[];
+		const stagePlans: StagePlan[] = hasDeps
+			? buildDAGStages(toGraphAgents(agents), toDependencyEdges(deps), toPlanPhases(phases))
+			: buildLinearStages(toGraphAgents(agents), toPlanPhases(phases));
 
-		if (hasDeps) {
-			// v2: DAG tabanlı wave'ler
-			stages = this.buildDAGStages(agents, deps, phases);
-		} else {
-			// Fallback: eski pipeline_order tabanlı lineer stage'ler
-			stages = this.buildLinearStages(agents, phases);
-		}
+		const stages: PipelineStage[] = stagePlans.map((sp) => ({
+			order: sp.order,
+			agents: agents.filter((a) => sp.agents.some((ga) => ga.id === a.id)),
+			tasks: toKernelTasks(phases, sp),
+			status: sp.status as PipelineStage["status"],
+			phaseId: sp.phaseId,
+		}));
 
 		return {
 			projectId,
@@ -275,165 +175,7 @@ class PipelineEngine {
 		};
 	}
 
-	/**
-	 * DAG dependency graph'ından pipeline stage'leri oluşturur.
-	 * Her wave bir stage olur; wave'deki agent'lar paralel çalışır.
-	 */
-	private buildDAGStages(agents: ProjectAgent[], deps: AgentDependency[], phases: Phase[]): PipelineStage[] {
-		const waves = buildDAGWaves(agents, deps);
-		const agentMap = new Map(agents.map((a) => [a.id, a]));
-		const sortedPhases = [...phases].sort((a, b) => a.order - b.order);
-		const usedTaskIds = new Set<string>();
-
-		// Collect all tasks and separate review tasks for second pass
-		const allTasks: Task[] = [];
-		const reviewTasks: Task[] = [];
-		for (const phase of sortedPhases) {
-			for (const task of phase.tasks ?? []) {
-				if (task.title.startsWith("Code Review: ") && task.dependsOn.length > 0) {
-					reviewTasks.push(task);
-				} else {
-					allTasks.push(task);
-				}
-			}
-		}
-
-		const stages = waves.map((waveAgentIds, index) => {
-			const waveAgents = waveAgentIds.map((id) => agentMap.get(id)!).filter(Boolean);
-			const { ids, roles } = this.buildAgentMatchSet(waveAgents);
-
-			// Bu wave'in agent'larına eşleşen task'ları topla (review task'lar hariç)
-			const stageTasks: Task[] = [];
-			let firstMatchedPhaseId: string | undefined;
-
-			for (const task of allTasks) {
-				if (usedTaskIds.has(task.id)) continue;
-				const assigned = task.assignedAgent ?? "";
-				if (ids.has(assigned) || roles.has(assigned.toLowerCase())) {
-					stageTasks.push(task);
-					usedTaskIds.add(task.id);
-					if (!firstMatchedPhaseId) firstMatchedPhaseId = task.phaseId;
-				}
-			}
-
-			return {
-				order: index,
-				agents: waveAgents,
-				tasks: stageTasks,
-				status: "pending" as const,
-				phaseId: firstMatchedPhaseId,
-			} satisfies PipelineStage;
-		});
-
-		// Second pass: place review tasks in the same stage as their dependency
-		for (const reviewTask of reviewTasks) {
-			if (usedTaskIds.has(reviewTask.id)) continue;
-			const depId = reviewTask.dependsOn[0];
-			const targetStage = stages.find((s) => s.tasks.some((t) => t.id === depId));
-			if (targetStage) {
-				targetStage.tasks.push(reviewTask);
-				usedTaskIds.add(reviewTask.id);
-			} else {
-				// Fallback: put in last stage
-				const last = stages[stages.length - 1];
-				if (last) {
-					last.tasks.push(reviewTask);
-					usedTaskIds.add(reviewTask.id);
-				}
-			}
-		}
-
-		return stages;
-	}
-
-	/**
-	 * Eski pipeline_order tabanlı lineer stage'ler (backward compat).
-	 */
-	private buildLinearStages(agents: ProjectAgent[], phases: Phase[]): PipelineStage[] {
-		const orderGroups = new Map<number, ProjectAgent[]>();
-		for (const agent of agents) {
-			const order = agent.pipelineOrder ?? 0;
-			if (!orderGroups.has(order)) orderGroups.set(order, []);
-			orderGroups.get(order)!.push(agent);
-		}
-
-		const sortedOrders = Array.from(orderGroups.keys()).sort((a, b) => a - b);
-		const sortedPhases = [...phases].sort((a, b) => a.order - b.order);
-		const usedTaskIds = new Set<string>();
-
-		return sortedOrders.map((order) => {
-			const stageAgents = orderGroups.get(order)!;
-			const { ids, roles } = this.buildAgentMatchSet(stageAgents);
-
-			const stageTasks: Task[] = [];
-			let firstMatchedPhaseId: string | undefined;
-
-			for (const phase of sortedPhases) {
-				for (const task of phase.tasks ?? []) {
-					if (usedTaskIds.has(task.id)) continue;
-					const assigned = task.assignedAgent ?? "";
-					if (ids.has(assigned) || roles.has(assigned.toLowerCase())) {
-						stageTasks.push(task);
-						usedTaskIds.add(task.id);
-						if (!firstMatchedPhaseId) firstMatchedPhaseId = phase.id;
-					}
-				}
-			}
-
-			return {
-				order,
-				agents: stageAgents,
-				tasks: stageTasks,
-				status: "pending" as const,
-				phaseId: firstMatchedPhaseId,
-			} satisfies PipelineStage;
-		});
-	}
-
-	/** Agent eşleştirme için id ve role/name setleri oluşturur */
-	private buildAgentMatchSet(stageAgents: ProjectAgent[]): {
-		ids: Set<string>;
-		roles: Set<string>;
-	} {
-		const ids = new Set<string>();
-		const roles = new Set<string>();
-
-		// Reverse category map: "backend-dev" → also match "backend"
-		const reverseCategoryMap: Record<string, string[]> = {
-			"backend-dev": ["backend", "backend-developer", "coder"],
-			"backend-developer": ["backend", "backend-dev", "coder"],
-			"frontend-dev": ["frontend", "frontend-developer"],
-			"frontend-developer": ["frontend", "frontend-dev"],
-			"backend-qa": ["qa"],
-			"frontend-qa": ["qa"],
-			"qa-engineer": ["qa"],
-			"design-lead": ["design", "designer", "ui-designer"],
-			"tech-lead": ["architect", "tech-lead"],
-			"scrum-master": ["pm"],
-			"product-owner": ["pm"],
-			"business-analyst": ["analyst"],
-		};
-
-		for (const a of stageAgents) {
-			ids.add(a.id);
-			if (a.sourceAgentId) ids.add(a.sourceAgentId);
-			const roleLower = a.role.toLowerCase();
-			roles.add(roleLower);
-			roles.add(a.name.toLowerCase());
-
-			// Add reverse category aliases so "backend" tasks match "backend-dev" agents
-			const aliases = reverseCategoryMap[roleLower];
-			if (aliases) {
-				for (const alias of aliases) roles.add(alias);
-			}
-			// Also match partial: "backend-dev" → add "backend" prefix
-			const dashIdx = roleLower.indexOf("-");
-			if (dashIdx > 0) {
-				roles.add(roleLower.slice(0, dashIdx)); // "backend-dev" → "backend"
-			}
-		}
-		return { ids, roles };
-	}
+	// (DAG/linear stage building and agent matching now live in @oscorpex/task-graph)
 
 	// -------------------------------------------------------------------------
 	// Pipeline başlatma
@@ -981,7 +723,6 @@ class PipelineEngine {
 
 	// v3.3: Refresh pipeline — rebuild DAG waves without resetting completed stages
 	async refreshPipeline(projectId: string): Promise<void> {
-		// Mevcut agent ve dependency bilgilerini çek
 		const agents = await listProjectAgents(projectId);
 		const deps = await listAgentDependencies(projectId);
 		const newWaves = buildDAGWaves(agents, deps);
@@ -1089,6 +830,59 @@ class PipelineEngine {
 				});
 		});
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Adapter helpers: kernel types → task-graph lightweight interfaces
+// ---------------------------------------------------------------------------
+
+function toGraphAgents(agents: ProjectAgent[]): GraphAgent[] {
+	return agents.map((a) => ({
+		id: a.id,
+		name: a.name,
+		role: a.role,
+		skills: a.skills,
+		sourceAgentId: a.sourceAgentId,
+		reportsTo: a.reportsTo,
+		pipelineOrder: a.pipelineOrder,
+		personality: a.personality,
+	}));
+}
+
+function toDependencyEdges(deps: AgentDependency[]): DependencyEdge[] {
+	return deps.map((d) => ({
+		fromAgentId: d.fromAgentId,
+		toAgentId: d.toAgentId,
+		type: d.type,
+		metadata: d.metadata,
+	}));
+}
+
+function toPlanPhases(phases: Phase[]): PlanPhase[] {
+	return phases.map((ph) => ({
+		id: ph.id,
+		order: ph.order,
+		name: ph.name,
+		status: ph.status,
+		tasks: (ph.tasks ?? []).map((t) => ({
+			id: t.id,
+			title: t.title,
+			status: t.status,
+			assignedAgent: t.assignedAgent,
+			complexity: t.complexity,
+			description: t.description,
+			targetFiles: t.targetFiles,
+			dependsOn: t.dependsOn,
+			phaseId: t.phaseId,
+			output: t.output,
+		})),
+	}));
+}
+
+function toKernelTasks(phases: Phase[], stagePlan: StagePlan): Task[] {
+	const allKernelTasks = phases.flatMap((ph) => ph.tasks ?? []);
+	const stageTaskIds = new Set(stagePlan.tasks.map((t) => t.id));
+	return allKernelTasks.filter((t) => stageTaskIds.has(t.id));
 }
 
 // ---------------------------------------------------------------------------

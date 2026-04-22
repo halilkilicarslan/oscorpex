@@ -15,7 +15,8 @@ import {
 	updatePlanStatus,
 } from "../db.js";
 import { execute } from "../pg.js";
-import { buildDAGWaves, pipelineEngine } from "../pipeline-engine.js";
+import { pipelineEngine } from "../pipeline-engine.js";
+import { buildDAGWaves } from "@oscorpex/task-graph";
 import type { AgentDependency, ProjectAgent } from "../types.js";
 
 // ---- Fixture builders ------------------------------------------------------
