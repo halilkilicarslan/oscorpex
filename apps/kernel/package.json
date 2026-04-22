@@ -1,0 +1,62 @@
+{
+  "name": "@oscorpex/kernel",
+  "version": "0.1.0",
+  "description": "Oscorpex execution kernel — AI-powered software development platform",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "dev": "tsx watch ./src",
+    "build": "tsdown",
+    "start": "node dist/index.js",
+    "lint": "biome check ./src",
+    "lint:fix": "biome check --write ./src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.67",
+    "@ai-sdk/google": "^3.0.59",
+    "@ai-sdk/openai": "^3.0.50",
+    "@ai-sdk/provider": "^3.0.8",
+    "@ai-sdk/provider-utils": "^4.0.22",
+    "@octokit/rest": "^22.0.1",
+    "@voltagent/cli": "^0.1.21",
+    "@voltagent/core": "^2.6.14",
+    "@voltagent/libsql": "^2.1.2",
+    "@voltagent/logger": "^2.0.2",
+    "@voltagent/server-hono": "^2.0.8",
+    "ai": "^6.0.146",
+    "commander": "^14.0.3",
+    "dockerode": "^4.0.10",
+    "dotenv": "^16.4.7",
+    "hono": "^4.12.11",
+    "pg": "^8.20.0",
+    "pino": "^10.3.1",
+    "simple-git": "^3.35.2",
+    "ws": "^8.20.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/dockerode": "^4.0.1",
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.20.0",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.1.2",
+    "tsdown": "^0.15.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

@@ -6,9 +6,12 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "outDir": "dist",
     "skipLibCheck": true
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
-} 
+  "references": [
+    { "path": "./apps/kernel" },
+    { "path": "./packages/core" },
+    { "path": "./packages/event-schema" },
+    { "path": "./packages/provider-sdk" }
+  ]
+}
