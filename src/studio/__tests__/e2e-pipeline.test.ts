@@ -572,4 +572,63 @@ describe.skipIf(!dbReady)("E2E Pipeline", () => {
 			expect(proj?.status).toBe("completed");
 		});
 	});
+
+	// ---- Gate validation E2E -----------------------------------------------
+
+	describe("Execution Gates", () => {
+		it("should complete task through verification + test gates", async () => {
+			const { project, t1 } = await setupE2EProject();
+
+			// CLI succeeds with files
+			getMockExecute().mockResolvedValue(cliSuccess(["src/index.ts"]));
+
+			await executionEngine.startProjectExecution(project.id);
+
+			const task1 = await getTask(t1.id);
+			expect(task1?.status).toBe("done");
+			// Verification + test gate mocks both pass, task completes normally
+		});
+
+		it("should record session steps during execution", async () => {
+			const { recordStep } = await import("../agent-runtime/index.js");
+			const mockRecordStep = vi.mocked(recordStep);
+			mockRecordStep.mockClear();
+
+			const { project } = await setupE2EProject();
+			getMockExecute().mockResolvedValue(cliSuccess(["src/index.ts"]));
+
+			await executionEngine.startProjectExecution(project.id);
+
+			// recordStep should be called for each task: action_executed, result_inspected, verification, test gate
+			expect(mockRecordStep).toHaveBeenCalled();
+			const calls = mockRecordStep.mock.calls;
+			const summaries = calls.map((c) => (c[1] as any).summary);
+			expect(summaries.some((s: string) => s.includes("CLI execution started"))).toBe(true);
+			expect(summaries.some((s: string) => s.includes("Output received"))).toBe(true);
+		});
+	});
+
+	// ---- Transient failure tracking ----------------------------------------
+
+	describe("Failure Classification", () => {
+		it("should record transient failures as events in DB during auto-retry", async () => {
+			const { project, t1 } = await setupE2EProject();
+
+			// All attempts fail
+			getMockExecute().mockRejectedValue(new Error("transient network error"));
+
+			await executionEngine.startProjectExecution(project.id);
+
+			const task1 = await getTask(t1.id);
+			expect(task1?.status).toBe("failed");
+			expect(task1?.retryCount).toBe(2);
+
+			// Transient failure events should be persisted in DB
+			const transientEvents = await query(
+				`SELECT * FROM events WHERE task_id = $1 AND type = 'task:transient_failure'`,
+				[t1.id],
+			);
+			expect(transientEvents.length).toBeGreaterThanOrEqual(1);
+		});
+	});
 });
