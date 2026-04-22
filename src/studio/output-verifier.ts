@@ -1,6 +1,13 @@
 // ---------------------------------------------------------------------------
-// Oscorpex — Output Verification Gate
-// Verifies that execution artifacts actually exist on disk and match claimed output.
+// Oscorpex — Artifact Existence Gate (output-verifier)
+//
+// Scope: Verifies that execution artifacts exist on disk and are non-empty.
+// This is Layer 1 of a 3-layer verification model:
+//   Layer 1: Artifact existence (this module) — files_exist, files_modified, output_non_empty
+//   Layer 2: Target-file compliance — planned via execution-gates.ts
+//   Layer 3: Semantic/test validation — handled by test-gate.ts + goal-engine.ts
+//
+// This module does NOT verify content correctness, test results, or semantic quality.
 // Runs after CLI execution, before task completion.
 // ---------------------------------------------------------------------------
 

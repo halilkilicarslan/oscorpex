@@ -70,12 +70,13 @@ export async function resolveWorkspace(
 
 	const level = policy?.isolationLevel ?? "none";
 
-	// Container mode: for now, fall back to file-copy isolation.
-	// When container-pool is wired into execution path, this branch
-	// will acquire a container and use docker cp for workspace setup.
+	// Container/VM mode: falls back to file-copy isolation until real
+	// container-pool is wired into execution path.
+	// IMPORTANT: type is "isolated" (not "container") because no real
+	// container boundary exists — only file-copy workspace separation.
 	if (level === "container" || level === "vm") {
 		const ws = await prepareIsolatedWorkspace(sourceRepoPath, taskId, policy);
-		return fromIsolated(ws, ws.isolated ? "container" : "local");
+		return fromIsolated(ws, ws.isolated ? "isolated" : "local");
 	}
 
 	if (level === "workspace") {

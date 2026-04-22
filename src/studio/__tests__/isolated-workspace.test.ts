@@ -159,8 +159,8 @@ describe("execution-workspace", () => {
 			networkPolicy: "no_network", maxExecutionTimeMs: 1000,
 			maxOutputSizeBytes: 1000, elevatedCapabilities: [], enforcementMode: "hard",
 		});
-		// Without Docker, container mode falls back to file-copy
-		expect(ws.type).toBe("container");
+		// Without Docker, container mode falls back to file-copy — type is "isolated" not "container"
+		expect(ws.type).toBe("isolated");
 		expect(ws.isolated).toBe(true);
 		await ws.cleanup();
 	});

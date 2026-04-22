@@ -297,10 +297,17 @@ studio.route("/", analyticsRoutes);
 studio.route("/", runtimeRoutes);
 studio.route("/", integrationRoutes);
 studio.route("/", providerRoutes);
-studio.route("/", cliUsageRoutes);
+// YAGNI-deferred: cli-usage, ceremony, marketplace, cluster, collaboration
+// These modules are not part of the core execution pipeline and add maintenance
+// cost without current runtime value. Re-enable when needed.
+// studio.route("/", cliUsageRoutes);
+// studio.route("/", ceremonyRoutes);
+// studio.route("/cluster", clusterRoutes);
+// studio.route("/collaboration", collaborationRoutes);
+// studio.route("/marketplace", marketplaceRoutes);
+
 studio.route("/", workItemRoutes);
 studio.route("/", lifecycleRoutes);
-studio.route("/", ceremonyRoutes);
 studio.route("/", sprintRoutes);
 studio.route("/", memoryRoutes);
 studio.route("/plugins", pluginRoutes);
@@ -314,10 +321,6 @@ studio.route("/jobs", jobRoutes);
 if (process.env.OSCORPEX_TRACE_ENABLED === "true") {
 	studio.route("/telemetry", telemetryRoutes);
 }
-
-studio.route("/cluster", clusterRoutes);
-studio.route("/collaboration", collaborationRoutes);
-studio.route("/marketplace", marketplaceRoutes);
 // v7.0 Phase 2+3: Agentic platform
 studio.route("/", agenticRoutes);
 studio.route("/", graphRoutes);
