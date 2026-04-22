@@ -2,44 +2,31 @@
 // Oscorpex — Artifact Existence Gate (output-verifier)
 //
 // Scope: Verifies that execution artifacts exist on disk and are non-empty.
-// This is Layer 1 of a 3-layer verification model:
-//   Layer 1: Artifact existence (this module) — files_exist, files_modified, output_non_empty
-//   Layer 2: Target-file compliance — planned via execution-gates.ts
-//   Layer 3: Semantic/test validation — handled by test-gate.ts + goal-engine.ts
-//
-// This module does NOT verify content correctness, test results, or semantic quality.
-// Runs after CLI execution, before task completion.
+// Pure verification logic is in @oscorpex/verification-kit; this module
+// handles persistence (DB) and event emission (kernel layer).
 // ---------------------------------------------------------------------------
 
 import { existsSync, statSync } from "node:fs";
-import { randomUUID } from "node:crypto";
 import { join, isAbsolute } from "node:path";
+import { randomUUID } from "node:crypto";
 import { execute } from "./pg.js";
 import { eventBus } from "./event-bus.js";
 import { getProjectSetting } from "./db.js";
 import type { TaskOutput } from "./types.js";
 import { createLogger } from "./logger.js";
+import {
+	verifyFilesExist,
+	verifyFilesModified,
+	verifyOutputNonEmpty,
+	shouldBlockCompletion,
+	type VerificationResult,
+	type VerificationStrictness,
+} from "@oscorpex/verification-kit";
 const log = createLogger("output-verifier");
 
-export type VerificationStrictness = "strict" | "lenient";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type VerificationType = "files_exist" | "files_modified" | "output_non_empty";
-
-export interface VerificationDetail {
-	file?: string;
-	expected: string;
-	actual: string;
-}
-
-export interface VerificationResult {
-	type: VerificationType;
-	passed: boolean;
-	details: VerificationDetail[];
-}
+// Re-export types and functions from verification-kit for backward compatibility
+export type { VerificationStrictness, VerificationType } from "@oscorpex/verification-kit";
+export type { VerificationDetail, VerificationResult } from "@oscorpex/verification-kit";
 
 export interface OutputVerificationReport {
 	taskId: string;
@@ -66,65 +53,6 @@ async function persistResult(taskId: string, result: VerificationResult): Promis
 }
 
 // ---------------------------------------------------------------------------
-// Verification checks
-// ---------------------------------------------------------------------------
-
-/** Check that all claimed created files exist on disk */
-function verifyFilesExist(repoPath: string, files: string[]): VerificationResult {
-	const details: VerificationDetail[] = [];
-	let allExist = true;
-
-	for (const file of files) {
-		const fullPath = isAbsolute(file) ? file : join(repoPath, file);
-		const exists = existsSync(fullPath);
-		if (!exists) {
-			allExist = false;
-			details.push({ file, expected: "exists", actual: "missing" });
-		}
-	}
-
-	return { type: "files_exist", passed: allExist, details };
-}
-
-/** Check that claimed modified files exist and have non-zero size */
-function verifyFilesModified(repoPath: string, files: string[]): VerificationResult {
-	const details: VerificationDetail[] = [];
-	let allValid = true;
-
-	for (const file of files) {
-		const fullPath = isAbsolute(file) ? file : join(repoPath, file);
-		if (!existsSync(fullPath)) {
-			allValid = false;
-			details.push({ file, expected: "exists and modified", actual: "missing" });
-			continue;
-		}
-		const stat = statSync(fullPath);
-		if (stat.size === 0) {
-			allValid = false;
-			details.push({ file, expected: "non-empty", actual: "empty (0 bytes)" });
-		}
-	}
-
-	return { type: "files_modified", passed: allValid, details };
-}
-
-/** Check that the output is not completely empty (at least some artifact or log) */
-function verifyOutputNonEmpty(output: TaskOutput): VerificationResult {
-	const hasFiles = (output.filesCreated?.length ?? 0) + (output.filesModified?.length ?? 0) > 0;
-	const hasLogs = (output.logs?.length ?? 0) > 0;
-
-	if (hasFiles || hasLogs) {
-		return { type: "output_non_empty", passed: true, details: [] };
-	}
-
-	return {
-		type: "output_non_empty",
-		passed: false,
-		details: [{ expected: "non-empty output", actual: "no files and no logs" }],
-	};
-}
-
-// ---------------------------------------------------------------------------
 // Main verification entry point
 // ---------------------------------------------------------------------------
 
@@ -140,11 +68,9 @@ export async function resolveStrictness(projectId: string): Promise<Verification
 
 /**
  * Verify execution artifacts before allowing task completion.
- * Returns a report with all verification results.
+ * Uses pure verification functions from @oscorpex/verification-kit,
+ * then persists results to DB and emits verification events.
  * Does NOT throw — caller decides how to handle failures.
- *
- * v8.0: Added strictness parameter. In "strict" mode (default), file existence
- * failures are treated as hard fails by the caller.
  */
 export async function verifyTaskOutput(
 	taskId: string,
@@ -156,12 +82,12 @@ export async function verifyTaskOutput(
 
 	// 1. Verify created files exist
 	if (output.filesCreated && output.filesCreated.length > 0) {
-		results.push(verifyFilesExist(repoPath, output.filesCreated));
+		results.push(verifyFilesExist(repoPath, output.filesCreated, existsSync, join, isAbsolute));
 	}
 
 	// 2. Verify modified files exist and are non-empty
 	if (output.filesModified && output.filesModified.length > 0) {
-		results.push(verifyFilesModified(repoPath, output.filesModified));
+		results.push(verifyFilesModified(repoPath, output.filesModified, existsSync, statSync, join, isAbsolute));
 	}
 
 	// 3. Verify output is not completely empty

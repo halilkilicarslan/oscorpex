@@ -40,7 +40,8 @@
     "zod": "^3.25.76",
     "@oscorpex/event-schema": "workspace:*",
     "@oscorpex/core": "workspace:*",
-    "@oscorpex/provider-sdk": "workspace:*"
+    "@oscorpex/provider-sdk": "workspace:*",
+    "@oscorpex/verification-kit": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
