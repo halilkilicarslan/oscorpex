@@ -19,6 +19,9 @@ import {
 import { eventBus } from "./event-bus.js";
 import type { GraphMutationType } from "./db/graph-mutation-repo.js";
 import type { Task } from "./types.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("graph-coordinator");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -539,7 +542,7 @@ export async function approveGraphMutationRequest(
 	});
 
 	const { executionEngine } = await import("./execution-engine.js");
-	executionEngine.startProjectExecution(mutation.projectId).catch((err) => console.warn("[graph-coordinator] Non-blocking operation failed:", err?.message ?? err));
+	executionEngine.startProjectExecution(mutation.projectId).catch((err) => log.warn("[graph-coordinator] Non-blocking operation failed:", err?.message ?? err));
 
 	return { success: true, mutationType: mutation.mutationType, mutationId: mutation.id, detail };
 }

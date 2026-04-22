@@ -34,6 +34,9 @@ import { queryOne } from "./pg.js";
 import { evaluatePolicies } from "./policy-engine.js";
 import { classifyRisk } from "./agent-runtime/agent-constraints.js";
 import type { Phase, ProjectAgent, Task, TaskOutput } from "./types.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("task-engine");
 
 // Default onay keyword'leri — proje bazlı override yoksa bunlar kullanılır
 const DEFAULT_APPROVAL_KEYWORDS = [
@@ -230,7 +233,7 @@ class TaskEngine {
 				await updateTask(taskId, { riskLevel });
 			}
 		} catch (err) {
-			console.warn("[task-engine] Risk classification failed (non-blocking):", err);
+			log.warn("[task-engine] Risk classification failed (non-blocking):" + " " + String(err));
 		}
 
 		// v3.7: Policy enforcement — governance rules can block or warn before execution.
@@ -254,14 +257,14 @@ class TaskEngine {
 						violations: policyResult.violations,
 					},
 				});
-				console.warn(`[task-engine] Task ${taskId} blocked by policy: ${message}`);
+				log.warn(`[task-engine] Task ${taskId} blocked by policy: ${message}`);
 				return blocked;
 			}
 			if (policyResult.violations.length > 0) {
-				console.warn(`[task-engine] Task ${taskId} policy warnings: ${policyResult.violations.join("; ")}`);
+				log.warn(`[task-engine] Task ${taskId} policy warnings: ${policyResult.violations.join("; ")}`);
 			}
 		} catch (err) {
-			console.warn("[task-engine] evaluatePolicies failed (non-blocking):", err);
+			log.warn("[task-engine] evaluatePolicies failed (non-blocking):" + " " + String(err));
 		}
 
 		// Human-in-the-Loop: Onay kontrolü — budget kontrolünden önce yapılır
@@ -291,7 +294,7 @@ class TaskEngine {
 				},
 			});
 
-			console.log(`[task-engine] Task ${taskId} onay bekliyor: "${task.title}" (complexity: ${task.complexity})`);
+			log.info(`[task-engine] Task ${taskId} onay bekliyor: "${task.title}" (complexity: ${task.complexity})`);
 			return waiting;
 		}
 
@@ -330,7 +333,7 @@ class TaskEngine {
 				},
 			});
 
-			console.warn(`[task-engine] Budget limit aşıldı, task blocked: ${taskId} — ${budgetStatus.message}`);
+			log.warn(`[task-engine] Budget limit aşıldı, task blocked: ${taskId} — ${budgetStatus.message}`);
 			return blocked;
 		}
 
@@ -345,7 +348,7 @@ class TaskEngine {
 					budgetWarning: true,
 				},
 			});
-			console.warn(`[task-engine] Budget uyarısı: ${budgetStatus.message}`);
+			log.warn(`[task-engine] Budget uyarısı: ${budgetStatus.message}`);
 		}
 
 		const updated = (await updateTask(taskId, {
@@ -396,7 +399,7 @@ class TaskEngine {
 			},
 		});
 
-		console.log(`[task-engine] Task ${taskId} onaylandı: "${task.title}" — kuyruğa alındı`);
+		log.info(`[task-engine] Task ${taskId} onaylandı: "${task.title}" — kuyruğa alındı`);
 		return updated;
 	}
 
@@ -433,7 +436,7 @@ class TaskEngine {
 			},
 		});
 
-		console.log(`[task-engine] Task ${taskId} reddedildi: "${task.title}" — sebep: ${rejectionReason}`);
+		log.info(`[task-engine] Task ${taskId} reddedildi: "${task.title}" — sebep: ${rejectionReason}`);
 		return updated;
 	}
 
@@ -515,7 +518,7 @@ class TaskEngine {
 				},
 			});
 
-			console.log(
+			log.info(
 				`[task-engine] Task ${taskId} review'a gönderildi → reviewer: ${reviewer.name} — review task: ${reviewTask.id}`,
 			);
 
@@ -556,24 +559,24 @@ class TaskEngine {
 
 		// v3.1: Execution-time edge hooks — notification, mentoring, handoff doc check
 		applyPostCompletionHooks(projectId, updated, output).catch((err) => {
-			console.warn("[task-engine] applyPostCompletionHooks failed:", err);
+			log.warn("[task-engine] applyPostCompletionHooks failed:" + " " + String(err));
 		});
 
 		// v3.4: Refresh working memory snapshot for downstream context packets
 		updateWorkingMemory(projectId).catch((err) => {
-			console.warn("[task-engine] updateWorkingMemory failed:", err);
+			log.warn("[task-engine] updateWorkingMemory failed:" + " " + String(err));
 		});
 
 		// v4.0: Index task output for FTS cross-agent context
 		indexTaskOutput(projectId, taskId, task.title, output).catch((err) => {
-			console.warn("[task-engine] indexTaskOutput failed:", err);
+			log.warn("[task-engine] indexTaskOutput failed:" + " " + String(err));
 		});
 
 		// v4.1: Capture file diffs for DiffViewer
 		let proj = await getProject(projectId);
 		if (proj?.repoPath) {
 			captureTaskDiffs(taskId, proj.repoPath, output).catch((err) => {
-				console.warn("[task-engine] captureTaskDiffs failed:", err);
+				log.warn("[task-engine] captureTaskDiffs failed:" + " " + String(err));
 			});
 		}
 
@@ -585,7 +588,7 @@ class TaskEngine {
 			tasksCompleted: 1,
 			avgTaskTimeMs: taskTimeMs,
 		}).catch((err) => {
-			console.warn("[task-engine] upsertAgentDailyStat failed:", err);
+			log.warn("[task-engine] upsertAgentDailyStat failed:" + " " + String(err));
 		});
 
 		// v3.0: Sub-task rollup — if this task has a parent, check if all siblings are done
@@ -595,7 +598,7 @@ class TaskEngine {
 				if (allDone) {
 					const parentTask = await getTask(task.parentTaskId);
 					if (parentTask && parentTask.status !== "done") {
-						console.log(`[task-engine] All sub-tasks done — auto-completing parent "${parentTask.title}"`);
+						log.info(`[task-engine] All sub-tasks done — auto-completing parent "${parentTask.title}"`);
 						await updateTask(task.parentTaskId, {
 							status: "done",
 							completedAt: new Date().toISOString(),
@@ -612,7 +615,7 @@ class TaskEngine {
 					}
 				}
 			} catch (err) {
-				console.warn("[task-engine] Sub-task rollup check failed:", err);
+				log.warn("[task-engine] Sub-task rollup check failed:" + " " + String(err));
 			}
 		}
 
@@ -631,7 +634,7 @@ class TaskEngine {
 				agent?.name || task.assignedAgent,
 				task.title,
 				output.logs?.[0] || null,
-			).catch((err) => console.warn("[task-engine] Non-blocking operation failed:", err?.message ?? err));
+			).catch((err) => log.warn("[task-engine] Non-blocking operation failed:", err?.message ?? err));
 		}
 
 		return updated;
@@ -676,7 +679,7 @@ class TaskEngine {
 				},
 			});
 
-			console.log(`[task-engine] Task ${taskId} review onaylandı`);
+			log.info(`[task-engine] Task ${taskId} review onaylandı`);
 
 			await this.checkAndAdvancePhase(task.phaseId, projectId);
 			this.notifyCompleted(taskId, projectId);
@@ -712,7 +715,7 @@ class TaskEngine {
 			},
 		});
 
-		console.log(
+		log.info(
 			`[task-engine] Task ${taskId} revision'a gönderildi (döngü ${newRevisionCount}/${MAX_REVISION_CYCLES})`,
 		);
 
@@ -765,10 +768,10 @@ class TaskEngine {
 				sourceAgentId: task.assignedAgentId,
 			});
 		} catch (err) {
-			console.warn("[task-engine] Auto work-item creation on escalation failed:", err);
+			log.warn("[task-engine] Auto work-item creation on escalation failed:" + " " + String(err));
 		}
 
-		console.warn(
+		log.warn(
 			`[task-engine] Task ${taskId} eskalasyon: ${escalationTarget} (${MAX_REVISION_CYCLES} review döngüsü aşıldı)`,
 		);
 
@@ -803,7 +806,7 @@ class TaskEngine {
 			},
 		});
 
-		console.log(`[task-engine] Task ${taskId} revision'dan tekrar kuyruğa alındı (döngü ${task.revisionCount})`);
+		log.info(`[task-engine] Task ${taskId} revision'dan tekrar kuyruğa alındı (döngü ${task.revisionCount})`);
 
 		return updated;
 	}
@@ -868,7 +871,7 @@ class TaskEngine {
 			const effectiveAgentId = task.assignedAgentId ?? task.assignedAgent;
 			const fallbackEdge = deps.find((d) => d.type === "fallback" && d.fromAgentId === effectiveAgentId);
 			if (fallbackEdge && task.retryCount === 0) {
-				console.log(`[task-engine] Fallback edge found — re-assigning task "${task.title}" to fallback agent`);
+				log.info(`[task-engine] Fallback edge found — re-assigning task "${task.title}" to fallback agent`);
 				await updateTask(taskId, {
 					assignedAgentId: fallbackEdge.toAgentId,
 					assignedAgent: fallbackEdge.toAgentId,
@@ -884,7 +887,7 @@ class TaskEngine {
 			const escalationEdge = deps.find((d) => d.type === "escalation" && d.fromAgentId === effectiveAgentId);
 			const maxFailures = escalationEdge?.metadata?.maxFailures ?? 3;
 			if (escalationEdge && (task.retryCount ?? 0) >= maxFailures) {
-				console.log(`[task-engine] Escalation triggered — task "${task.title}" failed ${task.retryCount} times`);
+				log.info(`[task-engine] Escalation triggered — task "${task.title}" failed ${task.retryCount} times`);
 				await updateTask(taskId, {
 					assignedAgentId: escalationEdge.toAgentId,
 					assignedAgent: escalationEdge.toAgentId,
@@ -895,7 +898,7 @@ class TaskEngine {
 				return (await getTask(taskId))!;
 			}
 		} catch (err) {
-			console.warn("[task-engine] Edge-type check failed in failTask:", err);
+			log.warn("[task-engine] Edge-type check failed in failTask:" + " " + String(err));
 		}
 
 		const updated = (await updateTask(taskId, { status: "failed", error }))!;
@@ -922,7 +925,7 @@ class TaskEngine {
 				sourceAgentId: task.assignedAgentId,
 			});
 		} catch (err) {
-			console.warn("[task-engine] Auto work-item creation failed:", err);
+			log.warn("[task-engine] Auto work-item creation failed:" + " " + String(err));
 		}
 
 		await updatePhaseStatus(task.phaseId, "failed");
@@ -1179,7 +1182,7 @@ class TaskEngine {
 	private async writeZeroFileDecision(projectId: string, task: Task, content: string): Promise<boolean> {
 		const project = await getProject(projectId);
 		if (!project?.repoPath) {
-			console.warn(`[task-engine] decision.md yazılamadı: proje repoPath boş (projectId=${projectId})`);
+			log.warn(`[task-engine] decision.md yazılamadı: proje repoPath boş (projectId=${projectId})`);
 			return false;
 		}
 
@@ -1189,7 +1192,7 @@ class TaskEngine {
 			writeFileSync(join(project.repoPath, this.decisionMdPath(projectId, task)), content);
 			return true;
 		} catch (err) {
-			console.warn(`[task-engine] decision.md yazılamadı: ${err}`);
+			log.warn(`[task-engine] decision.md yazılamadı: ${err}`);
 			return false;
 		}
 	}

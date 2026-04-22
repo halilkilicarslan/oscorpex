@@ -47,6 +47,9 @@ import type {
 	ProjectAgent,
 	Task,
 } from "./types.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("pipeline-engine");
 
 // ---------------------------------------------------------------------------
 // Read-through cache (projectId → PipelineState)
@@ -183,7 +186,7 @@ export function buildDAGWaves(agents: ProjectAgent[], deps: AgentDependency[]): 
 
 		if (wave.length === 0) {
 			// Döngüsel bağımlılık — kalan agent'ları son wave'e at (graceful)
-			console.warn("[pipeline-engine] Döngüsel bağımlılık tespit edildi, kalan agent'lar zorla ekleniyor");
+			log.warn("[pipeline-engine] Döngüsel bağımlılık tespit edildi, kalan agent'lar zorla ekleniyor");
 			waves.push([...remaining]);
 			break;
 		}
@@ -497,7 +500,7 @@ class PipelineEngine {
 
 		// Phase başlarken otomatik git branch oluştur — pipeline'ı bloklamaz
 		this.createPhaseBranch(projectId, stageIndex, stage).catch((err) =>
-			console.warn(`[pipeline-engine] Phase branch oluşturulamadı (stage ${stageIndex}):`, err),
+			log.warn(`[pipeline-engine] Phase branch oluşturulamadı (stage ${stageIndex}):` + " " + String(err)),
 		);
 
 		eventBus.emit({
@@ -547,7 +550,7 @@ class PipelineEngine {
 				payload: { branch: branchName, stageIndex },
 			});
 		} catch (err) {
-			console.warn(`[pipeline-engine] Branch oluşturulamadı: ${branchName}`, err);
+			log.warn(`[pipeline-engine] Branch oluşturulamadı: ${branchName}` + " " + String(err));
 		}
 	}
 
@@ -569,7 +572,7 @@ class PipelineEngine {
 
 		// Phase tamamlanınca branch'i main'e merge et — pipeline'ı bloklamaz
 		this.mergePhaseBranchToMain(projectId, stageIndex, stage).catch((err) =>
-			console.warn(`[pipeline-engine] Phase branch merge edilemedi (stage ${stageIndex}):`, err),
+			log.warn(`[pipeline-engine] Phase branch merge edilemedi (stage ${stageIndex}):` + " " + String(err)),
 		);
 
 		eventBus.emit({
@@ -583,7 +586,7 @@ class PipelineEngine {
 
 		// --- Adaptive Replanning: evaluate at phase boundary ---
 		evaluateReplan({ projectId, trigger: "phase_end", phaseId: stage.phaseId }).catch((err) =>
-			console.warn(`[pipeline-engine] Adaptive replan failed (non-blocking):`, err),
+			log.warn(`[pipeline-engine] Adaptive replan failed (non-blocking):` + " " + String(err)),
 		);
 
 		const nextIndex = stageIndex + 1;
@@ -633,11 +636,11 @@ class PipelineEngine {
 				});
 			} else {
 				// Conflict varsa main'e geri dön
-				console.warn(`[pipeline-engine] Merge conflict tespit edildi: ${branchName} → main`, result.conflicts);
-				await gitManager.checkout(project.repoPath, "main").catch((err) => console.warn("[pipeline-engine] Non-blocking operation failed:", err?.message ?? err));
+				log.warn(`[pipeline-engine] Merge conflict tespit edildi: ${branchName} → main` + " " + String(result.conflicts));
+				await gitManager.checkout(project.repoPath, "main").catch((err) => log.warn("[pipeline-engine] Non-blocking operation failed:", err?.message ?? err));
 			}
 		} catch (err) {
-			console.warn(`[pipeline-engine] Branch merge atlandı: ${branchName}`, err);
+			log.warn(`[pipeline-engine] Branch merge atlandı: ${branchName}` + " " + String(err));
 		}
 	}
 
@@ -659,21 +662,21 @@ class PipelineEngine {
 
 		// Pipeline tamamlandığında README.md otomatik oluştur — non-blocking
 		generateReadme(projectId, (msg) => {
-			console.log(`[pipeline-engine] ${msg}`);
+			log.info(`[pipeline-engine] ${msg}`);
 		}).catch((err) => {
-			console.error("[pipeline-engine] README oluşturma hatası:", err);
+			log.error("[pipeline-engine] README oluşturma hatası:" + " " + String(err));
 		});
 
 		// Auto PR: GitHub yapılandırılmışsa ve auto_pr aktifse PR oluştur — fire-and-forget
 		this.tryCreatePR(projectId).catch((err) => {
-			console.warn("[pipeline-engine] Auto PR oluşturulamadı:", err);
+			log.warn("[pipeline-engine] Auto PR oluşturulamadı:" + " " + String(err));
 		});
 
 		// v3.5: Lifecycle transition — pipeline completion flips project.status to "completed"
 		// so it can enter maintenance on hotfix or be archived. Best-effort: if project is
 		// not in a valid starting state (e.g. paused), fall back to a notification event.
 		transitionProject(projectId, "completed").catch((err) => {
-			console.warn("[pipeline-engine] lifecycle transition → completed failed:", err);
+			log.warn("[pipeline-engine] lifecycle transition → completed failed:" + " " + String(err));
 			eventBus.emit({
 				projectId,
 				type: "lifecycle:transition",
@@ -713,7 +716,7 @@ class PipelineEngine {
 			body: `Automated PR from Oscorpex pipeline.\n\nProject: ${project.name}\nBranch: ${currentBranch}`,
 		});
 
-		console.log(`[pipeline-engine] PR oluşturuldu: ${pr.url}`);
+		log.info(`[pipeline-engine] PR oluşturuldu: ${pr.url}`);
 
 		eventBus.emit({
 			projectId,
@@ -772,7 +775,7 @@ class PipelineEngine {
 			[projectId],
 		);
 		if (pendingReplan) {
-			console.log(`[pipeline-engine] advanceStage blocked — pending replan ${pendingReplan.id} awaiting approval`);
+			log.info(`[pipeline-engine] advanceStage blocked — pending replan ${pendingReplan.id} awaiting approval`);
 			eventBus.emit({
 				projectId,
 				type: "plan:replanned",
@@ -901,7 +904,7 @@ class PipelineEngine {
 
 		// Actually stop running agent processes and abort in-flight tasks
 		const cancelledCount = await executionEngine.cancelRunningTasks(projectId);
-		console.log(`[pipeline-engine] Pipeline paused: ${cancelledCount} task(s) cancelled for ${projectId}`);
+		log.info(`[pipeline-engine] Pipeline paused: ${cancelledCount} task(s) cancelled for ${projectId}`);
 
 		eventBus.emit({
 			projectId,
@@ -929,7 +932,7 @@ class PipelineEngine {
 
 		// Re-dispatch queued tasks that were paused
 		executionEngine.startProjectExecution(projectId).catch((err) => {
-			console.error(`[pipeline-engine] Resume dispatch failed:`, err);
+			log.error(`[pipeline-engine] Resume dispatch failed:` + " " + String(err));
 		});
 
 		await this.advanceStage(projectId);
@@ -1008,7 +1011,7 @@ class PipelineEngine {
 				}
 			}
 
-			console.log(
+			log.info(
 				`[pipeline-engine] Pipeline refresh — ${newWaves.length} stage (${completedStageCount} completed korundu)`,
 			);
 			return { stagesJson: JSON.stringify(stages) };
@@ -1061,7 +1064,7 @@ class PipelineEngine {
 						try {
 							await this.advanceStage(projectId);
 						} catch (err) {
-							console.error(`[pipeline-engine] advanceStage hatası (proje=${projectId}):`, err);
+							log.error(`[pipeline-engine] advanceStage hatası (proje=${projectId}):` + " " + String(err));
 						}
 						return;
 					}
@@ -1070,19 +1073,19 @@ class PipelineEngine {
 						try {
 							const agents = await listProjectAgents(projectId);
 							if (agents.length > 0) {
-								console.log(
+								log.info(
 									`[pipeline-engine] Task tamamlandı ama pipeline başlatılmamış; otomatik başlatılıyor (proje=${projectId})`,
 								);
 								await this.startPipeline(projectId);
 								await this.advanceStage(projectId);
 							}
 						} catch (err) {
-							console.error(`[pipeline-engine] otomatik pipeline başlatma hatası (proje=${projectId}):`, err);
+							log.error(`[pipeline-engine] otomatik pipeline başlatma hatası (proje=${projectId}):` + " " + String(err));
 						}
 					}
 				})
 				.catch((err) => {
-					console.error(`[pipeline-engine] getPipelineRun hatası (proje=${projectId}):`, err);
+					log.error(`[pipeline-engine] getPipelineRun hatası (proje=${projectId}):` + " " + String(err));
 				});
 		});
 	}

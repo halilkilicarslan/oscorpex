@@ -8,6 +8,9 @@ import { randomUUID } from "node:crypto";
 import { normalize, resolve, sep } from "node:path";
 import { query, queryOne, execute, getProjectSetting } from "./db.js";
 import type { Task } from "./types.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("sandbox-manager");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -290,12 +293,12 @@ export async function enforceToolCheck(
 		detail: result.reason,
 		timestamp: new Date().toISOString(),
 	};
-	if (sessionId) await recordViolation(sessionId, violation).catch((err) => console.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
+	if (sessionId) await recordViolation(sessionId, violation).catch((err) => log.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
 	if (policy.enforcementMode === "hard") {
 		throw new SandboxViolationError(violation);
 	}
 	// soft mode: log only
-	console.warn(`[sandbox] Soft violation — tool denied: ${toolName} — ${result.reason}`);
+	log.warn(`[sandbox] Soft violation — tool denied: ${toolName} — ${result.reason}`);
 }
 
 /**
@@ -318,11 +321,11 @@ export async function enforcePathChecks(
 			timestamp: new Date().toISOString(),
 		};
 		violations.push(violation);
-		if (sessionId) await recordViolation(sessionId, violation).catch((err) => console.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
+		if (sessionId) await recordViolation(sessionId, violation).catch((err) => log.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
 		if (policy.enforcementMode === "hard") {
 			throw new SandboxViolationError(violation);
 		}
-		console.warn(`[sandbox] Soft violation — path blocked: ${filePath}`);
+		log.warn(`[sandbox] Soft violation — path blocked: ${filePath}`);
 	}
 	return violations;
 }
@@ -343,9 +346,9 @@ export async function enforceOutputSizeCheck(
 		detail: result.reason,
 		timestamp: new Date().toISOString(),
 	};
-	if (sessionId) await recordViolation(sessionId, violation).catch((err) => console.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
+	if (sessionId) await recordViolation(sessionId, violation).catch((err) => log.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
 	if (policy.enforcementMode === "hard") {
 		throw new SandboxViolationError(violation);
 	}
-	console.warn(`[sandbox] Soft violation — output size exceeded: ${sizeBytes} bytes`);
+	log.warn(`[sandbox] Soft violation — output size exceeded: ${sizeBytes} bytes`);
 }

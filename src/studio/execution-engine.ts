@@ -69,6 +69,9 @@ import { taskEngine } from "./task-engine.js";
 import { runIntegrationTest } from "./task-runners.js";
 import type { AgentConfig, Project, Task, TaskOutput } from "./types.js";
 import { canonicalizeAgentRole, roleMatches } from "./roles.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("execution-engine");
 
 // ---------------------------------------------------------------------------
 // Rate-limit detection
@@ -287,21 +290,21 @@ class ExecutionEngine {
 					if (task.status === "running" || task.status === "assigned") {
 						await updateTask(task.id, { status: "queued", startedAt: undefined });
 						await releaseTaskClaim(task.id);
-						console.log(`[execution-engine] Recovery: "${task.title}" → queued (was ${task.status})`);
+						log.info(`[execution-engine] Recovery: "${task.title}" → queued (was ${task.status})`);
 						phaseRecovered = true;
 					}
 				}
 				if (phaseRecovered && phase.status === "failed") {
 					await updatePhaseStatus(phase.id, "running");
-					console.log(`[execution-engine] Recovery: phase "${phase.name}" → running (was failed)`);
+					log.info(`[execution-engine] Recovery: phase "${phase.name}" → running (was failed)`);
 				}
 				hasRecovered = hasRecovered || phaseRecovered;
 			}
 
 			if (hasRecovered) {
-				console.log(`[execution-engine] Recovering project "${project.name}" — restarting execution`);
+				log.info(`[execution-engine] Recovering project "${project.name}" — restarting execution`);
 				this.startProjectExecution(project.id).catch((err) => {
-					console.error(`[execution-engine] Recovery failed for "${project.name}":`, err);
+					log.error(`[execution-engine] Recovery failed for "${project.name}":` + " " + String(err));
 				});
 			}
 
@@ -310,15 +313,15 @@ class ExecutionEngine {
 				if (phase.status !== "running" && phase.status !== "completed") continue;
 				for (const task of phase.tasks ?? []) {
 					if (task.status === "revision") {
-						console.log(`[execution-engine] Recovery: restarting revision "${task.title}"`);
+						log.info(`[execution-engine] Recovery: restarting revision "${task.title}"`);
 						try {
 							await taskEngine.restartRevision(task.id);
 							const fresh = await getTask(task.id);
 							if (fresh) {
-								this.executeTask(project.id, fresh).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
+								this.executeTask(project.id, fresh).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
 							}
 						} catch (e) {
-							console.error(`[execution-engine] Revision recovery failed for "${task.title}":`, e);
+							log.error({ err: e }, `Revision recovery failed for "${task.title}"`);
 						}
 					}
 				}
@@ -330,10 +333,10 @@ class ExecutionEngine {
 				if (phase.status !== "running" && phase.status !== "completed") continue;
 				const ready = await taskEngine.getReadyTasks(phase.id);
 				if (ready.length > 0) {
-					console.log(
+					log.info(
 						`[execution-engine] Recovery: ${ready.length} orphaned ready task(s) in phase "${phase.name}" — dispatching`,
 					);
-					Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
+					Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
 				}
 
 				// Recover orphaned running tasks — stuck in "running" with no active CLI process
@@ -344,7 +347,7 @@ class ExecutionEngine {
 						!this._dispatchingTasks.has(task.id) &&
 						!this._activeControllers.has(`${project.id}:${task.id}`)
 					) {
-						console.log(`[execution-engine] Recovery: orphaned running task "${task.title}" → queued`);
+						log.info(`[execution-engine] Recovery: orphaned running task "${task.title}" → queued`);
 						await updateTask(task.id, { status: "queued", startedAt: undefined });
 						await releaseTaskClaim(task.id);
 						hasRecovered = true;
@@ -358,7 +361,7 @@ class ExecutionEngine {
 					if (phase.status !== "running") continue;
 					const ready = await taskEngine.getReadyTasks(phase.id);
 					if (ready.length > 0) {
-						Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
+						Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
 					}
 				}
 			}
@@ -408,15 +411,15 @@ class ExecutionEngine {
 			if (task.status === "running" || task.status === "assigned") {
 				try {
 					await pgExecute("UPDATE tasks SET status = 'queued', started_at = NULL WHERE id = $1", [task.id]);
-					console.log(`[execution-engine] Task "${task.title}" → queued (pipeline paused)`);
+					log.info(`[execution-engine] Task "${task.title}" → queued (pipeline paused)`);
 				} catch (err) {
-					console.warn(`[execution-engine] Task reset failed: ${task.id}`, err);
+					log.warn(`[execution-engine] Task reset failed: ${task.id}` + " " + String(err));
 				}
 			}
 		}
 
 		if (cancelled > 0) {
-			console.log(`[execution-engine] Cancelled ${cancelled} running task(s) for project ${projectId}`);
+			log.info(`[execution-engine] Cancelled ${cancelled} running task(s) for project ${projectId}`);
 		}
 
 		return cancelled;
@@ -487,7 +490,7 @@ class ExecutionEngine {
 	async executeTask(projectId: string, task: Task): Promise<void> {
 		// Guard: skip if this task is already being dispatched by another caller
 		if (this._dispatchingTasks.has(task.id)) {
-			console.log(`[execution-engine] Task "${task.title}" zaten dispatch ediliyor, skip.`);
+			log.info(`[execution-engine] Task "${task.title}" zaten dispatch ediliyor, skip.`);
 			return;
 		}
 
@@ -495,7 +498,7 @@ class ExecutionEngine {
 		// If another worker already claimed this task, claimTask returns null.
 		const freshTask = await claimTask(task.id, this._workerId);
 		if (!freshTask) {
-			console.log(
+			log.info(
 				`[execution-engine] Task "${task.title}" could not be claimed (already taken or not queued), skip.`,
 			);
 			return;
@@ -511,7 +514,7 @@ class ExecutionEngine {
 			});
 			const constraint = await checkConstraints(projectId, "execute_task", riskLevel);
 			if (!constraint.allowed && constraint.requiresApproval) {
-				console.warn(`[execution-engine] Task "${freshTask.title}" blocked by constraints (${riskLevel} risk — requires approval)`);
+				log.warn(`[execution-engine] Task "${freshTask.title}" blocked by constraints (${riskLevel} risk — requires approval)`);
 				await updateTask(freshTask.id, { status: "waiting_approval", requiresApproval: true });
 				await releaseTaskClaim(freshTask.id);
 				eventBus.emit({
@@ -523,7 +526,7 @@ class ExecutionEngine {
 				return;
 			}
 		} catch (err) {
-			console.warn("[execution-engine] Constraint check failed (non-blocking):", err);
+			log.warn("[execution-engine] Constraint check failed (non-blocking):" + " " + String(err));
 		}
 
 		// v3.0: Auto-decompose L/XL tasks into micro-tasks
@@ -531,7 +534,7 @@ class ExecutionEngine {
 			try {
 				const { shouldDecompose, decomposeTask } = await import("./task-decomposer.js");
 				if (shouldDecompose(freshTask)) {
-					console.log(`[execution-engine] Auto-decomposing ${freshTask.complexity} task "${freshTask.title}"`);
+					log.info(`[execution-engine] Auto-decomposing ${freshTask.complexity} task "${freshTask.title}"`);
 					const subTasks = await decomposeTask(freshTask, projectId);
 					if (subTasks.length > 0) {
 						// Parent becomes a container — update status to track sub-tasks
@@ -540,14 +543,14 @@ class ExecutionEngine {
 						// Dispatch sub-tasks
 						for (const sub of subTasks) {
 							this.executeTask(projectId, sub).catch((err) =>
-								console.error(`[execution-engine] Sub-task "${sub.title}" dispatch hatası:`, err),
+								log.error(`[execution-engine] Sub-task "${sub.title}" dispatch hatası:` + " " + String(err)),
 							);
 						}
 						return;
 					}
 				}
 			} catch (err) {
-				console.warn("[execution-engine] Task decomposition failed, executing as-is:", err);
+				log.warn("[execution-engine] Task decomposition failed, executing as-is:" + " " + String(err));
 			}
 		}
 
@@ -652,7 +655,7 @@ class ExecutionEngine {
 				await acknowledgeMessages(protocolCtx.messageIds);
 			}
 		} catch (err) {
-			console.warn("[execution-engine] Agent runtime init failed (non-blocking):", err);
+			log.warn("[execution-engine] Agent runtime init failed (non-blocking):" + " " + String(err));
 		}
 
 		// --- Goal-based execution: inject goal prompt if task has an associated goal ---
@@ -664,7 +667,7 @@ class ExecutionEngine {
 				goalId = goal.id;
 			}
 		} catch (err) {
-			console.warn("[execution-engine] Goal lookup failed (non-blocking):", err);
+			log.warn("[execution-engine] Goal lookup failed (non-blocking):" + " " + String(err));
 		}
 
 		const prompt = await buildTaskPrompt(task, project, agent.role) + promptSuffix;
@@ -688,7 +691,7 @@ class ExecutionEngine {
 				sandboxSessionId = sbSession.id;
 			}
 		} catch (err) {
-			console.warn("[execution-engine] Sandbox init failed (non-blocking):", err);
+			log.warn("[execution-engine] Sandbox init failed (non-blocking):" + " " + String(err));
 		}
 
 		// Complexity ve proje timeout_multiplier ayarına göre efektif timeout hesapla
@@ -698,7 +701,7 @@ class ExecutionEngine {
 		const onTimeoutWarning = () => {
 			const remainingMs = Math.round(timeoutMs * (1 - TIMEOUT_WARNING_THRESHOLD));
 			const remainingSec = Math.round(remainingMs / 1000);
-			console.warn(`[execution-engine] Timeout uyarısı: "${task.title}" — ${remainingSec}sn kaldı`);
+			log.warn(`[execution-engine] Timeout uyarısı: "${task.title}" — ${remainingSec}sn kaldı`);
 			eventBus.emit({
 				projectId,
 				type: "task:timeout_warning",
@@ -746,7 +749,7 @@ class ExecutionEngine {
 				});
 				routedModel = resolved.model;
 			} catch (err) {
-				console.warn("[execution-engine] resolveModel failed, using fallback:", err);
+				log.warn("[execution-engine] resolveModel failed, using fallback:" + " " + String(err));
 			}
 
 			// Sandbox pre-execution gate: in hard mode, verify tools before spawning CLI
@@ -770,21 +773,21 @@ class ExecutionEngine {
 				const adapterName = adapter.name as import("./types.js").AgentCliTool;
 
 				if (!providerState.isAvailable(adapterName)) {
-					console.log(`[execution] Adapter "${adapter.name}" is in cooldown, skipping.`);
+					log.info(`[execution] Adapter "${adapter.name}" is in cooldown, skipping.`);
 					continue;
 				}
 
 				const adapterReady = await adapter.isAvailable();
-				console.log(`[execution] CLI adapter: ${adapter.name}, ready=${adapterReady}`);
+				log.info(`[execution] CLI adapter: ${adapter.name}, ready=${adapterReady}`);
 
 				if (!adapterReady) {
-					console.log(`[execution] Adapter "${adapter.name}" is not installed, skipping.`);
+					log.info(`[execution] Adapter "${adapter.name}" is not installed, skipping.`);
 					continue;
 				}
 
 				// Session step: CLI execution started
 				if (sessionId) {
-					recordStep(sessionId, { step: 1, type: "action_executed", summary: `CLI execution started: ${adapter.name}` }).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
+					recordStep(sessionId, { step: 1, type: "action_executed", summary: `CLI execution started: ${adapter.name}` }).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
 				}
 
 				try {
@@ -808,12 +811,12 @@ class ExecutionEngine {
 					lastAdapterError = adapterErr instanceof Error ? adapterErr : new Error(String(adapterErr));
 					const errMsg = lastAdapterError.message;
 					if (isRateLimitError(errMsg)) {
-						console.warn(`[execution] Rate limit on adapter "${adapter.name}" — marking cooldown.`);
+						log.warn(`[execution] Rate limit on adapter "${adapter.name}" — marking cooldown.`);
 						providerState.markRateLimited(adapterName);
 					} else {
 						providerState.markFailure(adapterName);
 					}
-					console.warn(`[execution] Adapter "${adapter.name}" failed: ${errMsg.slice(0, 200)}`);
+					log.warn(`[execution] Adapter "${adapter.name}" failed: ${errMsg.slice(0, 200)}`);
 				}
 			}
 
@@ -822,7 +825,7 @@ class ExecutionEngine {
 				// instead of failing it. Reset to queued and schedule a retry.
 				if (providerState.isAllExhausted()) {
 					const retryMs = providerState.getEarliestRecoveryMs();
-					console.warn(
+					log.warn(
 						`[execution-engine] All providers exhausted — deferring "${task.title}" for ${Math.round(retryMs / 1000)}s`,
 					);
 					await updateTask(task.id, { status: "queued" });
@@ -840,7 +843,7 @@ class ExecutionEngine {
 					setTimeout(() => {
 						getTask(task.id).then((t) => {
 							if (t && t.status === "queued") {
-								this.executeTask(projectId, t).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
+								this.executeTask(projectId, t).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
 							}
 						});
 					}, retryMs + 1000);
@@ -858,7 +861,7 @@ class ExecutionEngine {
 			// Session step: CLI output received
 			if (sessionId) {
 				const fileCount = (output.filesCreated?.length ?? 0) + (output.filesModified?.length ?? 0);
-				recordStep(sessionId, { step: 2, type: "result_inspected", summary: `Output received: ${fileCount} files (${output.filesCreated?.length ?? 0} created, ${output.filesModified?.length ?? 0} modified)` }).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
+				recordStep(sessionId, { step: 2, type: "result_inspected", summary: `Output received: ${fileCount} files (${output.filesCreated?.length ?? 0} created, ${output.filesModified?.length ?? 0} modified)` }).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
 			}
 
 			if (isolatedWorkspace?.isolated) {
@@ -891,7 +894,7 @@ class ExecutionEngine {
 				const budgetExceeded = await enforceBudgetGuard(projectId);
 				if (budgetExceeded) {
 					// Complete current task normally but stop dispatching further
-					console.warn(`[execution-engine] Budget exceeded — completing "${task.title}" but pausing pipeline`);
+					log.warn(`[execution-engine] Budget exceeded — completing "${task.title}" but pausing pipeline`);
 				}
 			}
 
@@ -925,7 +928,7 @@ class ExecutionEngine {
 					}
 				} catch (lintErr) {
 					// Lint failure should never block task completion
-					console.warn("[execution-engine] Lint/format failed (non-blocking):", lintErr);
+					log.warn({ err: lintErr }, "Lint/format failed (non-blocking)");
 				}
 			}
 
@@ -936,13 +939,13 @@ class ExecutionEngine {
 					agentRuntime.appendVirtualOutput(projectId, agent.id, msg);
 				});
 			} catch (docErr) {
-				console.warn("[execution-engine] Docs update failed (non-blocking):", docErr);
+				log.warn({ err: docErr }, "Docs update failed (non-blocking)");
 			}
 
 			// Agent output buffer'ını log dosyasına persist et (restart sonrası terminal'de görünsün)
 			const agentOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
 			if (agentOutputLines.length > 0) {
-				persistAgentLog(projectId, agent.id, agentOutputLines).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
+				persistAgentLog(projectId, agent.id, agentOutputLines).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
 			}
 
 			// --- Sandbox post-execution: enforce path + output size restrictions ---
@@ -963,7 +966,7 @@ class ExecutionEngine {
 				try {
 					await processAgentProposals(projectId, task, agent, cliResult.proposals);
 				} catch (err) {
-					console.warn("[execution-engine] Proposal processing failed (non-blocking):", err);
+					log.warn("[execution-engine] Proposal processing failed (non-blocking):" + " " + String(err));
 				}
 			}
 
@@ -984,10 +987,10 @@ class ExecutionEngine {
 
 			// --- Sandbox: end session ---
 			if (sandboxSessionId) {
-				endSandboxSession(sandboxSessionId).catch((e) => console.warn("[execution-engine] Sandbox end failed:", e));
+				endSandboxSession(sandboxSessionId).catch((e) => log.warn("[execution-engine] Sandbox end failed:", e));
 			}
 			if (isolatedWorkspace?.isolated) {
-				isolatedWorkspace.cleanup().catch((e) => console.warn("[execution-engine] Workspace cleanup failed:", e));
+				isolatedWorkspace.cleanup().catch((e) => log.warn("[execution-engine] Workspace cleanup failed:", e));
 			}
 
 			// --- Goal evaluation (delegated to execution-gates.ts) ---
@@ -996,7 +999,7 @@ class ExecutionEngine {
 					await runGoalEvaluation(task.id, task.title, output, projectId);
 				} catch (e) {
 					if (e instanceof Error && e.message.startsWith("Goal validation failed")) throw e;
-					console.warn("[execution-engine] Goal evaluation failed (non-blocking):", e);
+					log.warn({ err: e }, "Goal evaluation failed (non-blocking)");
 				}
 			}
 
@@ -1004,7 +1007,7 @@ class ExecutionEngine {
 			if (sessionId) {
 				completeSession(sessionId, projectId, agent.id, agent.role, task, {
 					costUsd: cliResult?.totalCostUsd,
-				}).catch((e) => console.warn("[execution-engine] Session complete failed:", e));
+				}).catch((e) => log.warn("[execution-engine] Session complete failed:", e));
 			}
 
 			// Review task dispatch: task-engine creates a review task which
@@ -1013,7 +1016,7 @@ class ExecutionEngine {
 			// If task was aborted by pipeline pause, don't mark as failed — cancelRunningTasks
 			// already reset it to queued. Just bail out silently.
 			if (taskController.signal.aborted) {
-				console.log(`[execution-engine] Task "${task.title}" aborted (pipeline paused)`);
+				log.info(`[execution-engine] Task "${task.title}" aborted (pipeline paused)`);
 				return;
 			}
 
@@ -1036,11 +1039,11 @@ class ExecutionEngine {
 
 			const isTimeout = err instanceof TaskTimeoutError;
 			const errorMsg = err instanceof Error ? err.message : String(err);
-			console.error(`[execution-engine] Task failed: "${task.title}" — ${errorMsg}`);
+			log.error(`[execution-engine] Task failed: "${task.title}" — ${errorMsg}`);
 
 			// --- Rate-limit guard: pause pipeline instead of failing the task ---
 			if (isRateLimitError(errorMsg)) {
-				console.warn(`[execution-engine] Rate limit detected — pausing pipeline for ${projectId}`);
+				log.warn(`[execution-engine] Rate limit detected — pausing pipeline for ${projectId}`);
 
 				// Reset task back to queued so it can resume later
 				await updateTask(task.id, { status: "queued" });
@@ -1058,7 +1061,7 @@ class ExecutionEngine {
 					const { pipelineEngine } = await import("./pipeline-engine.js");
 					await pipelineEngine.pausePipeline(projectId);
 				} catch (pauseErr) {
-					console.error("[execution-engine] Failed to pause pipeline after rate limit:", pauseErr);
+					log.error({ err: pauseErr }, "Failed to pause pipeline after rate limit");
 				}
 				return; // Don't fail/retry — just stop
 			}
@@ -1089,7 +1092,7 @@ class ExecutionEngine {
 			// Agent output buffer'ını log dosyasına persist et
 			const failOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
 			if (failOutputLines.length > 0) {
-				persistAgentLog(projectId, agent.id, failOutputLines).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
+				persistAgentLog(projectId, agent.id, failOutputLines).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
 			}
 
 			await taskEngine.failTask(task.id, errorMsg);
@@ -1097,18 +1100,18 @@ class ExecutionEngine {
 			// --- Agent Runtime: record failed session ---
 			if (sessionId) {
 				failSession(sessionId, projectId, agent.id, agent.role, task, errorMsg).catch((e) =>
-					console.warn("[execution-engine] Session fail record failed:", e),
+					log.warn("[execution-engine] Session fail record failed:", e),
 				);
 			}
 			if (isolatedWorkspace?.isolated) {
-				isolatedWorkspace.cleanup().catch((e) => console.warn("[execution-engine] Workspace cleanup failed:", e));
+				isolatedWorkspace.cleanup().catch((e) => log.warn("[execution-engine] Workspace cleanup failed:", e));
 			}
 
 			// --- Self-healing: auto-retry with error context ---
 			const MAX_AUTO_RETRIES = 2;
 			const failedTask = await getTask(task.id);
 			if (!isTimeout && failedTask && failedTask.retryCount < MAX_AUTO_RETRIES) {
-				console.log(`[execution-engine] Self-healing: auto-retry #${failedTask.retryCount + 1} for "${task.title}"`);
+				log.info(`[execution-engine] Self-healing: auto-retry #${failedTask.retryCount + 1} for "${task.title}"`);
 				// Transient failure: will be retried
 				eventBus.emit({
 					projectId,
@@ -1148,7 +1151,7 @@ class ExecutionEngine {
 				const phaseFailures = Number(failCountRow?.cnt ?? 0);
 				if (phaseFailures >= 3) {
 					evaluateReplan({ projectId, trigger: "repeated_review_failure", phaseId: task.phaseId }).catch((err) =>
-						console.warn("[execution-engine] Replan trigger failed (non-blocking):", err),
+						log.warn("[execution-engine] Replan trigger failed (non-blocking):" + " " + String(err)),
 					);
 				}
 			}
@@ -1211,7 +1214,7 @@ class ExecutionEngine {
 			await taskEngine.completeTask(task.id, output);
 		} catch (err) {
 			const errorMsg = err instanceof Error ? err.message : String(err);
-			console.error(`[execution-engine] Special task failed: "${task.title}" — ${errorMsg}`);
+			log.error(`[execution-engine] Special task failed: "${task.title}" — ${errorMsg}`);
 			eventBus.emit({
 				projectId,
 				type: "agent:error",
@@ -1298,6 +1301,6 @@ export const executionEngine = new ExecutionEngine();
 // Uygulama başlangıcında yarıda kalmış görevleri kurtart
 if (process.env.VITEST !== "true") {
 	executionEngine.recoverStuckTasks().catch((err) => {
-		console.error("[execution-engine] Startup recovery failed:", err);
+		log.error("[execution-engine] Startup recovery failed:", err);
 	});
 }
