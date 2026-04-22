@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
 import type { CostBreakdownEntry, ProjectCostSummary, TokenUsage } from "../types.js";
 import { getProjectSettingsMap } from "./settings-repo.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("analytics-repo");
 
 // ---------------------------------------------------------------------------
 // Token Usage & Cost Tracking

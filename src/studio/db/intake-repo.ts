@@ -8,6 +8,8 @@ import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
 import type { IntakeQuestion, IntakeQuestionCategory, IntakeQuestionStatus } from "../types.js";
 import { now, rowToIntakeQuestion } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("intake-repo");
 
 export interface IntakeQuestionInput {
 	question: string;

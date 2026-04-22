@@ -6,6 +6,8 @@
 
 import type { MiddlewareHandler } from "hono";
 import { tracer } from "../telemetry.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("tracing-middleware");
 
 /**
  * Parse a W3C traceparent header.

@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { execute, getPool, query, queryOne } from "../pg.js";
 import type { ConversationCompaction, MemoryFact, ProjectContextSnapshot } from "../types.js";
 import { now, rowToContextSnapshot, rowToConversationCompaction, rowToMemoryFact } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("memory-repo");
 
 // ---------------------------------------------------------------------------
 // Context Snapshots

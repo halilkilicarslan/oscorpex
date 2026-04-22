@@ -12,6 +12,8 @@ import type {
 	ContextSource,
 } from "../types.js";
 import { now, rowToContextChunk, rowToContextSource } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("context-repo");
 
 // ---------------------------------------------------------------------------
 // Sources

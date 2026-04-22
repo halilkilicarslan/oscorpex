@@ -7,6 +7,8 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { join, normalize, relative } from "node:path";
 import { type SimpleGit, simpleGit } from "simple-git";
 import type { FileTreeNode, GitLogEntry, GitStatus, MergeResult } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("git-manager");
 
 class GitManager {
 	private getGit(repoPath: string): SimpleGit {

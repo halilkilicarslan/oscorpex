@@ -56,6 +56,8 @@ import { getProjectTemplate, listProjectTemplates, scaffoldFromTemplate } from "
 import { initSonarConfig, isSonarEnabled } from "../sonar-runner.js";
 import { taskEngine } from "../task-engine.js";
 import type { IntakeQuestionCategory } from "../types.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("project-routes");
 
 export const projectRoutes = new Hono();
 
@@ -191,7 +193,7 @@ projectRoutes.get("/platform/stats", async (c) => {
 			})),
 		});
 	} catch (err) {
-		console.error("[project-routes] platform stats failed:", err);
+		log.error("[project-routes] platform stats failed:" + " " + String(err));
 		return c.json({ error: "Failed to get platform stats" }, 500);
 	}
 });
@@ -382,7 +384,7 @@ projectRoutes.get("/platform/analytics", async (c) => {
 			})),
 		});
 	} catch (err) {
-		console.error("[project-routes] platform analytics failed:", err);
+		log.error("[project-routes] platform analytics failed:" + " " + String(err));
 		return c.json({ error: "Failed to get platform analytics" }, 500);
 	}
 });
@@ -399,7 +401,7 @@ projectRoutes.get("/projects", async (c) => {
 		c.header("X-Total-Count", String(total));
 		return c.json(projects);
 	} catch (err) {
-		console.error("[project-routes] list projects failed:", err);
+		log.error("[project-routes] list projects failed:" + " " + String(err));
 		return c.json({ error: "Failed to list projects" }, 500);
 	}
 });
@@ -447,7 +449,7 @@ projectRoutes.post("/projects", requirePermission("projects:create"), async (c) 
 					personality: agent.personality,
 					role: agent.role,
 					model: agent.model,
-				}).catch((err) => console.error("Failed to create agent files:", err));
+				}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
 			}
 		}
 	} else {
@@ -465,7 +467,7 @@ projectRoutes.post("/projects", requirePermission("projects:create"), async (c) 
 					personality: agent.personality,
 					role: agent.role,
 					model: agent.model,
-				}).catch((err) => console.error("Failed to create agent files:", err));
+				}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
 			}
 		}
 	}
@@ -558,7 +560,7 @@ projectRoutes.post("/projects/import", async (c) => {
 					personality: agent.personality,
 					role: agent.role,
 					model: agent.model,
-				}).catch((err) => console.error("Failed to create agent files:", err));
+				}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
 			}
 		}
 	} else {
@@ -575,7 +577,7 @@ projectRoutes.post("/projects/import", async (c) => {
 					personality: agent.personality,
 					role: agent.role,
 					model: agent.model,
-				}).catch((err) => console.error("Failed to create agent files:", err));
+				}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
 			}
 		}
 	}
@@ -660,7 +662,7 @@ projectRoutes.post("/projects/:id/chat", async (c) => {
 			: selectedProviderInfo.defaultEffort;
 
 	await insertChatMessage({ projectId, role: "user", content: userMessage });
-	recordChatToMemory(projectId, project.name, "user", userMessage).catch((err) => console.warn("[project-routes] Non-blocking operation failed:", err?.message ?? err));
+	recordChatToMemory(projectId, project.name, "user", userMessage).catch((err) => log.warn("[project-routes] Non-blocking operation failed:", err?.message ?? err));
 
 	const history = await listChatMessages(projectId);
 	const settingsMap = await getProjectSettingsMap(projectId);
@@ -851,10 +853,10 @@ ${
 													})),
 												},
 											});
-											console.log(`[Planner] Registered ${created.length} intake questions for project ${projectId}`);
+											log.info(`[Planner] Registered ${created.length} intake questions for project ${projectId}`);
 										}
 									} catch (parseErr) {
-										console.error("[Planner] Failed to parse askuser-json:", parseErr);
+										log.error("[Planner] Failed to parse askuser-json:" + " " + String(parseErr));
 									}
 								}
 
@@ -875,10 +877,10 @@ ${
 													resolvedTechStack: JSON.stringify(recommendedTechStack),
 												});
 											}
-											console.log(`[Planner] Plan created for project ${projectId} (${planData.phases.length} phases)`);
+											log.info(`[Planner] Plan created for project ${projectId} (${planData.phases.length} phases)`);
 										}
 									} catch (parseErr) {
-										console.error("[Planner] Failed to parse plan-json:", parseErr);
+										log.error("[Planner] Failed to parse plan-json:" + " " + String(parseErr));
 									}
 								}
 
@@ -888,7 +890,7 @@ ${
 										role: "assistant",
 										content: fullText,
 									});
-									recordChatToMemory(projectId, project?.name, "assistant", fullText).catch((err) => console.warn("[project-routes] Non-blocking operation failed:", err?.message ?? err));
+									recordChatToMemory(projectId, project?.name, "assistant", fullText).catch((err) => log.warn("[project-routes] Non-blocking operation failed:", err?.message ?? err));
 								}
 
 								await stream.writeSSE({
@@ -912,13 +914,13 @@ ${
 			});
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : "Unknown error";
-			console.error("[Planner Error]", {
+			log.error("[Planner Error] " + JSON.stringify({
 				projectId,
 				provider: selectedProvider,
 				model: plannerModel,
 				effort: plannerEffort ?? null,
 				error: errorMsg,
-			});
+			}));
 			await stream.writeSSE({
 				event: "error",
 				data: JSON.stringify({ error: errorMsg }),
@@ -934,7 +936,7 @@ projectRoutes.get("/projects/:id/chat/history", async (c) => {
 		if (!project) return c.json({ error: "Project not found" }, 404);
 		return c.json(await listChatMessages(projectId));
 	} catch (err) {
-		console.error("[project-routes] chat history failed:", err);
+		log.error("[project-routes] chat history failed:" + " " + String(err));
 		return c.json({ error: "Failed to get chat history" }, 500);
 	}
 });
@@ -1000,7 +1002,7 @@ projectRoutes.get("/projects/:id/plan", async (c) => {
 		if (!plan) return c.json({ error: "No plan found" }, 404);
 		return c.json(plan);
 	} catch (err) {
-		console.error("[project-routes] get plan failed:", err);
+		log.error("[project-routes] get plan failed:" + " " + String(err));
 		return c.json({ error: "Failed to get plan" }, 500);
 	}
 });
@@ -1020,7 +1022,7 @@ projectRoutes.post("/projects/:id/plan/approve", async (c) => {
 	});
 
 	executionEngine.startProjectExecution(projectId).catch((err) => {
-		console.error("[execution-engine] startProjectExecution failed:", err);
+		log.error("[execution-engine] startProjectExecution failed:" + " " + String(err));
 	});
 
 	let pipelineStarted = false;
@@ -1030,15 +1032,15 @@ projectRoutes.post("/projects/:id/plan/approve", async (c) => {
 		const agents = await listProjectAgents(projectId);
 		if (agents.length === 0) {
 			pipelineWarning = "Projeye atanmış agent bulunamadı; pipeline stage koordinasyonu devre dışı.";
-			console.warn(`[pipeline-engine] ${pipelineWarning} (proje=${projectId})`);
+			log.warn(`[pipeline-engine] ${pipelineWarning} (proje=${projectId})`);
 		} else {
 			await pipelineEngine.startPipeline(projectId);
 			pipelineStarted = true;
-			console.log(`[pipeline-engine] Plan onayı ile pipeline otomatik başlatıldı (proje=${projectId})`);
+			log.info(`[pipeline-engine] Plan onayı ile pipeline otomatik başlatıldı (proje=${projectId})`);
 		}
 	} catch (err) {
 		pipelineWarning = err instanceof Error ? err.message : String(err);
-		console.error("[pipeline-engine] auto-start hatası (execution devam ediyor):", err);
+		log.error("[pipeline-engine] auto-start hatası (execution devam ediyor):" + " " + String(err));
 	}
 
 	return c.json({
@@ -1118,7 +1120,7 @@ projectRoutes.post("/projects/:id/execute", async (c) => {
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
 	executionEngine.startProjectExecution(projectId).catch((err) => {
-		console.error("[execution-engine] manual execute failed:", err);
+		log.error("[execution-engine] manual execute failed:" + " " + String(err));
 	});
 
 	return c.json({ success: true, message: "Execution started" });
@@ -1131,7 +1133,7 @@ projectRoutes.get("/projects/:id/execution/status", async (c) => {
 		if (!project) return c.json({ error: "Project not found" }, 404);
 			return c.json(await executionEngine.getExecutionStatus(projectId));
 	} catch (err) {
-		console.error("[project-routes] execution status failed:", err);
+		log.error("[project-routes] execution status failed:" + " " + String(err));
 		return c.json({ error: "Failed to get execution status" }, 500);
 	}
 });
@@ -1189,7 +1191,7 @@ projectRoutes.post("/projects/from-template", async (c) => {
 				personality: agent.personality,
 				role: agent.role,
 				model: agent.model,
-			}).catch((err) => console.error("Failed to create agent files:", err));
+			}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
 		}
 	}
 

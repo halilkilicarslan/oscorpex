@@ -51,6 +51,8 @@ import type {
 	WorkItemType,
 } from "../types.js";
 import { canonicalizeAgentRole } from "../roles.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("helpers");
 
 // ---------------------------------------------------------------------------
 // Utility

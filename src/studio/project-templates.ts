@@ -207,7 +207,7 @@ app.get('/health', (_req, res) => {
 app.use('/api', router);
 
 app.listen(PORT, () => {
-  console.log(\`Server running on http://localhost:\${PORT}\`);
+  log.info(\`Server running on http://localhost:\${PORT}\`);
 });
 `,
 			"src/routes/index.ts": `import { Router } from 'express';
@@ -413,6 +413,8 @@ dist/
 			"src/index.ts": `import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
+import { createLogger } from "./logger.js";
+const log = createLogger("project-templates");
 
 const app = new Hono();
 
@@ -422,7 +424,7 @@ app.get('/', (c) => c.json({ message: 'Hono API running' }));
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
 serve({ fetch: app.fetch, port: 3000 }, (info) => {
-  console.log(\`Server running on http://localhost:\${info.port}\`);
+  log.info(\`Server running on http://localhost:\${info.port}\`);
 });
 `,
 			".gitignore": `node_modules/
@@ -487,7 +489,7 @@ dist/
 
 const app = express();
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
-app.listen(3001, () => console.log('API running on http://localhost:3001'));
+app.listen(3001, () => log.info('API running on http://localhost:3001'));
 `,
 			".gitignore": `node_modules/
 dist/

@@ -29,6 +29,8 @@ import {
 	recordSonarScan,
 	runSonarScan,
 } from "../sonar-runner.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("analytics-routes");
 
 export const analyticsRoutes = new Hono();
 
@@ -322,7 +324,7 @@ analyticsRoutes.get("/projects/:id/analytics/agents/heatmap", async (c) => {
 		const data = await getAgentHeatMap(projectId, days);
 		return c.json({ data });
 	} catch (err) {
-		console.error("[analytics] agent heatmap failed:", err);
+		log.error("[analytics] agent heatmap failed:" + " " + String(err));
 		return c.json({ error: "Failed to get agent heatmap" }, 500);
 	}
 });
@@ -336,7 +338,7 @@ analyticsRoutes.get("/projects/:id/analytics/agents/:agentId/timeline", async (c
 		const data = await getAgentPerformanceTimeline(projectId, agentId, days);
 		return c.json({ data });
 	} catch (err) {
-		console.error("[analytics] agent timeline failed:", err);
+		log.error("[analytics] agent timeline failed:" + " " + String(err));
 		return c.json({ error: "Failed to get agent timeline" }, 500);
 	}
 });
@@ -348,7 +350,7 @@ analyticsRoutes.get("/projects/:id/analytics/agents/comparison", async (c) => {
 		const data = await getAgentComparison(projectId);
 		return c.json({ data });
 	} catch (err) {
-		console.error("[analytics] agent comparison failed:", err);
+		log.error("[analytics] agent comparison failed:" + " " + String(err));
 		return c.json({ error: "Failed to get agent comparison" }, 500);
 	}
 });
@@ -365,7 +367,7 @@ analyticsRoutes.get("/projects/:id/analytics/context/observability", async (c) =
 		const data = await getSearchObservability(projectId, days);
 		return c.json(data);
 	} catch (err) {
-		console.error("[analytics] search observability failed:", err);
+		log.error("[analytics] search observability failed:" + " " + String(err));
 		return c.json({ error: "Failed to get search observability" }, 500);
 	}
 });

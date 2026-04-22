@@ -16,6 +16,8 @@ import {
 	getSprintsByProject,
 	startSprint,
 } from "../sprint-manager.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("sprint-routes");
 
 export const sprintRoutes = new Hono();
 
@@ -48,7 +50,7 @@ sprintRoutes.get("/projects/:id/sprints", async (c) => {
 		);
 		return c.json(enriched);
 	} catch (err) {
-		console.error("[sprint-routes] list failed:", err);
+		log.error("[sprint-routes] list failed:" + " " + String(err));
 		const msg = err instanceof Error ? err.message : String(err);
 		return c.json({ error: msg }, 500);
 	}
@@ -83,7 +85,7 @@ sprintRoutes.post("/projects/:id/sprints", async (c) => {
 		});
 		return c.json(sprint, 201);
 	} catch (err) {
-		console.error("[sprint-routes] create failed:", err);
+		log.error("[sprint-routes] create failed:" + " " + String(err));
 		const msg = err instanceof Error ? err.message : String(err);
 		return c.json({ error: msg }, 500);
 	}

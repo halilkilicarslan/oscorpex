@@ -7,6 +7,8 @@
 import { getDefaultRoutingConfig } from "./model-router.js";
 import { getProjectCostBreakdown, listTokenUsage } from "./db.js";
 import type { TaskComplexity } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("cost-optimizer");
 
 // ---------------------------------------------------------------------------
 // Types

@@ -6,6 +6,8 @@
 import Dockerode from "dockerode";
 import { eventBus } from "./event-bus.js";
 import type { AgentConfig, AgentRuntime, AgentRuntimeStatus, ContainerConfig, Project } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("container-manager");
 
 // ---------------------------------------------------------------------------
 // Docker client
@@ -120,8 +122,8 @@ class ContainerManager {
 
 		try {
 			const container = docker.getContainer(runtime.containerId);
-			await container.stop({ t: 5 }).catch((err) => console.warn("[container-manager] Non-blocking operation failed:", err?.message ?? err));
-			await container.remove({ force: true }).catch((err) => console.warn("[container-manager] Non-blocking operation failed:", err?.message ?? err));
+			await container.stop({ t: 5 }).catch((err) => log.warn("[container-manager] Non-blocking operation failed:", err?.message ?? err));
+			await container.remove({ force: true }).catch((err) => log.warn("[container-manager] Non-blocking operation failed:", err?.message ?? err));
 		} catch {
 			// Container may already be stopped/removed
 		}

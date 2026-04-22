@@ -6,6 +6,8 @@
 import { getProjectSettingsMap } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import type { PolicyRule, Task } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("policy-engine");
 
 // ---------------------------------------------------------------------------
 // Built-in rule names

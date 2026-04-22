@@ -4,6 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import type { Context, MiddlewareHandler, Next } from "hono";
+import { createLogger } from "../logger.js";
+const log = createLogger("rbac");
 
 // Role hierarchy (highest to lowest privilege)
 const ROLE_HIERARCHY = ["owner", "admin", "developer", "viewer", "billing"] as const;

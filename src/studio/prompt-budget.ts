@@ -5,6 +5,8 @@
 // ---------------------------------------------------------------------------
 
 import { eventBus } from "./event-bus.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("prompt-budget");
 
 // Rough char → token estimation (Anthropic: ~4 chars per token for English/code)
 const CHARS_PER_TOKEN = 4;
@@ -60,12 +62,12 @@ export function enforcePromptBudget(
 	if (overLimit) {
 		finalPrompt = capText(prompt, PROMPT_LIMITS.totalPrompt);
 		truncated = true;
-		console.warn(
+		log.warn(
 			`[prompt-budget] Prompt truncated: ${chars} → ${finalPrompt.length} chars ` +
 				`(project=${ctx.projectId}, task=${ctx.taskId ?? "n/a"})`,
 		);
 	} else if (warn) {
-		console.warn(
+		log.warn(
 			`[prompt-budget] Prompt near limit: ${chars} chars (~${estimatedTokens} tokens) ` +
 				`(project=${ctx.projectId}, task=${ctx.taskId ?? "n/a"})`,
 		);

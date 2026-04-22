@@ -7,6 +7,8 @@ import { execute, getPool, query, queryOne } from "../pg.js";
 import { decrypt, encrypt, isEncrypted } from "../secret-vault.js";
 import type { AIProvider } from "../types.js";
 import { now, rowToProvider } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("provider-repo");
 
 // ---------------------------------------------------------------------------
 // AI Providers CRUD

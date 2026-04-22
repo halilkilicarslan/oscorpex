@@ -13,6 +13,8 @@ import { getProject } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { analyzeProject, writeEnvFile } from "../runtime-analyzer.js";
 import type { DatabaseType } from "../runtime-analyzer.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("runtime-routes");
 
 export const runtimeRoutes = new Hono();
 

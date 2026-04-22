@@ -8,6 +8,8 @@
 
 import pg from "pg";
 import { execute } from "./db.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("pg-listener");
 
 const CHANNEL = "oscorpex_events";
 const RECONNECT_DELAY_MS = 2000;
@@ -47,8 +49,8 @@ class PgListener {
 		try {
 			await client.connect();
 		} catch (err) {
-			console.warn("[pg-listener] Connection failed:", err instanceof Error ? err.message : err);
-			client.end().catch((err) => console.warn("[pg-listener] Non-blocking operation failed:", err?.message ?? err));
+			log.warn("[pg-listener] Connection failed: " + (err instanceof Error ? err.message : String(err)));
+			client.end().catch((err) => log.warn("[pg-listener] Non-blocking operation failed: " + (err?.message ?? String(err))));
 			this._scheduleReconnect();
 			return;
 		}
@@ -69,12 +71,12 @@ class PgListener {
 					}
 				}
 			} catch {
-				console.warn("[pg-listener] Failed to parse notification payload:", msg.payload);
+				log.warn("[pg-listener] Failed to parse notification payload:" + " " + String(msg.payload));
 			}
 		});
 
 		client.on("error", (err) => {
-			console.warn("[pg-listener] Client error:", err instanceof Error ? err.message : err);
+			log.warn("[pg-listener] Client error: " + (err instanceof Error ? err.message : String(err)));
 			this.connected = false;
 			this.client = null;
 			if (!this.stopped) this._scheduleReconnect();
@@ -84,7 +86,7 @@ class PgListener {
 			this.connected = false;
 			this.client = null;
 			if (!this.stopped) {
-				console.warn("[pg-listener] Connection ended unexpectedly, scheduling reconnect...");
+				log.warn("[pg-listener] Connection ended unexpectedly, scheduling reconnect...");
 				this._scheduleReconnect();
 			}
 		});
@@ -93,10 +95,10 @@ class PgListener {
 			await client.query(`LISTEN ${CHANNEL}`);
 			console.info(`[pg-listener] Listening on channel: ${CHANNEL}`);
 		} catch (err) {
-			console.warn("[pg-listener] LISTEN failed:", err instanceof Error ? err.message : err);
+			log.warn("[pg-listener] LISTEN failed: " + (err instanceof Error ? err.message : String(err)));
 			this.connected = false;
 			this.client = null;
-			client.end().catch((err) => console.warn("[pg-listener] Non-blocking operation failed:", err?.message ?? err));
+			client.end().catch((err) => log.warn("[pg-listener] Non-blocking operation failed: " + (err?.message ?? String(err))));
 			this._scheduleReconnect();
 		}
 	}
@@ -104,7 +106,7 @@ class PgListener {
 	private _scheduleReconnect(): void {
 		if (this.stopped) return;
 		if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-			console.warn(`[pg-listener] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`);
+			log.warn(`[pg-listener] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`);
 			return;
 		}
 

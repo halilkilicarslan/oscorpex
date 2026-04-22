@@ -14,6 +14,8 @@
 import { sendMessage } from "./agent-messaging.js";
 import { listAgentDependencies } from "./db.js";
 import type { AgentDependency, Task, TaskOutput } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("edge-hooks");
 
 /** Simple inline doc-detection heuristic for handoff edges. */
 export function outputHasDocumentation(output: TaskOutput): boolean {
@@ -53,7 +55,7 @@ export async function applyPostCompletionHooks(
 	try {
 		deps = depsOverride ?? (await listAgentDependencies(projectId));
 	} catch (err) {
-		console.warn("[edge-hooks] listAgentDependencies failed:", err);
+		log.warn("[edge-hooks] listAgentDependencies failed:" + " " + String(err));
 		return result;
 	}
 
@@ -79,7 +81,7 @@ export async function applyPostCompletionHooks(
 			);
 			result.notificationsSent += 1;
 		} catch (err) {
-			console.warn(`[edge-hooks] notification → ${edge.toAgentId} failed:`, err);
+			log.warn(`[edge-hooks] notification → ${edge.toAgentId} failed:` + " " + String(err));
 		}
 	}
 
@@ -98,7 +100,7 @@ export async function applyPostCompletionHooks(
 			);
 			result.mentoringMessagesSent += 1;
 		} catch (err) {
-			console.warn(`[edge-hooks] mentoring → ${edge.toAgentId} failed:`, err);
+			log.warn(`[edge-hooks] mentoring → ${edge.toAgentId} failed:` + " " + String(err));
 		}
 	}
 
@@ -118,10 +120,10 @@ export async function applyPostCompletionHooks(
 					{ taskId: task.id, edgeType: "handoff", severity: "warning" },
 				);
 			} catch (err) {
-				console.warn(`[edge-hooks] handoff warning → ${edge.toAgentId} failed:`, err);
+				log.warn(`[edge-hooks] handoff warning → ${edge.toAgentId} failed:` + " " + String(err));
 			}
 		}
-		console.warn(
+		log.warn(
 			`[edge-hooks] Task "${task.title}" missing handoff documentation (${handoffEdges.length} edge(s) require it)`,
 		);
 	}
@@ -144,7 +146,7 @@ export async function taskNeedsApprovalFromEdges(
 	try {
 		deps = depsOverride ?? (await listAgentDependencies(projectId));
 	} catch (err) {
-		console.warn("[edge-hooks] listAgentDependencies failed:", err);
+		log.warn("[edge-hooks] listAgentDependencies failed:" + " " + String(err));
 		return false;
 	}
 

@@ -34,6 +34,8 @@ import {
 	listProjectTasks,
 	updateAgentConfig,
 } from "../db.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("agent-routes");
 
 export const agentRoutes = new Hono();
 
@@ -293,7 +295,7 @@ agentRoutes.post("/projects/:id/agents/:agentId/start", async (c) => {
 				cliTool: record.cliTool,
 			});
 		} catch (localErr) {
-			console.warn("[routes] Yerel süreç başlatılamadı, Docker deneniyor:", localErr);
+			log.warn("[routes] Yerel süreç başlatılamadı, Docker deneniyor:" + " " + String(localErr));
 		}
 	}
 
@@ -491,7 +493,7 @@ agentRoutes.post("/projects/:id/agents/:agentId/chat", async (c) => {
 		if (msg.includes("not found") || msg.includes("does not belong")) {
 			return c.json({ error: msg }, 404);
 		}
-		console.error("[agent-routes] chat failed:", err);
+		log.error("[agent-routes] chat failed:" + " " + String(err));
 		return c.json({ error: msg }, 500);
 	}
 });

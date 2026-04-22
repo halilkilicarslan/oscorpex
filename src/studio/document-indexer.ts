@@ -9,6 +9,8 @@ import { gitManager } from "./git-manager.js";
 import { execute, query, queryOne } from "./pg.js";
 import type { FileTreeNode } from "./types.js";
 import { vectorStore } from "./vector-store.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("document-indexer");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,13 +95,13 @@ async function indexDocumentContent(
 ): Promise<IndexResult> {
 	// Skip empty content
 	if (!content || content.trim().length === 0) {
-		console.log(`[DocumentIndexer] Skipping empty file: ${filename}`);
+		log.info(`[DocumentIndexer] Skipping empty file: ${filename}`);
 		return { docId, filename, chunkCount: 0, status: "skipped", error: "empty content" };
 	}
 
 	// Skip binary content
 	if (looksLikeBinary(content)) {
-		console.log(`[DocumentIndexer] Skipping binary file: ${filename}`);
+		log.info(`[DocumentIndexer] Skipping binary file: ${filename}`);
 		return { docId, filename, chunkCount: 0, status: "skipped", error: "binary file" };
 	}
 
@@ -130,11 +132,11 @@ async function indexDocumentContent(
 			[chunkCount, now, now, kbId],
 		);
 
-		console.log(`[DocumentIndexer] Indexed "${filename}" → ${chunkCount} chunks`);
+		log.info(`[DocumentIndexer] Indexed "${filename}" → ${chunkCount} chunks`);
 		return { docId, filename, chunkCount, status: "indexed" };
 	} catch (err: any) {
 		const error = err?.message ?? "unknown error";
-		console.error(`[DocumentIndexer] Failed to index "${filename}": ${error}`);
+		log.error(`[DocumentIndexer] Failed to index "${filename}": ${error}`);
 
 		// Mark document as failed in DB
 		try {
@@ -189,7 +191,7 @@ async function indexCodebase(options: CodebaseIndexOptions): Promise<CodebaseInd
 
 	const now = new Date().toISOString();
 
-	console.log(`[DocumentIndexer] Starting codebase index for KB ${kbId} at path: ${projectPath}`);
+	log.info(`[DocumentIndexer] Starting codebase index for KB ${kbId} at path: ${projectPath}`);
 
 	// Walk file tree
 	let allFiles: string[];
@@ -197,7 +199,7 @@ async function indexCodebase(options: CodebaseIndexOptions): Promise<CodebaseInd
 		const tree = await gitManager.getFileTree(projectPath);
 		allFiles = flattenFileTree(tree);
 	} catch (err: any) {
-		console.error(`[DocumentIndexer] Failed to read file tree: ${err?.message}`);
+		log.error(`[DocumentIndexer] Failed to read file tree: ${err?.message}`);
 		return {
 			totalFiles: 0,
 			indexedFiles: 0,
@@ -215,7 +217,7 @@ async function indexCodebase(options: CodebaseIndexOptions): Promise<CodebaseInd
 		return true;
 	});
 
-	console.log(`[DocumentIndexer] Found ${eligible.length} eligible files (${allFiles.length} total)`);
+	log.info(`[DocumentIndexer] Found ${eligible.length} eligible files (${allFiles.length} total)`);
 
 	const summary: CodebaseIndexSummary = {
 		totalFiles: eligible.length,
@@ -239,7 +241,7 @@ async function indexCodebase(options: CodebaseIndexOptions): Promise<CodebaseInd
 		// Check file size
 		const sizeBytes = new TextEncoder().encode(content).length;
 		if (sizeBytes > maxFileSize) {
-			console.log(`[DocumentIndexer] Skipping oversized file (${sizeBytes} bytes): ${filePath}`);
+			log.info(`[DocumentIndexer] Skipping oversized file (${sizeBytes} bytes): ${filePath}`);
 			summary.skippedFiles++;
 			continue;
 		}
@@ -274,7 +276,7 @@ async function indexCodebase(options: CodebaseIndexOptions): Promise<CodebaseInd
 		}
 	}
 
-	console.log(
+	log.info(
 		`[DocumentIndexer] Codebase index complete — indexed: ${summary.indexedFiles}, skipped: ${summary.skippedFiles}, chunks: ${summary.totalChunks}`,
 	);
 
@@ -290,7 +292,7 @@ async function indexCodebase(options: CodebaseIndexOptions): Promise<CodebaseInd
  * Deletes old embeddings for changed files before re-indexing.
  */
 async function reindexChanged(projectPath: string, kbId: string, sinceCommit?: string): Promise<ReindexSummary> {
-	console.log(`[DocumentIndexer] Starting incremental re-index for KB ${kbId}`);
+	log.info(`[DocumentIndexer] Starting incremental re-index for KB ${kbId}`);
 
 	// Collect changed file paths
 	let changedPaths: string[] = [];
@@ -307,16 +309,16 @@ async function reindexChanged(projectPath: string, kbId: string, sinceCommit?: s
 			changedPaths = [...status.modified, ...status.untracked, ...status.staged];
 		}
 	} catch (err: any) {
-		console.error(`[DocumentIndexer] Failed to determine changed files: ${err?.message}`);
+		log.error(`[DocumentIndexer] Failed to determine changed files: ${err?.message}`);
 		return { changedFiles: 0, reindexed: 0, totalChunks: 0 };
 	}
 
 	if (changedPaths.length === 0) {
-		console.log("[DocumentIndexer] No changed files detected — nothing to re-index");
+		log.info("[DocumentIndexer] No changed files detected — nothing to re-index");
 		return { changedFiles: 0, reindexed: 0, totalChunks: 0 };
 	}
 
-	console.log(`[DocumentIndexer] ${changedPaths.length} changed file(s) to re-index`);
+	log.info(`[DocumentIndexer] ${changedPaths.length} changed file(s) to re-index`);
 
 	const summary: ReindexSummary = {
 		changedFiles: changedPaths.length,
@@ -338,7 +340,7 @@ async function reindexChanged(projectPath: string, kbId: string, sinceCommit?: s
 			try {
 				await vectorStore.deleteDocEmbeddings(existing.id);
 			} catch (err: any) {
-				console.error(`[DocumentIndexer] Failed to delete embeddings for ${filePath}: ${err?.message}`);
+				log.error(`[DocumentIndexer] Failed to delete embeddings for ${filePath}: ${err?.message}`);
 			}
 
 			// Update KB counters to remove old chunks
@@ -362,7 +364,7 @@ async function reindexChanged(projectPath: string, kbId: string, sinceCommit?: s
 			content = await gitManager.getFileContent(projectPath, filePath);
 		} catch {
 			// File may have been deleted — skip
-			console.log(`[DocumentIndexer] Skipping deleted/unreadable file: ${filePath}`);
+			log.info(`[DocumentIndexer] Skipping deleted/unreadable file: ${filePath}`);
 			continue;
 		}
 
@@ -377,7 +379,7 @@ async function reindexChanged(projectPath: string, kbId: string, sinceCommit?: s
 				[docId, kbId, filePath, filePath, contentPreview, sizeBytes, now],
 			);
 		} catch (err: any) {
-			console.error(`[DocumentIndexer] DB insert error for ${filePath}: ${err?.message}`);
+			log.error(`[DocumentIndexer] DB insert error for ${filePath}: ${err?.message}`);
 			continue;
 		}
 
@@ -389,7 +391,7 @@ async function reindexChanged(projectPath: string, kbId: string, sinceCommit?: s
 		}
 	}
 
-	console.log(
+	log.info(
 		`[DocumentIndexer] Incremental re-index complete — reindexed: ${summary.reindexed}, chunks: ${summary.totalChunks}`,
 	);
 
@@ -408,7 +410,7 @@ async function autoIndexProject(projectId: string, projectPath: string, projectN
 	const kbId = randomUUID();
 	const now = new Date().toISOString();
 
-	console.log(`[DocumentIndexer] Auto-indexing project "${projectName}" (${projectId})`);
+	log.info(`[DocumentIndexer] Auto-indexing project "${projectName}" (${projectId})`);
 
 	// Ensure RAG tables exist (idempotent)
 	await execute(`
@@ -456,7 +458,7 @@ async function autoIndexProject(projectId: string, projectPath: string, projectN
 	// Index the codebase
 	await indexCodebase({ projectPath, kbId });
 
-	console.log(`[DocumentIndexer] Project "${projectName}" auto-indexed — kbId: ${kbId}`);
+	log.info(`[DocumentIndexer] Project "${projectName}" auto-indexed — kbId: ${kbId}`);
 	return kbId;
 }
 

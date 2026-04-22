@@ -6,6 +6,8 @@
 import type { AgentCliTool } from "./types.js";
 import { eventBus } from "./event-bus.js";
 import { query, execute as pgExec } from "./pg.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("provider-state");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,7 +51,7 @@ class ProviderStateManager {
 				type: "provider:degraded",
 				payload: { provider: adapter, cooldownMs, reason: "rate_limited" },
 			});
-			this.persistToDb().catch((err) => console.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
+			this.persistToDb().catch((err) => log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
 		}
 	}
 
@@ -60,7 +62,7 @@ class ProviderStateManager {
 			state.cooldownUntil = null;
 			state.consecutiveFailures = 0;
 			state.lastSuccess = new Date();
-			this.persistToDb().catch((err) => console.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
+			this.persistToDb().catch((err) => log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
 		}
 	}
 
@@ -71,7 +73,7 @@ class ProviderStateManager {
 			if (state.consecutiveFailures >= 3) {
 				this.markRateLimited(adapter, 120_000);
 			} else {
-				this.persistToDb().catch((err) => console.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
+				this.persistToDb().catch((err) => log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
 			}
 		}
 	}
@@ -141,7 +143,7 @@ class ProviderStateManager {
 				);
 			}
 		} catch (err) {
-			console.warn("[provider-state] Failed to persist state:", err);
+			log.warn("[provider-state] Failed to persist state:" + " " + String(err));
 		}
 	}
 
@@ -166,7 +168,7 @@ class ProviderStateManager {
 				existing.consecutiveFailures = row.consecutive_failures;
 				existing.lastSuccess = row.last_success ? new Date(row.last_success) : null;
 			}
-			console.log("[provider-state] Loaded state from DB");
+			log.info("[provider-state] Loaded state from DB");
 		} catch {
 			// Table may not exist yet on first run — non-blocking
 		}

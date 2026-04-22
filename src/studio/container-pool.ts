@@ -6,6 +6,8 @@
 
 import Dockerode from "dockerode";
 import { eventBus } from "./event-bus.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("container-pool");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -111,7 +113,7 @@ class ContainerPool {
 		try {
 			await this.docker.ping();
 		} catch {
-			console.warn("[pool] Docker not available — pool disabled");
+			log.warn("[pool] Docker not available — pool disabled");
 			return;
 		}
 
@@ -121,7 +123,7 @@ class ContainerPool {
 		// Ensure image exists
 		const hasImage = await this.hasImage();
 		if (!hasImage) {
-			console.warn(`[pool] Image ${AGENT_IMAGE} not found. Run: docker build -t ${AGENT_IMAGE} docker/coder-agent/`);
+			log.warn(`[pool] Image ${AGENT_IMAGE} not found. Run: docker build -t ${AGENT_IMAGE} docker/coder-agent/`);
 			return;
 		}
 
@@ -139,7 +141,7 @@ class ContainerPool {
 		this.healthTimer = setInterval(() => this.healthCheck(), this.config.healthCheckInterval);
 
 		this.initialized = true;
-		console.log(
+		log.info(
 			`[pool] Initialized with ${this.containers.size} containers (min=${this.config.minIdle}, max=${this.config.maxTotal})`,
 		);
 	}
@@ -272,8 +274,8 @@ class ContainerPool {
 			// Wait for health check to pass
 			const healthy = await this.waitForHealthy(port, 15_000);
 			if (!healthy) {
-				await container.stop({ t: 2 }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
-				await container.remove({ force: true }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+				await container.stop({ t: 2 }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+				await container.remove({ force: true }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
 				return undefined;
 			}
 
@@ -286,10 +288,10 @@ class ContainerPool {
 			};
 
 			this.containers.set(container.id, poolContainer);
-			console.log(`[pool] Container ${name} ready on port ${port}`);
+			log.info(`[pool] Container ${name} ready on port ${port}`);
 			return poolContainer;
 		} catch (err) {
-			console.error(`[pool] Failed to create container: ${err instanceof Error ? err.message : err}`);
+			log.error(`[pool] Failed to create container: ${err instanceof Error ? err.message : err}`);
 			return undefined;
 		}
 	}
@@ -301,8 +303,8 @@ class ContainerPool {
 
 		try {
 			const container = this.docker.getContainer(containerId);
-			await container.stop({ t: 3 }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
-			await container.remove({ force: true }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+			await container.stop({ t: 3 }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+			await container.remove({ force: true }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
 		} catch {
 			/* already gone */
 		}
@@ -418,7 +420,7 @@ class ContainerPool {
 				Internal: false, // needs access to host.docker.internal
 				Labels: { "studio.pool": "true" },
 			});
-			console.log(`[pool] Created network: ${INTERNAL_NETWORK}`);
+			log.info(`[pool] Created network: ${INTERNAL_NETWORK}`);
 		}
 	}
 
@@ -434,11 +436,11 @@ class ContainerPool {
 			});
 			for (const c of containers) {
 				const container = this.docker.getContainer(c.Id);
-				await container.stop({ t: 2 }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
-				await container.remove({ force: true }).catch((err) => console.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+				await container.stop({ t: 2 }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+				await container.remove({ force: true }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
 			}
 			if (containers.length > 0) {
-				console.log(`[pool] Cleaned up ${containers.length} stale containers`);
+				log.info(`[pool] Cleaned up ${containers.length} stale containers`);
 			}
 		} catch {
 			/* ignore */
@@ -453,7 +455,7 @@ class ContainerPool {
 			promises.push(this.removeContainer(id));
 		}
 		await Promise.allSettled(promises);
-		console.log("[pool] Shut down");
+		log.info("[pool] Shut down");
 	}
 
 	// -------------------------------------------------------------------------

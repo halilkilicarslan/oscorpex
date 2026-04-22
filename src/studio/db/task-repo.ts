@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { execute, query, queryOne, withTransaction } from "../pg.js";
 import type { Task, TaskOutput } from "../types.js";
 import { rowToTask } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("task-repo");
 
 // ---------------------------------------------------------------------------
 // Tasks CRUD

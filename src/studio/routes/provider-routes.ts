@@ -18,6 +18,8 @@ import {
 } from "../db.js";
 import { isAnyPlannerCLIAvailable, listPlannerCLIProviders } from "../planner-cli.js";
 import { providerState } from "../provider-state.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("provider-routes");
 
 export const providerRoutes = new Hono();
 
@@ -35,7 +37,7 @@ providerRoutes.get("/config/status", async (c) => {
 			plannerAvailable,
 		});
 	} catch (err) {
-		console.error("[provider-routes] config status failed:", err);
+		log.error("[provider-routes] config status failed:" + " " + String(err));
 		return c.json({ error: "Failed to get config status" }, 500);
 	}
 });
@@ -50,7 +52,7 @@ providerRoutes.get("/providers", async (c) => {
 	try {
 		return c.json(await listProviders());
 	} catch (err) {
-		console.error("[provider-routes] list providers failed:", err);
+		log.error("[provider-routes] list providers failed:" + " " + String(err));
 		return c.json({ error: "Failed to list providers" }, 500);
 	}
 });
@@ -89,7 +91,7 @@ providerRoutes.get("/providers/fallback-chain", async (c) => {
 	try {
 		return c.json(await getFallbackChain());
 	} catch (err) {
-		console.error("[provider-routes] get fallback chain failed:", err);
+		log.error("[provider-routes] get fallback chain failed:" + " " + String(err));
 		return c.json({ error: "Failed to get fallback chain" }, 500);
 	}
 });

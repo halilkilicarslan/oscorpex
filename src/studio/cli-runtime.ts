@@ -10,6 +10,8 @@ import { resolve } from "node:path";
 import { agentRuntime } from "./agent-runtime.js";
 import { eventBus } from "./event-bus.js";
 import type { TaskOutput } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("cli-runtime");
 
 // ---------------------------------------------------------------------------
 // Types for stream-json events
@@ -135,7 +137,7 @@ export async function isClaudeCliAvailable(): Promise<boolean> {
 		return cliAvailable;
 	}
 
-	console.log(`[cli-runtime] Checking CLI availability: ${CLAUDE_BIN}`);
+	log.info(`[cli-runtime] Checking CLI availability: ${CLAUDE_BIN}`);
 
 	return new Promise((resolveResult) => {
 		let resolved = false;
@@ -144,7 +146,7 @@ export async function isClaudeCliAvailable(): Promise<boolean> {
 			resolved = true;
 			cliAvailable = result;
 			cliCheckedAt = Date.now();
-			console.log(`[cli-runtime] CLI check: ${reason}, available=${result}`);
+			log.info(`[cli-runtime] CLI check: ${reason}, available=${result}`);
 			resolveResult(result);
 		};
 

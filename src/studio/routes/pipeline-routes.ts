@@ -7,6 +7,8 @@ import { requirePermission } from "../auth/rbac.js";
 import { getLatestPlan, getProject, getTask, listPhases, listProjectAgents, listTasks } from "../db.js";
 import { pipelineEngine } from "../pipeline-engine.js";
 import type { Task } from "../types.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("pipeline-routes");
 
 export const pipelineRoutes = new Hono();
 

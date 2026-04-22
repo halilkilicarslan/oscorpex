@@ -419,6 +419,8 @@ export async function discoverApi(repoPath: string, appUrl?: string): Promise<Ap
 // ---------------------------------------------------------------------------
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createLogger } from "./logger.js";
+const log = createLogger("api-discovery");
 
 const COLLECTIONS_BASE = join(process.cwd(), ".voltagent", "api-collections");
 
@@ -461,6 +463,6 @@ export async function saveCollection(collection: ApiCollection): Promise<void> {
 		await mkdir(COLLECTIONS_BASE, { recursive: true });
 		await writeFile(collectionPath(collection.projectId), JSON.stringify(collection, null, 2), "utf-8");
 	} catch (err) {
-		console.warn("[api-discovery] Collection kaydedilemedi:", err instanceof Error ? err.message : err);
+		log.warn("[api-discovery] Collection kaydedilemedi: " + (err instanceof Error ? err.message : String(err)));
 	}
 }

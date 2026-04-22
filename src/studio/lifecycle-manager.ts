@@ -7,6 +7,8 @@ import { randomUUID } from "node:crypto";
 import { createTask, getLatestPlan, getProject, listPhases, updateProject } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import type { ProjectStatus } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("lifecycle-manager");
 
 // ---------------------------------------------------------------------------
 // Valid state machine transitions
@@ -64,7 +66,7 @@ export async function transitionProject(projectId: string, newStatus: ProjectSta
 		},
 	});
 
-	console.log(`[lifecycle-manager] Project ${projectId} transitioned: ${project.status} → ${newStatus}`);
+	log.info(`[lifecycle-manager] Project ${projectId} transitioned: ${project.status} → ${newStatus}`);
 }
 
 /**
@@ -136,7 +138,7 @@ export async function triggerHotfix(projectId: string, description: string): Pro
 		},
 	});
 
-	console.log(`[lifecycle-manager] Hotfix task created: ${task.id} (project=${projectId})`);
+	log.info(`[lifecycle-manager] Hotfix task created: ${task.id} (project=${projectId})`);
 
 	return task.id;
 }

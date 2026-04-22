@@ -15,6 +15,8 @@ import { eventBus } from "./event-bus.js";
 import { ensureGoalForTask, type GoalDefinition } from "./goal-engine.js";
 import { pipelineEngine } from "./pipeline-engine.js";
 import type { Phase, ProjectPlan, Task, TaskComplexity } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("incremental-planner");
 
 export interface AppendPhaseInput {
 	name: string;
@@ -44,7 +46,7 @@ async function bestEffortRefresh(projectId: string): Promise<void> {
 		// Pipeline not running yet or not found — safe to ignore
 		const msg = err instanceof Error ? err.message : String(err);
 		if (!msg.includes("refresh edilemiyor") && !msg.includes("bulunamadı")) {
-			console.warn(`[incremental-planner] refreshPipeline failed: ${msg}`);
+			log.warn(`[incremental-planner] refreshPipeline failed: ${msg}`);
 		}
 	}
 }

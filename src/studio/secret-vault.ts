@@ -5,6 +5,8 @@
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { hostname } from "node:os";
+import { createLogger } from "./logger.js";
+const log = createLogger("secret-vault");
 
 // ---------------------------------------------------------------------------
 // Vault anahtarı — 32 byte (AES-256 için)
@@ -18,7 +20,7 @@ function getVaultKey(): Buffer {
 	}
 
 	// Production'da mutlaka env var set edilmeli
-	console.warn(
+	log.warn(
 		"[secret-vault] OSCORPEX_VAULT_KEY not set — using hostname-derived key. Set a proper key for production.",
 	);
 	return createHash("sha256").update(hostname()).digest();

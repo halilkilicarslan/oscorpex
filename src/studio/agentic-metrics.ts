@@ -4,6 +4,8 @@
 
 import { query, queryOne } from "./db.js";
 import { canonicalizeAgentRole } from "./roles.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("agentic-metrics");
 
 export interface AgenticMetrics {
 	taskClaimLatency: { avgMs: number; p95Ms: number; samples: number };

@@ -6,6 +6,8 @@
 import { listEvents, listProjectAgents, listProjectTasks } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import type { ProjectAgent, StudioEvent, Task } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("ceremony-engine");
 
 // ---------------------------------------------------------------------------
 // Report types (exported for frontend/routes consumption)
@@ -103,7 +105,7 @@ export async function runStandup(projectId: string): Promise<StandupReport[]> {
 		payload: { agentCount: reports.length, generatedAt: new Date().toISOString() },
 	});
 
-	console.log(`[ceremony-engine] Standup generated for ${reports.length} agents (project=${projectId})`);
+	log.info(`[ceremony-engine] Standup generated for ${reports.length} agents (project=${projectId})`);
 
 	return reports;
 }
@@ -214,7 +216,7 @@ export async function runRetrospective(projectId: string): Promise<Retrospective
 		},
 	});
 
-	console.log(`[ceremony-engine] Retrospective generated (project=${projectId}, completion=${completionRate}%)`);
+	log.info(`[ceremony-engine] Retrospective generated (project=${projectId}, completion=${completionRate}%)`);
 
 	return report;
 }

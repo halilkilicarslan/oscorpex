@@ -8,6 +8,8 @@ import { searchContext } from "./context-store.js";
 import { getLatestPlan, getProject, listPhases, listProjectAgents, listProjectTasks } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import type { ContextPacketOptions, ProjectAgent, Task } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("context-packet");
 
 // ---------------------------------------------------------------------------
 // Constants

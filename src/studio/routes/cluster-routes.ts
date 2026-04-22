@@ -5,6 +5,8 @@
 
 import { Hono } from "hono";
 import { wsCluster } from "../ws-cluster.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("cluster-routes");
 
 const router = new Hono();
 
@@ -21,7 +23,7 @@ router.get("/instances", async (c) => {
 			currentInstanceId: wsCluster.currentInstanceId,
 		});
 	} catch (err) {
-		console.error("[cluster-routes] getActiveInstances error:", err);
+		log.error("[cluster-routes] getActiveInstances error:" + " " + String(err));
 		return c.json({ error: "Failed to retrieve cluster instances" }, 500);
 	}
 });
@@ -47,7 +49,7 @@ router.get("/status", async (c) => {
 			},
 		});
 	} catch (err) {
-		console.error("[cluster-routes] status error:", err);
+		log.error("[cluster-routes] status error:" + " " + String(err));
 		return c.json({ error: "Failed to retrieve cluster status" }, 500);
 	}
 });

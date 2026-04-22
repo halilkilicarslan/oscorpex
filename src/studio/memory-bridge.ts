@@ -6,6 +6,8 @@
 
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "./pg.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("memory-bridge");
 
 function now(): string {
 	return new Date().toISOString();

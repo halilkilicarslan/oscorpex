@@ -29,6 +29,8 @@ import { execute, queryOne } from "./pg.js";
 import type { TaskComplexity } from "./types.js";
 import { canonicalizeAgentRole, roleMatches } from "./roles.js";
 import { ensureGoalForTask } from "./goal-engine.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("pm-agent");
 
 // ---------------------------------------------------------------------------
 // Maliyet Tahmini — Model fiyat tablosu (USD / 1M token)

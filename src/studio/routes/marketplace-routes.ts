@@ -14,6 +14,8 @@ import {
 	rateMarketplaceItem,
 	updateMarketplaceItem,
 } from "../db.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("marketplace-routes");
 
 const router = new Hono();
 
@@ -44,7 +46,7 @@ router.get("/", async (c) => {
 		c.header("X-Total-Count", String(total));
 		return c.json(items);
 	} catch (err) {
-		console.error("[marketplace-routes] list error:", err);
+		log.error("[marketplace-routes] list error:" + " " + String(err));
 		return c.json({ error: "Failed to list marketplace items" }, 500);
 	}
 });
@@ -57,7 +59,7 @@ router.get("/:id", async (c) => {
 		if (!item) return c.json({ error: "Marketplace item not found" }, 404);
 		return c.json(item);
 	} catch (err) {
-		console.error("[marketplace-routes] get error:", err);
+		log.error("[marketplace-routes] get error:" + " " + String(err));
 		return c.json({ error: "Failed to get marketplace item" }, 500);
 	}
 });
@@ -95,7 +97,7 @@ router.post("/", async (c) => {
 		});
 		return c.json(item, 201);
 	} catch (err) {
-		console.error("[marketplace-routes] create error:", err);
+		log.error("[marketplace-routes] create error:" + " " + String(err));
 		return c.json({ error: "Failed to publish marketplace item" }, 500);
 	}
 });
@@ -118,7 +120,7 @@ router.patch("/:id", async (c) => {
 		if (!item) return c.json({ error: "Marketplace item not found" }, 404);
 		return c.json(item);
 	} catch (err) {
-		console.error("[marketplace-routes] update error:", err);
+		log.error("[marketplace-routes] update error:" + " " + String(err));
 		return c.json({ error: "Failed to update marketplace item" }, 500);
 	}
 });
@@ -131,7 +133,7 @@ router.delete("/:id", async (c) => {
 		if (!deleted) return c.json({ error: "Marketplace item not found" }, 404);
 		return c.json({ ok: true });
 	} catch (err) {
-		console.error("[marketplace-routes] delete error:", err);
+		log.error("[marketplace-routes] delete error:" + " " + String(err));
 		return c.json({ error: "Failed to delete marketplace item" }, 500);
 	}
 });
@@ -144,7 +146,7 @@ router.post("/:id/download", async (c) => {
 		if (!item) return c.json({ error: "Marketplace item not found" }, 404);
 		return c.json({ ok: true, config: item.config, item });
 	} catch (err) {
-		console.error("[marketplace-routes] download error:", err);
+		log.error("[marketplace-routes] download error:" + " " + String(err));
 		return c.json({ error: "Failed to download marketplace item" }, 500);
 	}
 });
@@ -164,7 +166,7 @@ router.post("/:id/rate", async (c) => {
 		if (!item) return c.json({ error: "Marketplace item not found" }, 404);
 		return c.json({ ok: true, rating: item.rating, ratingCount: item.ratingCount });
 	} catch (err) {
-		console.error("[marketplace-routes] rate error:", err);
+		log.error("[marketplace-routes] rate error:" + " " + String(err));
 		return c.json({ error: "Failed to rate marketplace item" }, 500);
 	}
 });

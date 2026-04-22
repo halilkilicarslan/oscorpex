@@ -8,6 +8,8 @@ import type { AgentConfig, AgentRole, DependencyType, ProjectAgent } from "../ty
 import { bulkCreateDependencies } from "./dependency-repo.js";
 import { now, rowToAgentConfig, rowToProjectAgent } from "./helpers.js";
 import { canonicalizeAgentRole } from "../roles.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("agent-repo");
 
 // ---------------------------------------------------------------------------
 // Agent Configs CRUD

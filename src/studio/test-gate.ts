@@ -10,6 +10,8 @@ import { join } from "node:path";
 import { getProjectSetting, saveTestResult } from "./db.js";
 import type { Task, TaskOutput } from "./types.js";
 import { canonicalizeAgentRole, getBehaviorRoleKey } from "./roles.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("test-gate");
 
 // ---------------------------------------------------------------------------
 // Types

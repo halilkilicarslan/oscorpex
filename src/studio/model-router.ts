@@ -6,6 +6,8 @@
 
 import { getProjectSettings } from "./db.js";
 import type { AgentCliTool, Task } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("model-router");
 
 // ---------------------------------------------------------------------------
 // Types

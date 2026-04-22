@@ -11,6 +11,8 @@ import {
 	resolveTaskPolicy,
 } from "../sandbox-manager.js";
 import { getTask } from "../db.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("sandbox-routes");
 
 export const sandboxRoutes = new Hono();
 

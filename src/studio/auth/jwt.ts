@@ -3,6 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { createHmac, randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
+const log = createLogger("jwt");
 
 const JWT_SECRET = process.env.OSCORPEX_JWT_SECRET ?? "oscorpex-dev-secret-change-in-production";
 const JWT_EXPIRY = 24 * 60 * 60; // 24 saat (saniye)

@@ -6,6 +6,8 @@
 import { Hono } from "hono";
 import { getTestResults, getTestSummary, saveTestResult } from "../db.js";
 import { testRunner } from "../test-runner.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("test-routes");
 
 const router = new Hono();
 
@@ -42,7 +44,7 @@ router.post("/run/:projectId", async (c) => {
 
 		return c.json(saved, 201);
 	} catch (err) {
-		console.error("[test-routes] POST /run/:projectId:", err);
+		log.error("[test-routes] POST /run/:projectId:" + " " + String(err));
 		return c.json({ error: "Failed to run tests" }, 500);
 	}
 });
@@ -62,7 +64,7 @@ router.get("/results/:projectId", async (c) => {
 		const results = await getTestResults(projectId, { taskId, limit, offset });
 		return c.json(results);
 	} catch (err) {
-		console.error("[test-routes] GET /results/:projectId:", err);
+		log.error("[test-routes] GET /results/:projectId:" + " " + String(err));
 		return c.json({ error: "Failed to fetch test results" }, 500);
 	}
 });
@@ -77,7 +79,7 @@ router.get("/summary/:projectId", async (c) => {
 		const summary = await getTestSummary(projectId);
 		return c.json(summary);
 	} catch (err) {
-		console.error("[test-routes] GET /summary/:projectId:", err);
+		log.error("[test-routes] GET /summary/:projectId:" + " " + String(err));
 		return c.json({ error: "Failed to fetch test summary" }, 500);
 	}
 });

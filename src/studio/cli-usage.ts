@@ -10,6 +10,8 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execute, query, queryOne } from "./pg.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("cli-usage");
 
 export type CLIProviderId = "claude" | "codex" | "gemini" | "cursor";
 export type QuotaStatus = "healthy" | "warning" | "critical" | "depleted" | "unknown";
@@ -446,7 +448,7 @@ async function recordProbeEvent(providerId: CLIProviderId, status: string, messa
 	await execute(
 		"INSERT INTO cli_probe_events (id, provider_id, status, message, created_at) VALUES ($1, $2, $3, $4, $5)",
 		[randomUUID(), providerId, status, message.slice(0, 500), now()],
-	).catch((err) => console.warn("[cli-usage] recordProbeEvent failed:", err.message));
+	).catch((err) => log.warn("[cli-usage] recordProbeEvent failed:" + " " + String(err.message)));
 }
 
 async function persistSnapshot(snapshot: CLIUsageSnapshot): Promise<void> {

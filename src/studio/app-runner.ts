@@ -15,6 +15,8 @@ import { join } from "path";
 import { getDbConnectionInfo, provisionDatabase } from "./db-provisioner.js";
 import { analyzeProject, generateStudioConfig, writeEnvFile } from "./runtime-analyzer.js";
 import type { DetectedService, RuntimeRequirements } from "./runtime-analyzer.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("app-runner");
 
 // ---------------------------------------------------------------------------
 // Types

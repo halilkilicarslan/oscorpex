@@ -6,6 +6,8 @@
 import { createNotification } from "./db.js";
 import type { Notification } from "./db/notification-repo.js";
 import type { EventType, StudioEvent } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("notification-service");
 
 // ---------------------------------------------------------------------------
 // Event → Notification mapping

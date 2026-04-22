@@ -19,6 +19,8 @@ import {
 import { eventBus } from "../event-bus.js";
 import { executionEngine } from "../execution-engine.js";
 import { taskEngine } from "../task-engine.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("task-routes");
 
 export const taskRoutes = new Hono();
 
@@ -50,7 +52,7 @@ taskRoutes.get("/projects/:id/tasks", async (c) => {
 		c.header("X-Total-Count", String(total));
 		return c.json(tasksWithSummary);
 	} catch (err) {
-		console.error("[task-routes] list tasks failed:", err);
+		log.error("[task-routes] list tasks failed:" + " " + String(err));
 		return c.json({ error: "Failed to list tasks" }, 500);
 	}
 });
@@ -61,7 +63,7 @@ taskRoutes.get("/projects/:id/tasks/:taskId", async (c) => {
 		if (!task) return c.json({ error: "Task not found" }, 404);
 		return c.json(task);
 	} catch (err) {
-		console.error("[task-routes] get task failed:", err);
+		log.error("[task-routes] get task failed:" + " " + String(err));
 		return c.json({ error: "Failed to get task" }, 500);
 	}
 });
@@ -79,7 +81,7 @@ taskRoutes.patch("/projects/:id/tasks/:taskId", async (c) => {
 		if (!task) return c.json({ error: "Task not found" }, 404);
 		return c.json(task);
 	} catch (err) {
-		console.error("[task-routes] update task failed:", err);
+		log.error("[task-routes] update task failed:" + " " + String(err));
 		return c.json({ error: "Failed to update task" }, 500);
 	}
 });
@@ -87,7 +89,7 @@ taskRoutes.patch("/projects/:id/tasks/:taskId", async (c) => {
 taskRoutes.post("/projects/:id/tasks/:taskId/retry", async (c) => {
 	try {
 		const updated = await taskEngine.retryTask(c.req.param("taskId"));
-		executionEngine.executeTask(c.req.param("id"), updated).catch((err) => console.warn("[task-routes] Non-blocking operation failed:", err?.message ?? err));
+		executionEngine.executeTask(c.req.param("id"), updated).catch((err) => log.warn("[task-routes] Non-blocking operation failed:", err?.message ?? err));
 		return c.json({ success: true, task: updated });
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : "Retry failed";
@@ -124,7 +126,7 @@ taskRoutes.post("/projects/:id/tasks/:taskId/approve", async (c) => {
 		const projectId = c.req.param("id");
 		const taskId = c.req.param("taskId");
 		const updated = await taskEngine.approveTask(taskId);
-		executionEngine.executeTask(projectId, updated).catch((err) => console.warn("[task-routes] Non-blocking operation failed:", err?.message ?? err));
+		executionEngine.executeTask(projectId, updated).catch((err) => log.warn("[task-routes] Non-blocking operation failed:", err?.message ?? err));
 		return c.json({ success: true, task: updated });
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : "Onay işlemi başarısız";
@@ -151,7 +153,7 @@ taskRoutes.get("/projects/:id/approvals", async (c) => {
 		const pendingTasks = await listPendingApprovals(c.req.param("id"));
 		return c.json(pendingTasks);
 	} catch (err) {
-		console.error("[task-routes] list approvals failed:", err);
+		log.error("[task-routes] list approvals failed:" + " " + String(err));
 		return c.json({ error: "Failed to list approvals" }, 500);
 	}
 });
@@ -202,7 +204,7 @@ taskRoutes.get("/projects/:id/tasks/:taskId/output", async (c) => {
 			output: task.output,
 		});
 	} catch (err) {
-		console.error("[task-routes] get task output failed:", err);
+		log.error("[task-routes] get task output failed:" + " " + String(err));
 		return c.json({ error: "Failed to get task output" }, 500);
 	}
 });
@@ -219,7 +221,7 @@ taskRoutes.get("/projects/:id/tasks/:taskId/diffs", async (c) => {
 
 		return c.json({ taskId, summary, diffs });
 	} catch (err) {
-		console.error("[task-routes] get task diffs failed:", err);
+		log.error("[task-routes] get task diffs failed:" + " " + String(err));
 		return c.json({ error: "Failed to get task diffs" }, 500);
 	}
 });

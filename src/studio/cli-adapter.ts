@@ -6,6 +6,8 @@
 import type { CLIExecutionResult } from "./cli-runtime.js";
 import { executeWithCLI, isClaudeCliAvailable } from "./cli-runtime.js";
 import type { AgentCliTool } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("cli-adapter");
 
 // ---------------------------------------------------------------------------
 // Adapter interface

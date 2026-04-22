@@ -7,6 +7,8 @@ import { execute, query } from "../pg.js";
 import type { AgentConfig } from "../types.js";
 import { createAgentConfig } from "./agent-repo.js";
 import { now } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("seed");
 
 // ---------------------------------------------------------------------------
 // Seed preset agents

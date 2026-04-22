@@ -6,6 +6,8 @@
 import { spawn } from "node:child_process";
 import { readFile, access } from "node:fs/promises";
 import { join } from "node:path";
+import { createLogger } from "./logger.js";
+const log = createLogger("test-runner");
 
 // ---------------------------------------------------------------------------
 // Types

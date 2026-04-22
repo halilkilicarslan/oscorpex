@@ -17,6 +17,8 @@ import {
 } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import type { Task } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("goal-engine");
 
 export type GoalEnforcementMode = "enforce" | "advisory";
 
@@ -297,7 +299,7 @@ export async function validateCriteriaWithLLM(
 			evidence: c.evidence,
 		}));
 	} catch (err) {
-		console.warn("[goal-engine] LLM validation failed, falling back to keyword heuristic:", err);
+		log.warn("[goal-engine] LLM validation failed, falling back to keyword heuristic:" + " " + String(err));
 		return validateCriteriaFromOutput(goal, output);
 	}
 }

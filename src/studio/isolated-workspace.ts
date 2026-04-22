@@ -8,6 +8,8 @@ import { cp, lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { dirname, join, normalize, relative, resolve, sep } from "node:path";
 import type { SandboxPolicy } from "./sandbox-manager.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("isolated-workspace");
 
 const COPY_EXCLUDES = new Set([
 	"node_modules",

@@ -4,6 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { EventEmitter } from "node:events";
+import { createLogger } from "./logger.js";
+const log = createLogger("shared-state");
 
 // ---------------------------------------------------------------------------
 // Interface

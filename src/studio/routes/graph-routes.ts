@@ -39,6 +39,8 @@ import {
 	promoteToGlobal,
 } from "../cross-project-learning.js";
 import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("graph-routes");
 
 export const graphRoutes = new Hono();
 

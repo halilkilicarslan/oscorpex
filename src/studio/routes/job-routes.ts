@@ -5,6 +5,8 @@
 
 import { Hono } from "hono";
 import { type JobStatus, cleanupCompletedJobs, getJobStats, incrementRetryCount, listJobs } from "../db.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("job-routes");
 
 const router = new Hono();
 
@@ -23,7 +25,7 @@ router.get("/", async (c) => {
 		const jobs = await listJobs({ status, queue, limit, offset });
 		return c.json({ jobs, count: jobs.length });
 	} catch (err) {
-		console.error("[job-routes] GET /jobs error:", err instanceof Error ? err.message : err);
+		log.error("[job-routes] GET /jobs error: " + (err instanceof Error ? err.message : String(err)));
 		return c.json({ error: "Failed to list jobs" }, 500);
 	}
 });
@@ -39,7 +41,7 @@ router.get("/stats", async (c) => {
 		const stats = await getJobStats(queue);
 		return c.json({ stats, queue: queue ?? "all" });
 	} catch (err) {
-		console.error("[job-routes] GET /jobs/stats error:", err instanceof Error ? err.message : err);
+		log.error("[job-routes] GET /jobs/stats error: " + (err instanceof Error ? err.message : String(err)));
 		return c.json({ error: "Failed to get job stats" }, 500);
 	}
 });
@@ -82,7 +84,7 @@ router.post("/:id/retry", async (c) => {
 
 		return c.json({ job: updated });
 	} catch (err) {
-		console.error("[job-routes] POST /jobs/:id/retry error:", err instanceof Error ? err.message : err);
+		log.error("[job-routes] POST /jobs/:id/retry error: " + (err instanceof Error ? err.message : String(err)));
 		return c.json({ error: "Failed to retry job" }, 500);
 	}
 });
@@ -103,7 +105,7 @@ router.delete("/cleanup", async (c) => {
 		const deleted = await cleanupCompletedJobs(olderThanMs);
 		return c.json({ deleted, message: `Deleted ${deleted} completed jobs older than ${hoursStr}h` });
 	} catch (err) {
-		console.error("[job-routes] DELETE /jobs/cleanup error:", err instanceof Error ? err.message : err);
+		log.error("[job-routes] DELETE /jobs/cleanup error: " + (err instanceof Error ? err.message : String(err)));
 		return c.json({ error: "Failed to cleanup jobs" }, 500);
 	}
 });

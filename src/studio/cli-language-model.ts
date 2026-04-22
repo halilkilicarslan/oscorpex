@@ -16,6 +16,8 @@ import type {
 	LanguageModelV3StreamResult,
 } from "@ai-sdk/provider";
 import type { ProviderCliTool } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("cli-language-model");
 
 // ---------------------------------------------------------------------------
 // Binary resolution

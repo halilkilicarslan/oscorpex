@@ -6,6 +6,8 @@
 
 import { randomUUID } from "node:crypto";
 import { query, queryOne, execute } from "./db.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("cross-project-learning");
 
 // ---------------------------------------------------------------------------
 // Types

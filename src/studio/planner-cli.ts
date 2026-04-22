@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import { streamWithCLI } from "./cli-runtime.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("planner-cli");
 
 export type PlannerCLIProvider = "claude-code" | "codex" | "gemini";
 export type PlannerReasoningEffort = "low" | "medium" | "high" | "max" | "xhigh";

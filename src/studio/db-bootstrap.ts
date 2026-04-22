@@ -9,6 +9,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getPool } from "./pg.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("db-bootstrap");
 
 export async function applyDbBootstrap(): Promise<void> {
 	const initSqlPath = join(process.cwd(), "scripts", "init.sql");
@@ -41,13 +43,13 @@ export async function applyDbBootstrap(): Promise<void> {
 
 	try {
 		await pool.query(sanitized);
-		console.log("[db-bootstrap] scripts/init.sql applied (idempotent)");
+		log.info("[db-bootstrap] scripts/init.sql applied (idempotent)");
 	} catch (err) {
 		// Ownership mismatches (dev DBs created by a different role) surface
 		// here. The app can still run — log loudly so the operator can fix
 		// ownership when convenient.
 		const msg = err instanceof Error ? err.message : String(err);
-		console.warn(`[db-bootstrap] init.sql apply failed: ${msg}`);
-		console.warn("[db-bootstrap] Continuing — ensure schema is up-to-date manually.");
+		log.warn(`[db-bootstrap] init.sql apply failed: ${msg}`);
+		log.warn("[db-bootstrap] Continuing — ensure schema is up-to-date manually.");
 	}
 }

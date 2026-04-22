@@ -7,6 +7,8 @@ import { execute, query, queryOne } from "../pg.js";
 import type { TeamTemplate } from "../types.js";
 import { now, rowToTeamTemplate } from "./helpers.js";
 import { canonicalizeAgentRole } from "../roles.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("team-repo");
 
 // ---------------------------------------------------------------------------
 // Custom Team Template interface — DB layer only

@@ -6,6 +6,8 @@
 
 import { randomUUID } from "node:crypto";
 import { type SharedStateProvider, sharedState } from "./shared-state.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("ws-cluster");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -217,7 +219,7 @@ export class WsCluster {
 			try {
 				await this.heartbeat();
 			} catch (err) {
-				console.warn("[ws-cluster] Heartbeat failed:", err instanceof Error ? err.message : err);
+				log.warn("[ws-cluster] Heartbeat failed: " + (err instanceof Error ? err.message : String(err)));
 			}
 		}, HEARTBEAT_INTERVAL_MS);
 

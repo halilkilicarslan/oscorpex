@@ -7,6 +7,8 @@
 // ---------------------------------------------------------------------------
 
 import pg from "pg";
+import { createLogger } from "./logger.js";
+const log = createLogger("pg");
 
 const { Pool } = pg;
 
@@ -26,7 +28,7 @@ export function getPool(): pg.Pool {
 		});
 
 		_pool.on("error", (err) => {
-			console.error("[pg] Unexpected error on idle client:", err);
+			log.error("[pg] Unexpected error on idle client:" + " " + String(err));
 		});
 	}
 	return _pool;

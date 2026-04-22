@@ -5,6 +5,8 @@
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
 import type { AgentEpisode, AgentStrategyPattern, EpisodeOutcome } from "../types.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("episode-repo");
 
 // ---------------------------------------------------------------------------
 // Row mappers

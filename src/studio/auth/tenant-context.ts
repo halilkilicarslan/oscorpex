@@ -7,6 +7,8 @@
 import type { Context } from "hono";
 import { queryOne } from "../pg.js";
 import type { EventType } from "../types.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("tenant-context");
 
 // ---------------------------------------------------------------------------
 // Types

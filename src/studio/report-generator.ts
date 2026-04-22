@@ -5,6 +5,8 @@
 
 import { getLatestPlan, getProject, getProjectCostSummary, listEvents, listProjectTasks } from "./db.js";
 import type { Project, ProjectPlan, StudioEvent, Task } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("report-generator");
 
 // ---------------------------------------------------------------------------
 // Report types (exported for frontend/routes consumption)
@@ -129,7 +131,7 @@ export async function generateProjectReport(projectId: string): Promise<ProjectR
 		topFileChanges,
 	};
 
-	console.log(
+	log.info(
 		`[report-generator] Report generated for "${project.name}" — ` +
 			`${completedTasks}/${totalTasks} tasks done, cost: $${report.totalCostUsd}`,
 	);

@@ -12,6 +12,8 @@ import { createHash } from "node:crypto";
 import type { Context, Next } from "hono";
 import { queryOne, setTenantContext } from "../pg.js";
 import { verifyJwt } from "./jwt.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("auth-middleware");
 
 // Context variables populated by this middleware
 export interface AuthVariables {
@@ -89,7 +91,7 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<void 
 				c.set("apiKeyScopes", scopes);
 			}
 			// Non-blocking last_used_at update
-			queryOne("UPDATE api_keys SET last_used_at = now() WHERE id = $1", [row.id]).catch((err) => console.warn("[auth-middleware] Non-blocking operation failed:", err?.message ?? err));
+			queryOne("UPDATE api_keys SET last_used_at = now() WHERE id = $1", [row.id]).catch((err) => log.warn("[auth-middleware] Non-blocking operation failed:", err?.message ?? err));
 			if (row.tenant_id) {
 				await setTenantContext(row.tenant_id);
 			}

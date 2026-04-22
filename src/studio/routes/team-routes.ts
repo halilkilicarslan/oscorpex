@@ -39,6 +39,8 @@ import {
 } from "../planner-cli.js";
 import { TEAM_ARCHITECT_SYSTEM_PROMPT } from "../team-architect.js";
 import type { ProjectAgent } from "../types.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("team-routes");
 
 export const teamRoutes = new Hono();
 
@@ -260,7 +262,7 @@ teamRoutes.post("/projects/:id/team", async (c) => {
 			personality: agent.personality,
 			role: agent.role,
 			model: agent.model,
-		}).catch((err) => console.error("Failed to create agent files:", err));
+		}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
 		return c.json(agent, 201);
 	}
 
@@ -286,7 +288,7 @@ teamRoutes.post("/projects/:id/team", async (c) => {
 		personality: agent.personality,
 		role: agent.role,
 		model: agent.model,
-	}).catch((err) => console.error("Failed to create agent files:", err));
+	}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
 	return c.json(agent, 201);
 });
 
@@ -342,7 +344,7 @@ teamRoutes.put("/projects/:id/team/:agentId", async (c) => {
 		personality: updated.personality,
 		role: updated.role,
 		model: updated.model,
-	}).catch((err) => console.error("Failed to update agent files:", err));
+	}).catch((err) => log.error("Failed to update agent files:" + " " + String(err)));
 	return c.json(updated);
 });
 
@@ -362,7 +364,7 @@ teamRoutes.delete("/projects/:id/team/:agentId", async (c) => {
 	}
 	const ok = await deleteProjectAgent(agentId);
 	if (!ok) return c.json({ error: "Agent not found" }, 404);
-	deleteAgentFiles(c.req.param("id"), existing.name).catch((err) => console.warn("[team-routes] Non-blocking operation failed:", err?.message ?? err));
+	deleteAgentFiles(c.req.param("id"), existing.name).catch((err) => log.warn("[team-routes] Non-blocking operation failed:", err?.message ?? err));
 	return c.json({ success: true });
 });
 
@@ -386,7 +388,7 @@ teamRoutes.post("/projects/:id/team/from-template", async (c) => {
 			personality: agent.personality,
 			role: agent.role,
 			model: agent.model,
-		}).catch((err) => console.error("Failed to create agent files:", err));
+		}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
 	}
 	return c.json(agents, 201);
 });

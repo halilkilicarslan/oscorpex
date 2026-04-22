@@ -14,6 +14,8 @@ import { getAIModelWithFallback } from "./ai-provider-factory.js";
 import { createTask, getProject, listProjectAgents } from "./db.js";
 import { execute } from "./pg.js";
 import type { Project, Task, TaskComplexity } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("task-decomposer");
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -245,7 +247,7 @@ async function aiDecompose(project: Project, parentTask: Task): Promise<AISubTas
 	try {
 		codebaseContext = await gatherCodebaseContext(project, parentTask);
 	} catch (err) {
-		console.warn("[task-decomposer] Codebase context gather failed:", err);
+		log.warn("[task-decomposer] Codebase context gather failed:" + " " + String(err));
 		codebaseContext = "(codebase context unavailable)";
 	}
 
@@ -264,9 +266,8 @@ async function aiDecompose(project: Project, parentTask: Task): Promise<AISubTas
 		if (!Array.isArray(subTasks) || subTasks.length === 0) return null;
 		return subTasks;
 	} catch (err) {
-		console.warn(
-			`[task-decomposer] AI decomposition failed for "${parentTask.title}", will fall back to heuristic:`,
-			err instanceof Error ? err.message : err,
+		log.warn(
+			`[task-decomposer] AI decomposition failed for "${parentTask.title}", will fall back to heuristic: ` + (err instanceof Error ? err.message : String(err)),
 		);
 		return null;
 	}
@@ -403,9 +404,9 @@ export async function decomposeTask(task: Task, projectId: string): Promise<Task
 	const subTasks: Array<HeuristicSubTask | AISubTask> = ai && ai.length >= 2 ? ai : heuristicDecompose(task);
 
 	if (ai && ai.length >= 2) {
-		console.log(`[task-decomposer] AI produced ${ai.length} micro-tasks for "${task.title}" (${task.complexity})`);
+		log.info(`[task-decomposer] AI produced ${ai.length} micro-tasks for "${task.title}" (${task.complexity})`);
 	} else {
-		console.log(
+		log.info(
 			`[task-decomposer] Heuristic produced ${subTasks.length} micro-tasks for "${task.title}" (${task.complexity})`,
 		);
 	}

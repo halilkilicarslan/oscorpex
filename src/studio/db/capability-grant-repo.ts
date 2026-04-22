@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { query, queryOne, execute } from "../pg.js";
 import type { CapabilityGrant, CapabilityToken } from "../types.js";
 import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("capability-grant-repo");
 
 function rowToGrant(row: Record<string, unknown>): CapabilityGrant {
 	return {

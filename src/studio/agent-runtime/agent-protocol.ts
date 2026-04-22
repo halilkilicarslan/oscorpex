@@ -7,6 +7,8 @@
 import { getUnreadMessages, markMessagesRead, sendProtocolMessage } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import type { AgentProtocolMessage, ProtocolMessageType } from "../types.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("agent-protocol");
 
 // ---------------------------------------------------------------------------
 // Message types that block execution until resolved

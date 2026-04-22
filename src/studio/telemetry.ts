@@ -4,6 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "./logger.js";
+const log = createLogger("telemetry");
 
 // ---------------------------------------------------------------------------
 // Types

@@ -4,6 +4,8 @@
 
 import type { MiddlewareHandler } from "hono";
 import { getProjectCostSummary, getProjectSettingsMap } from "../db.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("policy-middleware");
 
 /**
  * budgetGuard — Execution başlamadan önce proje bütçesini kontrol eder.
@@ -38,7 +40,7 @@ export function budgetGuard(): MiddlewareHandler {
 			}
 		} catch (err) {
 			// Budget check failure should not block requests
-			console.warn("[policy-middleware] Budget check failed (non-blocking):", err);
+			log.warn("[policy-middleware] Budget check failed (non-blocking):" + " " + String(err));
 		}
 
 		return next();

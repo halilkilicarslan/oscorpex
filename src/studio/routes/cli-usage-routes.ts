@@ -15,6 +15,8 @@ import {
 	listCLIUsageSnapshots,
 	setCLIProbeSettings,
 } from "../cli-usage.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("cli-usage-routes");
 
 export const cliUsageRoutes = new Hono();
 

@@ -13,6 +13,8 @@ import {
 	isDuplicateEvent,
 } from "./db.js";
 import type { eventBus as _eventBusType } from "./event-bus.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("context-session");
 type EventBus = typeof _eventBusType;
 
 // ---------------------------------------------------------------------------
@@ -114,7 +116,7 @@ export function initContextSession(eventBus: EventBus): void {
 		eventBus.on(eventType as any, (data: any) => {
 			trackEvent(data.projectId, data.taskId, data.agentId, eventType, JSON.stringify(data.payload ?? data)).catch(
 				(err) => {
-					console.warn(`[context-session] Failed to track ${eventType}:`, err);
+					log.warn(`[context-session] Failed to track ${eventType}:` + " " + String(err));
 				},
 			);
 		});

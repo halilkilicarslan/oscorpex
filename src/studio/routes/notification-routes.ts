@@ -5,6 +5,8 @@
 
 import { Hono } from "hono";
 import { countUnread, deleteNotification, listNotifications, markAllNotificationsAsRead, markNotificationAsRead } from "../db.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("notification-routes");
 
 const router = new Hono();
 
@@ -30,7 +32,7 @@ router.get("/", async (c) => {
 		});
 		return c.json(notifications);
 	} catch (err) {
-		console.error("[notification-routes] GET /notifications:", err);
+		log.error("[notification-routes] GET /notifications:" + " " + String(err));
 		return c.json({ error: "Failed to fetch notifications" }, 500);
 	}
 });
@@ -46,7 +48,7 @@ router.get("/unread-count", async (c) => {
 		const count = await countUnread({ userId, projectId });
 		return c.json({ count });
 	} catch (err) {
-		console.error("[notification-routes] GET /unread-count:", err);
+		log.error("[notification-routes] GET /unread-count:" + " " + String(err));
 		return c.json({ error: "Failed to fetch unread count" }, 500);
 	}
 });
@@ -60,7 +62,7 @@ router.patch("/:id/read", async (c) => {
 		await markNotificationAsRead(c.req.param("id"));
 		return c.json({ ok: true });
 	} catch (err) {
-		console.error("[notification-routes] PATCH /:id/read:", err);
+		log.error("[notification-routes] PATCH /:id/read:" + " " + String(err));
 		return c.json({ error: "Failed to mark notification as read" }, 500);
 	}
 });
@@ -76,7 +78,7 @@ router.post("/mark-all-read", async (c) => {
 		await markAllNotificationsAsRead({ userId, projectId });
 		return c.json({ ok: true });
 	} catch (err) {
-		console.error("[notification-routes] POST /mark-all-read:", err);
+		log.error("[notification-routes] POST /mark-all-read:" + " " + String(err));
 		return c.json({ error: "Failed to mark all as read" }, 500);
 	}
 });
@@ -90,7 +92,7 @@ router.delete("/:id", async (c) => {
 		await deleteNotification(c.req.param("id"));
 		return c.json({ ok: true });
 	} catch (err) {
-		console.error("[notification-routes] DELETE /:id:", err);
+		log.error("[notification-routes] DELETE /:id:" + " " + String(err));
 		return c.json({ error: "Failed to delete notification" }, 500);
 	}
 });

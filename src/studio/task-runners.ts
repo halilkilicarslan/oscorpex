@@ -6,6 +6,8 @@
 import { startApp, stopApp } from "./app-runner.js";
 import { analyzeProject } from "./runtime-analyzer.js";
 import type { TaskOutput } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("task-runners");
 
 async function httpCheck(url: string, timeoutMs = 5000): Promise<{ ok: boolean; status: number; body: string }> {
 	const controller = new AbortController();
@@ -106,6 +108,6 @@ export async function runIntegrationTest(
 			logs,
 		};
 	} finally {
-		await stopApp(projectId, log).catch((err) => console.warn("[task-runners] Non-blocking operation failed:", err?.message ?? err));
+		await stopApp(projectId, log).catch((err) => log("[task-runners] Non-blocking operation failed: " + (err?.message ?? String(err))));
 	}
 }

@@ -21,6 +21,8 @@ import { persistAgentLog } from "./agent-log-store.js";
 import { taskEngine } from "./task-engine.js";
 import { canonicalizeAgentRole, roleMatches } from "./roles.js";
 import type { AgentConfig, Project, Task } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("review-dispatcher");
 
 const DEFAULT_TASK_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -216,7 +218,7 @@ export async function executeReviewTask(
 		const reviewOutputLines = agentRuntime.getAgentOutput(projectId, reviewer.id);
 		if (reviewOutputLines.length > 0) {
 			persistAgentLog(projectId, reviewer.id, reviewOutputLines)
-				.catch((err) => console.warn("[review-dispatcher] Non-blocking operation failed:", err?.message ?? err));
+				.catch((err) => log.warn("[review-dispatcher] Non-blocking operation failed:", err?.message ?? err));
 		}
 
 		await taskEngine.completeTask(reviewTask.id, {
@@ -227,12 +229,12 @@ export async function executeReviewTask(
 		await taskEngine.submitReview(originalTaskId!, approved, feedback);
 		agentRuntime.markVirtualStopped(projectId, reviewer.id);
 		await reviewWorkspace.cleanup()
-			.catch((err) => console.warn("[review-dispatcher] Non-blocking operation failed:", err?.message ?? err));
+			.catch((err) => log.warn("[review-dispatcher] Non-blocking operation failed:", err?.message ?? err));
 
 		if (!approved) {
 			const revisedTask = await getTask(originalTaskId!);
 			if (revisedTask?.status === "revision") {
-				console.log(`[review-dispatcher] Review rejected — restarting "${revisedTask.title}" for revision`);
+				log.info(`[review-dispatcher] Review rejected — restarting "${revisedTask.title}" for revision`);
 				await taskEngine.restartRevision(originalTaskId!);
 			}
 		}
@@ -242,7 +244,7 @@ export async function executeReviewTask(
 		agentRuntime.markVirtualStopped(projectId, reviewer.id);
 		if (reviewWorkspace?.isolated) {
 			await reviewWorkspace.cleanup()
-				.catch((e) => console.warn("[review-dispatcher] Non-blocking operation failed:", e?.message ?? e));
+				.catch((e) => log.warn("[review-dispatcher] Non-blocking operation failed:", e?.message ?? e));
 		}
 		await taskEngine.failTask(reviewTask.id, msg);
 		try {

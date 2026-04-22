@@ -9,6 +9,8 @@
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { createLogger } from "./logger.js";
+const log = createLogger("runtime-analyzer");
 
 // ---------------------------------------------------------------------------
 // Types

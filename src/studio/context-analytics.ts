@@ -5,6 +5,8 @@
 
 import { listContextSources } from "./db.js";
 import { query, queryOne } from "./pg.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("context-analytics");
 
 // ---------------------------------------------------------------------------
 // Types

@@ -10,6 +10,8 @@ import type { LanguageModelV3 } from "@ai-sdk/provider";
 import { CliLanguageModel, defaultModelForCliTool } from "./cli-language-model.js";
 import { getDefaultProvider, getFallbackChain, getRawProviderApiKey } from "./db.js";
 import type { AIProvider } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("ai-provider-factory");
 
 /**
  * Varsayılan AI provider'ı veritabanından okuyarak uygun AI SDK modelini
@@ -243,7 +245,7 @@ export async function getAIModelWithFallback<T>(
 
 		if (i > 0) {
 			// Birinci model dışındakilerde fallback log yaz
-			console.log(`[AI Fallback] Primary failed, trying fallback: ${modelName} (${provider.name})`);
+			log.info(`[AI Fallback] Primary failed, trying fallback: ${modelName} (${provider.name})`);
 		}
 
 		try {
@@ -252,7 +254,7 @@ export async function getAIModelWithFallback<T>(
 		} catch (err) {
 			lastError = err;
 			const errMsg = err instanceof Error ? err.message : String(err);
-			console.warn(`[AI Fallback] Provider "${provider.name}" (${modelName}) başarısız oldu: ${errMsg}`);
+			log.warn(`[AI Fallback] Provider "${provider.name}" (${modelName}) başarısız oldu: ${errMsg}`);
 		}
 	}
 

@@ -12,6 +12,8 @@ import { buildPolicyPromptSection, getDefaultPolicy } from "./command-policy.js"
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
 import type { Project, Task } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("prompt-builder");
 
 // ---------------------------------------------------------------------------
 // Task execution prompt
@@ -44,7 +46,7 @@ export async function buildTaskPrompt(task: Task, project: Project, agentRole?: 
 			lines.push(compact.prompt, "");
 		}
 	} catch (err) {
-		console.warn("[prompt-builder] compactCrossAgentContext failed (non-blocking):", err);
+		log.warn("[prompt-builder] compactCrossAgentContext failed (non-blocking):" + " " + String(err));
 	}
 
 	// RAG Context
@@ -54,7 +56,7 @@ export async function buildTaskPrompt(task: Task, project: Project, agentRole?: 
 			lines.push(formatRAGContext(ragContext));
 		}
 	} catch (err) {
-		console.warn("[prompt-builder] RAG context fetch failed (non-blocking):", err);
+		log.warn("[prompt-builder] RAG context fetch failed (non-blocking):" + " " + String(err));
 	}
 
 	// Resume snapshot for retried/revised tasks
@@ -66,7 +68,7 @@ export async function buildTaskPrompt(task: Task, project: Project, agentRole?: 
 				lines.push(formatResumeSnapshot(snapshot), "");
 			}
 		} catch (err) {
-			console.warn("[prompt-builder] Resume snapshot failed (non-blocking):", err);
+			log.warn("[prompt-builder] Resume snapshot failed (non-blocking):" + " " + String(err));
 		}
 	}
 

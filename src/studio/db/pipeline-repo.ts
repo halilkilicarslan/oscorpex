@@ -7,6 +7,8 @@ import type pg from "pg";
 import { execute, query, queryOne, withTransaction } from "../pg.js";
 import type { AgentRun, PipelineRun } from "../types.js";
 import { now, rowToAgentRun, rowToPipelineRun } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("pipeline-repo");
 
 // ---------------------------------------------------------------------------
 // Pipeline Runs CRUD

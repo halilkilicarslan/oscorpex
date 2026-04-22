@@ -9,6 +9,8 @@ import { eventBus } from "../event-bus.js";
 import type { ProposalType, Task, TaskProposal } from "../types.js";
 import { canAutoApprove } from "./agent-constraints.js";
 import { canonicalizeAgentRole, roleMatches } from "../roles.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("task-injection");
 
 // ---------------------------------------------------------------------------
 // Containment limits

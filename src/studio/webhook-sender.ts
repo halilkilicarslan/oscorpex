@@ -9,6 +9,8 @@ import { insertWebhookDelivery, listWebhooksForEvent } from "./db.js";
 import type { Webhook } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import type { EventType, StudioEvent } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("webhook-sender");
 
 // ---------------------------------------------------------------------------
 // Sabitler
@@ -243,12 +245,12 @@ class WebhookSender {
 			eventBus.on(type, (event) => {
 				// Arka planda çalışır — event akışını bloklamamak için
 				this.processEvent(event).catch((err) => {
-					console.warn(`[webhook-sender] processEvent hatasi (${type}):`, err instanceof Error ? err.message : err);
+					log.warn(`[webhook-sender] processEvent hatasi (${type}):`, err instanceof Error ? err.message : err);
 				});
 			});
 		}
 
-		console.log(`[webhook-sender] Baslatildi — ${eventTypes.length} event tipi dinleniyor`);
+		log.info(`[webhook-sender] Baslatildi — ${eventTypes.length} event tipi dinleniyor`);
 	}
 
 	/**
@@ -263,13 +265,13 @@ class WebhookSender {
 		try {
 			webhooks = await listWebhooksForEvent(event.projectId, webhookEventType);
 		} catch (err) {
-			console.warn("[webhook-sender] Webhook listesi alinamadi:", err instanceof Error ? err.message : err);
+			log.warn("[webhook-sender] Webhook listesi alinamadi: " + (err instanceof Error ? err.message : String(err)));
 			return;
 		}
 
 		if (webhooks.length === 0) return;
 
-		const payload = event.payload as Record<string, unknown>;
+const payload = event.payload as Record<string, unknown>;
 
 		// Tüm webhook'ları paralel gönder — Promise.allSettled ile hata izolasyonu
 		await Promise.allSettled(
@@ -389,11 +391,11 @@ class WebhookSender {
 			});
 		} catch (logErr) {
 			// Log hatası ana akışı engellemez
-			console.warn("[webhook-sender] Teslimat kaydedilemedi:", logErr instanceof Error ? logErr.message : logErr);
+			log.warn("[webhook-sender] Teslimat kaydedilemedi: " + (logErr instanceof Error ? logErr.message : String(logErr)));
 		}
 
 		if (result.success) {
-			console.log(
+			log.info(
 				`[webhook-sender] Gonderildi — ${webhook.name} (${webhook.type}), event: ${eventType}, ` +
 					`${result.durationMs}ms, HTTP ${result.statusCode}`,
 			);
@@ -402,7 +404,7 @@ class WebhookSender {
 
 		// Başarısız — retry gerekiyor mu?
 		if (attempt >= MAX_RETRIES) {
-			console.warn(
+			log.warn(
 				`[webhook-sender] Maksimum deneme sayisina ulasildi — ${webhook.name}, event: ${eventType}, ` +
 					`deneme: ${attempt}/${MAX_RETRIES}, HTTP ${result.statusCode ?? "N/A"}`,
 			);
@@ -410,7 +412,7 @@ class WebhookSender {
 		}
 
 		const delay = RETRY_DELAYS_MS[attempt - 1] ?? 15_000;
-		console.warn(
+		log.warn(
 			`[webhook-sender] Gonderim basarisiz — ${webhook.name}, event: ${eventType}, ` +
 				`HTTP ${result.statusCode ?? "N/A"}, ${delay}ms sonra tekrar denenecek (${attempt}/${MAX_RETRIES})`,
 		);
@@ -449,7 +451,7 @@ export async function sendWebhookNotification(
 		webhooks = await listWebhooksForEvent(projectId, eventType);
 	} catch (err) {
 		// DB hatası — sessizce logla
-		console.warn("[webhook-sender] Webhook listesi alinamadi:", err instanceof Error ? err.message : err);
+		log.warn("[webhook-sender] Webhook listesi alinamadi: " + (err instanceof Error ? err.message : String(err)));
 		return;
 	}
 

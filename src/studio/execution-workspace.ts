@@ -6,6 +6,8 @@
 
 import type { SandboxPolicy } from "./sandbox-manager.js";
 import { prepareIsolatedWorkspace, type IsolatedWorkspace } from "./isolated-workspace.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("execution-workspace");
 
 // ---------------------------------------------------------------------------
 // Contract

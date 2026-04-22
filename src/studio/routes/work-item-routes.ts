@@ -13,6 +13,8 @@ import {
 } from "../db.js";
 import type { WorkItemPriority, WorkItemSource, WorkItemStatus, WorkItemType } from "../types.js";
 import { planWorkItem } from "../work-item-planner.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("work-item-routes");
 
 export const workItemRoutes = new Hono();
 
@@ -40,7 +42,7 @@ workItemRoutes.get("/projects/:id/work-items", async (c) => {
 		c.header("X-Total-Count", String(total));
 		return c.json(items);
 	} catch (err) {
-		console.error("[work-item-routes] list items failed:", err);
+		log.error("[work-item-routes] list items failed:" + " " + String(err));
 		return c.json({ error: "Failed to list work items" }, 500);
 	}
 });
@@ -68,7 +70,7 @@ workItemRoutes.post("/projects/:id/work-items", async (c) => {
 		const item = await createWorkItem({ projectId, ...body });
 		return c.json(item, 201);
 	} catch (err) {
-		console.error("[work-item-routes] create item failed:", err);
+		log.error("[work-item-routes] create item failed:" + " " + String(err));
 		return c.json({ error: "Failed to create work item" }, 500);
 	}
 });
@@ -80,7 +82,7 @@ workItemRoutes.get("/projects/:id/work-items/:itemId", async (c) => {
 		if (!item) return c.json({ error: "Work item not found" }, 404);
 		return c.json(item);
 	} catch (err) {
-		console.error("[work-item-routes] get item failed:", err);
+		log.error("[work-item-routes] get item failed:" + " " + String(err));
 		return c.json({ error: "Failed to get work item" }, 500);
 	}
 });
@@ -93,7 +95,7 @@ workItemRoutes.patch("/projects/:id/work-items/:itemId", async (c) => {
 		if (!item) return c.json({ error: "Work item not found" }, 404);
 		return c.json(item);
 	} catch (err) {
-		console.error("[work-item-routes] update item failed:", err);
+		log.error("[work-item-routes] update item failed:" + " " + String(err));
 		return c.json({ error: "Failed to update work item" }, 500);
 	}
 });
@@ -118,7 +120,7 @@ workItemRoutes.post("/projects/:id/work-items/:itemId/plan", async (c) => {
 		if (message.includes("not open") || message.includes("No plan")) {
 			return c.json({ error: message }, 409);
 		}
-		console.error("[work-item-routes] planWorkItem failed:", err);
+		log.error("[work-item-routes] planWorkItem failed:" + " " + String(err));
 		return c.json({ error: message }, 500);
 	}
 });

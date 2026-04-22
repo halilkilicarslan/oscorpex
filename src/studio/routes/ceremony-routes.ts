@@ -6,6 +6,8 @@
 import { type Context, Hono } from "hono";
 import { runRetrospective, runStandup } from "../ceremony-engine.js";
 import { getProject, listProjectAgents } from "../db.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("ceremony-routes");
 
 export const ceremonyRoutes = new Hono();
 
@@ -40,7 +42,7 @@ async function handleStandup(c: Context) {
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);
-		console.error("[ceremony-routes] standup failed:", err);
+		log.error("[ceremony-routes] standup failed:" + " " + String(err));
 		return c.json({ error: msg }, 500);
 	}
 }
@@ -69,7 +71,7 @@ async function handleRetrospective(c: Context) {
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);
-		console.error("[ceremony-routes] retrospective failed:", err);
+		log.error("[ceremony-routes] retrospective failed:" + " " + String(err));
 		return c.json({ error: msg }, 500);
 	}
 }

@@ -7,6 +7,8 @@ import { generateText } from "ai";
 import { getAIModelWithFallback } from "./ai-provider-factory.js";
 import { getProject, getProjectAgent, insertChatMessage } from "./db.js";
 import type { ProjectAgent } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("agent-chat");
 
 // ---------------------------------------------------------------------------
 // Prompt builder
@@ -86,12 +88,12 @@ export async function chatWithAgent(projectId: string, agentId: string, message:
 				prompt,
 				maxOutputTokens: 600,
 			});
-			console.log(`[agent-chat] AI reply via ${info.modelName} (${info.providerType}) — ${result.text.length} chars`);
+			log.info(`[agent-chat] AI reply via ${info.modelName} (${info.providerType}) — ${result.text.length} chars`);
 			return result.text.trim();
 		});
 	} catch (err) {
 		const errMsg = err instanceof Error ? err.message : String(err);
-		console.warn(`[agent-chat] AI call failed, falling back to placeholder: ${errMsg}`);
+		log.warn(`[agent-chat] AI call failed, falling back to placeholder: ${errMsg}`);
 		response = buildPlaceholderResponse(agent, message);
 	}
 
@@ -103,7 +105,7 @@ export async function chatWithAgent(projectId: string, agentId: string, message:
 		agentId,
 	});
 
-	console.log(`[agent-chat] Chat with ${agent.name} (${agentId}) — message length: ${message.length}`);
+	log.info(`[agent-chat] Chat with ${agent.name} (${agentId}) — message length: ${message.length}`);
 
 	return response;
 }

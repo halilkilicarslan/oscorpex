@@ -5,6 +5,8 @@
 
 import { getApprovalRule, requiresApproval } from "../db.js";
 import type { RiskLevel, TaskProposal } from "../types.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("agent-constraints");
 
 // ---------------------------------------------------------------------------
 // Types

@@ -14,6 +14,8 @@ import { requirePermission } from "../auth/rbac.js";
 import { logTenantActivity } from "../auth/tenant-context.js";
 import { createApiKey, listApiKeys, revokeApiKey } from "../db/tenant-repo.js";
 import { execute, query, queryOne } from "../pg.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("auth-routes");
 
 const router = new Hono<{ Variables: AuthVariables }>();
 
@@ -84,7 +86,7 @@ router.post("/register", async (c) => {
 			201,
 		);
 	} catch (err) {
-		console.error("[auth] register error:", err);
+		log.error("[auth] register error:" + " " + String(err));
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -131,7 +133,7 @@ router.post("/login", async (c) => {
 			},
 		});
 	} catch (err) {
-		console.error("[auth] login error:", err);
+		log.error("[auth] login error:" + " " + String(err));
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -170,7 +172,7 @@ router.get("/me", async (c) => {
 			role: roleRow?.role ?? "viewer",
 		});
 	} catch (err) {
-		console.error("[auth] me error:", err);
+		log.error("[auth] me error:" + " " + String(err));
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -201,7 +203,7 @@ router.get("/users", requirePermission("users:read"), async (c) => {
 			})),
 		);
 	} catch (err) {
-		console.error("[auth] users list error:", err);
+		log.error("[auth] users list error:" + " " + String(err));
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -243,7 +245,7 @@ router.patch("/users/:id/role", async (c) => {
 
 		return c.json({ ok: true, userId, role });
 	} catch (err) {
-		console.error("[auth] patch role error:", err);
+		log.error("[auth] patch role error:" + " " + String(err));
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -273,7 +275,7 @@ router.post("/api-keys", async (c) => {
 
 		return c.json(result, 201);
 	} catch (err) {
-		console.error("[auth] create api-key error:", err);
+		log.error("[auth] create api-key error:" + " " + String(err));
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -290,7 +292,7 @@ router.get("/api-keys", async (c) => {
 		const keys = await listApiKeys(tid);
 		return c.json(keys);
 	} catch (err) {
-		console.error("[auth] list api-keys error:", err);
+		log.error("[auth] list api-keys error:" + " " + String(err));
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -315,7 +317,7 @@ router.delete("/api-keys/:id", async (c) => {
 
 		return c.json({ ok: true });
 	} catch (err) {
-		console.error("[auth] revoke api-key error:", err);
+		log.error("[auth] revoke api-key error:" + " " + String(err));
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });

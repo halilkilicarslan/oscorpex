@@ -25,4 +25,6 @@ export {
 	classifyRisk,
 	type ConstraintCheck,
 } from "./agent-constraints.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("index");
 export { proposeTask, type InjectionRequest, type InjectionResult } from "./task-injection.js";

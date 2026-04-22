@@ -3,6 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createLogger } from "../logger.js";
+const log = createLogger("password");
 
 /**
  * Hash a plaintext password using scrypt with a random salt.

@@ -16,6 +16,8 @@ import type {
 	WorkItemPriority,
 	WorkItemType,
 } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("work-item-planner");
 
 const BACKLOG_PHASE_NAME = "Backlog";
 

@@ -4,6 +4,8 @@
 
 import { execute, getPool, query, queryOne } from "../pg.js";
 import { now } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("settings-repo");
 
 // ---------------------------------------------------------------------------
 // ProjectSetting interface — DB layer only

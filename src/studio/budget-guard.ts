@@ -6,6 +6,8 @@
 
 import { getProjectSetting, queryOne } from "./db.js";
 import { eventBus } from "./event-bus.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("budget-guard");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,7 +73,7 @@ export async function enforceBudgetGuard(projectId: string): Promise<boolean> {
 	const check = await checkBudget(projectId);
 	if (!check.exceeded) return false;
 
-	console.warn(
+	log.warn(
 		`[budget-guard] Budget exceeded for project ${projectId}: $${check.totalSpentUsd.toFixed(2)} >= $${check.budgetMaxUsd?.toFixed(2)}`,
 	);
 
@@ -90,7 +92,7 @@ export async function enforceBudgetGuard(projectId: string): Promise<boolean> {
 		const { pipelineEngine } = await import("./pipeline-engine.js");
 		await pipelineEngine.pausePipeline(projectId);
 	} catch (err) {
-		console.error("[budget-guard] Failed to pause pipeline after budget breach:", err);
+		log.error("[budget-guard] Failed to pause pipeline after budget breach:" + " " + String(err));
 	}
 
 	return true;

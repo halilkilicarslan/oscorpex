@@ -24,6 +24,8 @@ import {
 	updateJobStatus,
 } from "./db/job-repo.js";
 import { execute } from "./pg.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("job-queue");
 
 export type { Job, JobStatus };
 
@@ -218,7 +220,7 @@ export class JobQueue {
 			try {
 				jobs = await claimJobs(queueName, Math.min(available, batchSize));
 			} catch (err) {
-				console.error("[job-queue] dequeue error:", err instanceof Error ? err.message : err);
+				console.error("[job-queue] dequeue error: " + (err instanceof Error ? err.message : String(err)));
 				return;
 			}
 
@@ -231,9 +233,9 @@ export class JobQueue {
 		};
 
 		// Run immediately, then on interval
-		poll().catch((err) => console.error("[job-queue] initial poll error:", err));
+		poll().catch((err) => console.error("[job-queue] initial poll error:" + " " + String(err)));
 		this._workerTimer = setInterval(() => {
-			poll().catch((err) => console.error("[job-queue] poll error:", err));
+			poll().catch((err) => console.error("[job-queue] poll error:" + " " + String(err)));
 		}, pollIntervalMs);
 
 		console.info(

@@ -5,6 +5,8 @@
 
 import { execSync } from "node:child_process";
 import { Octokit } from "@octokit/rest";
+import { createLogger } from "./logger.js";
+const log = createLogger("github-integration");
 
 // ---------------------------------------------------------------------------
 // Types

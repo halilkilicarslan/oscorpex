@@ -6,6 +6,8 @@
 import { randomUUID } from "node:crypto";
 import { execute, query } from "../pg.js";
 import { now } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("diff-repo");
 
 // ---------------------------------------------------------------------------
 // Types

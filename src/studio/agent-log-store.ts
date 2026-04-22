@@ -6,6 +6,8 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createLogger } from "./logger.js";
+const log = createLogger("agent-log-store");
 
 const LOGS_BASE = join(process.cwd(), ".voltagent", "logs");
 
@@ -28,7 +30,7 @@ export async function persistAgentLog(projectId: string, agentId: string, lines:
 		const content = lines.map((l) => l.replace(/\n$/, "")).join("\n") + "\n";
 		await writeFile(logPath(projectId, agentId), content, "utf8");
 	} catch (err) {
-		console.warn("[agent-log-store] Log yazılamadı:", err instanceof Error ? err.message : err);
+		log.warn("[agent-log-store] Log yazılamadı: " + (err instanceof Error ? err.message : String(err)));
 	}
 }
 

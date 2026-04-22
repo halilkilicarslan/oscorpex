@@ -10,6 +10,8 @@ import { verifyTaskOutput, resolveStrictness } from "./output-verifier.js";
 import { runTestGate } from "./test-gate.js";
 import { recordStep } from "./agent-runtime/index.js";
 import type { Task, TaskOutput } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("execution-gates");
 
 // ---------------------------------------------------------------------------
 // Verification gate
@@ -37,7 +39,7 @@ export async function runVerificationGate(
 			.map((r) => `${r.type}: ${r.details.map((d) => d.file ?? d.actual).join(", ")}`)
 			.join("; ");
 
-		console.warn(`[execution-gates] Output verification failed for "${task.title}": ${failedChecks}`);
+		log.warn(`[execution-gates] Output verification failed for "${task.title}": ${failedChecks}`);
 		eventBus.emitTransient({
 			projectId,
 			type: "agent:output",
@@ -53,7 +55,7 @@ export async function runVerificationGate(
 
 		if (sessionId) {
 			recordStep(sessionId, { step: 3, type: "decision_made", summary: "Verification: failed" })
-				.catch((err) => console.warn("[execution-gates] recordStep failed:", err?.message ?? err));
+				.catch((err) => log.warn("[execution-gates] recordStep failed:", err?.message ?? err));
 		}
 
 		if (hasEmptyFail || (strictness === "strict" && hasFileFail)) {
@@ -61,7 +63,7 @@ export async function runVerificationGate(
 		}
 	} else if (sessionId) {
 		recordStep(sessionId, { step: 3, type: "decision_made", summary: "Verification: passed" })
-			.catch((err) => console.warn("[execution-gates] recordStep failed:", err?.message ?? err));
+			.catch((err) => log.warn("[execution-gates] recordStep failed:", err?.message ?? err));
 	}
 
 	return { passed: true };
@@ -83,7 +85,7 @@ export async function runTestGateCheck(
 	const testResult = await runTestGate(projectId, task, repoPath, output, agentRole);
 
 	if (!testResult.passed) {
-		console.warn(`[execution-gates] Test gate failed for "${task.title}": ${testResult.summary}`);
+		log.warn(`[execution-gates] Test gate failed for "${task.title}": ${testResult.summary}`);
 		eventBus.emitTransient({
 			projectId,
 			type: "agent:output",
@@ -94,7 +96,7 @@ export async function runTestGateCheck(
 
 		if (sessionId) {
 			recordStep(sessionId, { step: 4, type: "decision_made", summary: `Test gate: failed: ${testResult.summary}` })
-				.catch((err) => console.warn("[execution-gates] recordStep failed:", err?.message ?? err));
+				.catch((err) => log.warn("[execution-gates] recordStep failed:", err?.message ?? err));
 		}
 
 		if (testResult.policy === "required") {
@@ -110,7 +112,7 @@ export async function runTestGateCheck(
 		}
 		if (sessionId) {
 			recordStep(sessionId, { step: 4, type: "decision_made", summary: `Test gate: passed (${testResult.testsTotal} tests)` })
-				.catch((err) => console.warn("[execution-gates] recordStep failed:", err?.message ?? err));
+				.catch((err) => log.warn("[execution-gates] recordStep failed:", err?.message ?? err));
 		}
 	}
 
@@ -138,7 +140,7 @@ export async function runGoalEvaluation(
 	const enforcement = await resolveGoalEnforcement(projectId);
 	if (shouldEnforceGoalFailure(results, enforcement)) {
 		const failedCriteria = results.filter((r) => !r.met).map((r) => r.criterion).join("; ");
-		console.warn(`[execution-gates] Goal enforcement: "${taskTitle}" failed criteria — triggering revision`);
+		log.warn(`[execution-gates] Goal enforcement: "${taskTitle}" failed criteria — triggering revision`);
 		throw new Error(`Goal validation failed (${enforcement}): ${failedCriteria}`);
 	}
 }

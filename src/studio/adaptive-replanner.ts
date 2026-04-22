@@ -18,6 +18,8 @@ import {
 } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import type { Task } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("adaptive-replanner");
 
 // ---------------------------------------------------------------------------
 // Types

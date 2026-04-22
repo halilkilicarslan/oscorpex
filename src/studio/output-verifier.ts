@@ -18,6 +18,8 @@ import { execute } from "./pg.js";
 import { eventBus } from "./event-bus.js";
 import { getProjectSetting } from "./db.js";
 import type { TaskOutput } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("output-verifier");
 
 export type VerificationStrictness = "strict" | "lenient";
 

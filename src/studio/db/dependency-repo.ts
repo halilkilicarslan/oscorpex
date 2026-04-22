@@ -13,6 +13,8 @@ import type {
 	DependencyType,
 } from "../types.js";
 import { rowToCapability, rowToDependency } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("dependency-repo");
 
 // ---------------------------------------------------------------------------
 // Agent Dependencies

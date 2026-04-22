@@ -5,6 +5,8 @@
 
 import { randomUUID } from "node:crypto";
 import { query, queryOne, execute } from "../pg.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("graph-mutation-repo");
 
 // ---------------------------------------------------------------------------
 // Types

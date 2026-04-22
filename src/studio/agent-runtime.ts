@@ -14,6 +14,8 @@ import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { eventBus } from "./event-bus.js";
 import { execute, query, queryOne } from "./pg.js";
 import type { AgentProcessRecord, AgentProcessStatus, AgentRun } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("agent-runtime");
 
 // ---------------------------------------------------------------------------
 // Sabitler
@@ -476,7 +478,7 @@ function _createRunInDb(record: AgentProcessRecord, taskPrompt?: string): void {
 		],
 	).catch((err) => {
 		// DB hatası agent'ı durdurmasın — sadece logla
-		console.error("[agent-runtime] DB kaydı oluşturulamadı:", err);
+		log.error("[agent-runtime] DB kaydı oluşturulamadı:" + " " + String(err));
 	});
 }
 
@@ -491,7 +493,7 @@ function _syncRunToDb(record: AgentProcessRecord): void {
   `,
 		[record.status, summary || null, record.exitCode ?? null, record.stoppedAt ?? null, record.id],
 	).catch((err) => {
-		console.error("[agent-runtime] DB kaydı güncellenemedi:", err);
+		log.error("[agent-runtime] DB kaydı güncellenemedi:" + " " + String(err));
 	});
 }
 

@@ -987,10 +987,10 @@ class ExecutionEngine {
 
 			// --- Sandbox: end session ---
 			if (sandboxSessionId) {
-				endSandboxSession(sandboxSessionId).catch((e) => log.warn("[execution-engine] Sandbox end failed:", e));
+				endSandboxSession(sandboxSessionId).catch((e) => log.warn("[execution-engine] Sandbox end failed:" + " " + String(e)));
 			}
 			if (isolatedWorkspace?.isolated) {
-				isolatedWorkspace.cleanup().catch((e) => log.warn("[execution-engine] Workspace cleanup failed:", e));
+				isolatedWorkspace.cleanup().catch((e) => log.warn("[execution-engine] Workspace cleanup failed:" + " " + String(e)));
 			}
 
 			// --- Goal evaluation (delegated to execution-gates.ts) ---
@@ -1007,7 +1007,7 @@ class ExecutionEngine {
 			if (sessionId) {
 				completeSession(sessionId, projectId, agent.id, agent.role, task, {
 					costUsd: cliResult?.totalCostUsd,
-				}).catch((e) => log.warn("[execution-engine] Session complete failed:", e));
+				}).catch((e) => log.warn("[execution-engine] Session complete failed:" + " " + String(e)));
 			}
 
 			// Review task dispatch: task-engine creates a review task which
@@ -1100,11 +1100,11 @@ class ExecutionEngine {
 			// --- Agent Runtime: record failed session ---
 			if (sessionId) {
 				failSession(sessionId, projectId, agent.id, agent.role, task, errorMsg).catch((e) =>
-					log.warn("[execution-engine] Session fail record failed:", e),
+					log.warn("[execution-engine] Session fail record failed:" + " " + String(e)),
 				);
 			}
 			if (isolatedWorkspace?.isolated) {
-				isolatedWorkspace.cleanup().catch((e) => log.warn("[execution-engine] Workspace cleanup failed:", e));
+				isolatedWorkspace.cleanup().catch((e) => log.warn("[execution-engine] Workspace cleanup failed:" + " " + String(e)));
 			}
 
 			// --- Self-healing: auto-retry with error context ---
@@ -1301,6 +1301,6 @@ export const executionEngine = new ExecutionEngine();
 // Uygulama başlangıcında yarıda kalmış görevleri kurtart
 if (process.env.VITEST !== "true") {
 	executionEngine.recoverStuckTasks().catch((err) => {
-		log.error("[execution-engine] Startup recovery failed:", err);
+		log.error("[execution-engine] Startup recovery failed:" + " " + String(err));
 	});
 }

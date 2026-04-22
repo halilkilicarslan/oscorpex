@@ -5,6 +5,8 @@
 
 import { Hono } from "hono";
 import { collaboration } from "../collaboration.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("collaboration-routes");
 
 const router = new Hono();
 
@@ -36,7 +38,7 @@ router.post("/join", async (c) => {
 
 		return c.json({ ok: true, presence });
 	} catch (err) {
-		console.error("[collaboration-routes] POST /join:", err);
+		log.error("[collaboration-routes] POST /join:" + " " + String(err));
 		return c.json({ error: "Failed to join collaboration session" }, 500);
 	}
 });
@@ -57,7 +59,7 @@ router.post("/leave", async (c) => {
 		const removed = collaboration.leave(body.projectId, body.userId);
 		return c.json({ ok: true, removed });
 	} catch (err) {
-		console.error("[collaboration-routes] POST /leave:", err);
+		log.error("[collaboration-routes] POST /leave:" + " " + String(err));
 		return c.json({ error: "Failed to leave collaboration session" }, 500);
 	}
 });
@@ -84,7 +86,7 @@ router.post("/heartbeat", async (c) => {
 
 		return c.json({ ok: true });
 	} catch (err) {
-		console.error("[collaboration-routes] POST /heartbeat:", err);
+		log.error("[collaboration-routes] POST /heartbeat:" + " " + String(err));
 		return c.json({ error: "Failed to process heartbeat" }, 500);
 	}
 });
@@ -120,7 +122,7 @@ router.patch("/presence", async (c) => {
 
 		return c.json({ ok: true, presence });
 	} catch (err) {
-		console.error("[collaboration-routes] PATCH /presence:", err);
+		log.error("[collaboration-routes] PATCH /presence:" + " " + String(err));
 		return c.json({ error: "Failed to update presence" }, 500);
 	}
 });
@@ -141,7 +143,7 @@ router.get("/presence/:projectId", async (c) => {
 		const presenceList = collaboration.getPresence(projectId);
 		return c.json(presenceList);
 	} catch (err) {
-		console.error("[collaboration-routes] GET /presence/:projectId:", err);
+		log.error("[collaboration-routes] GET /presence/:projectId:" + " " + String(err));
 		return c.json({ error: "Failed to fetch presence" }, 500);
 	}
 });
@@ -156,7 +158,7 @@ router.get("/stats", async (c) => {
 		const stats = collaboration.getCollaborationStats();
 		return c.json(stats);
 	} catch (err) {
-		console.error("[collaboration-routes] GET /stats:", err);
+		log.error("[collaboration-routes] GET /stats:" + " " + String(err));
 		return c.json({ error: "Failed to fetch collaboration stats" }, 500);
 	}
 });

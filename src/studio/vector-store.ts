@@ -8,6 +8,8 @@ import { randomUUID } from "node:crypto";
 import { openai } from "@ai-sdk/openai";
 import { embed, embedMany } from "ai";
 import { execute, getPool, query, queryOne } from "./pg.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("vector-store");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -195,7 +197,7 @@ export async function searchSimilar(
 ): Promise<SearchResult[]> {
 	if (!queryText.trim()) return [];
 
-	console.log(`[VectorStore] Searching kbId=${kbId} topK=${topK} query="${queryText.slice(0, 80)}..."`);
+	log.info(`[VectorStore] Searching kbId=${kbId} topK=${topK} query="${queryText.slice(0, 80)}..."`);
 
 	// 1. Sorgu embedding'i üret
 	const queryVector = await generateEmbedding(queryText, model);
@@ -219,7 +221,7 @@ export async function searchSimilar(
 	);
 
 	if (rows.length === 0) {
-		console.log(`[VectorStore] No embeddings found for kbId=${kbId}`);
+		log.info(`[VectorStore] No embeddings found for kbId=${kbId}`);
 		return [];
 	}
 
@@ -232,7 +234,7 @@ export async function searchSimilar(
 		metadata: row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : null,
 	}));
 
-	console.log(
+	log.info(
 		`[VectorStore] Search complete: ${rows.length} results, top score=${results[0]?.score.toFixed(4) ?? "n/a"}`,
 	);
 
@@ -261,27 +263,27 @@ export async function indexDocument(
 	model = "text-embedding-3-small",
 ): Promise<{ chunkCount: number }> {
 	if (!content || !content.trim()) {
-		console.warn(`[VectorStore] indexDocument called with empty content for docId=${docId}`);
+		log.warn(`[VectorStore] indexDocument called with empty content for docId=${docId}`);
 		return { chunkCount: 0 };
 	}
 
-	console.log(`[VectorStore] Indexing docId=${docId} kbId=${kbId} model=${model}`);
+	log.info(`[VectorStore] Indexing docId=${docId} kbId=${kbId} model=${model}`);
 
 	// 1. Metni chunk'lara böl
 	const chunks = chunkText(content, chunkSize, chunkOverlap);
 	if (chunks.length === 0) {
-		console.warn(`[VectorStore] No chunks produced for docId=${docId}`);
+		log.warn(`[VectorStore] No chunks produced for docId=${docId}`);
 		return { chunkCount: 0 };
 	}
 
-	console.log(`[VectorStore] Generated ${chunks.length} chunks, requesting embeddings...`);
+	log.info(`[VectorStore] Generated ${chunks.length} chunks, requesting embeddings...`);
 
 	// 2. Toplu embedding üret
 	let embeddings: number[][];
 	try {
 		embeddings = await generateEmbeddings(chunks, model);
 	} catch (err) {
-		console.error(`[VectorStore] Embedding API error for docId=${docId}:`, err);
+		log.error(`[VectorStore] Embedding API error for docId=${docId}:` + " " + String(err));
 		throw err;
 	}
 
@@ -311,7 +313,7 @@ export async function indexDocument(
 		client.release();
 	}
 
-	console.log(`[VectorStore] Indexed ${chunks.length} chunks for docId=${docId}`);
+	log.info(`[VectorStore] Indexed ${chunks.length} chunks for docId=${docId}`);
 
 	return { chunkCount: chunks.length };
 }

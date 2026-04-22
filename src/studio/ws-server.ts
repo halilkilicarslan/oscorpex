@@ -25,6 +25,8 @@
 
 import { createServer } from "node:http";
 import { wsManager } from "./ws-manager.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("ws-server");
 
 const WS_PORT = Number(process.env.STUDIO_WS_PORT ?? 3142);
 const WS_PATH = "/api/studio/ws";
@@ -51,10 +53,10 @@ export function startWSServer(): void {
 	});
 
 	httpServer.listen(WS_PORT, "0.0.0.0", () => {
-		console.log(`[ws-server] WebSocket sunucusu dinleniyor: ws://localhost:${WS_PORT}${WS_PATH}`);
+		log.info(`[ws-server] WebSocket sunucusu dinleniyor: ws://localhost:${WS_PORT}${WS_PATH}`);
 	});
 
 	httpServer.on("error", (err) => {
-		console.error("[ws-server] Sunucu hatası:", err.message);
+		log.error("[ws-server] Sunucu hatası:" + " " + String(err.message));
 	});
 }

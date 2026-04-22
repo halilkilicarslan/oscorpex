@@ -6,6 +6,8 @@
 import { listAgentCapabilities } from "./db.js";
 import type { AgentCapability } from "./types.js";
 import { canonicalizeAgentRole } from "./roles.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("capability-resolver");
 
 // Rol bazlı varsayılan araç listeleri
 function getDefaultToolsForRole(role: string): string[] {

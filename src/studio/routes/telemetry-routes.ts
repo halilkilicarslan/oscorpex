@@ -5,6 +5,8 @@
 
 import { Hono } from "hono";
 import { tracer } from "../telemetry.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("telemetry-routes");
 
 const router = new Hono();
 

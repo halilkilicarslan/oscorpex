@@ -5,6 +5,8 @@
 
 import { getBestStrategies, getFailureEpisodes, getRecentEpisodes } from "../db.js";
 import type { AgentEpisode, AgentStrategyPattern } from "../types.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("agent-memory");
 
 // ---------------------------------------------------------------------------
 // Types

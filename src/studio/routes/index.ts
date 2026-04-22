@@ -53,6 +53,8 @@ import { sandboxRoutes } from "./sandbox-routes.js";
 // M6.2: auth middleware — opt-in via OSCORPEX_AUTH_ENABLED=true
 // Disabled by default so existing tests and integrations keep working.
 import { authMiddleware } from "../auth/auth-middleware.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("index");
 
 // Preset agentları ve takım şablonlarını başlat
 seedPresetAgents();
@@ -64,7 +66,7 @@ initContextSession(eventBus);
 // M3: PG LISTEN/NOTIFY durable event bridge — diğer process'lerden gelen event'leri dinle
 eventBus
 	.initPgListener()
-	.catch((err) => console.warn("[routes] initPgListener failed:", err instanceof Error ? err.message : err));
+	.catch((err) => log.warn("[routes] initPgListener failed:", err instanceof Error ? err.message : err));
 
 // ---------------------------------------------------------------------------
 // Webhook Event Entegrasyonu — global event listener
@@ -80,7 +82,7 @@ eventBus.on("task:completed", (event) => {
 		taskTitle: payload.title ?? payload.taskTitle ?? "",
 		agentId: event.agentId ?? "",
 		...payload,
-	}).catch((err) => console.warn("[webhook] task_completed gonderilemedi:", err));
+	}).catch((err) => log.warn("[webhook] task_completed gonderilemedi:" + " " + String(err)));
 });
 
 eventBus.on("task:failed", (event) => {
@@ -91,13 +93,13 @@ eventBus.on("task:failed", (event) => {
 		error: payload.error ?? "Bilinmeyen hata",
 		agentId: event.agentId ?? "",
 		...payload,
-	}).catch((err) => console.warn("[webhook] task_failed gonderilemedi:", err));
+	}).catch((err) => log.warn("[webhook] task_failed gonderilemedi:" + " " + String(err)));
 });
 
 eventBus.on("pipeline:completed", (event) => {
 	sendWebhookNotification(event.projectId, "pipeline_completed", {
 		...(event.payload as Record<string, unknown>),
-	}).catch((err) => console.warn("[webhook] pipeline_completed gonderilemedi:", err));
+	}).catch((err) => log.warn("[webhook] pipeline_completed gonderilemedi:" + " " + String(err)));
 });
 
 eventBus.on("budget:warning", (event) => {
@@ -106,7 +108,7 @@ eventBus.on("budget:warning", (event) => {
 		currentCost: payload.currentCostUsd ?? payload.currentCost ?? 0,
 		limitCost: payload.maxCostUsd ?? payload.limitCost ?? 0,
 		...payload,
-	}).catch((err) => console.warn("[webhook] budget_warning gonderilemedi:", err));
+	}).catch((err) => log.warn("[webhook] budget_warning gonderilemedi:" + " " + String(err)));
 });
 
 // ---------------------------------------------------------------------------
@@ -173,7 +175,7 @@ for (const eventType of ALL_PLUGIN_EVENTS) {
 	eventBus.on(eventType, (event) => {
 		// New manifest-driven registry (M5)
 		pluginRegistry.notifyPlugins(event).catch((err) => {
-			console.warn(
+			log.warn(
 				`[plugin-bridge] Error notifying plugins for ${eventType}:`,
 				err instanceof Error ? err.message : err,
 			);
@@ -185,26 +187,26 @@ for (const eventType of ALL_PLUGIN_EVENTS) {
 				projectId: event.projectId,
 				taskId: event.taskId ?? "",
 				agentId: event.agentId ?? "",
-			}).catch((err) => console.warn("[plugin-registry] onTaskComplete failed:", err));
+			}).catch((err) => log.warn("[plugin-registry] onTaskComplete failed:" + " " + String(err)));
 		} else if (eventType === "pipeline:completed") {
 			const payload = event.payload as Record<string, unknown>;
 			notifyPlugins("onPipelineComplete", {
 				projectId: event.projectId,
 				status: String(payload.status ?? "completed"),
-			}).catch((err) => console.warn("[plugin-registry] onPipelineComplete failed:", err));
+			}).catch((err) => log.warn("[plugin-registry] onPipelineComplete failed:" + " " + String(err)));
 		} else if (eventType === "work_item:created") {
 			const payload = event.payload as Record<string, unknown>;
 			notifyPlugins("onWorkItemCreated", {
 				projectId: event.projectId,
 				itemId: String(payload.itemId ?? payload.id ?? ""),
 				type: String(payload.type ?? "feature"),
-			}).catch((err) => console.warn("[plugin-registry] onWorkItemCreated failed:", err));
+			}).catch((err) => log.warn("[plugin-registry] onWorkItemCreated failed:" + " " + String(err)));
 		} else if (eventType === "phase:completed") {
 			const payload = event.payload as Record<string, unknown>;
 			notifyPlugins("onPhaseComplete", {
 				projectId: event.projectId,
 				phaseId: String(payload.phaseId ?? ""),
-			}).catch((err) => console.warn("[plugin-registry] onPhaseComplete failed:", err));
+			}).catch((err) => log.warn("[plugin-registry] onPhaseComplete failed:" + " " + String(err)));
 		}
 	});
 }
@@ -218,7 +220,7 @@ const NOTIFICATION_EVENTS: EventType[] = ["task:completed", "task:failed", "pipe
 for (const eventType of NOTIFICATION_EVENTS) {
 	eventBus.on(eventType, (event) => {
 		processEventForNotification(event).catch((err) => {
-			console.warn(`[notification-bridge] Error for ${eventType}:`, err instanceof Error ? err.message : err);
+			log.warn(`[notification-bridge] Error for ${eventType}:`, err instanceof Error ? err.message : err);
 		});
 	});
 }

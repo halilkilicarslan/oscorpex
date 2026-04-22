@@ -8,6 +8,8 @@
 import { getPipelineRun } from "./db.js";
 import type { Task } from "./types.js";
 import type { AgentOutputProposal } from "./cli-runtime.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("proposal-processor");
 
 // ---------------------------------------------------------------------------
 // Process agent proposals from CLI output
@@ -62,9 +64,9 @@ async function handleTaskProposal(
 			suggestedRole: p.suggestedRole ?? agent.role,
 			phaseId: task.phaseId,
 		});
-		console.log(`[proposal-processor] Task proposal accepted: "${p.title}" from ${agent.name}`);
+		log.info(`[proposal-processor] Task proposal accepted: "${p.title}" from ${agent.name}`);
 	} catch (err) {
-		console.warn(`[proposal-processor] Task proposal failed: "${p.title}"`, err);
+		log.warn(`[proposal-processor] Task proposal failed: "${p.title}"` + " " + String(err));
 	}
 }
 
@@ -96,9 +98,9 @@ async function handleAgentMessage(
 		} else {
 			await protocol.requestInfo(projectId, agent.id, m.targetAgentId, m.content, m.content, task.id);
 		}
-		console.log(`[proposal-processor] Agent message sent (${msgType}): ${agent.name} → ${m.targetAgentId ?? "broadcast"}`);
+		log.info(`[proposal-processor] Agent message sent (${msgType}): ${agent.name} → ${m.targetAgentId ?? "broadcast"}`);
 	} catch (err) {
-		console.warn("[proposal-processor] Agent message failed:", err);
+		log.warn("[proposal-processor] Agent message failed:" + " " + String(err));
 	}
 }
 
@@ -119,5 +121,5 @@ async function handleGraphMutation(
 		mutationType: mutationType as any,
 		payload,
 	});
-	console.log(`[proposal-processor] Graph mutation proposal from ${agent.name} persisted for approval`);
+	log.info(`[proposal-processor] Graph mutation proposal from ${agent.name} persisted for approval`);
 }

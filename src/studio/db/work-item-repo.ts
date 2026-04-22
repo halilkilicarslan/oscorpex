@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
 import type { WorkItem, WorkItemPriority, WorkItemSource, WorkItemStatus, WorkItemType } from "../types.js";
 import { now, rowToWorkItem } from "./helpers.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("work-item-repo");
 
 // ---------------------------------------------------------------------------
 // Work Items CRUD

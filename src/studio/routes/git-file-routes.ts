@@ -5,6 +5,8 @@
 import { Hono } from "hono";
 import { getProject } from "../db.js";
 import { gitManager } from "../git-manager.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("git-file-routes");
 
 export const gitFileRoutes = new Hono();
 

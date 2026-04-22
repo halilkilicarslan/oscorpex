@@ -16,6 +16,8 @@ import type { AgentObservation, AgentSession, EpisodeOutcome, Task } from "../ty
 import { formatBehavioralPrompt, loadBehavioralContext } from "./agent-memory.js";
 import { selectStrategy, type StrategySelection } from "./agent-strategy.js";
 import { getBehaviorRoleKey } from "../roles.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("agent-session");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -165,7 +167,7 @@ export async function completeSession(
 	);
 
 	// v8.0: Trigger cross-project learning extraction (non-blocking)
-	triggerLearningExtraction(projectId).catch((err) => console.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
+	triggerLearningExtraction(projectId).catch((err) => log.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
 }
 
 /**
@@ -209,7 +211,7 @@ export async function failSession(
 	);
 
 	// v8.0: Trigger cross-project learning extraction (non-blocking)
-	triggerLearningExtraction(projectId).catch((err) => console.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
+	triggerLearningExtraction(projectId).catch((err) => log.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
 }
 
 // ---------------------------------------------------------------------------
@@ -246,8 +248,8 @@ async function triggerLearningExtraction(projectId: string): Promise<void> {
 	_lastExtractionCount.set(projectId, currentCount);
 
 	if (patternsCreated > 0) {
-		await autoPromotePatterns(tenantId).catch((err) => console.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
-		console.log(`[agent-session] Extracted ${patternsCreated} learning patterns for project ${projectId}`);
+		await autoPromotePatterns(tenantId).catch((err) => log.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
+		log.info(`[agent-session] Extracted ${patternsCreated} learning patterns for project ${projectId}`);
 	}
 }
 

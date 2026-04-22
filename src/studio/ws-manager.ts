@@ -16,6 +16,8 @@ import { WebSocket, WebSocketServer } from "ws";
 import { verifyJwt } from "./auth/jwt.js";
 import { eventBus } from "./event-bus.js";
 import type { StudioEvent } from "./types.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("ws-manager");
 
 // ---------------------------------------------------------------------------
 // Tipler

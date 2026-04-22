@@ -5,6 +5,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { createLogger } from "./logger.js";
+const log = createLogger("agent-files");
 
 const AGENTS_BASE = resolve(".voltagent/agents");
 

@@ -7,6 +7,8 @@ import { Hono } from "hono";
 import { requirePermission } from "../auth/rbac.js";
 import { deletePlugin, getPlugin, getPluginExecutions, listPlugins, updatePlugin } from "../db.js";
 import { pluginRegistry } from "../plugin-registry.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("plugin-routes");
 
 const router = new Hono();
 
@@ -17,7 +19,7 @@ router.get("/", async (c) => {
 		const loaded = pluginRegistry.listLoaded();
 		return c.json({ registered: dbPlugins, loaded });
 	} catch (err) {
-		console.error("[plugin-routes] listPlugins error:", err);
+		log.error("[plugin-routes] listPlugins error:" + " " + String(err));
 		return c.json({ error: "Failed to list plugins" }, 500);
 	}
 });
@@ -34,7 +36,7 @@ router.get("/:name", async (c) => {
 			loaded: loaded ? { hooks: loaded.manifest.hooks, enabled: loaded.enabled } : null,
 		});
 	} catch (err) {
-		console.error("[plugin-routes] getPlugin error:", err);
+		log.error("[plugin-routes] getPlugin error:" + " " + String(err));
 		return c.json({ error: "Failed to get plugin" }, 500);
 	}
 });
@@ -56,7 +58,7 @@ router.patch("/:name", requirePermission("plugins:write"), async (c) => {
 		}
 		return c.json({ ok: true });
 	} catch (err) {
-		console.error("[plugin-routes] updatePlugin error:", err);
+		log.error("[plugin-routes] updatePlugin error:" + " " + String(err));
 		return c.json({ error: "Failed to update plugin" }, 500);
 	}
 });
@@ -69,7 +71,7 @@ router.delete("/:name", requirePermission("plugins:write"), async (c) => {
 		await deletePlugin(name);
 		return c.json({ ok: true });
 	} catch (err) {
-		console.error("[plugin-routes] deletePlugin error:", err);
+		log.error("[plugin-routes] deletePlugin error:" + " " + String(err));
 		return c.json({ error: "Failed to delete plugin" }, 500);
 	}
 });
@@ -82,7 +84,7 @@ router.get("/:name/executions", async (c) => {
 		const executions = await getPluginExecutions(name, limit);
 		return c.json(executions);
 	} catch (err) {
-		console.error("[plugin-routes] getPluginExecutions error:", err);
+		log.error("[plugin-routes] getPluginExecutions error:" + " " + String(err));
 		return c.json({ error: "Failed to get plugin executions" }, 500);
 	}
 });

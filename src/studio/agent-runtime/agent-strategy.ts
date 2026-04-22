@@ -7,6 +7,8 @@
 import { getBestStrategies, getDefaultStrategy, getStrategiesForRole } from "../db.js";
 import type { AgentStrategy, AgentStrategyPattern, Task } from "../types.js";
 import { getBehaviorRoleKey } from "../roles.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("agent-strategy");
 
 // ---------------------------------------------------------------------------
 // Types

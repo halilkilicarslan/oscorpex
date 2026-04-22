@@ -17,6 +17,8 @@ import { extname, join } from "node:path";
 const DEFAULT_ESLINT_CONFIG = `import js from "@eslint/js";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
+import { createLogger } from "./logger.js";
+const log = createLogger("lint-runner");
 
 export default [
   js.configs.recommended,

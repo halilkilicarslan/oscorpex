@@ -5,6 +5,8 @@
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../pg.js";
 import type { AgentObservation, AgentSession, AgentSessionStatus } from "../types.js";
+import { createLogger } from "../logger.js";
+const log = createLogger("session-repo");
 
 // ---------------------------------------------------------------------------
 // Row mapper

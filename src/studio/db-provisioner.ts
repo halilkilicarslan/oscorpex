@@ -6,6 +6,8 @@
 
 import { ChildProcess, execSync, spawn } from "node:child_process";
 import type { DatabaseType, DetectedDatabase } from "./runtime-analyzer.js";
+import { createLogger } from "./logger.js";
+const log = createLogger("db-provisioner");
 
 // ---------------------------------------------------------------------------
 // Types
