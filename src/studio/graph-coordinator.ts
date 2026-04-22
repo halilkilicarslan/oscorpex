@@ -93,10 +93,49 @@ async function applySplitTask(
 	}
 
 	await updateTask(params.parentTaskId, { status: "blocked" });
+
+	// Register child completion listener for parent state propagation
+	registerSplitCompletionListener(params.parentTaskId, childIds);
+
 	return { parentTaskId: params.parentTaskId, childIds };
 }
 
-async function applyAddEdge(params: { fromTaskId: string; toTaskId: string }): Promise<{ fromTaskId: string; toTaskId: string }> {
+/**
+ * Propagate child task completion to split parent.
+ * All children done → parent done. Any child failed → parent failed.
+ */
+function registerSplitCompletionListener(parentTaskId: string, childIds: string[]): void {
+	const childSet = new Set(childIds);
+	let unsubComplete: (() => void) | undefined;
+	let unsubFailed: (() => void) | undefined;
+
+	const checkPropagation = async (event: { taskId?: string }) => {
+		if (!event.taskId || !childSet.has(event.taskId)) return;
+
+		const children = await Promise.all(childIds.map((id) => getTask(id)));
+		const statuses = children.map((c) => c?.status);
+
+		if (statuses.some((s) => s === "failed")) {
+			await updateTask(parentTaskId, { status: "failed" });
+			unsubComplete?.();
+			unsubFailed?.();
+			return;
+		}
+
+		if (statuses.every((s) => s === "done")) {
+			await updateTask(parentTaskId, { status: "done" });
+			unsubComplete?.();
+			unsubFailed?.();
+		}
+	};
+
+	unsubComplete = eventBus.on("task:completed", checkPropagation);
+	unsubFailed = eventBus.on("task:failed", checkPropagation);
+}
+
+async function applyAddEdge(params: { fromTaskId: string; toTaskId: string }, projectId: string): Promise<{ fromTaskId: string; toTaskId: string }> {
+	await validateAddEdge(params.fromTaskId, params.toTaskId, projectId);
+
 	const toTask = await getTask(params.toTaskId);
 	if (!toTask) throw new Error(`Task ${params.toTaskId} not found`);
 
@@ -155,6 +194,74 @@ async function applyMergeIntoPhase(
 	}
 
 	return { createdIds };
+}
+
+// ---------------------------------------------------------------------------
+// Graph invariant validator — prevents invalid DAG mutations
+// ---------------------------------------------------------------------------
+
+export class GraphInvariantError extends Error {
+	constructor(
+		public readonly violation: "cycle" | "self_edge" | "duplicate_edge" | "task_not_found" | "phase_crossing",
+		message: string,
+	) {
+		super(message);
+		this.name = "GraphInvariantError";
+	}
+}
+
+/**
+ * Detect if adding edge fromId→toId would create a cycle.
+ * Uses DFS from fromId following existing dependsOn edges.
+ * If toId is reachable from fromId, adding toId→fromId creates a cycle.
+ */
+async function wouldCreateCycle(fromTaskId: string, toTaskId: string, projectId: string): Promise<boolean> {
+	// We're adding: toTask.dependsOn += fromTaskId
+	// This means toTask depends on fromTask (fromTask must complete before toTask).
+	// Cycle exists if fromTask already (transitively) depends on toTask.
+	const visited = new Set<string>();
+	const stack = [fromTaskId];
+
+	while (stack.length > 0) {
+		const current = stack.pop()!;
+		if (current === toTaskId) return true;
+		if (visited.has(current)) continue;
+		visited.add(current);
+
+		const task = await getTask(current);
+		if (task?.dependsOn) {
+			for (const dep of task.dependsOn) {
+				if (!visited.has(dep)) stack.push(dep);
+			}
+		}
+	}
+	return false;
+}
+
+/**
+ * Validate graph invariants before applying an edge mutation.
+ * Throws GraphInvariantError if any invariant is violated.
+ */
+async function validateAddEdge(fromTaskId: string, toTaskId: string, projectId: string): Promise<void> {
+	// Self-edge
+	if (fromTaskId === toTaskId) {
+		throw new GraphInvariantError("self_edge", `Cannot add self-edge on task ${fromTaskId}`);
+	}
+
+	// Both tasks must exist
+	const [fromTask, toTask] = await Promise.all([getTask(fromTaskId), getTask(toTaskId)]);
+	if (!fromTask) throw new GraphInvariantError("task_not_found", `Source task ${fromTaskId} not found`);
+	if (!toTask) throw new GraphInvariantError("task_not_found", `Target task ${toTaskId} not found`);
+
+	// Duplicate edge
+	if (toTask.dependsOn?.includes(fromTaskId)) {
+		throw new GraphInvariantError("duplicate_edge", `Edge ${fromTaskId}→${toTaskId} already exists`);
+	}
+
+	// Cycle detection
+	if (await wouldCreateCycle(fromTaskId, toTaskId, projectId)) {
+		throw new GraphInvariantError("cycle", `Adding edge ${fromTaskId}→${toTaskId} would create a cycle`);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +347,7 @@ export async function addEdge(
 	ctx: MutationContext,
 	params: { fromTaskId: string; toTaskId: string },
 ): Promise<MutationResult> {
-	const detail = await applyAddEdge(params);
+	const detail = await applyAddEdge(params, ctx.projectId);
 
 	const mutation = await recordGraphMutation({
 		projectId: ctx.projectId,
@@ -397,7 +504,7 @@ export async function approveGraphMutationRequest(
 			detail = await applySplitTask(mutation.projectId, mutation.payload as any);
 			break;
 		case "add_edge":
-			detail = await applyAddEdge(mutation.payload as any);
+			detail = await applyAddEdge(mutation.payload as any, mutation.projectId);
 			break;
 		case "remove_edge":
 			detail = await applyRemoveEdge(mutation.payload as any);

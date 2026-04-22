@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { normalize, resolve, sep } from "node:path";
 import { query, queryOne, execute, getProjectSetting } from "./db.js";
 import type { Task } from "./types.js";
 
@@ -186,9 +187,18 @@ export function checkPathAllowed(policy: SandboxPolicy, filePath: string): { all
 	if (policy.filesystemScope.length === 0) {
 		return { allowed: true, reason: "no filesystem scope restriction" };
 	}
-	const withinScope = policy.filesystemScope.some((scope) => filePath.startsWith(scope));
+
+	// Resolve canonical path to prevent prefix bypass (e.g. /repo/app-malicious matching /repo/app)
+	const canonical = normalize(resolve(filePath));
+
+	const withinScope = policy.filesystemScope.some((scope) => {
+		const canonicalScope = normalize(resolve(scope));
+		// Strict parent check: path must equal scope or start with scope + separator
+		return canonical === canonicalScope || canonical.startsWith(canonicalScope + sep);
+	});
+
 	if (!withinScope) {
-		return { allowed: false, reason: `Path "${filePath}" is outside sandbox scope: ${policy.filesystemScope.join(", ")}` };
+		return { allowed: false, reason: `Path "${filePath}" (resolved: ${canonical}) is outside sandbox scope` };
 	}
 	return { allowed: true, reason: "within scope" };
 }

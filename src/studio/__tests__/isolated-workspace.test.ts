@@ -70,6 +70,46 @@ describe("isolated-workspace", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Sandbox path hardening
+// ---------------------------------------------------------------------------
+import { checkPathAllowed } from "../sandbox-manager.js";
+import type { SandboxPolicy } from "../sandbox-manager.js";
+
+describe("checkPathAllowed — realpath hardening", () => {
+	const makePolicy = (scope: string[]): SandboxPolicy => ({
+		id: "p", projectId: "proj-1", isolationLevel: "workspace",
+		allowedTools: [], deniedTools: [], filesystemScope: scope,
+		networkPolicy: "project_only", maxExecutionTimeMs: 1000,
+		maxOutputSizeBytes: 1000, elevatedCapabilities: [], enforcementMode: "hard",
+	});
+
+	it("allows path exactly matching scope", () => {
+		const result = checkPathAllowed(makePolicy(["/repo/app"]), "/repo/app");
+		expect(result.allowed).toBe(true);
+	});
+
+	it("allows path within scope", () => {
+		const result = checkPathAllowed(makePolicy(["/repo/app"]), "/repo/app/src/index.ts");
+		expect(result.allowed).toBe(true);
+	});
+
+	it("rejects prefix bypass (app-malicious matching app)", () => {
+		const result = checkPathAllowed(makePolicy(["/repo/app"]), "/repo/app-malicious/exploit.ts");
+		expect(result.allowed).toBe(false);
+	});
+
+	it("rejects path outside scope", () => {
+		const result = checkPathAllowed(makePolicy(["/repo/app"]), "/etc/passwd");
+		expect(result.allowed).toBe(false);
+	});
+
+	it("allows everything when scope is empty", () => {
+		const result = checkPathAllowed(makePolicy([]), "/anywhere/at/all");
+		expect(result.allowed).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // ExecutionWorkspace contract
 // ---------------------------------------------------------------------------
 import { resolveWorkspace } from "../execution-workspace.js";

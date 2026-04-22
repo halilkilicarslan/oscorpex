@@ -4,9 +4,9 @@
 // declared file mutations to the source repository.
 // ---------------------------------------------------------------------------
 
-import { cp, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, normalize, relative, resolve } from "node:path";
+import { dirname, join, normalize, relative, resolve, sep } from "node:path";
 import type { SandboxPolicy } from "./sandbox-manager.js";
 
 const COPY_EXCLUDES = new Set([
@@ -72,7 +72,10 @@ export async function prepareIsolatedWorkspace(
 		};
 	}
 
-	const workspaceRoot = await mkdtemp(join(tmpdir(), `oscorpex-task-${taskId}-`));
+	// Resolve canonical paths to prevent symlink issues (e.g. macOS /tmp → /private/tmp)
+	const canonicalSourceRepo = await realpath(sourceRepoPath);
+	const workspaceRootRaw = await mkdtemp(join(tmpdir(), `oscorpex-task-${taskId}-`));
+	const workspaceRoot = await realpath(workspaceRootRaw);
 	const workspacePath = join(workspaceRoot, "workspace");
 	await mkdir(workspacePath, { recursive: true });
 	await copySourceRepo(sourceRepoPath, workspacePath);
@@ -88,16 +91,23 @@ export async function prepareIsolatedWorkspace(
 				if (!isSafeRelativePath(file)) continue;
 
 				const sourceFile = resolve(workspacePath, file);
-				if (!sourceFile.startsWith(workspacePath)) continue;
+				// Strict parent check with separator to prevent prefix bypass
+				if (sourceFile !== workspacePath && !sourceFile.startsWith(workspacePath + sep)) continue;
 
 				try {
-					await stat(sourceFile);
+					// Resolve symlinks to prevent symlink traversal attacks
+					const realSource = await realpath(sourceFile);
+					if (realSource !== workspacePath && !realSource.startsWith(workspacePath + sep)) continue;
+
+					// Reject symlinks pointing outside workspace
+					const fileStat = await lstat(sourceFile);
+					if (fileStat.isSymbolicLink()) continue;
 				} catch {
 					continue;
 				}
 
-				const targetFile = resolve(sourceRepoPath, file);
-				if (!targetFile.startsWith(sourceRepoPath)) continue;
+				const targetFile = resolve(canonicalSourceRepo, file);
+				if (targetFile !== canonicalSourceRepo && !targetFile.startsWith(canonicalSourceRepo + sep)) continue;
 
 				await mkdir(dirname(targetFile), { recursive: true });
 				await cp(sourceFile, targetFile, { force: true, recursive: false, preserveTimestamps: true });

@@ -74,6 +74,7 @@ vi.mock("../event-bus.js", () => ({
 	eventBus: {
 		emit: vi.fn(),
 		emitTransient: vi.fn(),
+		on: vi.fn().mockReturnValue(() => {}),
 	},
 }));
 
@@ -89,7 +90,9 @@ import {
 	mergeIntoPhase,
 	proposeGraphMutation,
 	approveGraphMutationRequest,
+	GraphInvariantError,
 } from "../graph-coordinator.js";
+import { getTask } from "../db.js";
 
 describe("Graph Coordinator", () => {
 	const ctx = { projectId: "proj-1", pipelineRunId: "run-1", causedByAgentId: "agent-1" };
@@ -123,6 +126,31 @@ describe("Graph Coordinator", () => {
 		const result = await addEdge(ctx, { fromTaskId: "task-1", toTaskId: "task-2" });
 		expect(result.success).toBe(true);
 		expect(result.mutationType).toBe("add_edge");
+	});
+
+	it("should reject self-edge", async () => {
+		await expect(addEdge(ctx, { fromTaskId: "task-1", toTaskId: "task-1" })).rejects.toThrow(GraphInvariantError);
+		await expect(addEdge(ctx, { fromTaskId: "task-1", toTaskId: "task-1" })).rejects.toThrow("self-edge");
+	});
+
+	it("should reject duplicate edge", async () => {
+		// Mock task-2 already has task-1 as dependency
+		vi.mocked(getTask).mockResolvedValueOnce({ id: "task-1", dependsOn: [], status: "queued" } as any);
+		vi.mocked(getTask).mockResolvedValueOnce({ id: "task-2", dependsOn: ["task-1"], status: "queued" } as any);
+
+		await expect(addEdge(ctx, { fromTaskId: "task-1", toTaskId: "task-2" })).rejects.toThrow("already exists");
+	});
+
+	it("should reject edge that would create a cycle", async () => {
+		// Setup: task-1 → task-2 → task-3 (existing chain)
+		// Attempt: task-3 → task-1 (would create cycle)
+		vi.mocked(getTask)
+			.mockResolvedValueOnce({ id: "task-3", dependsOn: [], status: "queued" } as any) // fromTask exists
+			.mockResolvedValueOnce({ id: "task-1", dependsOn: [], status: "queued" } as any) // toTask exists, no dup
+			.mockResolvedValueOnce({ id: "task-3", dependsOn: ["task-2"], status: "queued" } as any) // cycle DFS: start at task-3
+			.mockResolvedValueOnce({ id: "task-2", dependsOn: ["task-1"], status: "queued" } as any); // cycle DFS: task-2 depends on task-1 → found!
+
+		await expect(addEdge(ctx, { fromTaskId: "task-3", toTaskId: "task-1" })).rejects.toThrow("cycle");
 	});
 
 	it("should remove an edge between tasks", async () => {
