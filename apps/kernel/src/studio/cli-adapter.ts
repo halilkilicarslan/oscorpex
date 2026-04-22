@@ -1,55 +1,20 @@
 // ---------------------------------------------------------------------------
 // Oscorpex — Multi-CLI Adapter (Faz 4.1)
 // CLITool bazlı adapter pattern: her CLI aracı için ayrı implementasyon.
+// Types re-exported from @oscorpex/provider-sdk for provider-agnostic use.
 // ---------------------------------------------------------------------------
 
-import type { CLIExecutionResult } from "./cli-runtime.js";
+import { type CLIExecutionResult } from "./cli-runtime.js";
 import { executeWithCLI, isClaudeCliAvailable } from "./cli-runtime.js";
 import type { AgentCliTool } from "./types.js";
+import type { CLIAdapterOptions } from "@oscorpex/provider-sdk";
+import { buildToolGovernanceSection, hasFullToolAccess } from "@oscorpex/provider-sdk";
 import { createLogger } from "./logger.js";
 const log = createLogger("cli-adapter");
 
-// ---------------------------------------------------------------------------
-// Adapter interface
-// ---------------------------------------------------------------------------
-
-export interface CLIAdapterOptions {
-	projectId: string;
-	agentId: string;
-	agentName: string;
-	repoPath: string;
-	prompt: string;
-	systemPrompt: string;
-	timeoutMs: number;
-	allowedTools?: string[];
-	model?: string;
-	signal?: AbortSignal;
-}
-
-export interface CLIAdapter {
-	readonly name: string;
-	isAvailable(): Promise<boolean>;
-	execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult>;
-}
-
-const FULL_TOOL_ACCESS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep"];
-
-export function buildToolGovernanceSection(allowedTools?: string[]): string {
-	if (!allowedTools || allowedTools.length === 0) return "";
-	return [
-		"## Tool Governance",
-		`Allowed tools only: ${allowedTools.join(", ")}`,
-		"If a required action is not possible with the allowed tools, stop and report the limitation instead of improvising with a forbidden tool.",
-	].join("\n");
-}
-
-function hasFullToolAccess(allowedTools?: string[]): boolean {
-	if (!allowedTools || allowedTools.length === 0) return true;
-	return (
-		allowedTools.length === FULL_TOOL_ACCESS.length &&
-		FULL_TOOL_ACCESS.every((tool) => allowedTools.includes(tool))
-	);
-}
+// Re-export the CLIAdapter interface from provider-sdk for local convenience
+export type { CLIAdapter, CLIAdapterOptions } from "@oscorpex/provider-sdk";
+export { buildToolGovernanceSection, hasFullToolAccess, FULL_TOOL_ACCESS } from "@oscorpex/provider-sdk";
 
 // ---------------------------------------------------------------------------
 // ClaudeAdapter — mevcut executeWithCLI üzerinden çalışır

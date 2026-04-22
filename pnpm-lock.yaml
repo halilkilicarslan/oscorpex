@@ -135,6 +135,9 @@ importers:
       '@oscorpex/event-schema':
         specifier: workspace:*
         version: link:../../packages/event-schema
+      '@oscorpex/provider-sdk':
+        specifier: workspace:*
+        version: link:../../packages/provider-sdk
       '@voltagent/cli':
         specifier: ^0.1.21
         version: 0.1.21(@ai-sdk/provider-utils@4.0.23(zod@3.25.76))(@ai-sdk/provider@3.0.8)(@types/node@22.19.17)(@voltagent/logger@2.0.2(@opentelemetry/api@1.9.1))(@voltagent/scorers@2.1.0(@voltagent/core@2.6.14(@ai-sdk/provider-utils@4.0.23(zod@3.25.76))(@ai-sdk/provider@3.0.8)(@voltagent/logger@2.0.2(@opentelemetry/api@1.9.1))(ai@6.0.146(zod@3.25.76))(graphql@16.13.2)(ws@8.20.0)(zod@3.25.76))(ai@6.0.146(zod@3.25.76))(ws@8.20.0)(zod@3.25.76))(ai@6.0.146(zod@3.25.76))(graphql@16.13.2)(ws@8.20.0)(zod@3.25.76)
@@ -253,7 +256,17 @@ importers:
         version: 4.1.2(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(jsdom@29.0.2)(vite@8.0.5(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
   packages/provider-sdk:
+    dependencies:
+      '@oscorpex/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
+      '@biomejs/biome':
+        specifier: ^1.9.0
+        version: 1.9.4
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.17
       tsdown:
         specifier: ^0.15.2
         version: 0.15.12(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(typescript@5.9.3)
@@ -262,7 +275,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.2
-        version: 4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(jsdom@29.0.2)(vite@8.0.5(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 4.1.2(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(jsdom@29.0.2)(vite@8.0.5(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
 packages:
 

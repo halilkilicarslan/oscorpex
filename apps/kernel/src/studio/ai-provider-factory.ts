@@ -10,60 +10,9 @@ import type { LanguageModelV3 } from "@ai-sdk/provider";
 import { CliLanguageModel, defaultModelForCliTool } from "./cli-language-model.js";
 import { getDefaultProvider, getFallbackChain, getRawProviderApiKey } from "./db.js";
 import type { AIProvider } from "./types.js";
+import { calculateCost, defaultModelForType } from "@oscorpex/provider-sdk";
 import { createLogger } from "./logger.js";
 const log = createLogger("ai-provider-factory");
-
-/**
- * Varsayılan AI provider'ı veritabanından okuyarak uygun AI SDK modelini
- * oluşturur ve döndürür.
- *
- * Desteklenen provider tipleri:
- *  - openai    → @ai-sdk/openai  (createOpenAI)
- *  - anthropic → @ai-sdk/anthropic (createAnthropic)
- *  - google    → @ai-sdk/google  (createGoogleGenerativeAI)
- *  - ollama    → @ai-sdk/openai  (OpenAI uyumlu baseURL ile)
- *  - custom    → @ai-sdk/openai  (özel baseURL ile)
- *
- * Hiçbir varsayılan provider ayarlanmamışsa OPENAI_API_KEY env değişkenini
- * kullanarak gpt-4o-mini modeline geri döner.
- */
-/** Returns the model along with its name and provider type for cost tracking */
-export async function getAIModelInfo(): Promise<{ model: LanguageModelV3; modelName: string; providerType: string }> {
-	const provider = await getDefaultProvider();
-	const providerType = provider?.type ?? "openai";
-	const modelName = provider?.model?.trim() || defaultModelForType(providerType);
-	return { model: await getAIModel(), modelName, providerType };
-}
-
-/** Model bazlı fiyat tablosu (USD per 1M tokens) */
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-	// OpenAI
-	"gpt-4o": { input: 2.5, output: 10.0 },
-	"gpt-4o-mini": { input: 0.15, output: 0.6 },
-	"gpt-4-turbo": { input: 10.0, output: 30.0 },
-	"gpt-4": { input: 30.0, output: 60.0 },
-	"gpt-3.5-turbo": { input: 0.5, output: 1.5 },
-	o1: { input: 15.0, output: 60.0 },
-	"o1-mini": { input: 3.0, output: 12.0 },
-	"o3-mini": { input: 1.1, output: 4.4 },
-	// Anthropic
-	"claude-opus-4-6": { input: 15.0, output: 75.0 },
-	"claude-sonnet-4-6": { input: 3.0, output: 15.0 },
-	"claude-haiku-4-5-20251001": { input: 0.8, output: 4.0 },
-	"claude-3-5-sonnet-20241022": { input: 3.0, output: 15.0 },
-	"claude-3-5-haiku-20241022": { input: 0.8, output: 4.0 },
-	// Google
-	"gemini-1.5-pro": { input: 1.25, output: 5.0 },
-	"gemini-1.5-flash": { input: 0.075, output: 0.3 },
-	"gemini-2.0-flash": { input: 0.1, output: 0.4 },
-};
-
-/** Calculate cost in USD from token counts and model name */
-export function calculateCost(modelName: string, inputTokens: number, outputTokens: number): number {
-	const pricing = MODEL_PRICING[modelName];
-	if (!pricing) return 0; // Unknown model (e.g. Ollama) — free
-	return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
-}
 
 export async function getAIModel(): Promise<LanguageModelV3> {
 	const provider = await getDefaultProvider();

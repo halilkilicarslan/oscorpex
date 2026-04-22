@@ -39,7 +39,8 @@
     "ws": "^8.20.0",
     "zod": "^3.25.76",
     "@oscorpex/event-schema": "workspace:*",
-    "@oscorpex/core": "workspace:*"
+    "@oscorpex/core": "workspace:*",
+    "@oscorpex/provider-sdk": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
