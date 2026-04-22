@@ -46,10 +46,11 @@ import {
 	loadProtocolContext,
 	recordStep,
 } from "./agent-runtime/index.js";
-import { getGoalForTask, formatGoalPrompt, validateCriteriaFromOutput, validateCriteriaWithLLM, evaluateGoal, resolveGoalEnforcement, shouldEnforceGoalFailure } from "./goal-engine.js";
+import { getGoalForTask, formatGoalPrompt } from "./goal-engine.js";
 import { evaluateReplan } from "./adaptive-replanner.js";
 import { resolveModel } from "./model-router.js";
-import { verifyTaskOutput, resolveStrictness } from "./output-verifier.js";
+import { runVerificationGate, runTestGateCheck, runGoalEvaluation } from "./execution-gates.js";
+import { processAgentProposals } from "./proposal-processor.js";
 import {
 	resolveTaskPolicy, startSandboxSession, endSandboxSession,
 	checkToolAllowed, checkPathAllowed,
@@ -58,7 +59,7 @@ import {
 	type SandboxPolicy,
 } from "./sandbox-manager.js";
 import { resolveWorkspace, type ExecutionWorkspace } from "./execution-workspace.js";
-import { runTestGate } from "./test-gate.js";
+// test-gate imported via execution-gates.ts
 import { execute as pgExecute, queryOne as pgQueryOne } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { providerState } from "./provider-state.js";
@@ -955,84 +956,25 @@ class ExecutionEngine {
 				await enforceOutputSizeCheck(sandboxPolicy, outputSizeEstimate, sandboxSessionId);
 			}
 
-			// --- v8.0: Process structured proposals from agent output ---
+			// --- v8.0: Process structured proposals (delegated to proposal-processor.ts) ---
 			if (cliResult?.proposals && cliResult.proposals.length > 0) {
 				try {
-					await this.processAgentProposals(projectId, task, agent, cliResult.proposals);
+					await processAgentProposals(projectId, task, agent, cliResult.proposals);
 				} catch (err) {
 					console.warn("[execution-engine] Proposal processing failed (non-blocking):", err);
 				}
 			}
 
-			// --- Output verification gate: verify artifacts before completion ---
+			// --- Output verification + test gates (delegated to execution-gates.ts) ---
 			if (project.repoPath) {
-				const strictness = await resolveStrictness(projectId);
-				const verification = await verifyTaskOutput(task.id, project.repoPath, output, {
-					projectId,
-					strictness,
-				});
-				if (!verification.allPassed) {
-					const failedChecks = verification.results
-						.filter((r) => !r.passed)
-						.map((r) => `${r.type}: ${r.details.map((d) => d.file ?? d.actual).join(", ")}`)
-						.join("; ");
-					console.warn(`[execution-engine] Output verification failed for "${task.title}": ${failedChecks}`);
-					eventBus.emitTransient({
-						projectId,
-						type: "agent:output",
-						agentId: agent.id,
-						taskId: task.id,
-						payload: { output: `[verify] Output verification failed: ${failedChecks}` },
-					});
-					// Non-empty check failure is always a hard fail
-					const hasEmptyFail = verification.results.some(
-						(r) => !r.passed && r.type === "output_non_empty",
-					);
-					// v8.0: In strict mode, file existence/modification failures are also hard fails
-					const hasFileFail = verification.results.some(
-						(r) => !r.passed && (r.type === "files_exist" || r.type === "files_modified"),
-					);
-					if (hasEmptyFail || (strictness === "strict" && hasFileFail)) {
-						throw new Error(`Output verification failed (${strictness}): ${failedChecks}`);
-					}
-					// Lenient mode: file existence failures are warnings only
+				const verifyResult = await runVerificationGate(projectId, task, project.repoPath, output, agent.id, sessionId);
+				if (!verifyResult.passed) {
+					throw new Error(`Output verification failed: ${verifyResult.failedChecks}`);
 				}
 
-				// Session step: verification result
-				if (sessionId) {
-					const status = verification.allPassed ? "passed" : "failed";
-					recordStep(sessionId, { step: 3, type: "decision_made", summary: `Verification: ${status}` }).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
-				}
-			}
-
-			// --- Test gate: run project tests before allowing completion ---
-			if (project.repoPath) {
-				const testResult = await runTestGate(projectId, task, project.repoPath, output, agent.role);
+				const testResult = await runTestGateCheck(projectId, task, project.repoPath, output, agent.role, agent.id, sessionId);
 				if (!testResult.passed) {
-					console.warn(`[execution-engine] Test gate failed for "${task.title}": ${testResult.summary}`);
-					eventBus.emitTransient({
-						projectId,
-						type: "agent:output",
-						agentId: agent.id,
-						taskId: task.id,
-						payload: { output: `[test-gate] ${testResult.summary}` },
-					});
-					// Required policy → fail the task so it enters retry/review flow
-					if (testResult.policy === "required") {
-						throw new Error(`Test gate failed (required): ${testResult.summary}`);
-					}
-				} else if (testResult.testsTotal > 0) {
-					output.testResults = {
-						passed: testResult.testsPassed,
-						failed: testResult.testsFailed,
-						total: testResult.testsTotal,
-					};
-				}
-
-				// Session step: test gate result
-				if (sessionId) {
-					const status = testResult.passed ? `passed (${testResult.testsTotal} tests)` : `failed: ${testResult.summary}`;
-					recordStep(sessionId, { step: 4, type: "decision_made", summary: `Test gate: ${status}` }).catch((err) => console.warn("[execution-engine] Non-blocking operation failed:", err?.message ?? err));
+					throw new Error(testResult.failedChecks!);
 				}
 			}
 
@@ -1046,27 +988,11 @@ class ExecutionEngine {
 				isolatedWorkspace.cleanup().catch((e) => console.warn("[execution-engine] Workspace cleanup failed:", e));
 			}
 
-			// --- Goal evaluation: validate success criteria (v8.0: LLM + enforcement) ---
+			// --- Goal evaluation (delegated to execution-gates.ts) ---
 			if (goalId) {
 				try {
-					const goal = await getGoalForTask(task.id);
-					if (goal) {
-						// v8.0: Try LLM validation first, fall back to keyword heuristic
-						const results = await validateCriteriaWithLLM(goal, output).catch(() =>
-							validateCriteriaFromOutput(goal, output),
-						);
-						await evaluateGoal(goalId, results);
-
-						// v8.0: Enforce goal failure if configured
-						const enforcement = await resolveGoalEnforcement(projectId);
-						if (shouldEnforceGoalFailure(results, enforcement)) {
-							const failedCriteria = results.filter((r) => !r.met).map((r) => r.criterion).join("; ");
-							console.warn(`[execution-engine] Goal enforcement: "${task.title}" failed criteria — triggering revision`);
-							throw new Error(`Goal validation failed (${enforcement}): ${failedCriteria}`);
-						}
-					}
+					await runGoalEvaluation(task.id, task.title, output, projectId);
 				} catch (e) {
-					// Re-throw goal enforcement errors (they start with "Goal validation failed")
 					if (e instanceof Error && e.message.startsWith("Goal validation failed")) throw e;
 					console.warn("[execution-engine] Goal evaluation failed (non-blocking):", e);
 				}
@@ -1245,81 +1171,6 @@ class ExecutionEngine {
 	// -------------------------------------------------------------------------
 	// Prompt builder
 	// -------------------------------------------------------------------------
-
-	/**
-	 * v8.0: Process structured proposals extracted from agent CLI output.
-	 * Task proposals → risk classify → auto-approve low-risk → create task.
-	 * Agent messages → persist to protocol → target agent sees in next execution.
-	 * Graph mutations → risk classify → auto-apply low-risk → queue medium+.
-	 */
-	private async processAgentProposals(
-		projectId: string,
-		task: Task,
-		agent: { id: string; name: string; role: string },
-		proposals: import("./cli-runtime.js").AgentOutputProposal[],
-	): Promise<void> {
-		const { proposeTask } = await import("./agent-runtime/task-injection.js");
-		const { requestInfo, signalBlocker, handoffArtifact, recordDesignDecision } = await import("./agent-runtime/agent-protocol.js");
-
-		for (const proposal of proposals) {
-			if (proposal.type === "task_proposal") {
-				const p = proposal.payload as {
-					title?: string; description?: string; severity?: string;
-					suggestedRole?: string; proposalType?: string;
-				};
-				if (!p.title) continue;
-				try {
-					await proposeTask({
-						projectId,
-						originatingTaskId: task.id,
-						originatingAgentId: agent.id,
-						proposalType: (p.proposalType as any) ?? "fix_task",
-						title: p.title,
-						description: p.description ?? "",
-						severity: p.severity,
-						suggestedRole: p.suggestedRole ?? agent.role,
-						phaseId: task.phaseId,
-					});
-					console.log(`[execution-engine] Task proposal accepted: "${p.title}" from ${agent.name}`);
-				} catch (err) {
-					console.warn(`[execution-engine] Task proposal failed: "${p.title}"`, err);
-				}
-			} else if (proposal.type === "agent_message") {
-				const m = proposal.payload as {
-					targetAgentId?: string; messageType?: string; content?: string;
-				};
-				if (!m.content || !m.targetAgentId) continue;
-				try {
-					const msgType = m.messageType ?? "request_info";
-					if (msgType === "blocker_alert") {
-						await signalBlocker(projectId, agent.id, m.content, task.id);
-					} else if (msgType === "handoff_artifact") {
-						await handoffArtifact(projectId, agent.id, m.targetAgentId, "artifact", m.content, task.id);
-					} else if (msgType === "design_decision") {
-						await recordDesignDecision(projectId, agent.id, m.content, m.content, task.id);
-					} else {
-						await requestInfo(projectId, agent.id, m.targetAgentId, m.content, m.content, task.id);
-					}
-					console.log(`[execution-engine] Agent message sent (${msgType}): ${agent.name} → ${m.targetAgentId ?? "broadcast"}`);
-				} catch (err) {
-					console.warn("[execution-engine] Agent message failed:", err);
-				}
-			} else if (proposal.type === "graph_mutation") {
-				const { proposeGraphMutation } = await import("./graph-coordinator.js");
-				const pipelineRun = await getPipelineRun(projectId);
-				const payload = proposal.payload as Record<string, unknown>;
-				const mutationType = String(payload.mutationType ?? "");
-				await proposeGraphMutation({
-					projectId,
-					causedByAgentId: agent.id,
-					pipelineRunId: pipelineRun?.id,
-					mutationType: mutationType as any,
-					payload,
-				});
-				console.log(`[execution-engine] Graph mutation proposal from ${agent.name} persisted for approval`);
-			}
-		}
-	}
 
 	/**
 	 * Build the execution prompt that is sent to the AI tool (Claude Code or
