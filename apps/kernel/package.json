@@ -42,7 +42,8 @@
     "@oscorpex/core": "workspace:*",
     "@oscorpex/provider-sdk": "workspace:*",
     "@oscorpex/verification-kit": "workspace:*",
-    "@oscorpex/policy-kit": "workspace:*"
+    "@oscorpex/policy-kit": "workspace:*",
+    "@oscorpex/memory-kit": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
