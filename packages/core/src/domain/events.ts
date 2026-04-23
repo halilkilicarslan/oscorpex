@@ -101,7 +101,14 @@ export type EventType =
 	| "work_item:created"
 	| "work_item:planned"
 	| "sprint:started"
-	| "sprint:completed";
+	| "sprint:completed"
+	// Run lifecycle
+	| "run:created"
+	| "run:started"
+	| "run:paused"
+	| "run:resumed"
+	| "run:failed"
+	| "run:completed";
 
 // Legacy event type for backward compatibility during migration
 // This matches the current StudioEvent shape and will be deprecated once

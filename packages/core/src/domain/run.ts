@@ -23,6 +23,7 @@ export interface Run {
 	currentStageId?: string;
 	startedAt?: string;
 	completedAt?: string;
+	createdAt?: string;
 	metadata?: Record<string, unknown>;
 }
 

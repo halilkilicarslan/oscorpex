@@ -5,6 +5,6 @@ import type { PipelineStage } from "../domain/stage.js";
 
 export interface TaskGraph {
 	buildWaves(phases: PipelineStage[]): PipelineStage[][];
-	resolveDependencies(taskId: string): string[];
-	getExecutionOrder(): string[];
+	resolveDependencies(taskId: string): Promise<string[]>;
+	getExecutionOrder(projectId: string): Promise<string[]>;
 }

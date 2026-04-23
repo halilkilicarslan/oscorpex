@@ -28,6 +28,8 @@ export * from "./context-repo.js";
 // v4.1: DiffViewer, Search Log, Agent Stats
 export * from "./diff-repo.js";
 export * from "./search-log-repo.js";
+// OSC-001: Run Store
+export * from "./run-repo.js";
 export * from "./agent-stats-repo.js";
 // M5: Plugin SDK
 export * from "./plugin-repo.js";

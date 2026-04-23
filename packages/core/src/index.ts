@@ -99,6 +99,7 @@ export { TASK_TRANSITIONS, canTransitionTask } from "./domain/state-machines.js"
 export { PIPELINE_STATUS_TRANSITIONS, canTransitionPipeline } from "./domain/state-machines.js";
 export { STAGE_STATUS_TRANSITIONS, canTransitionStage } from "./domain/state-machines.js";
 export { PHASE_STATUS_TRANSITIONS, canTransitionPhase } from "./domain/state-machines.js";
+export { RUN_TRANSITIONS, canTransitionRun } from "./domain/state-machines.js";
 
 // --- Contract interfaces ---
 export type { ProviderAdapter } from "./contracts/provider-adapter.js";

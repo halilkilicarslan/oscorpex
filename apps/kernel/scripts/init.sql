@@ -1689,6 +1689,26 @@ CREATE INDEX IF NOT EXISTS idx_learning_patterns_lookup ON learning_patterns(tas
 CREATE INDEX IF NOT EXISTS idx_learning_patterns_global ON learning_patterns(is_global) WHERE is_global = true;
 
 -- ---------------------------------------------------------------------------
+-- OSC-001: Run Store
+-- Canonical run entity for OscorpexKernel facade.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS runs (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  goal          TEXT NOT NULL DEFAULT '',
+  mode          TEXT NOT NULL DEFAULT 'execute',
+  status        TEXT NOT NULL DEFAULT 'created',
+  current_stage_id TEXT,
+  started_at    TIMESTAMPTZ,
+  completed_at  TIMESTAMPTZ,
+  metadata      TEXT NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_runs_status  ON runs(status);
+
+-- ---------------------------------------------------------------------------
 -- Phase 12: Replay Snapshots
 -- Checkpoint-level state capture for replay and observability.
 -- ---------------------------------------------------------------------------

@@ -50,6 +50,7 @@ import { eventBus } from "../event-bus.js";
 import { taskEngine } from "../task-engine.js";
 import { pipelineEngine } from "../pipeline-engine.js";
 import { replayStore } from "../replay-store.js";
+import { verificationRunner } from "./verification-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Adapter wrappers — kernel singletons behind contract interfaces
@@ -95,16 +96,20 @@ class KernelTaskStore implements TaskStore {
 
 class KernelRunStore implements RunStore {
 	async create(run: Run): Promise<Run> {
-		throw new Error("RunStore.create not yet wired — Phase 10 stub");
+		const { createRun } = await import("../db/run-repo.js");
+		return createRun(run);
 	}
 	async get(id: string): Promise<Run | null> {
-		throw new Error("RunStore.get not yet wired — Phase 10 stub");
+		const { getRun } = await import("../db/run-repo.js");
+		return getRun(id);
 	}
 	async update(id: string, partial: Partial<Run>): Promise<Run> {
-		throw new Error("RunStore.update not yet wired — Phase 10 stub");
+		const { updateRun } = await import("../db/run-repo.js");
+		return updateRun(id, partial);
 	}
 	async list(filter: import("@oscorpex/core").RunListFilter): Promise<Run[]> {
-		throw new Error("RunStore.list not yet wired — Phase 10 stub");
+		const { listRuns } = await import("../db/run-repo.js");
+		return listRuns(filter);
 	}
 }
 
@@ -123,14 +128,23 @@ class KernelScheduler implements Scheduler {
 }
 
 class KernelTaskGraph implements TaskGraphContract {
-	buildWaves(phases: import("@oscorpex/core").PipelineStage[]): import("@oscorpex/core").PipelineStage[][] {
-		throw new Error("TaskGraph.buildWaves not yet wired — Phase 10 stub");
+	buildWaves(_phases: import("@oscorpex/core").PipelineStage[]): import("@oscorpex/core").PipelineStage[][] {
+		// Project-scoped buildWaves requires agent + dependency fetch.
+		// Use pipelineEngine.refreshPipeline or @oscorpex/task-graph directly.
+		throw new Error("TaskGraph.buildWaves requires project context — use pipelineEngine.refreshPipeline");
 	}
-	resolveDependencies(taskId: string): string[] {
-		throw new Error("TaskGraph.resolveDependencies not yet wired — Phase 10 stub");
+	async resolveDependencies(taskId: string): Promise<string[]> {
+		const { getTask } = await import("../db.js");
+		const task = await getTask(taskId);
+		return task?.dependsOn ?? [];
 	}
-	getExecutionOrder(): string[] {
-		throw new Error("TaskGraph.getExecutionOrder not yet wired — Phase 10 stub");
+	async getExecutionOrder(projectId: string): Promise<string[]> {
+		const { listProjectAgents, listAgentDependencies } = await import("../db.js");
+		const agents = await listProjectAgents(projectId);
+		const deps = await listAgentDependencies(projectId);
+		const { buildDAGWaves } = await import("@oscorpex/task-graph");
+		const waves = buildDAGWaves(agents as any, deps as any);
+		return waves.flat();
 	}
 }
 
@@ -150,7 +164,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 	// Subsystem stubs — wired incrementally over Phase 10-12
 	// These throw clear errors if called before wiring is complete.
 	get verification(): VerificationRunner {
-		throw new Error("VerificationRunner not yet wired — Phase 10 stub");
+		return verificationRunner;
 	}
 	get policy(): PolicyEngineContract {
 		throw new Error("PolicyEngine not yet wired — Phase 10 stub");
@@ -165,28 +179,75 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		return replayStore;
 	}
 
-	// --- Run lifecycle (stubs — full wiring in Phase 12) ---
+	// --- Run lifecycle ---
 
-	async createRun(_input: { projectId: string; goal: string; mode: RunMode }): Promise<Run> {
-		throw new Error("OscorpexKernel.createRun not yet wired — Phase 10 stub");
+	async createRun(input: { projectId: string; goal: string; mode: RunMode }): Promise<Run> {
+		const { randomUUID } = await import("node:crypto");
+		const run: Run = {
+			id: randomUUID(),
+			projectId: input.projectId,
+			goal: input.goal,
+			mode: input.mode,
+			status: "created",
+			createdAt: new Date().toISOString(),
+		};
+		const created = await this.runs.create(run);
+		eventBus.emit({ projectId: input.projectId, type: "run:created", payload: { runId: created.id, goal: input.goal, mode: input.mode } });
+		return created;
 	}
-	async getRun(_runId: string): Promise<Run | null> {
-		throw new Error("OscorpexKernel.getRun not yet wired — Phase 10 stub");
+
+	async getRun(runId: string): Promise<Run | null> {
+		return this.runs.get(runId);
 	}
-	async startRun(_runId: string): Promise<Run> {
-		throw new Error("OscorpexKernel.startRun not yet wired — Phase 10 stub");
+
+	async startRun(runId: string): Promise<Run> {
+		const run = await this.runs.get(runId);
+		if (!run) throw new Error(`Run ${runId} not found`);
+		const { canTransitionRun } = await import("@oscorpex/core");
+		if (!canTransitionRun(run.status, "running")) throw new Error(`Cannot transition run ${runId} from ${run.status} to running`);
+		const updated = await this.runs.update(runId, { status: "running", startedAt: new Date().toISOString() });
+		eventBus.emit({ projectId: run.projectId, type: "run:started", payload: { runId } });
+		return updated;
 	}
-	async pauseRun(_runId: string): Promise<Run> {
-		throw new Error("OscorpexKernel.pauseRun not yet wired — Phase 10 stub");
+
+	async pauseRun(runId: string): Promise<Run> {
+		const run = await this.runs.get(runId);
+		if (!run) throw new Error(`Run ${runId} not found`);
+		const { canTransitionRun } = await import("@oscorpex/core");
+		if (!canTransitionRun(run.status, "paused")) throw new Error(`Cannot transition run ${runId} from ${run.status} to paused`);
+		const updated = await this.runs.update(runId, { status: "paused" });
+		eventBus.emit({ projectId: run.projectId, type: "run:paused", payload: { runId } });
+		return updated;
 	}
-	async resumeRun(_runId: string): Promise<Run> {
-		throw new Error("OscorpexKernel.resumeRun not yet wired — Phase 10 stub");
+
+	async resumeRun(runId: string): Promise<Run> {
+		const run = await this.runs.get(runId);
+		if (!run) throw new Error(`Run ${runId} not found`);
+		const { canTransitionRun } = await import("@oscorpex/core");
+		if (!canTransitionRun(run.status, "running")) throw new Error(`Cannot transition run ${runId} from ${run.status} to running`);
+		const updated = await this.runs.update(runId, { status: "running" });
+		eventBus.emit({ projectId: run.projectId, type: "run:resumed", payload: { runId } });
+		return updated;
 	}
-	async failRun(_runId: string, _reason: string): Promise<Run> {
-		throw new Error("OscorpexKernel.failRun not yet wired — Phase 10 stub");
+
+	async failRun(runId: string, reason: string): Promise<Run> {
+		const run = await this.runs.get(runId);
+		if (!run) throw new Error(`Run ${runId} not found`);
+		const { canTransitionRun } = await import("@oscorpex/core");
+		if (!canTransitionRun(run.status, "failed")) throw new Error(`Cannot transition run ${runId} from ${run.status} to failed`);
+		const updated = await this.runs.update(runId, { status: "failed", completedAt: new Date().toISOString() });
+		eventBus.emit({ projectId: run.projectId, type: "run:failed", payload: { runId, reason } });
+		return updated;
 	}
-	async completeRun(_runId: string): Promise<Run> {
-		throw new Error("OscorpexKernel.completeRun not yet wired — Phase 10 stub");
+
+	async completeRun(runId: string): Promise<Run> {
+		const run = await this.runs.get(runId);
+		if (!run) throw new Error(`Run ${runId} not found`);
+		const { canTransitionRun } = await import("@oscorpex/core");
+		if (!canTransitionRun(run.status, "completed")) throw new Error(`Cannot transition run ${runId} from ${run.status} to completed`);
+		const updated = await this.runs.update(runId, { status: "completed", completedAt: new Date().toISOString() });
+		eventBus.emit({ projectId: run.projectId, type: "run:completed", payload: { runId } });
+		return updated;
 	}
 
 	// --- Task lifecycle — delegates to taskEngine + hooks ---

@@ -132,3 +132,33 @@ export function canTransitionPhase(from: PhaseStatus, to: PhaseStatus): boolean 
 		return fromStatuses.includes(from) && t.to === to;
 	});
 }
+
+// ---------------------------------------------------------------------------
+// RunStatus — canonical run lifecycle transitions
+// ---------------------------------------------------------------------------
+
+import type { RunStatus } from "./run.js";
+
+export const RUN_TRANSITIONS: Array<{ from: RunStatus | RunStatus[]; to: RunStatus }> = [
+	{ from: "created", to: "planning" },
+	{ from: "created", to: "running" },
+	{ from: "planning", to: "running" },
+	{ from: "planning", to: "failed" },
+	{ from: "running", to: "paused" },
+	{ from: "running", to: "blocked" },
+	{ from: "running", to: "failed" },
+	{ from: "running", to: "completed" },
+	{ from: "paused", to: "running" },
+	{ from: "paused", to: "failed" },
+	{ from: "blocked", to: "running" },
+	{ from: "blocked", to: "failed" },
+	{ from: "failed", to: "running" },
+	{ from: "failed", to: "cancelled" },
+];
+
+export function canTransitionRun(from: RunStatus, to: RunStatus): boolean {
+	return RUN_TRANSITIONS.some((t) => {
+		const fromStatuses = Array.isArray(t.from) ? t.from : [t.from];
+		return fromStatuses.includes(from) && t.to === to;
+	});
+}
