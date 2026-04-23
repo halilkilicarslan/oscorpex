@@ -51,6 +51,9 @@ import { taskEngine } from "../task-engine.js";
 import { pipelineEngine } from "../pipeline-engine.js";
 import { replayStore } from "../replay-store.js";
 import { verificationRunner } from "./verification-adapter.js";
+import { policyEngine } from "./policy-adapter.js";
+import { costReporter } from "./cost-adapter.js";
+import { providerRegistry } from "./provider-registry.js";
 
 // ---------------------------------------------------------------------------
 // Adapter wrappers — kernel singletons behind contract interfaces
@@ -167,10 +170,10 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		return verificationRunner;
 	}
 	get policy(): PolicyEngineContract {
-		throw new Error("PolicyEngine not yet wired — Phase 10 stub");
+		return policyEngine;
 	}
 	get cost(): CostReporter {
-		throw new Error("CostReporter not yet wired — Phase 10 stub");
+		return costReporter;
 	}
 	get memory(): MemoryProvider {
 		throw new Error("MemoryProvider not yet wired — Phase 10 stub");
@@ -285,8 +288,8 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 
 	// --- Provider execution (stub) ---
 
-	async executeWithProvider(_providerId: string, _input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
-		throw new Error("OscorpexKernel.executeWithProvider not yet wired — Phase 10 stub");
+	async executeWithProvider(providerId: string, input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
+		return providerRegistry.execute(providerId, input);
 	}
 
 	// --- Status queries — delegates to pipelineEngine ---
