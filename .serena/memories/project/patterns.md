@@ -1,144 +1,35 @@
-# Oscorpex — Patterns & Gotchas
+# Oscorpex Critical Patterns (v8.1)
 
-## Hono
-- Routes at /api/studio, mounted via `app.route('/api/studio', studioRoutes)`
-- CRITICAL: Static routes (/team/org) BEFORE dynamic routes (/team/:agentId)
-- Wildcard `c.req.param('*')` unreliable with mount prefix — use raw URL parsing instead
-- Routes modular: src/studio/routes/ (12 sub-files). Mount via Hono `route('/')`. `routes.ts` shim re-exports.
+## Logging (NEW — 2026-04-22)
+- `import { createLogger } from "./logger.js"` then `const log = createLogger("module-name")`
+- Pino: `log.info("msg")`, `log.warn({ err }, "msg")` — NEVER `log.warn("msg", err)` (type error)
+- JSON output: `{"level":"warn","time":...,"service":"oscorpex","module":"...","msg":"..."}`
+- 4 files keep console.* for test compatibility: telemetry, shared-state, plugin-registry, job-queue
 
-## Database
-- PostgreSQL via `pg` library, `getPool()` from `src/studio/pg.ts`
-- 22+ tables; `token_usage` has `cache_creation_tokens`, `cache_read_tokens`
-- DB modular: `src/studio/db/` (17 repos). `db.ts` shim re-exports. Add new CRUD to matching repo.
-- UUID generation: always `randomUUID()` from `node:crypto` (not uuid package)
-- All migrations use `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` for idempotency
+## Graph Safety (NEW — 2026-04-22)
+- `validateAddEdge()` before every `applyAddEdge()` — cycle DFS, self-edge, duplicate check
+- `GraphInvariantError` with typed violations
+- `registerSplitCompletionListener()` on splitTask — child done→parent done, failed→parent failed
 
-## pnpm
-- Always pnpm add (never npm install)
+## Sandbox (UPDATED — 2026-04-22)
+- `checkPathAllowed()` uses `resolve() + normalize() + sep` — NEVER bare `startsWith()`
+- `writeBack()` uses `realpath()` + `lstat()` symlink rejection
+- Pre-execution gate: hard mode checks denied tools BEFORE CLI spawn
 
-## CLI-Only Execution
-- All AI runs through Claude CLI (`executeWithCLI` / `streamWithCLI`)
-- No `generateText`/`streamText` in routes or execution-engine
-- `emitTransient` for terminal streaming
-- Token usage including cache tokens recorded via `recordTokenUsage()` after each CLI call
+## Injection (NEW — 2026-04-22)
+- `checkInjectionLimits()` before `proposeTask()` — InjectionLimitError
+- Limits: per-task 3, per-phase 10, recursion depth 2, duplicate title check
 
-## Prompt Budget (v2.6)
-- `src/studio/prompt-budget.ts` — `enforcePromptBudget(prompt, ctx)` measures chars, truncates at 400k, emits `prompt:size` event
-- `capText(text, maxChars)` for individual field caps (e.g., `task.description` → 10k chars)
-- `estimateTokens(chars)` ≈ chars/4
-- `buildTaskPrompt` caps `task.description` early, wraps final prompt with `enforcePromptBudget`
-- Event type `prompt:size` added to `EventType` union — shows up in analytics
+## Replanner (UPDATED — 2026-04-22)
+- Pipeline gate: `advanceStage()` checks pending replan_events, blocks if any
+- 6 triggers, 5 patch actions (add/remove/modify/reorder/defer)
+- Event payload includes `replanEventId` + `patchSummary`
 
-## Context Injection Layers
-- Inside `buildTaskPrompt`:
-  - `contextFiles` capped at 50 (from completed tasks' filesCreated/Modified)
-  - `completedTasks.slice(-10)` (latest 10 summaries)
-  - RAG via `buildRAGContext()` — max 5 chunks, 4000 tokens
-  - `task.error.slice(0, 1000)` for self-healing
-  - `task.description` capped via `safeDescription` (10k chars)
-- Agent messages NOT injected into prompts (messaging is standalone)
-
-## CRITICAL: await all taskEngine calls
-- `taskEngine.assignTask()`, `startTask()`, `completeTask()`, `failTask()` are ALL async
-- MUST use `await` — without it, race conditions cause "status: queued" errors
-- This was a pervasive bug across execution-engine.ts (fixed in v2.3)
-
-## Agent Output Persistence
-- 3-tier fallback: in-memory buffer → .log file → DB task output.logs
-- `persistAgentLog()` called on task complete/fail in execution-engine
-- `loadAgentLog()` for reading back after restart
-
-## v3.0+ Engine Patterns
-
-### Sub-task Decomposition (v3.0)
-- `execution-engine.ts:executeTask()` auto-decomposes L/XL tasks without parentTaskId
-- Dynamic import: `await import("./task-decomposer.js")` to avoid circular deps
-- Parent task stays "running", sub-tasks dispatched independently
-- `task-engine.ts:markTaskDone()` checks `areAllSubTasksDone(parentTaskId)` → auto-completes parent
-
-### Edge Type Handling (v3.1)
-- 12 edge types in `DependencyType` union
-- Blocking (DAG): hierarchy, workflow, review, gate, conditional, handoff, approval, pair
-- Non-blocking (runtime): escalation, fallback, notification, mentoring
-- `pair` edges: both agents merged into same wave in `buildDAGWaves()`
-- `failTask()`: checks fallback edges (re-assign on first fail), escalation edges (after N failures via metadata.maxFailures)
-
-### Work Items (v3.2)
-- `task-engine.ts:failTask()` auto-creates defect work items via dynamic import `./db/work-item-repo.js`
-- PM tools: `convertWorkItemsToPlan`, `addPhaseToPlan`, `addTaskToPhase`, `replanUnfinishedTasks`
-
-### Model Routing (v3.4)
-- `model-router.ts:resolveModel(task, context)` reads `project_settings` category `model_routing`
-- Defaults: S→Haiku, M→Sonnet, L→Sonnet, XL→Opus
-- Escalation: +1 tier for priorFailures>0, +1 for reviewRejections>1
-
-## Review Loop
-- `completeTask()` → finds reviewer via `findReviewerForTask()` → creates review task → `notifyCompleted()` triggers dispatch
-- Review task placed in SAME stage as original task (not reviewer's stage)
-- Rejection → `submitReview(approved=false)` → task goes to 'revision' → auto-restart via `restartRevision()` + `executeTask()`
-- Review task title pattern: `"Code Review: {originalTitle}"`
-- Max revision cycles: 3 (then escalation to tech-lead)
-- CRITICAL: `restartRevision()` sets task to `"running"` — `executeTask` guard must accept `"running"` (not just `"queued"`)
-- CRITICAL: `_executeTaskInner` skips `assignTask`+`startTask` if task is already `"running"` (revision case)
-- CRITICAL: `dispatchReadyTasks` allows review tasks even when phase has failed tasks (filters non-review tasks only)
-
-## Pipeline Pause/Resume
-- Pause: `cancelRunningTasks()` — aborts via AbortController, kills process groups, stops apps, resets tasks to queued
-- Resume: `startProjectExecution()` re-dispatches queued tasks
-- `_activeControllers` Map tracks running task AbortControllers by `${projectId}:${taskId}`
-- Aborted tasks return silently in catch block (no failTask)
-
-## Event-Sourced Metrics
-- Failure count: query `events` table for `task:failed` type (NOT task.status — survives retry/requeue)
-- Review rejections: query `events` table for `task:review_rejected` type
-- First-pass tasks: completed tasks where task_id NOT IN events with type `task:failed`
-- Always prefer events table over task snapshot for cumulative metrics
-
-## Pipeline Stage Assignment
-- Normal tasks: matched to stage by assignedAgent → wave agent match
-- Review tasks: matched to stage by dependsOn[0] → same stage as original task
-- Reviewer agent injected into target stage's agent list
-- Pipeline status API does relocation for persisted state compatibility
-- Empty pending stages with 0 tasks are hidden in frontend
-
-## Startup Recovery (execution-engine.ts recoverStuckTasks)
-1. Reset running/assigned tasks → queued
-2. Restart revision tasks via restartRevision() + executeTask()
-3. Dispatch orphaned queued tasks in running/completed phases
-
-## Runtime System
-- Port detection: .env PORT → source code `.listen(N)` → FRAMEWORK_DEFAULT_PORTS
-- DB provisioning: `findAvailablePort()` auto-increments on conflict
-- `postStartHealthCheck()`: fetch localhost:PORT after start, any HTTP response = alive
-- `.studio.json` auto-generated after first successful start (only running services)
-- Preview proxy: strips X-Frame-Options, CSP, COOP, CORP headers
-
-## Preview / iframe
-- iframe uses DIRECT URL (http://localhost:PORT) — NOT proxy
-- Proxy breaks ES module imports in inline `<script type="module">` (import resolves against page origin, not `<base>`)
-- Proxy still used for: API-only detection (fetch), `<base>` tag injection in HTML
-- `switchPreviewService()` backend endpoint changes which service the proxy routes to
-- CRITICAL: Set `API_TARGET` for Vite proxy target, NEVER `VITE_API_URL` (bypasses proxy → CORS)
-- Port conflicts: `isPortInUse()` via `lsof -ti:PORT`, `resolvePort()` auto-increment
-- autoDetect/analyzeProject: ALWAYS scan root dir even when subdirs found (monorepo root may have backend)
-- Vite proxies `/api/studio` → localhost:3141
-
-## Task Modal
-- `task.error` field used for both real errors AND review feedback
-- Display logic: revision/review status → orange "Review Geri Bildirimi"; failed → red "Hata"
-
-## Agent Colors
-PM=#f59e0b, Designer=#f472b6, Architect=#3b82f6, Frontend=#ec4899,
-Backend=#22c55e, Coder=#06b6d4, QA=#a855f7, Reviewer=#ef4444, DevOps=#0ea5e9
-
-## Testing
-- `vi.mock('node:child_process')` factory required for ESM (vi.spyOn fails on exports)
-- DB tests use `describe.skipIf(!dbReady)` gate — `SELECT 1 FROM chat_messages LIMIT 0` check
-- Frontend mocks: always mock ALL imports from `../lib/studio-api` used by component (e.g. fetchProjectCosts)
-
-## User Preferences
-- Always respond in Turkish
-- Use pnpm, never npm
-- Don't push unless explicitly asked
-- Don't edit AI-generated code in .voltagent/repos/
-- Dark theme: bg-[#0a0a0a], cards #111111, borders #262626, accent #22c55e
+## Unchanged Patterns
+- Import: `.js` extension, DB from `./db.js` barrel, UUID from `node:crypto`
+- Dispatch: `claimTask()` SELECT FOR UPDATE SKIP LOCKED
+- Pipeline: DB-authoritative via `mutatePipelineState()`
+- Budget: `enforceBudgetGuard()`, canonical key `maxCostUsd`
+- Provider: fallback chain, `isAllExhausted()` → defer + retry timer
+- Session: `initSession()` → `recordStep()` x4 → `completeSession()`/`failSession()`
+- Auth: opt-in `OSCORPEX_AUTH_ENABLED`, RLS 14+ tables
