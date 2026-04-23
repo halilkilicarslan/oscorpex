@@ -54,6 +54,7 @@ import { verificationRunner } from "./verification-adapter.js";
 import { policyEngine } from "./policy-adapter.js";
 import { costReporter } from "./cost-adapter.js";
 import { providerRegistry } from "./provider-registry.js";
+import { memoryProvider } from "./memory-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Adapter wrappers — kernel singletons behind contract interfaces
@@ -176,7 +177,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		return costReporter;
 	}
 	get memory(): MemoryProvider {
-		throw new Error("MemoryProvider not yet wired — Phase 10 stub");
+		return memoryProvider;
 	}
 	get replay(): ReplayStore {
 		return replayStore;
