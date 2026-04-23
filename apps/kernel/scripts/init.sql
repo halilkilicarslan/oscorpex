@@ -1687,3 +1687,20 @@ CREATE TABLE IF NOT EXISTS learning_patterns (
 );
 CREATE INDEX IF NOT EXISTS idx_learning_patterns_lookup ON learning_patterns(task_type, agent_role);
 CREATE INDEX IF NOT EXISTS idx_learning_patterns_global ON learning_patterns(is_global) WHERE is_global = true;
+
+-- ---------------------------------------------------------------------------
+-- Phase 12: Replay Snapshots
+-- Checkpoint-level state capture for replay and observability.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS replay_snapshots (
+  id             TEXT PRIMARY KEY,
+  run_id         TEXT NOT NULL,
+  checkpoint_id  TEXT NOT NULL DEFAULT 'default',
+  snapshot_json  TEXT NOT NULL DEFAULT '{}',
+  context_hash   TEXT,
+  metadata       TEXT NOT NULL DEFAULT '{}',
+  created_at     TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_replay_run ON replay_snapshots(run_id);
+CREATE INDEX IF NOT EXISTS idx_replay_checkpoint ON replay_snapshots(run_id, checkpoint_id);

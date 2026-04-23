@@ -49,6 +49,7 @@ import { hookRegistry, runHooks } from "./hook-registry.js";
 import { eventBus } from "../event-bus.js";
 import { taskEngine } from "../task-engine.js";
 import { pipelineEngine } from "../pipeline-engine.js";
+import { replayStore } from "../replay-store.js";
 
 // ---------------------------------------------------------------------------
 // Adapter wrappers — kernel singletons behind contract interfaces
@@ -161,7 +162,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		throw new Error("MemoryProvider not yet wired — Phase 10 stub");
 	}
 	get replay(): ReplayStore {
-		throw new Error("ReplayStore not yet wired — Phase 10 stub");
+		return replayStore;
 	}
 
 	// --- Run lifecycle (stubs — full wiring in Phase 12) ---

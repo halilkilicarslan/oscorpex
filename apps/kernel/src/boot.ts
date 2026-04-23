@@ -16,6 +16,9 @@ import { providerState } from "./studio/provider-state.js";
 import { webhookSender } from "./studio/webhook-sender.js";
 import { startWSServer } from "./studio/ws-server.js";
 import { createLogger } from "./studio/logger.js";
+import { eventBus } from "./studio/event-bus.js";
+import { createCheckpointSnapshot } from "./studio/replay-store.js";
+import { randomUUID } from "node:crypto";
 
 const log = createLogger("boot");
 
@@ -68,6 +71,27 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 	// 7. Pipeline engine hook registration
 	const { pipelineEngine } = await import("./studio/pipeline-engine.js");
 	pipelineEngine.registerTaskHook();
+
+	// 7.5. Auto-checkpoint on stage boundaries
+	eventBus.on("pipeline:stage_completed", async (event) => {
+		const projectId = event.projectId;
+		const stageIndex = (event.payload as any)?.stageIndex ?? "unknown";
+		try {
+			await createCheckpointSnapshot(projectId, `stage-${stageIndex}`, randomUUID);
+			log.info(`[boot] Checkpoint created for project ${projectId} at stage ${stageIndex}`);
+		} catch (err) {
+			log.warn(`[boot] Checkpoint failed for ${projectId}: ` + String(err));
+		}
+	});
+	eventBus.on("pipeline:completed", async (event) => {
+		const projectId = event.projectId;
+		try {
+			await createCheckpointSnapshot(projectId, "final", randomUUID);
+			log.info(`[boot] Final checkpoint created for project ${projectId}`);
+		} catch (err) {
+			log.warn(`[boot] Final checkpoint failed for ${projectId}: ` + String(err));
+		}
+	});
 
 	// 8. Build Hono app with studio routes
 	const app = new Hono();
