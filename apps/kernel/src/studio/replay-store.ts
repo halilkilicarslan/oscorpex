@@ -240,3 +240,61 @@ export async function createCheckpointSnapshot(
 	await replayStore.pruneSnapshots(projectId, 100);
 	return snapshot;
 }
+
+/**
+ * ReplayRestoreResult — what changed during a restore operation.
+ */
+export interface ReplayRestoreResult {
+	tasksRestored: number;
+	pipelineRestored: boolean;
+	errors: string[];
+}
+
+/**
+ * Restore run state from a previously saved snapshot.
+ * Updates task statuses and pipeline stages to match the snapshot.
+ * This is a read-only diagnostic restore by default; set `dryRun: false`
+ * to actually mutate the DB.
+ */
+export async function restoreFromSnapshot(
+	snapshot: ReplaySnapshot,
+	options: { dryRun?: boolean } = {},
+): Promise<ReplayRestoreResult> {
+	const { dryRun = true } = options;
+	const { updateTask, createPipelineRun } = await import("./db.js");
+	const result: ReplayRestoreResult = { tasksRestored: 0, pipelineRestored: false, errors: [] };
+
+	// Restore task statuses from snapshot
+	for (const task of snapshot.tasks as any[]) {
+		try {
+			if (!dryRun) {
+				await updateTask(task.id, {
+					status: task.status,
+					output: task.output ? JSON.stringify(task.output) : undefined,
+					error: task.error ?? undefined,
+				});
+			}
+			result.tasksRestored++;
+		} catch (err) {
+			result.errors.push(`task ${task.id}: ${String(err)}`);
+		}
+	}
+
+	// Restore pipeline stages if present
+	if (snapshot.stages && snapshot.stages.length > 0) {
+		try {
+			if (!dryRun) {
+				await createPipelineRun({
+					projectId: snapshot.runId,
+					status: (snapshot.run as any)?.status ?? "running",
+					stagesJson: JSON.stringify(snapshot.stages),
+				});
+			}
+			result.pipelineRestored = true;
+		} catch (err) {
+			result.errors.push(`pipeline: ${String(err)}`);
+		}
+	}
+
+	return result;
+}
