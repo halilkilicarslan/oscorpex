@@ -162,4 +162,28 @@ describe("ProviderRegistry contract", () => {
 		expect(retrieved!.capabilities().supportsCancel).toBe(true);
 		expect(retrieved!.capabilities().supportedModels).toContain("fake-model");
 	});
+
+	it("registerDefaultProviders registers native adapters without legacy", () => {
+		registry.registerDefaultProviders();
+		expect(registry.get("claude-code")).toBeDefined();
+		expect(registry.get("codex")).toBeDefined();
+		expect(registry.get("cursor")).toBeDefined();
+	});
+
+	it("execution result includes duration metadata", async () => {
+		registry.register("fake", adapter);
+		const input: ProviderExecutionInput = {
+			runId: "r1",
+			taskId: "t1",
+			provider: "fake",
+			repoPath: "/tmp",
+			prompt: "hello",
+			timeoutMs: 5000,
+		};
+
+		const result = await registry.execute("fake", input);
+		expect(result.startedAt).toBeDefined();
+		expect(result.completedAt).toBeDefined();
+		expect(new Date(result.completedAt).getTime()).toBeGreaterThanOrEqual(new Date(result.startedAt).getTime());
+	});
 });

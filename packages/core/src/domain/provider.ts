@@ -34,6 +34,10 @@ export interface ProviderExecutionResult {
 	usage?: ProviderExecutionUsage;
 	startedAt: string;
 	completedAt: string;
+	metadata?: {
+		durationMs?: number;
+		[key: string]: unknown;
+	};
 }
 
 export interface ProviderCapabilities {

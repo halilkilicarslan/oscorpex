@@ -7,6 +7,29 @@ import { ClaudeCodeAdapter, CodexAdapter, CursorAdapter } from "../adapters/inde
 
 const log = createLogger("provider-registry");
 
+// ---------------------------------------------------------------------------
+// Provider factory — decouples adapter construction from legacy cli-adapter.ts
+// ---------------------------------------------------------------------------
+
+export interface ProviderFactoryConfig {
+	id: string;
+	legacyName?: string;
+	defaultModel?: string;
+}
+
+export function createProviderAdapter(config: ProviderFactoryConfig): ProviderAdapter {
+	switch (config.id) {
+		case "claude-code":
+			return new ClaudeCodeAdapter(null);
+		case "codex":
+			return new CodexAdapter(null);
+		case "cursor":
+			return new CursorAdapter(null);
+		default:
+			throw new Error(`Unknown provider: ${config.id}`);
+	}
+}
+
 export class ProviderRegistry {
 	private adapters = new Map<string, ProviderAdapter>();
 	/** Active abort controllers keyed by runId:taskId */
@@ -70,16 +93,39 @@ export class ProviderRegistry {
 	}
 
 	/**
+	 * Native provider registration — does NOT depend on legacy cli-adapter.ts.
+	 * Registers providers using the factory layer. This is the preferred
+	 * initialization path for new deployments.
+	 */
+	registerDefaultProviders(): void {
+		const configs: ProviderFactoryConfig[] = [
+			{ id: "claude-code", defaultModel: "sonnet" },
+			{ id: "codex", defaultModel: "gpt-4o" },
+			{ id: "cursor", defaultModel: "cursor-large" },
+		];
+
+		for (const config of configs) {
+			try {
+				const adapter = createProviderAdapter(config);
+				this.register(config.id, adapter);
+				log.info(`[provider-registry] Native registration: ${config.id}`);
+			} catch (err) {
+				log.warn(`[provider-registry] Could not native-register ${config.id}: ${String(err)}`);
+			}
+		}
+	}
+
+	/**
 	 * Boot-time initialization: register known CLI adapters.
 	 * This bridges legacy cli-adapter.ts with the new provider registry.
 	 *
 	 * @deprecated Transitional API — will be removed once all providers have
-	 * native adapter implementations. Use register() with real ProviderAdapter
-	 * instances for new providers.
+	 * native adapter implementations. Use registerDefaultProviders() or
+	 * register() with real ProviderAdapter instances for new providers.
 	 */
 	async initializeFromLegacy(): Promise<void> {
 		const { getAdapter } = await import("../cli-adapter.js");
-		const mapping: Array<{ name: string; ctor: new (legacy: any) => ProviderAdapter }> = [
+		const mapping: Array<{ name: string; ctor: new (legacy?: any) => ProviderAdapter }> = [
 			{ name: "claude-code", ctor: ClaudeCodeAdapter },
 			{ name: "codex", ctor: CodexAdapter },
 			{ name: "cursor", ctor: CursorAdapter },

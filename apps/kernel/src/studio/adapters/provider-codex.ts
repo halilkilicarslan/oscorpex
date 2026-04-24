@@ -11,7 +11,7 @@ export class CodexAdapter implements ProviderAdapter {
 
 	private legacy: any;
 
-	constructor(legacyAdapter: any) {
+	constructor(legacyAdapter?: any) {
 		this.legacy = legacyAdapter;
 	}
 

@@ -11,7 +11,7 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
 
 	private legacy: any;
 
-	constructor(legacyAdapter: any) {
+	constructor(legacyAdapter?: any) {
 		this.legacy = legacyAdapter;
 	}
 
@@ -48,6 +48,8 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
 			});
 
 			const completedAt = new Date().toISOString();
+			const startedMs = new Date(startedAt).getTime();
+			const completedMs = new Date(completedAt).getTime();
 			return {
 				provider: this.id,
 				model: input.model,
@@ -62,6 +64,9 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
 				},
 				startedAt,
 				completedAt,
+				metadata: {
+					durationMs: completedMs - startedMs,
+				},
 			};
 		} catch (err) {
 			log.warn({ err }, `[${this.id}] Execution failed`);
