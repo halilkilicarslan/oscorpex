@@ -72,6 +72,10 @@ class ProviderRegistry {
 	/**
 	 * Boot-time initialization: register known CLI adapters.
 	 * This bridges legacy cli-adapter.ts with the new provider registry.
+	 *
+	 * @deprecated Transitional API — will be removed once all providers have
+	 * native adapter implementations. Use register() with real ProviderAdapter
+	 * instances for new providers.
 	 */
 	async initializeFromLegacy(): Promise<void> {
 		const { getAdapter } = await import("../cli-adapter.js");
