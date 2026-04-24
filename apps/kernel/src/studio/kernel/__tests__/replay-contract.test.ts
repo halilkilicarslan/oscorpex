@@ -20,6 +20,7 @@ import type { ReplaySnapshot } from "@oscorpex/core";
 		const snapshot: ReplaySnapshot = {
 			id: "snap-1",
 			runId: "contract-run",
+			projectId: "contract-run",
 			checkpoint: "test-checkpoint",
 			createdAt: new Date().toISOString(),
 			run: { id: "contract-run", projectId: "contract-run", goal: "test", mode: "execute", status: "running" },
@@ -56,6 +57,7 @@ import type { ReplaySnapshot } from "@oscorpex/core";
 		const snapshot: ReplaySnapshot = {
 			id: "snap-2",
 			runId: "contract-run",
+			projectId: "contract-run",
 			checkpoint: "list-checkpoint",
 			createdAt: new Date().toISOString(),
 			run: { id: "contract-run", projectId: "contract-run", goal: "test", mode: "execute", status: "running" },
@@ -115,6 +117,7 @@ import type { ReplaySnapshot } from "@oscorpex/core";
 			await replayStore.saveSnapshot({
 				id: `prune-snap-${i}`,
 				runId: "prune-run",
+				projectId: "prune-run",
 				checkpoint: "cp",
 				createdAt: new Date(Date.now() + i * 1000).toISOString(),
 				run: { id: "prune-run", projectId: "prune-run", goal: "test", mode: "execute", status: "running" },

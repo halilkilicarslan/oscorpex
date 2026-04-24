@@ -88,6 +88,39 @@ class DbReplayStore implements ReplayStore {
 		} as ReplaySnapshot;
 	}
 
+	async getSnapshotById(snapshotId: string): Promise<ReplaySnapshot | null> {
+		const row = await queryOne<{
+			id: string;
+			run_id: string;
+			checkpoint_id: string;
+			snapshot_json: string;
+			policy_decisions_json: string | null;
+			verification_reports_json: string | null;
+			created_at: string;
+		}>(
+			`SELECT id, run_id, checkpoint_id, snapshot_json, policy_decisions_json, verification_reports_json, created_at
+			 FROM replay_snapshots
+			 WHERE id = $1`,
+			[snapshotId],
+		);
+
+		if (!row) return null;
+
+		const parsed = JSON.parse(row.snapshot_json);
+		return {
+			id: row.id,
+			runId: row.run_id,
+			checkpoint: row.checkpoint_id,
+			createdAt: row.created_at,
+			run: parsed.run ?? {},
+			stages: parsed.stages ?? [],
+			tasks: parsed.tasks ?? [],
+			artifacts: parsed.artifacts ?? [],
+			policyDecisions: row.policy_decisions_json ? JSON.parse(row.policy_decisions_json) : (parsed.policyDecisions ?? []),
+			verificationReports: row.verification_reports_json ? JSON.parse(row.verification_reports_json) : (parsed.verificationReports ?? []),
+		} as ReplaySnapshot;
+	}
+
 	async listSnapshots(runId: string, limit = 50): Promise<ReplaySnapshot[]> {
 		const rows = await query<{
 			id: string;
@@ -252,6 +285,7 @@ export async function createCheckpointSnapshot(
 	const snapshot: ReplaySnapshot = {
 		id: generateId(),
 		runId: canonicalRunId,
+		projectId,
 		checkpoint: checkpointName,
 		createdAt: new Date().toISOString(),
 		run: runSummary,
@@ -260,6 +294,15 @@ export async function createCheckpointSnapshot(
 		artifacts,
 		policyDecisions,
 		verificationReports,
+		metadata: {
+			truthSources: {
+				run: runRecord ? "canonical_run_db" : "pipeline_project_fallback",
+				policyDecisions: "task_policy_snapshot",
+				verificationReports: "verification_results_db",
+				artifacts: "task_output_files",
+				stages: pipeline ? "pipeline_run_db" : "empty",
+			},
+		},
 	};
 
 	await replayStore.saveSnapshot(snapshot);
@@ -307,11 +350,12 @@ export async function restoreFromSnapshot(
 	}
 
 	// Restore pipeline stages if present
+	// Use snapshot.projectId (not runId) to ensure we restore to the correct project
 	if (snapshot.stages && snapshot.stages.length > 0) {
 		try {
 			if (!dryRun) {
 				await createPipelineRun({
-					projectId: snapshot.runId,
+					projectId: snapshot.projectId,
 					status: (snapshot.run as any)?.status ?? "running",
 					stagesJson: JSON.stringify(snapshot.stages),
 				});

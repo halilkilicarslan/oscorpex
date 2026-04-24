@@ -3,6 +3,7 @@
 export interface ReplaySnapshot {
 	id: string;
 	runId: string;
+	projectId: string;
 	checkpoint: string;
 	createdAt: string;
 	run: import("./run.js").Run;
@@ -11,4 +12,8 @@ export interface ReplaySnapshot {
 	artifacts: import("./artifact.js").ArtifactManifest[];
 	policyDecisions: import("./policy.js").PolicyDecision[];
 	verificationReports: import("./verification.js").VerificationReport[];
+	metadata?: {
+		truthSources?: Record<string, string>;
+		[key: string]: unknown;
+	};
 }

@@ -37,13 +37,29 @@ replayRoutes.get("/runs/:runId/snapshots", async (c) => {
 	}
 });
 
-// GET /replay/snapshots/:snapshotId — inspect a single snapshot
+// GET /replay/snapshots/:snapshotId — inspect a single snapshot by ID
 replayRoutes.get("/snapshots/:snapshotId", async (c) => {
 	try {
 		const snapshotId = c.req.param("snapshotId");
-		// Note: getSnapshot by ID is not in ReplayStore contract; we list and find
-		// This is a limitation of the current contract — we work around it
-		return c.json({ error: "Inspect by snapshotId requires contract extension" }, 501);
+		const snapshot = await replayStore.getSnapshotById(snapshotId);
+		if (!snapshot) {
+			return c.json({ error: "Snapshot not found" }, 404);
+		}
+
+		return c.json({
+			id: snapshot.id,
+			runId: snapshot.runId,
+			projectId: snapshot.projectId,
+			checkpoint: snapshot.checkpoint,
+			createdAt: snapshot.createdAt,
+			run: snapshot.run,
+			stageCount: snapshot.stages?.length ?? 0,
+			taskCount: snapshot.tasks?.length ?? 0,
+			artifacts: snapshot.artifacts ?? [],
+			policyDecisions: snapshot.policyDecisions ?? [],
+			verificationReports: snapshot.verificationReports ?? [],
+			metadata: snapshot.metadata ?? {},
+		});
 	} catch (err) {
 		log.error({ err }, "[replay-routes] inspect snapshot failed");
 		return c.json({ error: String(err) }, 500);
