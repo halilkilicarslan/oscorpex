@@ -2,6 +2,7 @@
 
 export interface CostRecord {
 	id: string;
+	projectId?: string;
 	runId: string;
 	taskId: string;
 	provider: string;

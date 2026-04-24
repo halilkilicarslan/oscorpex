@@ -130,6 +130,9 @@ async function getState(projectId: string): Promise<PipelineState | null> {
 // ---------------------------------------------------------------------------
 
 class PipelineEngine {
+	// Guard: registerTaskHook() idempotent olmalı (boot.ts + module-level çağrı)
+	private taskHookRegistered = false;
+
 	// -------------------------------------------------------------------------
 	// Pipeline inşası
 	// -------------------------------------------------------------------------
@@ -798,6 +801,9 @@ class PipelineEngine {
 	// -------------------------------------------------------------------------
 
 	registerTaskHook(): void {
+		if (this.taskHookRegistered) return;
+		this.taskHookRegistered = true;
+
 		taskEngine.onTaskCompleted((taskId, projectId) => {
 			getPipelineRun(projectId)
 				.then(async (run) => {

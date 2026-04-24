@@ -11,13 +11,15 @@ const log = createLogger("cost-reporter");
 
 class KernelCostReporter implements CostReporter {
 	async recordCost(record: CostRecord): Promise<void> {
+		const projectId = record.projectId ?? record.runId;
+
 		// Persist to token_usage table (S3-03)
 		await execute(
 			`INSERT INTO token_usage (id, project_id, task_id, agent_id, model, provider, input_tokens, output_tokens, total_tokens, cost_usd, cache_creation_tokens, cache_read_tokens, created_at)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 			[
 				randomUUID(),
-				record.runId,
+				projectId,
 				record.taskId,
 				"system", // agent_id — not available in CostRecord
 				record.model ?? "",
@@ -34,10 +36,11 @@ class KernelCostReporter implements CostReporter {
 
 		// Emit cost:recorded event (S3-02 semantic fix)
 		eventBus.emit({
-			projectId: record.runId,
+			projectId,
 			type: "cost:recorded",
 			payload: {
 				recordId: record.id,
+				projectId,
 				runId: record.runId,
 				taskId: record.taskId,
 				provider: record.provider,
