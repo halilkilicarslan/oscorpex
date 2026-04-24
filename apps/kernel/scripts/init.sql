@@ -61,8 +61,12 @@ CREATE TABLE IF NOT EXISTS tasks (
   reviewer_agent_id         TEXT,
   review_task_id            TEXT,
   revision_count            INTEGER NOT NULL DEFAULT 0,
-  assigned_agent_id         TEXT
+  assigned_agent_id         TEXT,
+  policy_snapshot           TEXT NOT NULL DEFAULT '{}'
 );
+
+-- Migration: policy_snapshot for persisted policy truth
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS policy_snapshot TEXT NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS agent_configs (
   id            TEXT PRIMARY KEY,

@@ -113,6 +113,8 @@ export function rowToTask(row: any): Task {
 		projectId: row.project_id ?? undefined,
 		// v8.0: Auto-classified risk level
 		riskLevel: row.risk_level ?? undefined,
+		// v8.1: Persisted policy evaluation snapshot
+		policySnapshot: row.policy_snapshot ?? undefined,
 	};
 }
 

@@ -20,6 +20,7 @@ export class CursorAdapter implements ProviderAdapter {
 			supportsToolRestriction: false,
 			supportsStreaming: false,
 			supportsResume: false,
+			supportsCancel: false,
 			supportsStructuredOutput: false,
 			supportsSandboxHinting: false,
 			supportedModels: ["cursor-small", "cursor-large"],

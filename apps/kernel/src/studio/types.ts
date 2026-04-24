@@ -115,6 +115,8 @@ export interface Task {
 	projectId?: string;
 	// v8.0: Auto-classified risk level for governance enforcement
 	riskLevel?: RiskLevel;
+	// v8.1: Persisted policy evaluation snapshot for replay truth
+	policySnapshot?: string;
 }
 
 // ---- Agent Configuration ---------------------------------------------------

@@ -20,6 +20,7 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
 			supportsToolRestriction: true,
 			supportsStreaming: true,
 			supportsResume: true,
+			supportsCancel: true,
 			supportsStructuredOutput: true,
 			supportsSandboxHinting: true,
 			supportedModels: ["sonnet", "opus", "haiku"],

@@ -40,6 +40,7 @@ export interface ProviderCapabilities {
 	supportsToolRestriction: boolean;
 	supportsStreaming: boolean;
 	supportsResume: boolean;
+	supportsCancel: boolean;
 	supportsStructuredOutput: boolean;
 	supportsSandboxHinting: boolean;
 	supportedModels?: string[];

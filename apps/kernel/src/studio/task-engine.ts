@@ -237,8 +237,15 @@ class TaskEngine {
 		}
 
 		// v3.7: Policy enforcement — governance rules can block or warn before execution.
+		// Persist the evaluation result so replay can use historical truth instead of re-evaluating.
 		try {
 			const policyResult = await evaluatePolicies(projectId, task);
+			const policySnapshot = JSON.stringify({
+				allowed: policyResult.allowed,
+				violations: policyResult.violations,
+				evaluatedAt: new Date().toISOString(),
+			});
+			await updateTask(taskId, { policySnapshot });
 			if (!policyResult.allowed) {
 				const message = policyResult.violations.join("; ");
 				const blocked = (await updateTask(taskId, {

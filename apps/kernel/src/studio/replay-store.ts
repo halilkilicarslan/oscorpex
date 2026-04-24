@@ -228,34 +228,30 @@ export async function createCheckpointSnapshot(
 		// table may not exist in all environments
 	}
 
-	// --- Fetch policy decisions (latest per project) ---
-	let policyDecisions: any[] = [];
-	try {
-		const { evaluatePolicies } = await import("./policy-engine.js");
-		const { getTask: getTaskById } = await import("./db.js");
-		// Build a lightweight policy check against current state
-		const currentAgents = await (await import("./db.js")).listProjectAgents(projectId);
-		for (const agent of currentAgents) {
-			// Find a task assigned to this agent to use in policy evaluation
-			const agentTasks = tasks.filter((t: any) => t.assignedAgent === agent.id || t.assignedAgentId === agent.id);
-			const task = agentTasks[0] ? await getTaskById(agentTasks[0].id) : undefined;
-			if (!task) continue;
-			const decision = await evaluatePolicies(projectId, task);
-			policyDecisions.push({
-				agentId: agent.id,
-				agentName: agent.name,
-				action: "execute",
-				allowed: decision.allowed,
-				violations: decision.violations,
-			});
+	// --- Fetch policy decisions from persisted task snapshots (historical truth) ---
+	const policyDecisions: any[] = [];
+	for (const task of tasks) {
+		if (task.policySnapshot && task.policySnapshot !== "{}") {
+			try {
+				const snapshot = JSON.parse(task.policySnapshot);
+				policyDecisions.push({
+					taskId: task.id,
+					taskTitle: task.title,
+					allowed: snapshot.allowed,
+					violations: snapshot.violations ?? [],
+					evaluatedAt: snapshot.evaluatedAt,
+				});
+			} catch {
+				// skip malformed snapshot
+			}
 		}
-	} catch {
-		// policy engine may not be fully initialized
 	}
+
+	const canonicalRunId = runRecord?.id ?? projectId;
 
 	const snapshot: ReplaySnapshot = {
 		id: generateId(),
-		runId: projectId,
+		runId: canonicalRunId,
 		checkpoint: checkpointName,
 		createdAt: new Date().toISOString(),
 		run: runSummary,
