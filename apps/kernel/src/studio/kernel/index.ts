@@ -49,6 +49,7 @@ import { hookRegistry, runHooks } from "./hook-registry.js";
 import { eventBus } from "../event-bus.js";
 import { taskEngine } from "../task-engine.js";
 import { pipelineEngine } from "../pipeline-engine.js";
+import { executionEngine } from "../execution-engine.js";
 import { replayStore } from "../replay-store.js";
 import { verificationRunner } from "./verification-adapter.js";
 import { policyEngine } from "./policy-adapter.js";

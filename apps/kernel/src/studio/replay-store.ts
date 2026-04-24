@@ -207,16 +207,21 @@ export async function createCheckpointSnapshot(
 	let policyDecisions: any[] = [];
 	try {
 		const { evaluatePolicies } = await import("./policy-engine.js");
+		const { getTask: getTaskById } = await import("./db.js");
 		// Build a lightweight policy check against current state
 		const currentAgents = await (await import("./db.js")).listProjectAgents(projectId);
 		for (const agent of currentAgents) {
-			const decision = await evaluatePolicies(projectId, agent.id, "execute", { agentRole: agent.role });
+			// Find a task assigned to this agent to use in policy evaluation
+			const agentTasks = tasks.filter((t: any) => t.assignedAgent === agent.id || t.assignedAgentId === agent.id);
+			const task = agentTasks[0] ? await getTaskById(agentTasks[0].id) : undefined;
+			if (!task) continue;
+			const decision = await evaluatePolicies(projectId, task);
 			policyDecisions.push({
 				agentId: agent.id,
 				agentName: agent.name,
 				action: "execute",
 				allowed: decision.allowed,
-				reason: decision.reason ?? null,
+				violations: decision.violations,
 			});
 		}
 	} catch {
@@ -268,11 +273,11 @@ export async function restoreFromSnapshot(
 	for (const task of snapshot.tasks as any[]) {
 		try {
 			if (!dryRun) {
-				await updateTask(task.id, {
-					status: task.status,
-					output: task.output ? JSON.stringify(task.output) : undefined,
-					error: task.error ?? undefined,
-				});
+			await updateTask(task.id, {
+				status: task.status,
+				output: task.output ?? undefined,
+				error: task.error ?? undefined,
+			});
 			}
 			result.tasksRestored++;
 		} catch (err) {

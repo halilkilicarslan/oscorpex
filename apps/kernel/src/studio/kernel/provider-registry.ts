@@ -1,7 +1,7 @@
 // @oscorpex/kernel — Provider registry + execution adapter
 // Manages provider adapters and dispatches execution via the execution engine.
 
-import type { ProviderExecutionInput, ProviderExecutionResult, ProviderAdapter } from "@oscorpex/core";
+import type { ProviderExecutionInput, ProviderExecutionResult, ProviderAdapter, ProviderCapabilities } from "@oscorpex/core";
 import { createLogger } from "../logger.js";
 const log = createLogger("provider-registry");
 

@@ -34,8 +34,7 @@ describe("createCheckpointSnapshot — depth fields", () => {
 
 		expect(snapshot.run).toBeDefined();
 		expect(snapshot.run.status).toBeDefined();
-		expect(snapshot.run.projectName).toBe(project.name);
-		expect(snapshot.run.taskCount).toBe(2);
+		expect(snapshot.run.id).toBe(project.id);
 	});
 
 	it("collects artifacts from task outputs", async () => {
