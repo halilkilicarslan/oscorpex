@@ -1,129 +1,115 @@
 // ---------------------------------------------------------------------------
-// Oscorpex — VoltAgent Integration Entry Point
-// Boots the kernel (via boot.ts) AND registers VoltAgent agents/workflows
-// alongside the studio HTTP server. This is the ORIGINAL entry point behavior.
-//
-// To run without VoltAgent, use boot.ts directly.
+// Oscorpex — VoltAgent Integration Entry Point (isolated)
+// Boots the kernel AND registers VoltAgent agents/workflows.
+// VoltAgent modules are loaded dynamically so the kernel can build/run
+// without them when OSCORPEX_MODE !== "voltagent".
 // ---------------------------------------------------------------------------
 
-import { Agent, Memory, VoltAgent, VoltAgentObservability, VoltOpsClient } from "@voltagent/core";
-import { LibSQLMemoryAdapter, LibSQLObservabilityAdapter } from "@voltagent/libsql";
-import { createPinoLogger } from "@voltagent/logger";
-import { honoServer } from "@voltagent/server-hono";
-import { createCodeAssistant, createSummarizer, createTranslator } from "./agents";
-import { calculatorTool, dateTimeTool, weatherTool, webSearchTool } from "./tools";
-import { expenseApprovalWorkflow } from "./workflows";
-
 import "dotenv/config";
+import { createLogger } from "./studio/logger.js";
 
-// Create a logger instance
-const logger = createPinoLogger({
-	name: "my-voltagent-app",
-	level: "info",
-});
+const log = createLogger("entry-voltagent");
 
-// Configure persistent memory (LibSQL / SQLite)
-const memory = new Memory({
-	storage: new LibSQLMemoryAdapter({
-		url: "file:./.voltagent/memory.db",
-		logger: logger.child({ component: "libsql" }),
-	}),
-});
+async function bootVoltAgentMode() {
+	// Dynamic imports isolate VoltAgent from the core build graph
+	const { Agent, Memory, VoltAgent, VoltAgentObservability, VoltOpsClient } = await import("@voltagent/core");
+	const { LibSQLMemoryAdapter, LibSQLObservabilityAdapter } = await import("@voltagent/libsql");
+	const { createPinoLogger } = await import("@voltagent/logger");
+	const { honoServer } = await import("@voltagent/server-hono");
+	const { createCodeAssistant, createSummarizer, createTranslator } = await import("./agents/index.js");
+	const { calculatorTool, dateTimeTool, weatherTool, webSearchTool } = await import("./tools/index.js");
+	const { expenseApprovalWorkflow } = await import("./workflows/index.js");
 
-// Configure persistent observability (LibSQL / SQLite)
-const observability = new VoltAgentObservability({
-	storage: new LibSQLObservabilityAdapter({
-		url: "file:./.voltagent/observability.db",
-	}),
-});
+	const logger = createPinoLogger({ name: "my-voltagent-app", level: "info" });
 
-// All available tools
-const allTools = [weatherTool, calculatorTool, dateTimeTool, webSearchTool];
+	const memory = new Memory({
+		storage: new LibSQLMemoryAdapter({
+			url: "file:./.voltagent/memory.db",
+			logger: logger.child({ component: "libsql" }),
+		}),
+	});
 
-// Main assistant agent — general purpose with all tools
-const assistant = new Agent({
-	name: "assistant",
-	instructions: `You are a helpful AI assistant. You can:
-- Check real-time weather for any city worldwide
-- Perform calculations and math operations
-- Get current date/time in any timezone
-- Search the web for information
+	const observability = new VoltAgentObservability({
+		storage: new LibSQLObservabilityAdapter({
+			url: "file:./.voltagent/observability.db",
+		}),
+	});
 
-Always be concise and accurate. If you're unsure about something, say so.
-When using tools, explain what you're doing and present results clearly.`,
-	model: "openai/gpt-4o-mini",
-	tools: allTools,
-	memory,
-});
+	const allTools = [weatherTool, calculatorTool, dateTimeTool, webSearchTool];
 
-// Research specialist agent — focused on web search and analysis
-const researcher = new Agent({
-	name: "researcher",
-	instructions: `You are a research specialist. Your role is to:
-- Search for information on given topics
-- Summarize findings concisely
-- Provide sources when available
-- Compare different perspectives
+	const assistant = new Agent({
+		name: "assistant",
+		instructions: `You are a helpful AI assistant...`,
+		model: "openai/gpt-4o-mini",
+		tools: allTools,
+		memory,
+	});
 
-Focus on accuracy and cite your sources. Present findings in a structured format.`,
-	model: "openai/gpt-4o-mini",
-	tools: [webSearchTool, dateTimeTool],
-	memory,
-});
+	const researcher = new Agent({
+		name: "researcher",
+		instructions: `You are a research specialist...`,
+		model: "openai/gpt-4o-mini",
+		tools: [webSearchTool, dateTimeTool],
+		memory,
+	});
 
-const codeAssistant = createCodeAssistant();
-const translator = createTranslator();
-const summarizer = createSummarizer();
+	const codeAssistant = createCodeAssistant();
+	const translator = createTranslator();
+	const summarizer = createSummarizer();
 
-// Boot VoltAgent with agents/workflows and mount the studio API
-import { applyDbBootstrap } from "./studio/db-bootstrap.js";
-import { providerState } from "./studio/provider-state.js";
-import { startWSServer } from "./studio/ws-server.js";
-import { webhookSender } from "./studio/webhook-sender.js";
-import { containerPool } from "./studio/container-pool.js";
-import { studioRoutes, authRoutes } from "./studio/index.js";
-import { observabilityRoutes } from "./observability-routes.js";
+	// Boot shared kernel services
+	const { applyDbBootstrap } = await import("./studio/db-bootstrap.js");
+	const { providerState } = await import("./studio/provider-state.js");
+	const { startWSServer } = await import("./studio/ws-server.js");
+	const { webhookSender } = await import("./studio/webhook-sender.js");
+	const { containerPool } = await import("./studio/container-pool.js");
+	const { studioRoutes, authRoutes } = await import("./studio/index.js");
+	const { observabilityRoutes } = await import("./observability-routes.js");
 
-// Apply DB schema migrations (idempotent — safe on every startup)
-await applyDbBootstrap();
-await providerState.loadFromDb().catch((err) => {
-	console.warn("[provider-state] Load skipped:", err instanceof Error ? err.message : err);
-});
+	await applyDbBootstrap();
+	await providerState.loadFromDb().catch((err) => {
+		log.warn("[provider-state] Load skipped:", err instanceof Error ? err.message : err);
+	});
+	startWSServer();
+	webhookSender.init();
+	containerPool.initialize().catch((err) => {
+		log.warn("[pool] Initialization skipped:", err instanceof Error ? err.message : err);
+	});
 
-// Oscorpex WebSocket sunucusunu başlat (port 3142)
-startWSServer();
-
-// Webhook sender — event bus'a abone ol, tüm event tiplerini dinle
-webhookSender.init();
-
-// Container pool warm-up (non-blocking — fails silently if Docker not available)
-containerPool.initialize().catch((err) => {
-	console.warn("[pool] Initialization skipped:", err instanceof Error ? err.message : err);
-});
-
-new VoltAgent({
-	agents: {
-		assistant,
-		researcher,
-		"code-assistant": codeAssistant,
-		translator,
-		summarizer,
-	},
-	workflows: {
-		expenseApprovalWorkflow,
-	},
-	server: honoServer({
-		port: 3141,
-		configureApp: (app) => {
-			app.route("/api/studio", studioRoutes);
-			app.route("/api/observability", observabilityRoutes);
-			app.route("/api/auth", authRoutes);
+	new VoltAgent({
+		agents: {
+			assistant,
+			researcher,
+			"code-assistant": codeAssistant,
+			translator,
+			summarizer,
 		},
-	}),
-	logger,
-	observability,
-	voltOpsClient: new VoltOpsClient({
-		publicKey: process.env.VOLTAGENT_PUBLIC_KEY || "",
-		secretKey: process.env.VOLTAGENT_SECRET_KEY || "",
-	}),
-});
+		workflows: { expenseApprovalWorkflow },
+		server: honoServer({
+			port: 3141,
+			configureApp: (app: any) => {
+				app.route("/api/studio", studioRoutes);
+				app.route("/api/observability", observabilityRoutes);
+				app.route("/api/auth", authRoutes);
+			},
+		}),
+		logger,
+		observability,
+		voltOpsClient: new VoltOpsClient({
+			publicKey: process.env.VOLTAGENT_PUBLIC_KEY || "",
+			secretKey: process.env.VOLTAGENT_SECRET_KEY || "",
+		}),
+	});
+
+	log.info("[entry-voltagent] VoltAgent mode booted successfully");
+}
+
+// Only boot VoltAgent when explicitly requested
+if (process.env.OSCORPEX_MODE === "voltagent") {
+	bootVoltAgentMode().catch((err) => {
+		log.error("[entry-voltagent] Failed to boot VoltAgent mode:", err);
+		process.exit(1);
+	});
+} else {
+	log.info("[entry-voltagent] OSCORPEX_MODE !== 'voltagent' — skipping VoltAgent boot. Use boot.ts for kernel-only mode.");
+}

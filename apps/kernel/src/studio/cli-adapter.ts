@@ -13,8 +13,14 @@ import { createLogger } from "./logger.js";
 const log = createLogger("cli-adapter");
 
 // Re-export the CLIAdapter interface from provider-sdk for local convenience
-export type { CLIAdapter, CLIAdapterOptions } from "@oscorpex/provider-sdk";
+export type { CLIAdapterOptions } from "@oscorpex/provider-sdk";
 export { buildToolGovernanceSection, hasFullToolAccess, FULL_TOOL_ACCESS } from "@oscorpex/provider-sdk";
+
+export interface CLIAdapter {
+	readonly name: string;
+	isAvailable(): Promise<boolean>;
+	execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult>;
+}
 
 // ---------------------------------------------------------------------------
 // ClaudeAdapter — mevcut executeWithCLI üzerinden çalışır

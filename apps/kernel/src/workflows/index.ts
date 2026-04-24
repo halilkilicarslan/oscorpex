@@ -50,7 +50,7 @@ import { z } from "zod";
 //   "comments": "Budget exceeded for this quarter"
 // }
 // ==============================================================================
-export const expenseApprovalWorkflow = createWorkflowChain({
+export const expenseApprovalWorkflow: any = createWorkflowChain({
 	id: "expense-approval",
 	name: "Expense Approval Workflow",
 	purpose: "Process expense reports with manager approval for high amounts",

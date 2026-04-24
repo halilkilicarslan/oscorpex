@@ -10,7 +10,7 @@ import type { LanguageModelV3 } from "@ai-sdk/provider";
 import { CliLanguageModel, defaultModelForCliTool } from "./cli-language-model.js";
 import { getDefaultProvider, getFallbackChain, getRawProviderApiKey } from "./db.js";
 import type { AIProvider } from "./types.js";
-import { calculateCost, defaultModelForType } from "@oscorpex/provider-sdk";
+import { calculateCost } from "@oscorpex/provider-sdk";
 import { createLogger } from "./logger.js";
 const log = createLogger("ai-provider-factory");
 
