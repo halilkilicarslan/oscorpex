@@ -1,6 +1,6 @@
 // @oscorpex/core — Context packet and memory domain types
 
-export type ContextPacketMode = "planner" | "execution" | "review" | "team_architect";
+export type ContextPacketMode = "planner" | "execution" | "review" | "team_architect" | "recovery" | "verification";
 
 export interface ContextPacket {
 	id: string;
