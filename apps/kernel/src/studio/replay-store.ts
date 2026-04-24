@@ -141,27 +141,100 @@ export async function createCheckpointSnapshot(
 	checkpointName: string,
 	generateId: () => string,
 ): Promise<ReplaySnapshot> {
-	const { getPipelineRun } = await import("./db.js");
-	const { listProjectTasks } = await import("./db.js");
+	const { getPipelineRun, listProjectTasks, getProject, getProjectCostSummary, query } = await import("./db.js");
 	const pipeline = await getPipelineRun(projectId);
 	const tasks = await listProjectTasks(projectId);
+	const project = await getProject(projectId);
+
+	// --- Build run summary from pipeline + project ---
+	const runSummary: any = {
+		id: projectId,
+		status: pipeline?.status ?? "idle",
+		projectName: project?.name ?? "",
+		projectDescription: project?.description ?? "",
+		currentStage: pipeline?.currentStage ?? null,
+		taskCount: tasks.length,
+		completedTaskCount: tasks.filter((t: any) => t.status === "done").length,
+		failedTaskCount: tasks.filter((t: any) => t.status === "failed").length,
+		startedAt: pipeline?.startedAt ?? null,
+	};
+	try {
+		const cost = await getProjectCostSummary(projectId);
+		runSummary.totalCostUsd = cost.totalCostUsd ?? 0;
+	} catch {
+		// cost not available — skip
+	}
+
+	// --- Collect artifacts from task outputs ---
+	const artifacts: any[] = [];
+	for (const task of tasks) {
+		if (task.output) {
+			if (task.output.filesCreated?.length) {
+				artifacts.push({
+					taskId: task.id,
+					taskTitle: task.title,
+					filesCreated: task.output.filesCreated,
+					filesModified: task.output.filesModified ?? [],
+					testResults: task.output.testResults ?? null,
+				});
+			}
+		}
+	}
+
+	// --- Fetch verification reports from DB ---
+	let verificationReports: any[] = [];
+	try {
+		const rows = await query<any>(
+			`SELECT id, task_id, verification_type, status, details, created_at
+			 FROM verification_results
+			 WHERE task_id = ANY($1)
+			 ORDER BY created_at DESC`,
+			[tasks.map((t: any) => t.id)],
+		);
+		verificationReports = rows.map((r: any) => ({
+			id: r.id,
+			taskId: r.task_id,
+			type: r.verification_type,
+			status: r.status,
+			details: typeof r.details === "string" ? JSON.parse(r.details) : r.details,
+			createdAt: r.created_at,
+		}));
+	} catch {
+		// table may not exist in all environments
+	}
+
+	// --- Fetch policy decisions (latest per project) ---
+	let policyDecisions: any[] = [];
+	try {
+		const { evaluatePolicies } = await import("./policy-engine.js");
+		// Build a lightweight policy check against current state
+		const currentAgents = await (await import("./db.js")).listProjectAgents(projectId);
+		for (const agent of currentAgents) {
+			const decision = await evaluatePolicies(projectId, agent.id, "execute", { agentRole: agent.role });
+			policyDecisions.push({
+				agentId: agent.id,
+				agentName: agent.name,
+				action: "execute",
+				allowed: decision.allowed,
+				reason: decision.reason ?? null,
+			});
+		}
+	} catch {
+		// policy engine may not be fully initialized
+	}
 
 	const snapshot: ReplaySnapshot = {
 		id: generateId(),
 		runId: projectId,
 		checkpoint: checkpointName,
 		createdAt: new Date().toISOString(),
-		run: {} as any,
-		stages: [],
+		run: runSummary,
+		stages: pipeline ? JSON.parse(pipeline.stagesJson) : [],
 		tasks: tasks as any,
-		artifacts: [],
-		policyDecisions: [],
-		verificationReports: [],
+		artifacts,
+		policyDecisions,
+		verificationReports,
 	};
-
-	if (pipeline) {
-		snapshot.stages = JSON.parse(pipeline.stagesJson) as any;
-	}
 
 	await replayStore.saveSnapshot(snapshot);
 	await replayStore.pruneSnapshots(projectId, 100);
