@@ -45,6 +45,7 @@ import { marketplaceRoutes } from "./marketplace-routes.js";
 import { agenticRoutes } from "./agentic-routes.js";
 import { graphRoutes } from "./graph-routes.js";
 import { sandboxRoutes } from "./sandbox-routes.js";
+import { replayRoutes } from "./replay-routes.js";
 // import { tracingMiddleware } from "../middleware/tracing-middleware.js";
 // NOTE: Uncomment the line above and apply below to enable global HTTP tracing:
 //   studio.use("*", tracingMiddleware());
@@ -327,5 +328,6 @@ if (process.env.OSCORPEX_TRACE_ENABLED === "true") {
 studio.route("/", agenticRoutes);
 studio.route("/", graphRoutes);
 studio.route("/", sandboxRoutes);
+studio.route("/replay", replayRoutes);
 
 export { studio as studioRoutes };

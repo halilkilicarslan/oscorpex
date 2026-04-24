@@ -7,7 +7,7 @@ import { ClaudeCodeAdapter, CodexAdapter, CursorAdapter } from "../adapters/inde
 
 const log = createLogger("provider-registry");
 
-class ProviderRegistry {
+export class ProviderRegistry {
 	private adapters = new Map<string, ProviderAdapter>();
 	/** Active abort controllers keyed by runId:taskId */
 	private activeControllers = new Map<string, AbortController>();
