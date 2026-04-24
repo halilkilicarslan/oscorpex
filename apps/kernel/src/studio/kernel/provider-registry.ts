@@ -1,8 +1,10 @@
 // @oscorpex/kernel — Provider registry + execution adapter
 // Manages provider adapters and dispatches execution via the execution engine.
 
-import type { ProviderExecutionInput, ProviderExecutionResult, ProviderAdapter, ProviderCapabilities } from "@oscorpex/core";
+import type { ProviderExecutionInput, ProviderExecutionResult, ProviderAdapter } from "@oscorpex/core";
 import { createLogger } from "../logger.js";
+import { ClaudeCodeAdapter, CodexAdapter, CursorAdapter } from "../adapters/index.js";
+
 const log = createLogger("provider-registry");
 
 class ProviderRegistry {
@@ -39,7 +41,7 @@ class ProviderRegistry {
 		this.activeControllers.set(key, controller);
 
 		try {
-			const result = await adapter.execute(input);
+			const result = await adapter.execute({ ...input, signal: controller.signal });
 			return result;
 		} finally {
 			this.activeControllers.delete(key);
@@ -56,6 +58,15 @@ class ProviderRegistry {
 		} else {
 			log.warn(`[provider-registry] No active execution to cancel for ${key}`);
 		}
+
+		// Also propagate cancel to the adapter for any provider-side cleanup
+		for (const [, adapter] of this.adapters) {
+			try {
+				await adapter.cancel({ runId, taskId });
+			} catch {
+				// ignore adapter-level cancel failures
+			}
+		}
 	}
 
 	/**
@@ -64,82 +75,21 @@ class ProviderRegistry {
 	 */
 	async initializeFromLegacy(): Promise<void> {
 		const { getAdapter } = await import("../cli-adapter.js");
-		for (const name of ["claude-code", "codex", "cursor"]) {
+		const mapping: Array<{ name: string; ctor: new (legacy: any) => ProviderAdapter }> = [
+			{ name: "claude-code", ctor: ClaudeCodeAdapter },
+			{ name: "codex", ctor: CodexAdapter },
+			{ name: "cursor", ctor: CursorAdapter },
+		];
+
+		for (const { name, ctor } of mapping) {
 			try {
 				const legacy = getAdapter(name as any);
-				const wrapper = this.buildLegacyWrapper(name, legacy);
-				this.register(name, wrapper);
+				const adapter = new ctor(legacy);
+				this.register(name, adapter);
 			} catch (err) {
 				log.warn(`[provider-registry] Could not register ${name}: ${String(err)}`);
 			}
 		}
-	}
-
-	private buildLegacyWrapper(name: string, legacy: any): ProviderAdapter {
-		const capabilitiesByProvider: Record<string, ProviderCapabilities> = {
-			"claude-code": {
-				supportsToolRestriction: true,
-				supportsStreaming: true,
-				supportsResume: true,
-				supportsStructuredOutput: true,
-				supportsSandboxHinting: true,
-				supportedModels: ["sonnet", "opus", "haiku"],
-			},
-			codex: {
-				supportsToolRestriction: false,
-				supportsStreaming: false,
-				supportsResume: false,
-				supportsStructuredOutput: false,
-				supportsSandboxHinting: false,
-				supportedModels: ["gpt-4o", "o3-mini"],
-			},
-			cursor: {
-				supportsToolRestriction: false,
-				supportsStreaming: false,
-				supportsResume: false,
-				supportsStructuredOutput: false,
-				supportsSandboxHinting: false,
-				supportedModels: ["cursor-small", "cursor-large"],
-			},
-		};
-
-		return {
-			id: name,
-			capabilities: () => capabilitiesByProvider[name] ?? capabilitiesByProvider["claude-code"],
-			isAvailable: async () => legacy.isAvailable(),
-			execute: async (input) => {
-				const controller = this.activeControllers.get(this.controllerKey(input.runId, input.taskId));
-				const result = await legacy.execute({
-					projectId: input.runId,
-					agentId: "",
-					agentName: "",
-					repoPath: input.repoPath,
-					prompt: input.prompt,
-					systemPrompt: input.systemPrompt ?? "",
-					timeoutMs: input.timeoutMs,
-					model: input.model ?? "sonnet",
-					allowedTools: input.allowedTools ?? [],
-					signal: controller?.signal,
-				});
-				return {
-					provider: name,
-					model: input.model,
-					text: result.logs?.join("\n") ?? "",
-					filesCreated: result.filesCreated ?? [],
-					filesModified: result.filesModified ?? [],
-					logs: result.logs ?? [],
-					usage: {
-						inputTokens: result.inputTokens ?? 0,
-						outputTokens: result.outputTokens ?? 0,
-						billedCostUsd: result.totalCostUsd ?? 0,
-					},
-					startedAt: new Date().toISOString(),
-					completedAt: new Date().toISOString(),
-				};
-			},
-			cancel: async (input) => this.cancel(input.runId, input.taskId),
-			health: async () => ({ healthy: true }),
-		};
 	}
 }
 

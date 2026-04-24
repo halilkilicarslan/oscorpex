@@ -22,15 +22,15 @@ import type { ReplaySnapshot } from "@oscorpex/core";
 			runId: "contract-run",
 			checkpoint: "test-checkpoint",
 			createdAt: new Date().toISOString(),
-			run: { id: "contract-run", status: "running" },
+			run: { id: "contract-run", projectId: "contract-run", goal: "test", mode: "execute", status: "running" },
 			stages: [],
 			tasks: [],
 			artifacts: [],
 			policyDecisions: [
-				{ agentId: "a1", agentName: "Alice", action: "execute", allowed: true, violations: [] },
+				{ runId: "contract-run", agentId: "a1", agentName: "Alice", action: "allow", allowed: true, reasons: [], violations: [], policyVersion: "1.0", createdAt: new Date().toISOString() },
 			],
 			verificationReports: [
-				{ taskId: "t1", passed: true, report: "ok" },
+				{ runId: "contract-run", taskId: "t1", passed: true, checks: [], createdAt: new Date().toISOString() },
 			],
 		};
 
@@ -58,11 +58,11 @@ import type { ReplaySnapshot } from "@oscorpex/core";
 			runId: "contract-run",
 			checkpoint: "list-checkpoint",
 			createdAt: new Date().toISOString(),
-			run: { id: "contract-run", status: "idle" },
+			run: { id: "contract-run", projectId: "contract-run", goal: "test", mode: "execute", status: "running" },
 			stages: [],
 			tasks: [],
 			artifacts: [],
-			policyDecisions: [{ agentId: "a2", agentName: "Bob", action: "review", allowed: false, violations: ["risky"] }],
+			policyDecisions: [{ runId: "contract-run", agentId: "a2", agentName: "Bob", action: "warn", allowed: false, reasons: ["risky"], violations: ["risky"], policyVersion: "1.0", createdAt: new Date().toISOString() }],
 			verificationReports: [],
 		};
 
@@ -105,7 +105,7 @@ import type { ReplaySnapshot } from "@oscorpex/core";
 		const loaded = await replayStore.getSnapshot("contract-run", "legacy-checkpoint");
 		expect(loaded).toBeDefined();
 		expect(loaded!.policyDecisions).toEqual([{ agentId: "legacy", allowed: true, violations: [] }]);
-		expect(loaded!.verificationReports).toEqual([{ taskId: "legacy-t", passed: false }]);
+		expect(loaded!.verificationReports).toEqual([{ taskId: "legacy-t", passed: false }] as any);
 	});
 
 	it("pruneSnapshots removes old snapshots beyond maxDepth", async () => {
@@ -117,13 +117,13 @@ import type { ReplaySnapshot } from "@oscorpex/core";
 				runId: "prune-run",
 				checkpoint: "cp",
 				createdAt: new Date(Date.now() + i * 1000).toISOString(),
-				run: {},
+				run: { id: "prune-run", projectId: "prune-run", goal: "test", mode: "execute", status: "running" },
 				stages: [],
 				tasks: [],
 				artifacts: [],
 				policyDecisions: [],
 				verificationReports: [],
-			} as ReplaySnapshot);
+			} as unknown as ReplaySnapshot);
 		}
 
 		const before = await replayStore.listSnapshots("prune-run", 10);

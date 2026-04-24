@@ -12,6 +12,7 @@ export interface ProviderExecutionInput {
 	allowedTools?: string[];
 	model?: string;
 	contextRefs?: string[];
+	signal?: AbortSignal;
 }
 
 export interface ProviderExecutionUsage {

@@ -6,8 +6,12 @@ export type PolicyAction = "allow" | "warn" | "require_approval" | "block";
 export interface PolicyDecision {
 	runId: string;
 	taskId?: string;
+	agentId?: string;
+	agentName?: string;
 	action: PolicyAction;
+	allowed?: boolean;
 	reasons: string[];
+	violations?: string[];
 	policyVersion: string;
 	createdAt: string;
 }
