@@ -1717,14 +1717,20 @@ CREATE INDEX IF NOT EXISTS idx_runs_status  ON runs(status);
 -- Checkpoint-level state capture for replay and observability.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS replay_snapshots (
-  id             TEXT PRIMARY KEY,
-  run_id         TEXT NOT NULL,
-  checkpoint_id  TEXT NOT NULL DEFAULT 'default',
-  snapshot_json  TEXT NOT NULL DEFAULT '{}',
-  context_hash   TEXT,
-  metadata       TEXT NOT NULL DEFAULT '{}',
-  created_at     TIMESTAMPTZ NOT NULL
+  id                        TEXT PRIMARY KEY,
+  run_id                    TEXT NOT NULL,
+  checkpoint_id             TEXT NOT NULL DEFAULT 'default',
+  snapshot_json             TEXT NOT NULL DEFAULT '{}',
+  context_hash              TEXT,
+  metadata                  TEXT NOT NULL DEFAULT '{}',
+  policy_decisions_json     TEXT NOT NULL DEFAULT '[]',
+  verification_reports_json TEXT NOT NULL DEFAULT '[]',
+  created_at                TIMESTAMPTZ NOT NULL
 );
+
+-- Migration: ensure columns exist for existing tables
+ALTER TABLE replay_snapshots ADD COLUMN IF NOT EXISTS policy_decisions_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE replay_snapshots ADD COLUMN IF NOT EXISTS verification_reports_json TEXT NOT NULL DEFAULT '[]';
 
 CREATE INDEX IF NOT EXISTS idx_replay_run ON replay_snapshots(run_id);
 CREATE INDEX IF NOT EXISTS idx_replay_checkpoint ON replay_snapshots(run_id, checkpoint_id);

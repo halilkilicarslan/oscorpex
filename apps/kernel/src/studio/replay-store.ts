@@ -23,13 +23,15 @@ class DbReplayStore implements ReplayStore {
 		const metadata = (snapshot as any).metadata ?? {};
 		const contextHash = this.hashSnapshot(snapshot);
 		await execute(
-			`INSERT INTO replay_snapshots (id, run_id, checkpoint_id, snapshot_json, context_hash, metadata, created_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`INSERT INTO replay_snapshots (id, run_id, checkpoint_id, snapshot_json, context_hash, metadata, policy_decisions_json, verification_reports_json, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			 ON CONFLICT (id) DO UPDATE SET
-			   snapshot_json = EXCLUDED.snapshot_json,
-			   context_hash  = EXCLUDED.context_hash,
-			   metadata      = EXCLUDED.metadata,
-			   created_at    = EXCLUDED.created_at`,
+			   snapshot_json           = EXCLUDED.snapshot_json,
+			   context_hash            = EXCLUDED.context_hash,
+			   metadata                = EXCLUDED.metadata,
+			   policy_decisions_json   = EXCLUDED.policy_decisions_json,
+			   verification_reports_json = EXCLUDED.verification_reports_json,
+			   created_at              = EXCLUDED.created_at`,
 			[
 				snapshot.id,
 				snapshot.runId,
@@ -44,6 +46,8 @@ class DbReplayStore implements ReplayStore {
 				}),
 				contextHash,
 				JSON.stringify(metadata),
+				JSON.stringify(snapshot.policyDecisions ?? []),
+				JSON.stringify(snapshot.verificationReports ?? []),
 				snapshot.createdAt,
 			],
 		);
@@ -55,9 +59,11 @@ class DbReplayStore implements ReplayStore {
 			run_id: string;
 			checkpoint_id: string;
 			snapshot_json: string;
+			policy_decisions_json: string | null;
+			verification_reports_json: string | null;
 			created_at: string;
 		}>(
-			`SELECT id, run_id, checkpoint_id, snapshot_json, created_at
+			`SELECT id, run_id, checkpoint_id, snapshot_json, policy_decisions_json, verification_reports_json, created_at
 			 FROM replay_snapshots
 			 WHERE run_id = $1 ${checkpointId ? "AND checkpoint_id = $2" : ""}
 			 ORDER BY created_at DESC
@@ -77,8 +83,8 @@ class DbReplayStore implements ReplayStore {
 			stages: parsed.stages ?? [],
 			tasks: parsed.tasks ?? [],
 			artifacts: parsed.artifacts ?? [],
-			policyDecisions: parsed.policyDecisions ?? [],
-			verificationReports: parsed.verificationReports ?? [],
+			policyDecisions: row.policy_decisions_json ? JSON.parse(row.policy_decisions_json) : (parsed.policyDecisions ?? []),
+			verificationReports: row.verification_reports_json ? JSON.parse(row.verification_reports_json) : (parsed.verificationReports ?? []),
 		} as ReplaySnapshot;
 	}
 
@@ -88,9 +94,11 @@ class DbReplayStore implements ReplayStore {
 			run_id: string;
 			checkpoint_id: string;
 			snapshot_json: string;
+			policy_decisions_json: string | null;
+			verification_reports_json: string | null;
 			created_at: string;
 		}>(
-			`SELECT id, run_id, checkpoint_id, snapshot_json, created_at
+			`SELECT id, run_id, checkpoint_id, snapshot_json, policy_decisions_json, verification_reports_json, created_at
 			 FROM replay_snapshots
 			 WHERE run_id = $1
 			 ORDER BY created_at DESC
@@ -109,8 +117,8 @@ class DbReplayStore implements ReplayStore {
 				stages: parsed.stages ?? [],
 				tasks: parsed.tasks ?? [],
 				artifacts: parsed.artifacts ?? [],
-				policyDecisions: parsed.policyDecisions ?? [],
-				verificationReports: parsed.verificationReports ?? [],
+				policyDecisions: row.policy_decisions_json ? JSON.parse(row.policy_decisions_json) : (parsed.policyDecisions ?? []),
+				verificationReports: row.verification_reports_json ? JSON.parse(row.verification_reports_json) : (parsed.verificationReports ?? []),
 			} as ReplaySnapshot;
 		});
 	}
