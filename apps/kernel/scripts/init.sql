@@ -88,6 +88,10 @@ CREATE TABLE IF NOT EXISTS events (
   timestamp   TIMESTAMPTZ NOT NULL
 );
 
+-- v12.0 Migration: correlation/causation tracking for event sourcing
+ALTER TABLE events ADD COLUMN IF NOT EXISTS correlation_id TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS causation_id TEXT;
+
 CREATE TABLE IF NOT EXISTS chat_messages (
   id          TEXT PRIMARY KEY,
   project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

@@ -3,6 +3,7 @@
 // correlationId and causationId — the key gaps identified in the inventory.
 // StudioEvent is exported for backward compatibility during migration.
 
+import { generateId } from "@oscorpex/core";
 import type { BaseEvent, EventType } from "@oscorpex/core";
 
 // Re-export BaseEvent and EventType for convenience
@@ -62,6 +63,21 @@ export type {
 	PlanPhaseAddedPayload,
 	PlanReplannedPayload,
 } from "./plan-events.js";
+
+// --- Run lifecycle event payloads ---
+export type {
+	RunCreatedPayload,
+	RunStartedPayload,
+	RunPausedPayload,
+	RunResumedPayload,
+	RunFailedPayload,
+	RunCompletedPayload,
+} from "./run-events.js";
+
+// --- Cost event payloads ---
+export type {
+	CostRecordedPayload,
+} from "./cost-events.js";
 
 // --- Budget event payloads ---
 export type {
@@ -147,10 +163,21 @@ import type {
 	PlanReplannedPayload,
 } from "./plan-events.js";
 import type {
+	RunCreatedPayload,
+	RunStartedPayload,
+	RunPausedPayload,
+	RunResumedPayload,
+	RunFailedPayload,
+	RunCompletedPayload,
+} from "./run-events.js";
+import type {
 	BudgetWarningPayload,
 	BudgetExceededPayload,
 	BudgetHaltedPayload,
 } from "./budget-events.js";
+import type {
+	CostRecordedPayload,
+} from "./cost-events.js";
 import type {
 	ExecutionStartedPayload,
 	ExecutionErrorPayload,
@@ -219,6 +246,15 @@ export interface EventPayloadMap {
 	"plan:approved": PlanApprovedPayload;
 	"plan:phase_added": PlanPhaseAddedPayload;
 	"plan:replanned": PlanReplannedPayload;
+	// Run lifecycle
+	"run:created": RunCreatedPayload;
+	"run:started": RunStartedPayload;
+	"run:paused": RunPausedPayload;
+	"run:resumed": RunResumedPayload;
+	"run:failed": RunFailedPayload;
+	"run:completed": RunCompletedPayload;
+	// Cost
+	"cost:recorded": CostRecordedPayload;
 	// Budget
 	"budget:warning": BudgetWarningPayload;
 	"budget:exceeded": BudgetExceededPayload;
@@ -282,6 +318,8 @@ export interface StudioEvent {
 	taskId?: string;
 	payload: Record<string, unknown>;
 	timestamp: string;
+	correlationId?: string;
+	causationId?: string;
 }
 
 // --- Helper: Create a typed emit input ---
@@ -295,7 +333,7 @@ export function createEventInput<T extends EventType>(
 		type,
 		projectId,
 		payload,
-		correlationId: options?.correlationId ?? "",
+		correlationId: options?.correlationId ?? generateId(),
 		causationId: options?.causationId,
 		stageId: options?.stageId,
 		provider: options?.provider,

@@ -203,6 +203,8 @@ export function rowToEvent(row: any): StudioEvent {
 		taskId: row.task_id ?? undefined,
 		payload: JSON.parse(row.payload),
 		timestamp: row.timestamp,
+		correlationId: row.correlation_id ?? undefined,
+		causationId: row.causation_id ?? undefined,
 	};
 }
 

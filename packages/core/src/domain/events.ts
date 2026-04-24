@@ -65,6 +65,8 @@ export type EventType =
 	| "plan:approved"
 	| "plan:phase_added"
 	| "plan:replanned"
+	// Cost
+	| "cost:recorded"
 	// Budget
 	| "budget:warning"
 	| "budget:exceeded"

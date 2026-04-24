@@ -36,6 +36,8 @@ class EventBus {
 			agentId: event.agentId,
 			taskId: event.taskId,
 			payload: event.payload as Record<string, unknown>,
+			correlationId: event.correlationId,
+			causationId: event.causationId,
 		};
 		this.emit(legacyData);
 	}
@@ -48,6 +50,8 @@ class EventBus {
 			agentId: event.agentId,
 			taskId: event.taskId,
 			payload: event.payload as Record<string, unknown>,
+			correlationId: event.correlationId,
+			causationId: event.causationId,
 		};
 		this.emitTransient(legacyData);
 	}

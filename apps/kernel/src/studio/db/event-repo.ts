@@ -13,17 +13,30 @@ const log = createLogger("event-repo");
 // Events
 // ---------------------------------------------------------------------------
 
-export async function insertEvent(data: Omit<StudioEvent, "id" | "timestamp">): Promise<StudioEvent> {
+export async function insertEvent(
+	data: Omit<StudioEvent, "id" | "timestamp"> & { correlationId?: string; causationId?: string },
+): Promise<StudioEvent> {
 	const id = randomUUID();
 	const timestamp = now();
+	const correlationId = data.correlationId ?? randomUUID();
 	await execute(
 		`
-    INSERT INTO events (id, project_id, type, agent_id, task_id, payload, timestamp)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    INSERT INTO events (id, project_id, type, agent_id, task_id, payload, timestamp, correlation_id, causation_id)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
   `,
-		[id, data.projectId, data.type, data.agentId ?? null, data.taskId ?? null, JSON.stringify(data.payload), timestamp],
+		[
+			id,
+			data.projectId,
+			data.type,
+			data.agentId ?? null,
+			data.taskId ?? null,
+			JSON.stringify(data.payload),
+			timestamp,
+			correlationId,
+			data.causationId ?? null,
+		],
 	);
-	return { id, ...data, timestamp };
+	return { id, ...data, timestamp, correlationId, causationId: data.causationId };
 }
 
 export async function getEvent(eventId: string): Promise<StudioEvent | null> {
