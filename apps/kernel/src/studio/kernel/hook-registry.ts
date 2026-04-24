@@ -15,7 +15,13 @@ class InMemoryHookRegistry implements HookRegistry {
 
 	register(registration: HookRegistration): void {
 		const phaseHooks = this.hooks.get(registration.phase) ?? [];
-		phaseHooks.push(registration);
+		// Idempotent: replace existing registration with same id
+		const existingIndex = phaseHooks.findIndex((r) => r.id === registration.id);
+		if (existingIndex >= 0) {
+			phaseHooks[existingIndex] = registration;
+		} else {
+			phaseHooks.push(registration);
+		}
 		phaseHooks.sort((a, b) => a.priority - b.priority);
 		this.hooks.set(registration.phase, phaseHooks);
 	}

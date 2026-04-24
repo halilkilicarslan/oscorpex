@@ -18,36 +18,30 @@ the kernel can be considered the true owner of execution.
 ### RunStore (OSC-001)
 | Method | File | Priority | Status |
 |--------|------|----------|--------|
-| `create(run)` | `kernel/index.ts:103-105` | 🟥 P0 | STUB — throws "not yet wired" |
-| `get(id)` | `kernel/index.ts:106-108` | 🟥 P0 | STUB — throws "not yet wired" |
-| `update(id, partial)` | `kernel/index.ts:109-111` | 🟥 P0 | STUB — throws "not yet wired" |
-| `list(filter)` | `kernel/index.ts:112-114` | 🟥 P0 | STUB — throws "not yet wired" |
-
-**Blocked by:** No `runs` table or repository in DB layer.
-**Resolution:** Create `runs` repo in `db/`, wire to `KernelRunStore`.
+| `create(run)` | `db/run-repo.ts` | 🟥 P0 | ✅ DONE — `createRun()` wired |
+| `get(id)` | `db/run-repo.ts` | 🟥 P0 | ✅ DONE — `getRun()` wired |
+| `update(id, partial)` | `db/run-repo.ts` | 🟥 P0 | ✅ DONE — `updateRun()` wired |
+| `list(filter)` | `db/run-repo.ts` | 🟥 P0 | ✅ DONE — `listRuns()` wired |
 
 ### Run Lifecycle (OSC-002)
 | Method | File | Priority | Status |
 |--------|------|----------|--------|
-| `createRun(input)` | `kernel/index.ts:176-178` | 🟥 P0 | STUB — throws "not yet wired" |
-| `getRun(runId)` | `kernel/index.ts:179-181` | 🟥 P0 | STUB — throws "not yet wired" |
-| `startRun(runId)` | `kernel/index.ts:182-184` | 🟥 P0 | STUB — throws "not yet wired" |
-| `pauseRun(runId)` | `kernel/index.ts:185-187` | 🟥 P0 | STUB — throws "not yet wired" |
-| `resumeRun(runId)` | `kernel/index.ts:188-190` | 🟥 P0 | STUB — throws "not yet wired" |
-| `failRun(runId, reason)` | `kernel/index.ts:191-193` | 🟥 P0 | STUB — throws "not yet wired" |
-| `completeRun(runId)` | `kernel/index.ts:194-196` | 🟥 P0 | STUB — throws "not yet wired" |
-
-**Blocked by:** RunStore not implemented, no Run concept in DB.
-**Resolution:** Implement RunStore, then map lifecycle to pipeline/task engine.
+| `createRun(input)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — delegates to `RunStore` |
+| `getRun(runId)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — delegates to `RunStore` |
+| `startRun(runId)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — `RUN_TRANSITIONS` enforced |
+| `pauseRun(runId)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — `RUN_TRANSITIONS` enforced |
+| `resumeRun(runId)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — `RUN_TRANSITIONS` enforced |
+| `failRun(runId, reason)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — `RUN_TRANSITIONS` enforced |
+| `completeRun(runId)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — `RUN_TRANSITIONS` enforced |
 
 ### Subsystem Getters (OSC-005, 006, 007, 008)
 | Getter | File | Priority | Status | Kit Package |
 |--------|------|----------|--------|-------------|
-| `verification` | `kernel/index.ts:158-160` | 🟥 P0 | STUB — throws | `@oscorpex/verification-kit` |
-| `policy` | `kernel/index.ts:161-163` | 🟥 P0 | STUB — throws | `@oscorpex/policy-kit` |
-| `cost` | `kernel/index.ts:164-166` | 🟥 P0 | STUB — throws | `@oscorpex/provider-sdk` |
-| `memory` | `kernel/index.ts:167-169` | 🟨 P1 | STUB — throws | `@oscorpex/memory-kit` |
-| `replay` | `kernel/index.ts:170-172` | ✅ DONE | Wired to `DbReplayStore` | `@oscorpex/observability-sdk` |
+| `verification` | `kernel/verification-adapter.ts` | 🟥 P0 | ✅ DONE | `@oscorpex/verification-kit` |
+| `policy` | `kernel/policy-adapter.ts` | 🟥 P0 | ✅ DONE | `@oscorpex/policy-kit` |
+| `cost` | `kernel/cost-adapter.ts` | 🟥 P0 | ✅ DONE | `@oscorpex/provider-sdk` |
+| `memory` | `kernel/memory-adapter.ts` | 🟨 P1 | ✅ DONE | `@oscorpex/memory-kit` |
+| `replay` | `replay-store.ts` | ✅ DONE | ✅ DONE | `@oscorpex/observability-sdk` |
 
 **Resolution pattern:** Create adapter class implementing the contract,
 importing pure functions from the kit package, keeping DB/event emission
@@ -56,20 +50,14 @@ in the kernel layer.
 ### TaskGraph (OSC-003)
 | Method | File | Priority | Status |
 |--------|------|----------|--------|
-| `buildWaves(phases)` | `kernel/index.ts:136-140` | 🟥 P0 | STUB — throws |
-| `resolveDependencies(taskId)` | `kernel/index.ts:141-143` | 🟥 P0 | STUB — throws |
-| `getExecutionOrder()` | `kernel/index.ts:144-146` | 🟥 P0 | STUB — throws |
-
-**Blocked by:** Need to expose `@oscorpex/task-graph` functions through the contract.
-**Resolution:** Delegate to `buildDAGWaves` and related functions from task-graph.
+| `buildWaves(projectId)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — delegates to `buildDAGWaves` |
+| `resolveDependencies(taskId)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — fetches from DB |
+| `getExecutionOrder(projectId)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — delegates to `buildWaves` |
 
 ### Provider Execution (OSC-009)
 | Method | File | Priority | Status |
 |--------|------|----------|--------|
-| `executeWithProvider(id, input)` | `kernel/index.ts:218-220` | 🟥 P0 | STUB — throws |
-
-**Blocked by:** No provider registry wiring in facade.
-**Resolution:** Wire `executionEngine.executeTask` or create provider dispatcher.
+| `executeWithProvider(id, input)` | `kernel/index.ts` | 🟥 P0 | ✅ DONE — delegates to provider adapter |
 
 ---
 
@@ -77,37 +65,32 @@ in the kernel layer.
 
 | Category | Count | P0 | P1 | Done |
 |----------|-------|----|----|------|
-| RunStore | 4 | 4 | 0 | 0 |
-| Run Lifecycle | 7 | 7 | 0 | 0 |
-| Subsystem Getters | 5 | 3 | 1 | 1 |
-| TaskGraph | 3 | 3 | 0 | 0 |
-| Provider Execution | 1 | 1 | 0 | 0 |
-| **Total** | **20** | **18** | **1** | **1** |
+| RunStore | 4 | 0 | 0 | 4 |
+| Run Lifecycle | 7 | 0 | 0 | 7 |
+| Subsystem Getters | 5 | 0 | 0 | 5 |
+| TaskGraph | 3 | 0 | 0 | 3 |
+| Provider Execution | 1 | 0 | 0 | 1 |
+| **Total** | **20** | **0** | **0** | **20** |
+
+**All 20 stubs resolved. Kernel facade is the true owner of execution.**
 
 ---
 
-## Sprint Plan
+## Legacy Owner Matrix (S4-01)
 
-### Sprint 1 (Current)
-- OSC-001 → RunStore (4 stubs)
-- OSC-002 → Run lifecycle (7 stubs)
-- OSC-003 → TaskGraph (3 stubs)
-- OSC-005 → VerificationRunner (1 stub)
-- OSC-026 → This tracker (done)
-
-**Expected after Sprint 1:** 5 stubs remain (policy, cost, memory, provider execution)
-
-### Sprint 2
-- OSC-006 → PolicyEngine (1 stub)
-- OSC-007 → CostReporter (1 stub)
-- OSC-009 → executeWithProvider (1 stub)
-- OSC-010 → Provider registry (enhancement, not a stub)
-
-**Expected after Sprint 2:** 2 stubs remain (memory)
-
-### Sprint 3
-- OSC-008 → MemoryProvider (1 stub)
-- Remaining: 1 stub (complete)
+| Legacy Module | Kernel Subsystem | Adapter File | Contract |
+|---------------|------------------|--------------|----------|
+| `output-verifier.ts` | `verification` | `kernel/verification-adapter.ts` | `VerificationRunner` |
+| `policy-engine.ts` | `policy` | `kernel/policy-adapter.ts` | `PolicyEngine` |
+| `token_usage` table | `cost` | `kernel/cost-adapter.ts` | `CostReporter` |
+| `context-packet.ts` | `memory` | `kernel/memory-adapter.ts` | `MemoryProvider` |
+| `replay-store.ts` | `replay` | `replay-store.ts` (direct) | `ReplayStore` |
+| `pipeline-engine.ts` | `graph` | `kernel/index.ts` (inline) | `TaskGraph` |
+| `cli-adapter.ts` | `providers` | `kernel/provider-registry.ts` | `ProviderAdapter` |
+| `event-bus.ts` | `events` | `event-bus.ts` (direct) | `EventPublisher` |
+| `hook-registry.ts` | `hooks` | `kernel/hook-registry.ts` | `HookRegistry` |
+| `task-engine.ts` | `tasks` | `kernel/index.ts` (inline) | `TaskStore` |
+| `run-repo.ts` | `runs` | `kernel/index.ts` (inline) | `RunStore` |
 
 ---
 
