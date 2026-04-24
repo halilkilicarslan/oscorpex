@@ -146,21 +146,38 @@ export async function createCheckpointSnapshot(
 	const tasks = await listProjectTasks(projectId);
 	const project = await getProject(projectId);
 
-	// --- Build run summary from pipeline + project ---
-	const runSummary: any = {
+	// --- Fetch canonical Run record ---
+	let runRecord: import("@oscorpex/core").Run | undefined;
+	try {
+		const { listRuns } = await import("./db/run-repo.js");
+		const runs = await listRuns({ projectId, limit: 1 });
+		runRecord = runs[0];
+	} catch {
+		// runs table may not be populated in all environments
+	}
+
+	// Fallback: build a Run-compatible object from pipeline + project
+	const runSummary: any = runRecord ?? {
 		id: projectId,
-		status: pipeline?.status ?? "idle",
-		projectName: project?.name ?? "",
-		projectDescription: project?.description ?? "",
-		currentStage: pipeline?.currentStage ?? null,
-		taskCount: tasks.length,
-		completedTaskCount: tasks.filter((t: any) => t.status === "done").length,
-		failedTaskCount: tasks.filter((t: any) => t.status === "failed").length,
-		startedAt: pipeline?.startedAt ?? null,
+		projectId,
+		goal: project?.description ?? "",
+		mode: "execute",
+		status: (pipeline?.status as any) ?? "idle",
+		currentStageId: pipeline?.currentStage ?? undefined,
+		startedAt: pipeline?.startedAt ?? undefined,
+		completedAt: pipeline?.completedAt ?? undefined,
+		metadata: {
+			taskCount: tasks.length,
+			completedTaskCount: tasks.filter((t: any) => t.status === "done").length,
+			failedTaskCount: tasks.filter((t: any) => t.status === "failed").length,
+		},
 	};
 	try {
-		const cost = await getProjectCostSummary(projectId);
-		runSummary.totalCostUsd = cost.totalCostUsd ?? 0;
+		if (!runRecord) {
+			const cost = await getProjectCostSummary(projectId);
+			runSummary.metadata ??= {};
+			runSummary.metadata.totalCostUsd = cost.totalCostUsd ?? 0;
+		}
 	} catch {
 		// cost not available — skip
 	}

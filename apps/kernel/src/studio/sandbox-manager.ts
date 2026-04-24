@@ -143,7 +143,7 @@ export async function startSandboxSession(params: {
 	workspacePath: string;
 }): Promise<SandboxSession> {
 	const policy = await getSandboxPolicy(params.projectId);
-	const effectivePolicy = policy ?? buildDefaultPolicy(params.projectId);
+	const effectivePolicy = policy ?? buildDefaultSandboxPolicy(params.projectId);
 
 	const id = randomUUID();
 	const row = await queryOne(
@@ -185,11 +185,12 @@ export async function resolveTaskPolicy(
 ): Promise<SandboxPolicy> {
 	const projectPolicy = await getSandboxPolicy(projectId);
 	const defaultPolicy = buildDefaultSandboxPolicy(projectId);
-	const base = projectPolicy ?? {
+	const base: SandboxPolicy = projectPolicy ?? {
 		id: "default",
 		projectId,
 		isolationLevel: "workspace" as IsolationLevel,
 		...defaultPolicy,
+		networkPolicy: "unrestricted" as NetworkPolicy,
 		maxExecutionTimeMs: 300_000,
 		elevatedCapabilities: [] as string[],
 	};
@@ -213,6 +214,7 @@ export async function resolveTaskPolicy(
 	if (agentRole === "devops") {
 		return {
 			...base,
+			networkPolicy: base.networkPolicy ?? "full_network",
 			elevatedCapabilities: [...base.elevatedCapabilities, "docker", "network_access"],
 		};
 	}

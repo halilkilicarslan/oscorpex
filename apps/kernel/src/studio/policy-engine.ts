@@ -55,7 +55,7 @@ export async function getPolicies(projectId: string): Promise<PolicyRule[]> {
 		},
 		{
 			id: BUILTIN_RULE_LARGE_APPROVAL,
-			projectId,
+			projectId: projectId ?? "",
 			name: "Require approval for large tasks",
 			condition: "task.complexity in [L, XL]",
 			action: "require_approval",
@@ -63,7 +63,7 @@ export async function getPolicies(projectId: string): Promise<PolicyRule[]> {
 		},
 		{
 			id: BUILTIN_RULE_MULTI_REVIEWER,
-			projectId,
+			projectId: projectId ?? "",
 			name: "Multi-reviewer for sensitive files",
 			condition: "task.targetFiles matches pattern",
 			action: "warn",
@@ -72,7 +72,7 @@ export async function getPolicies(projectId: string): Promise<PolicyRule[]> {
 	];
 
 	// Merge: custom policies from settings override/supplement builtins
-	return [...builtins, ...customPolicies];
+	return [...builtins, ...(customPolicies as PolicyRule[])];
 }
 
 /**

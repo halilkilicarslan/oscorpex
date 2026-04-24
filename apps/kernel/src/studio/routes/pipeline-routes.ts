@@ -95,7 +95,7 @@ pipelineRoutes.get("/projects/:id/pipeline/status", async (c) => {
 			}
 		}
 
-		const existingTaskIds = new Set(pipelineState.stages.flatMap((s) => (s.tasks ?? []).map((t: any) => t.id)));
+		const existingTaskIds = new Set(pipelineState.stages.flatMap((s: { tasks?: { id: string }[] }) => (s.tasks ?? []).map((t) => t.id)));
 		for (const task of allTasks) {
 			if (existingTaskIds.has(task.id)) continue;
 
