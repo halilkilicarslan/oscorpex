@@ -294,6 +294,69 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		return result as unknown as CoreTask;
 	}
 
+	async submitReview(taskId: string, approved: boolean, feedback?: string): Promise<CoreTask> {
+		const result = await taskEngine.submitReview(taskId, approved, feedback);
+		return result as unknown as CoreTask;
+	}
+
+	async restartRevision(taskId: string): Promise<CoreTask> {
+		const result = await taskEngine.restartRevision(taskId);
+		return result as unknown as CoreTask;
+	}
+
+	async approveTask(taskId: string): Promise<CoreTask> {
+		const result = await taskEngine.approveTask(taskId);
+		return result as unknown as CoreTask;
+	}
+
+	async rejectTask(taskId: string, reason?: string): Promise<CoreTask> {
+		const result = await taskEngine.rejectTask(taskId, reason);
+		return result as unknown as CoreTask;
+	}
+
+	async executeTask(projectId: string, task: CoreTask): Promise<void> {
+		executionEngine.executeTask(projectId, task as any).catch((err) => {
+			// eslint-disable-next-line no-console
+			console.warn("[kernel] executeTask background error:", err?.message ?? err);
+		});
+	}
+
+	async startPipeline(projectId: string): Promise<void> {
+		await pipelineEngine.startPipeline(projectId);
+	}
+
+	async advancePipeline(projectId: string): Promise<void> {
+		await pipelineEngine.advanceStage(projectId);
+	}
+
+	async startProjectExecution(projectId: string): Promise<void> {
+		await executionEngine.startProjectExecution(projectId);
+	}
+
+	async getProjectProgress(projectId: string): Promise<any> {
+		return taskEngine.getProgress(projectId);
+	}
+
+	async getPipelineStatus(projectId: string): Promise<any> {
+		return pipelineEngine.getEnrichedPipelineStatus(projectId);
+	}
+
+	async getExecutionStatus(projectId: string): Promise<any> {
+		return executionEngine.getExecutionStatus(projectId);
+	}
+
+	async pausePipeline(projectId: string): Promise<void> {
+		await pipelineEngine.pausePipeline(projectId);
+	}
+
+	async resumePipeline(projectId: string): Promise<void> {
+		await pipelineEngine.resumePipeline(projectId);
+	}
+
+	async retryPipeline(projectId: string): Promise<void> {
+		await pipelineEngine.retryFailedPipeline(projectId);
+	}
+
 	// --- Provider execution (stub) ---
 
 	async executeWithProvider(providerId: string, input: ProviderExecutionInput): Promise<ProviderExecutionResult> {

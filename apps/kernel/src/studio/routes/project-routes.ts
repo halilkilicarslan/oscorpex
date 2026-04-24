@@ -44,6 +44,8 @@ import { executionEngine } from "../execution-engine.js";
 import { gitManager } from "../git-manager.js";
 import { initLintConfig } from "../lint-runner.js";
 import { recordChatToMemory } from "../memory-bridge.js";
+import { kernel } from "../kernel/index.js";
+import { withCorrelation } from "../correlation-context.js";
 import { pipelineEngine } from "../pipeline-engine.js";
 import {
 	type PlannerCLIProvider,
@@ -1021,8 +1023,8 @@ projectRoutes.post("/projects/:id/plan/approve", async (c) => {
 		payload: { planId: plan.id },
 	});
 
-	executionEngine.startProjectExecution(projectId).catch((err) => {
-		log.error("[execution-engine] startProjectExecution failed:" + " " + String(err));
+	kernel.startProjectExecution(projectId).catch((err) => {
+		log.error("[kernel] startProjectExecution failed:" + " " + String(err));
 	});
 
 	let pipelineStarted = false;
@@ -1032,15 +1034,15 @@ projectRoutes.post("/projects/:id/plan/approve", async (c) => {
 		const agents = await listProjectAgents(projectId);
 		if (agents.length === 0) {
 			pipelineWarning = "Projeye atanmış agent bulunamadı; pipeline stage koordinasyonu devre dışı.";
-			log.warn(`[pipeline-engine] ${pipelineWarning} (proje=${projectId})`);
+			log.warn(`[kernel] ${pipelineWarning} (proje=${projectId})`);
 		} else {
-			await pipelineEngine.startPipeline(projectId);
+			await kernel.startPipeline(projectId);
 			pipelineStarted = true;
-			log.info(`[pipeline-engine] Plan onayı ile pipeline otomatik başlatıldı (proje=${projectId})`);
+			log.info(`[kernel] Plan onayı ile pipeline otomatik başlatıldı (proje=${projectId})`);
 		}
 	} catch (err) {
 		pipelineWarning = err instanceof Error ? err.message : String(err);
-		log.error("[pipeline-engine] auto-start hatası (execution devam ediyor):" + " " + String(err));
+		log.error("[kernel] auto-start hatası (execution devam ediyor):" + " " + String(err));
 	}
 
 	return c.json({
@@ -1063,7 +1065,7 @@ projectRoutes.get("/projects/:id/pipeline/auto-start-status", async (c) => {
 	const plan = await getLatestPlan(projectId);
 	const planApproved = plan?.status === "approved";
 
-	const enriched = await pipelineEngine.getEnrichedPipelineStatus(projectId);
+	const enriched = await kernel.getPipelineStatus(projectId);
 	const pipelineState = enriched.pipelineState;
 
 	return c.json({
@@ -1119,8 +1121,8 @@ projectRoutes.post("/projects/:id/execute", async (c) => {
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
-	executionEngine.startProjectExecution(projectId).catch((err) => {
-		log.error("[execution-engine] manual execute failed:" + " " + String(err));
+	kernel.startProjectExecution(projectId).catch((err) => {
+		log.error("[kernel] manual execute failed:" + " " + String(err));
 	});
 
 	return c.json({ success: true, message: "Execution started" });
@@ -1131,7 +1133,7 @@ projectRoutes.get("/projects/:id/execution/status", async (c) => {
 		const projectId = c.req.param("id");
 		const project = await getProject(projectId);
 		if (!project) return c.json({ error: "Project not found" }, 404);
-			return c.json(await executionEngine.getExecutionStatus(projectId));
+			return c.json(await kernel.getExecutionStatus(projectId));
 	} catch (err) {
 		log.error("[project-routes] execution status failed:" + " " + String(err));
 		return c.json({ error: "Failed to get execution status" }, 500);
@@ -1139,7 +1141,7 @@ projectRoutes.get("/projects/:id/execution/status", async (c) => {
 });
 
 projectRoutes.get("/projects/:id/progress", (c) => {
-	return c.json(taskEngine.getProgress(c.req.param("id")));
+	return c.json(kernel.getProjectProgress(c.req.param("id")));
 });
 
 // ---- Project Templates (scaffold) -----------------------------------------

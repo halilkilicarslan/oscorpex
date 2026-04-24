@@ -37,6 +37,7 @@ import { getAgenticMetrics } from "../agentic-metrics.js";
 import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
 import { executionEngine } from "../execution-engine.js";
 import { taskEngine } from "../task-engine.js";
+import { kernel } from "../kernel/index.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("agentic-routes");
 
@@ -221,7 +222,7 @@ agenticRoutes.post("/proposals/:proposalId/approve", async (c) => {
 			if (task) {
 				const ready = await taskEngine.getReadyTasks(task.phaseId);
 				if (ready.some((candidate) => candidate.id === task.id)) {
-					executionEngine.executeTask(result.proposal.projectId, task).catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
+					kernel.executeTask(result.proposal.projectId, task as any).catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
 				}
 			}
 		}
@@ -255,7 +256,7 @@ agenticRoutes.post("/protocol-messages/:messageId/actioned", async (c) => {
 				if (refreshed) {
 					const ready = await taskEngine.getReadyTasks(refreshed.phaseId);
 					if (ready.some((candidate) => candidate.id === refreshed.id)) {
-						executionEngine.executeTask(message.projectId, refreshed).catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
+						kernel.executeTask(message.projectId, refreshed as any).catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
 					}
 				}
 			}

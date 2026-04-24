@@ -5,6 +5,7 @@
 import { Hono } from "hono";
 import { requirePermission } from "../auth/rbac.js";
 import { getLatestPlan, getProject, getTask, listPhases, listProjectAgents, listTasks } from "../db.js";
+import { kernel } from "../kernel/index.js";
 import { pipelineEngine } from "../pipeline-engine.js";
 import type { Task } from "../types.js";
 import { createLogger } from "../logger.js";
@@ -19,7 +20,7 @@ pipelineRoutes.post("/projects/:id/pipeline/start", requirePermission("pipeline:
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
 	try {
-		const state = await pipelineEngine.startPipeline(projectId);
+		const state = await kernel.startPipeline(projectId);
 		return c.json({ success: true, pipeline: state }, 201);
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : "Pipeline başlatılamadı";
@@ -33,7 +34,7 @@ pipelineRoutes.get("/projects/:id/pipeline/status", async (c) => {
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
-	const enriched = await pipelineEngine.getEnrichedPipelineStatus(projectId);
+	const enriched = await kernel.getPipelineStatus(projectId);
 
 	if (!enriched.pipelineState && enriched.taskProgress.overall.total === 0) {
 		return c.json({ error: "Bu proje için pipeline kaydı bulunamadı" }, 404);
@@ -147,7 +148,7 @@ pipelineRoutes.post("/projects/:id/pipeline/pause", requirePermission("pipeline:
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
 	try {
-		await pipelineEngine.pausePipeline(projectId);
+		await kernel.pausePipeline(projectId);
 		return c.json({ success: true, message: "Pipeline duraklatıldı" });
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : "Pipeline duraklatılamadı";
@@ -162,7 +163,7 @@ pipelineRoutes.post("/projects/:id/pipeline/resume", requirePermission("pipeline
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
 	try {
-		await pipelineEngine.resumePipeline(projectId);
+		await kernel.resumePipeline(projectId);
 		return c.json({ success: true, message: "Pipeline devam ettirildi" });
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : "Pipeline devam ettirilemedi";
@@ -177,7 +178,7 @@ pipelineRoutes.post("/projects/:id/pipeline/retry", async (c) => {
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
 	try {
-		await pipelineEngine.retryFailedPipeline(projectId);
+		await kernel.retryPipeline(projectId);
 		return c.json({
 			success: true,
 			message: "Failed pipeline yeniden başlatıldı",
@@ -195,7 +196,7 @@ pipelineRoutes.post("/projects/:id/pipeline/advance", async (c) => {
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
 	try {
-		const state = await pipelineEngine.advanceStage(projectId);
+		const state = await kernel.advancePipeline(projectId);
 		return c.json({ success: true, pipeline: state });
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : "Pipeline ilerletilemedi";

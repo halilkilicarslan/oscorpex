@@ -12,6 +12,7 @@ import { getEvent, insertEvent } from "./db.js";
 import { pgListener } from "./pg-listener.js";
 import type { EventType, StudioEvent } from "./types.js";
 import type { BaseEvent, EventPayloadMap } from "@oscorpex/event-schema";
+import { getCorrelationIds } from "./correlation-context.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("event-bus");
 
@@ -84,8 +85,15 @@ class EventBus {
 
 	/** Emit an event — persists to DB and notifies subscribers */
 	emit(data: Omit<StudioEvent, "id" | "timestamp">): void {
+		// Enforce correlation/causation tracking from async context if not provided
+		const ids = getCorrelationIds();
+		const enriched = {
+			...data,
+			correlationId: data.correlationId ?? ids.correlationId,
+			causationId: data.causationId ?? ids.causationId,
+		};
 		// Fire-and-forget: persist to DB asynchronously, then notify subscribers
-		insertEvent(data)
+		insertEvent(enriched)
 			.then((event) => {
 				// Dedup guard: bu ID'yi aynı process'te pg-listener'dan gelince skip etmek için işaretle
 				this._recentlyEmitted.add(event.id);
@@ -128,9 +136,12 @@ class EventBus {
 	 * Ideal for high-frequency ephemeral events like agent:output terminal lines.
 	 */
 	emitTransient(data: Omit<StudioEvent, "id" | "timestamp">): void {
+		const ids = getCorrelationIds();
 		const event: StudioEvent = {
 			id: "",
 			...data,
+			correlationId: data.correlationId ?? ids.correlationId,
+			causationId: data.causationId ?? ids.causationId,
 			timestamp: new Date().toISOString(),
 		};
 

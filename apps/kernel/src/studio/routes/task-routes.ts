@@ -17,8 +17,8 @@ import {
 	updateTask,
 } from "../db.js";
 import { eventBus } from "../event-bus.js";
-import { executionEngine } from "../execution-engine.js";
-import { taskEngine } from "../task-engine.js";
+import { kernel } from "../kernel/index.js";
+import { withCorrelation } from "../correlation-context.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("task-routes");
 
@@ -87,64 +87,74 @@ taskRoutes.patch("/projects/:id/tasks/:taskId", async (c) => {
 });
 
 taskRoutes.post("/projects/:id/tasks/:taskId/retry", async (c) => {
-	try {
-		const updated = await taskEngine.retryTask(c.req.param("taskId"));
-		executionEngine.executeTask(c.req.param("id"), updated).catch((err) => log.warn("[task-routes] Non-blocking operation failed:", err?.message ?? err));
-		return c.json({ success: true, task: updated });
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "Retry failed";
-		return c.json({ error: msg }, 400);
-	}
+	return withCorrelation(async () => {
+		try {
+			const updated = await kernel.retryTask(c.req.param("taskId"));
+			kernel.executeTask(c.req.param("id"), updated as any);
+			return c.json({ success: true, task: updated });
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Retry failed";
+			return c.json({ error: msg }, 400);
+		}
+	});
 });
 
 // POST /projects/:id/tasks/:taskId/review — Reviewer onay veya ret verir
 taskRoutes.post("/projects/:id/tasks/:taskId/review", async (c) => {
-	try {
-		const body = await c.req.json<{ approved: boolean; feedback?: string }>();
-		const updated = await taskEngine.submitReview(c.req.param("taskId"), body.approved, body.feedback);
-		return c.json({ success: true, task: updated });
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "Review failed";
-		return c.json({ error: msg }, 400);
-	}
+	return withCorrelation(async () => {
+		try {
+			const body = await c.req.json<{ approved: boolean; feedback?: string }>();
+			const updated = await kernel.submitReview(c.req.param("taskId"), body.approved, body.feedback);
+			return c.json({ success: true, task: updated });
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Review failed";
+			return c.json({ error: msg }, 400);
+		}
+	});
 });
 
 // POST /projects/:id/tasks/:taskId/restart-revision
 taskRoutes.post("/projects/:id/tasks/:taskId/restart-revision", async (c) => {
-	try {
-		const updated = await taskEngine.restartRevision(c.req.param("taskId"));
-		return c.json({ success: true, task: updated });
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "Restart revision failed";
-		return c.json({ error: msg }, 400);
-	}
+	return withCorrelation(async () => {
+		try {
+			const updated = await kernel.restartRevision(c.req.param("taskId"));
+			return c.json({ success: true, task: updated });
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Restart revision failed";
+			return c.json({ error: msg }, 400);
+		}
+	});
 });
 
 // POST /projects/:id/tasks/:taskId/approve — Human-in-the-Loop onay ver
 taskRoutes.post("/projects/:id/tasks/:taskId/approve", async (c) => {
-	try {
-		const projectId = c.req.param("id");
-		const taskId = c.req.param("taskId");
-		const updated = await taskEngine.approveTask(taskId);
-		executionEngine.executeTask(projectId, updated).catch((err) => log.warn("[task-routes] Non-blocking operation failed:", err?.message ?? err));
-		return c.json({ success: true, task: updated });
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "Onay işlemi başarısız";
-		return c.json({ error: msg }, 400);
-	}
+	return withCorrelation(async () => {
+		try {
+			const projectId = c.req.param("id");
+			const taskId = c.req.param("taskId");
+			const updated = await kernel.approveTask(taskId);
+			kernel.executeTask(projectId, updated as any);
+			return c.json({ success: true, task: updated });
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Onay işlemi başarısız";
+			return c.json({ error: msg }, 400);
+		}
+	});
 });
 
 // POST /projects/:id/tasks/:taskId/reject — Human-in-the-Loop reddet
 taskRoutes.post("/projects/:id/tasks/:taskId/reject", async (c) => {
-	try {
-		const taskId = c.req.param("taskId");
-		const body = await c.req.json<{ reason?: string }>().catch(() => ({}) as { reason?: string });
-		const updated = await taskEngine.rejectTask(taskId, body.reason);
-		return c.json({ success: true, task: updated });
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "Red işlemi başarısız";
-		return c.json({ error: msg }, 400);
-	}
+	return withCorrelation(async () => {
+		try {
+			const taskId = c.req.param("taskId");
+			const body = await c.req.json<{ reason?: string }>().catch(() => ({}) as { reason?: string });
+			const updated = await kernel.rejectTask(taskId, body.reason);
+			return c.json({ success: true, task: updated });
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Red işlemi başarısız";
+			return c.json({ error: msg }, 400);
+		}
+	});
 });
 
 // GET /projects/:id/approvals — Bekleyen onayları listele
