@@ -4,9 +4,25 @@
 
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { randomUUID } from "node:crypto";
 import type { VerificationRunner, VerificationInput, VerificationReport, VerificationResult } from "@oscorpex/core";
 import { runVerificationChecks, verifyOutputNonEmpty } from "@oscorpex/verification-kit";
+import { execute } from "../pg.js";
 import { eventBus } from "../event-bus.js";
+
+async function persistResult(taskId: string, result: VerificationResult): Promise<void> {
+	await execute(
+		`INSERT INTO verification_results (id, task_id, verification_type, status, details, created_at)
+		 VALUES ($1, $2, $3, $4, $5, now())`,
+		[
+			randomUUID(),
+			taskId,
+			result.type,
+			result.passed ? "passed" : "failed",
+			JSON.stringify(result.details),
+		],
+	);
+}
 
 class KernelVerificationRunner implements VerificationRunner {
 	async verify(input: VerificationInput): Promise<VerificationReport> {
@@ -24,6 +40,12 @@ class KernelVerificationRunner implements VerificationRunner {
 		}
 
 		const checks = runVerificationChecks(repoPath, output, { existsSync, statSync }, { join, isAbsolute });
+
+		// Persist all results to DB (gate binding)
+		for (const result of checks) {
+			await persistResult(task.id, result);
+		}
+
 		const passed = checks.every((r) => r.passed);
 
 		const report: VerificationReport = {

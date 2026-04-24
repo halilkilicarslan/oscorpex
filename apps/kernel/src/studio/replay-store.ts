@@ -3,11 +3,25 @@
 // Implements the ReplayStore contract from @oscorpex/core.
 
 import type { ReplaySnapshot, ReplayStore } from "@oscorpex/core";
-import { execute, queryOne } from "./pg.js";
+import { createHash } from "node:crypto";
+import { execute, queryOne, query } from "./pg.js";
 
 class DbReplayStore implements ReplayStore {
+	private hashSnapshot(snapshot: ReplaySnapshot): string {
+		const payload = JSON.stringify({
+			run: snapshot.run,
+			stages: snapshot.stages,
+			tasks: snapshot.tasks,
+			artifacts: snapshot.artifacts,
+			policyDecisions: snapshot.policyDecisions,
+			verificationReports: snapshot.verificationReports,
+		});
+		return createHash("sha256").update(payload).digest("hex");
+	}
+
 	async saveSnapshot(snapshot: ReplaySnapshot): Promise<void> {
 		const metadata = (snapshot as any).metadata ?? {};
+		const contextHash = this.hashSnapshot(snapshot);
 		await execute(
 			`INSERT INTO replay_snapshots (id, run_id, checkpoint_id, snapshot_json, context_hash, metadata, created_at)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -28,7 +42,7 @@ class DbReplayStore implements ReplayStore {
 					policyDecisions: snapshot.policyDecisions,
 					verificationReports: snapshot.verificationReports,
 				}),
-				null, // context_hash — populated by caller if available
+				contextHash,
 				JSON.stringify(metadata),
 				snapshot.createdAt,
 			],
@@ -67,6 +81,53 @@ class DbReplayStore implements ReplayStore {
 			verificationReports: parsed.verificationReports ?? [],
 		} as ReplaySnapshot;
 	}
+
+	async listSnapshots(runId: string, limit = 50): Promise<ReplaySnapshot[]> {
+		const rows = await query<{
+			id: string;
+			run_id: string;
+			checkpoint_id: string;
+			snapshot_json: string;
+			created_at: string;
+		}>(
+			`SELECT id, run_id, checkpoint_id, snapshot_json, created_at
+			 FROM replay_snapshots
+			 WHERE run_id = $1
+			 ORDER BY created_at DESC
+			 LIMIT $2`,
+			[runId, limit],
+		);
+
+		return rows.map((row) => {
+			const parsed = JSON.parse(row.snapshot_json);
+			return {
+				id: row.id,
+				runId: row.run_id,
+				checkpoint: row.checkpoint_id,
+				createdAt: row.created_at,
+				run: parsed.run ?? {},
+				stages: parsed.stages ?? [],
+				tasks: parsed.tasks ?? [],
+				artifacts: parsed.artifacts ?? [],
+				policyDecisions: parsed.policyDecisions ?? [],
+				verificationReports: parsed.verificationReports ?? [],
+			} as ReplaySnapshot;
+		});
+	}
+
+	async pruneSnapshots(runId: string, maxDepth: number): Promise<number> {
+		const result = await execute(
+			`DELETE FROM replay_snapshots
+			 WHERE id IN (
+			   SELECT id FROM replay_snapshots
+			   WHERE run_id = $1
+			   ORDER BY created_at DESC
+			   OFFSET $2
+			 )`,
+			[runId, maxDepth],
+		);
+		return result.rowCount ?? 0;
+	}
 }
 
 export const replayStore = new DbReplayStore();
@@ -103,5 +164,6 @@ export async function createCheckpointSnapshot(
 	}
 
 	await replayStore.saveSnapshot(snapshot);
+	await replayStore.pruneSnapshots(projectId, 100);
 	return snapshot;
 }
