@@ -46,20 +46,7 @@ replayRoutes.get("/snapshots/:snapshotId", async (c) => {
 			return c.json({ error: "Snapshot not found" }, 404);
 		}
 
-		return c.json({
-			id: snapshot.id,
-			runId: snapshot.runId,
-			projectId: snapshot.projectId,
-			checkpoint: snapshot.checkpoint,
-			createdAt: snapshot.createdAt,
-			run: snapshot.run,
-			stageCount: snapshot.stages?.length ?? 0,
-			taskCount: snapshot.tasks?.length ?? 0,
-			artifacts: snapshot.artifacts ?? [],
-			policyDecisions: snapshot.policyDecisions ?? [],
-			verificationReports: snapshot.verificationReports ?? [],
-			metadata: snapshot.metadata ?? {},
-		});
+		return c.json(buildInspectResponse(snapshot));
 	} catch (err) {
 		log.error({ err }, "[replay-routes] inspect snapshot failed");
 		return c.json({ error: String(err) }, 500);
@@ -106,20 +93,30 @@ replayRoutes.get("/runs/:runId/inspect", async (c) => {
 			return c.json({ error: "No snapshot found for run" }, 404);
 		}
 
-		return c.json({
-			runId,
-			snapshotId: snapshot.id,
-			checkpoint: snapshot.checkpoint,
-			createdAt: snapshot.createdAt,
-			run: snapshot.run,
-			stageCount: snapshot.stages?.length ?? 0,
-			taskCount: snapshot.tasks?.length ?? 0,
-			artifacts: snapshot.artifacts ?? [],
-			policyDecisions: snapshot.policyDecisions ?? [],
-			verificationReports: snapshot.verificationReports ?? [],
-		});
+		return c.json(buildInspectResponse(snapshot));
 	} catch (err) {
 		log.error({ err }, "[replay-routes] inspect failed");
 		return c.json({ error: String(err) }, 500);
 	}
 });
+
+// ---------------------------------------------------------------------------
+// Standardized inspect response builder
+// ---------------------------------------------------------------------------
+
+export function buildInspectResponse(snapshot: import("@oscorpex/core").ReplaySnapshot) {
+	return {
+		id: snapshot.id,
+		runId: snapshot.runId,
+		projectId: snapshot.projectId,
+		checkpoint: snapshot.checkpoint,
+		createdAt: snapshot.createdAt,
+		run: snapshot.run,
+		stages: snapshot.stages ?? [],
+		tasks: snapshot.tasks ?? [],
+		artifacts: snapshot.artifacts ?? [],
+		policyDecisions: snapshot.policyDecisions ?? [],
+		verificationReports: snapshot.verificationReports ?? [],
+		metadata: snapshot.metadata ?? {},
+	};
+}

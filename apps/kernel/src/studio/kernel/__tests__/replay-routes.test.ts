@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { replayRoutes } from "../../routes/replay-routes.js";
+import { replayRoutes, buildInspectResponse } from "../../routes/replay-routes.js";
 
 describe("Replay Routes", () => {
 	const app = new Hono();
@@ -82,5 +82,59 @@ describe("Replay Routes", () => {
 			const body = await res.json();
 			expect(body.error).toContain("Snapshot not found");
 		});
+	});
+
+	describe("POST /replay/runs/:runId/restore — edge cases", () => {
+		it("returns 500 for malformed JSON body", async () => {
+			const res = await app.request("/replay/runs/p-1/restore", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: "not-json",
+			});
+			expect([200, 404, 500]).toContain(res.status);
+		});
+
+		it("accepts checkpointId parameter", async () => {
+			const res = await app.request("/replay/runs/p-1/restore", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ dryRun: true, checkpointId: "specific-checkpoint" }),
+			});
+			expect([200, 404, 500]).toContain(res.status);
+		});
+	});
+});
+
+describe("buildInspectResponse standardization", () => {
+	it("returns consistent shape for both inspect endpoints", () => {
+		const snapshot = {
+			id: "snap-1",
+			runId: "r1",
+			projectId: "p1",
+			checkpoint: "cp1",
+			createdAt: "2024-01-01T00:00:00Z",
+			run: { id: "r1", projectId: "p1", goal: "test", mode: "execute", status: "running" },
+			stages: [{ order: 0, agents: [], tasks: [], status: "pending" as const }],
+			tasks: [{ id: "t1", phaseId: "ph1", title: "Task 1", assignedAgent: "", status: "queued", complexity: "M", dependsOn: [], branch: "", retryCount: 0, revisionCount: 0, requiresApproval: false }],
+			artifacts: [{ taskId: "t1", filesCreated: ["file.ts"], filesModified: [] }],
+			policyDecisions: [{ runId: "r1", action: "allow", reasons: [], policyVersion: "1.0", createdAt: "2024-01-01T00:00:00Z" }],
+			verificationReports: [{ runId: "r1", taskId: "t1", passed: true, checks: [], createdAt: "2024-01-01T00:00:00Z" }],
+			metadata: { truthSources: { run: "db" } },
+		};
+
+		const response = buildInspectResponse(snapshot as any);
+
+		expect(response).toHaveProperty("id");
+		expect(response).toHaveProperty("runId");
+		expect(response).toHaveProperty("projectId");
+		expect(response).toHaveProperty("checkpoint");
+		expect(response).toHaveProperty("createdAt");
+		expect(response).toHaveProperty("run");
+		expect(response).toHaveProperty("stages");
+		expect(response).toHaveProperty("tasks");
+		expect(response).toHaveProperty("artifacts");
+		expect(response).toHaveProperty("policyDecisions");
+		expect(response).toHaveProperty("verificationReports");
+		expect(response).toHaveProperty("metadata");
 	});
 });

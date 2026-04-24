@@ -138,4 +138,51 @@ import type { ReplaySnapshot } from "@oscorpex/core";
 		const after = await replayStore.listSnapshots("prune-run", 10);
 		expect(after.length).toBe(2);
 	});
+
+	it("pruneSnapshots uses runId (not projectId) to avoid cross-run deletion", async () => {
+		await execute("DELETE FROM replay_snapshots WHERE run_id LIKE 'prune-cross-%'");
+
+		// Simulate: project p-1 has two runs with different runIds
+		for (let i = 0; i < 3; i++) {
+			await replayStore.saveSnapshot({
+				id: `prune-cross-run1-${i}`,
+				runId: "run-1",
+				projectId: "p-1",
+				checkpoint: "cp",
+				createdAt: new Date(Date.now() + i * 1000).toISOString(),
+				run: { id: "run-1", projectId: "p-1", goal: "g1", mode: "execute", status: "running" },
+				stages: [],
+				tasks: [],
+				artifacts: [],
+				policyDecisions: [],
+				verificationReports: [],
+			} as unknown as ReplaySnapshot);
+		}
+		for (let i = 0; i < 3; i++) {
+			await replayStore.saveSnapshot({
+				id: `prune-cross-run2-${i}`,
+				runId: "run-2",
+				projectId: "p-1",
+				checkpoint: "cp",
+				createdAt: new Date(Date.now() + i * 1000).toISOString(),
+				run: { id: "run-2", projectId: "p-1", goal: "g2", mode: "execute", status: "running" },
+				stages: [],
+				tasks: [],
+				artifacts: [],
+				policyDecisions: [],
+				verificationReports: [],
+			} as unknown as ReplaySnapshot);
+		}
+
+		// Prune run-1 to max 1
+		await replayStore.pruneSnapshots("run-1", 1);
+
+		// run-1 should have 1 snapshot
+		const run1Snaps = await replayStore.listSnapshots("run-1", 10);
+		expect(run1Snaps.length).toBe(1);
+
+		// run-2 should still have 3 snapshots (not affected)
+		const run2Snaps = await replayStore.listSnapshots("run-2", 10);
+		expect(run2Snaps.length).toBe(3);
+	});
 });

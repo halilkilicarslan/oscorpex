@@ -306,7 +306,7 @@ export async function createCheckpointSnapshot(
 	};
 
 	await replayStore.saveSnapshot(snapshot);
-	await replayStore.pruneSnapshots(projectId, 100);
+	await replayStore.pruneSnapshots(canonicalRunId, 100);
 	return snapshot;
 }
 
