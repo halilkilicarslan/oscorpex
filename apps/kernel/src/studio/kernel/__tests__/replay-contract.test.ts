@@ -1,0 +1,138 @@
+// ---------------------------------------------------------------------------
+// Replay Contract Tests (RPL-05)
+// Verifies DbReplayStore roundtrips, column isolation, and fallback behavior.
+// ---------------------------------------------------------------------------
+
+import { describe, expect, it, beforeAll } from "vitest";
+import { execute, queryOne } from "../../pg.js";
+import { replayStore } from "../../replay-store.js";
+import type { ReplaySnapshot } from "@oscorpex/core";
+
+	describe("DbReplayStore contract", () => {
+	beforeAll(async () => {
+		await execute("DELETE FROM replay_snapshots WHERE run_id = 'contract-run'");
+		// Ensure columns are nullable for fallback test
+		await execute("ALTER TABLE replay_snapshots ALTER COLUMN policy_decisions_json DROP NOT NULL");
+		await execute("ALTER TABLE replay_snapshots ALTER COLUMN verification_reports_json DROP NOT NULL");
+	});
+
+	it("roundtrips policyDecisions and verificationReports via dedicated columns", async () => {
+		const snapshot: ReplaySnapshot = {
+			id: "snap-1",
+			runId: "contract-run",
+			checkpoint: "test-checkpoint",
+			createdAt: new Date().toISOString(),
+			run: { id: "contract-run", status: "running" },
+			stages: [],
+			tasks: [],
+			artifacts: [],
+			policyDecisions: [
+				{ agentId: "a1", agentName: "Alice", action: "execute", allowed: true, violations: [] },
+			],
+			verificationReports: [
+				{ taskId: "t1", passed: true, report: "ok" },
+			],
+		};
+
+		await replayStore.saveSnapshot(snapshot);
+
+		// Verify raw DB columns
+		const row = await queryOne<{ policy_decisions_json: string; verification_reports_json: string }>(
+			`SELECT policy_decisions_json, verification_reports_json FROM replay_snapshots WHERE id = $1`,
+			["snap-1"],
+		);
+		expect(row).toBeDefined();
+		expect(JSON.parse(row!.policy_decisions_json)).toEqual(snapshot.policyDecisions);
+		expect(JSON.parse(row!.verification_reports_json)).toEqual(snapshot.verificationReports);
+
+		// Verify getSnapshot reconstructs from dedicated columns
+		const loaded = await replayStore.getSnapshot("contract-run", "test-checkpoint");
+		expect(loaded).toBeDefined();
+		expect(loaded!.policyDecisions).toEqual(snapshot.policyDecisions);
+		expect(loaded!.verificationReports).toEqual(snapshot.verificationReports);
+	});
+
+	it("listSnapshots reconstructs dedicated columns", async () => {
+		const snapshot: ReplaySnapshot = {
+			id: "snap-2",
+			runId: "contract-run",
+			checkpoint: "list-checkpoint",
+			createdAt: new Date().toISOString(),
+			run: { id: "contract-run", status: "idle" },
+			stages: [],
+			tasks: [],
+			artifacts: [],
+			policyDecisions: [{ agentId: "a2", agentName: "Bob", action: "review", allowed: false, violations: ["risky"] }],
+			verificationReports: [],
+		};
+
+		await replayStore.saveSnapshot(snapshot);
+
+		const list = await replayStore.listSnapshots("contract-run", 10);
+		const found = list.find((s) => s.id === "snap-2");
+		expect(found).toBeDefined();
+		expect(found!.policyDecisions).toEqual(snapshot.policyDecisions);
+		expect(found!.verificationReports).toEqual([]);
+	});
+
+	it("falls back to snapshot_json when dedicated columns are null", async () => {
+		// Insert a legacy-style row with null dedicated columns
+		await execute(
+			`INSERT INTO replay_snapshots (id, run_id, checkpoint_id, snapshot_json, context_hash, metadata, policy_decisions_json, verification_reports_json, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, $7)
+			 ON CONFLICT (id) DO UPDATE SET
+			   snapshot_json = EXCLUDED.snapshot_json,
+			   policy_decisions_json = NULL,
+			   verification_reports_json = NULL`,
+			[
+				"legacy-snap",
+				"contract-run",
+				"legacy-checkpoint",
+				JSON.stringify({
+					run: { id: "contract-run" },
+					stages: [],
+					tasks: [],
+					artifacts: [],
+					policyDecisions: [{ agentId: "legacy", allowed: true, violations: [] }],
+					verificationReports: [{ taskId: "legacy-t", passed: false }],
+				}),
+				"hash",
+				"{}",
+				new Date().toISOString(),
+			],
+		);
+
+		const loaded = await replayStore.getSnapshot("contract-run", "legacy-checkpoint");
+		expect(loaded).toBeDefined();
+		expect(loaded!.policyDecisions).toEqual([{ agentId: "legacy", allowed: true, violations: [] }]);
+		expect(loaded!.verificationReports).toEqual([{ taskId: "legacy-t", passed: false }]);
+	});
+
+	it("pruneSnapshots removes old snapshots beyond maxDepth", async () => {
+		await execute("DELETE FROM replay_snapshots WHERE run_id = 'prune-run'");
+
+		for (let i = 0; i < 5; i++) {
+			await replayStore.saveSnapshot({
+				id: `prune-snap-${i}`,
+				runId: "prune-run",
+				checkpoint: "cp",
+				createdAt: new Date(Date.now() + i * 1000).toISOString(),
+				run: {},
+				stages: [],
+				tasks: [],
+				artifacts: [],
+				policyDecisions: [],
+				verificationReports: [],
+			} as ReplaySnapshot);
+		}
+
+		const before = await replayStore.listSnapshots("prune-run", 10);
+		expect(before.length).toBe(5);
+
+		const removed = await replayStore.pruneSnapshots("prune-run", 2);
+		expect(removed).toBe(3);
+
+		const after = await replayStore.listSnapshots("prune-run", 10);
+		expect(after.length).toBe(2);
+	});
+});
