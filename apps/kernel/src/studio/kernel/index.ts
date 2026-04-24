@@ -132,10 +132,21 @@ class KernelScheduler implements Scheduler {
 }
 
 class KernelTaskGraph implements TaskGraphContract {
-	buildWaves(_phases: import("@oscorpex/core").PipelineStage[]): import("@oscorpex/core").PipelineStage[][] {
-		// Project-scoped buildWaves requires agent + dependency fetch.
-		// Use pipelineEngine.refreshPipeline or @oscorpex/task-graph directly.
-		throw new Error("TaskGraph.buildWaves requires project context — use pipelineEngine.refreshPipeline");
+	async buildWaves(projectId: string): Promise<import("@oscorpex/core").PipelineStage[][]> {
+		const { listProjectAgents, listAgentDependencies } = await import("../db.js");
+		const agents = await listProjectAgents(projectId);
+		const deps = await listAgentDependencies(projectId);
+		const { buildDAGWaves } = await import("@oscorpex/task-graph");
+		const waveIds = buildDAGWaves(agents as any, deps as any);
+		// Map agent ID waves to empty PipelineStage shells (order only)
+		return waveIds.map((wave, idx) =>
+			wave.map((agentId) => ({
+				order: idx,
+				agents: [{ id: agentId }],
+				tasks: [],
+				status: "pending" as const,
+			})),
+		);
 	}
 	async resolveDependencies(taskId: string): Promise<string[]> {
 		const { getTask } = await import("../db.js");
@@ -143,12 +154,8 @@ class KernelTaskGraph implements TaskGraphContract {
 		return task?.dependsOn ?? [];
 	}
 	async getExecutionOrder(projectId: string): Promise<string[]> {
-		const { listProjectAgents, listAgentDependencies } = await import("../db.js");
-		const agents = await listProjectAgents(projectId);
-		const deps = await listAgentDependencies(projectId);
-		const { buildDAGWaves } = await import("@oscorpex/task-graph");
-		const waves = buildDAGWaves(agents as any, deps as any);
-		return waves.flat();
+		const waves = await this.buildWaves(projectId);
+		return waves.flat().map((s: any) => s.agents?.[0]?.id).filter(Boolean);
 	}
 }
 

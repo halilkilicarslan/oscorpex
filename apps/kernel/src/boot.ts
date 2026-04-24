@@ -72,6 +72,12 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 	const { pipelineEngine } = await import("./studio/pipeline-engine.js");
 	pipelineEngine.registerTaskHook();
 
+	// 7.5 Provider registry boot-time wiring
+	const { providerRegistry } = await import("./studio/kernel/provider-registry.js");
+	await providerRegistry.initializeFromLegacy().catch((err) => {
+		log.warn("[boot] Provider registry init skipped: " + String(err));
+	});
+
 	// 7.5. Auto-checkpoint on stage boundaries
 	eventBus.on("pipeline:stage_completed", async (event) => {
 		const projectId = event.projectId;
