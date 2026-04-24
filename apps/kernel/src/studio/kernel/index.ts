@@ -358,6 +358,59 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		await pipelineEngine.retryFailedPipeline(projectId);
 	}
 
+	// --- Kernel-first passthroughs for routes that still import engines directly ---
+
+	async getReadyTasks(phaseId: string): Promise<any[]> {
+		return taskEngine.getReadyTasks(phaseId);
+	}
+
+	async runStandup(projectId: string): Promise<any> {
+		const { runStandup } = await import("../ceremony-engine.js");
+		return runStandup(projectId);
+	}
+
+	async runRetrospective(projectId: string): Promise<any> {
+		const { runRetrospective } = await import("../ceremony-engine.js");
+		return runRetrospective(projectId);
+	}
+
+	// --- Goal engine passthroughs ---
+
+	async listGoals(projectId: string, status?: string): Promise<any[]> {
+		const { listGoals } = await import("../goal-engine.js");
+		return listGoals(projectId, status as any);
+	}
+
+	async getGoal(goalId: string): Promise<any | null> {
+		const { getGoal } = await import("../goal-engine.js");
+		return getGoal(goalId);
+	}
+
+	async getGoalForTask(taskId: string): Promise<any | null> {
+		const { getGoalForTask } = await import("../goal-engine.js");
+		return getGoalForTask(taskId);
+	}
+
+	async createGoal(input: { projectId: string; taskId?: string; definition: any }): Promise<any> {
+		const { createGoal } = await import("../goal-engine.js");
+		return createGoal(input);
+	}
+
+	async activateGoal(goalId: string): Promise<any> {
+		const { activateGoal } = await import("../goal-engine.js");
+		return activateGoal(goalId);
+	}
+
+	async evaluateGoal(goalId: string, results: any[]): Promise<any> {
+		const { evaluateGoal } = await import("../goal-engine.js");
+		return evaluateGoal(goalId, results);
+	}
+
+	async failGoal(goalId: string, reason: string): Promise<any> {
+		const { failGoal } = await import("../goal-engine.js");
+		return failGoal(goalId, reason);
+	}
+
 	// --- Provider execution (stub) ---
 
 	async executeWithProvider(providerId: string, input: ProviderExecutionInput): Promise<ProviderExecutionResult> {

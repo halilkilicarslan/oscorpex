@@ -6,7 +6,6 @@ import { Hono } from "hono";
 import { requirePermission } from "../auth/rbac.js";
 import { getLatestPlan, getProject, getTask, listPhases, listProjectAgents, listTasks } from "../db.js";
 import { kernel } from "../kernel/index.js";
-import { pipelineEngine } from "../pipeline-engine.js";
 import type { Task } from "../types.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("pipeline-routes");

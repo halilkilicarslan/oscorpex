@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { type Context, Hono } from "hono";
-import { runRetrospective, runStandup } from "../ceremony-engine.js";
 import { getProject, listProjectAgents } from "../db.js";
+import { kernel } from "../kernel/index.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("ceremony-routes");
 
@@ -26,11 +26,12 @@ async function handleStandup(c: Context) {
 	const projectId = c.req.param("id") ?? "";
 	try {
 		await ensureProjectExists(projectId);
-		const [reports, agents] = await Promise.all([runStandup(projectId), listProjectAgents(projectId)]);
+		const [reports, agents] = await Promise.all([kernel.runStandup(projectId), listProjectAgents(projectId)]);
+		const reportList = reports as any[];
 		const roleMap = new Map(agents.map((a) => [a.id, a.role] as const));
 		return c.json({
 			runAt: new Date().toISOString(),
-			agents: reports.map((r) => ({
+			agents: reportList.map((r: any) => ({
 				agentId: r.agentId,
 				agentName: r.agentName,
 				role: roleMap.get(r.agentId) ?? "",
@@ -58,7 +59,7 @@ async function handleRetrospective(c: Context) {
 	const projectId = c.req.param("id") ?? "";
 	try {
 		await ensureProjectExists(projectId);
-		const report = await runRetrospective(projectId);
+		const report = await kernel.runRetrospective(projectId);
 		return c.json({
 			runAt: new Date().toISOString(),
 			data: {

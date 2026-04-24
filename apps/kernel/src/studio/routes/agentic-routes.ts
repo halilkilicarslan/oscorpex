@@ -35,8 +35,6 @@ import { loadBehavioralContext, formatBehavioralPrompt } from "../agent-runtime/
 import { BUILTIN_STRATEGIES } from "../agent-runtime/agent-strategy.js";
 import { getAgenticMetrics } from "../agentic-metrics.js";
 import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
-import { executionEngine } from "../execution-engine.js";
-import { taskEngine } from "../task-engine.js";
 import { kernel } from "../kernel/index.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("agentic-routes");
@@ -220,7 +218,7 @@ agenticRoutes.post("/proposals/:proposalId/approve", async (c) => {
 		if (result.taskId) {
 			const task = await getTask(result.taskId);
 			if (task) {
-				const ready = await taskEngine.getReadyTasks(task.phaseId);
+				const ready = await kernel.getReadyTasks(task.phaseId);
 				if (ready.some((candidate) => candidate.id === task.id)) {
 					kernel.executeTask(result.proposal.projectId, task as any).catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
 				}
@@ -254,7 +252,7 @@ agenticRoutes.post("/protocol-messages/:messageId/actioned", async (c) => {
 				await import("../db.js").then(({ updateTask }) => updateTask(task.id, { status: "queued" }));
 				const refreshed = await getTask(task.id);
 				if (refreshed) {
-					const ready = await taskEngine.getReadyTasks(refreshed.phaseId);
+					const ready = await kernel.getReadyTasks(refreshed.phaseId);
 					if (ready.some((candidate) => candidate.id === refreshed.id)) {
 						kernel.executeTask(message.projectId, refreshed as any).catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
 					}

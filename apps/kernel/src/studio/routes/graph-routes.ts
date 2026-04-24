@@ -16,15 +16,7 @@ import {
 	approveGraphMutationRequest,
 	rejectGraphMutationRequest,
 } from "../graph-coordinator.js";
-import {
-	createGoal,
-	getGoal,
-	getGoalForTask,
-	listGoals,
-	activateGoal,
-	evaluateGoal,
-	failGoal,
-} from "../goal-engine.js";
+import { kernel } from "../kernel/index.js";
 import {
 	evaluateReplan,
 	getReplanEvent,
@@ -172,7 +164,7 @@ graphRoutes.post("/graph-mutations/:mutationId/reject", async (c) => {
 graphRoutes.get("/projects/:projectId/goals", async (c) => {
 	try {
 		const status = c.req.query("status");
-		const goals = await listGoals(c.req.param("projectId"), status as any);
+		const goals = await kernel.listGoals(c.req.param("projectId"), status as any);
 		return c.json(goals);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
@@ -181,7 +173,7 @@ graphRoutes.get("/projects/:projectId/goals", async (c) => {
 
 graphRoutes.get("/goals/:goalId", async (c) => {
 	try {
-		const goal = await getGoal(c.req.param("goalId"));
+		const goal = await kernel.getGoal(c.req.param("goalId"));
 		if (!goal) return c.json({ error: "Goal not found" }, 404);
 		return c.json(goal);
 	} catch (err) {
@@ -191,7 +183,7 @@ graphRoutes.get("/goals/:goalId", async (c) => {
 
 graphRoutes.get("/tasks/:taskId/goal", async (c) => {
 	try {
-		const goal = await getGoalForTask(c.req.param("taskId"));
+		const goal = await kernel.getGoalForTask(c.req.param("taskId"));
 		if (!goal) return c.json({ error: "No goal for this task" }, 404);
 		return c.json(goal);
 	} catch (err) {
@@ -202,7 +194,7 @@ graphRoutes.get("/tasks/:taskId/goal", async (c) => {
 graphRoutes.post("/projects/:projectId/goals", async (c) => {
 	try {
 		const body = await c.req.json();
-		const goal = await createGoal({
+		const goal = await kernel.createGoal({
 			projectId: c.req.param("projectId"),
 			taskId: body.taskId,
 			definition: body.definition,
@@ -215,7 +207,7 @@ graphRoutes.post("/projects/:projectId/goals", async (c) => {
 
 graphRoutes.post("/goals/:goalId/activate", async (c) => {
 	try {
-		const goal = await activateGoal(c.req.param("goalId"));
+		const goal = await kernel.activateGoal(c.req.param("goalId"));
 		return c.json(goal);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
@@ -225,7 +217,7 @@ graphRoutes.post("/goals/:goalId/activate", async (c) => {
 graphRoutes.post("/goals/:goalId/evaluate", async (c) => {
 	try {
 		const body = await c.req.json();
-		const goal = await evaluateGoal(c.req.param("goalId"), body.results);
+		const goal = await kernel.evaluateGoal(c.req.param("goalId"), body.results);
 		return c.json(goal);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
@@ -235,7 +227,7 @@ graphRoutes.post("/goals/:goalId/evaluate", async (c) => {
 graphRoutes.post("/goals/:goalId/fail", async (c) => {
 	try {
 		const body = await c.req.json();
-		const goal = await failGoal(c.req.param("goalId"), body.reason);
+		const goal = await kernel.failGoal(c.req.param("goalId"), body.reason);
 		return c.json(goal);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);

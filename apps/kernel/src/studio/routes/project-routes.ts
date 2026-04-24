@@ -40,13 +40,11 @@ import {
 	updateProject,
 } from "../db.js";
 import { eventBus } from "../event-bus.js";
-import { executionEngine } from "../execution-engine.js";
 import { gitManager } from "../git-manager.js";
 import { initLintConfig } from "../lint-runner.js";
 import { recordChatToMemory } from "../memory-bridge.js";
 import { kernel } from "../kernel/index.js";
 import { withCorrelation } from "../correlation-context.js";
-import { pipelineEngine } from "../pipeline-engine.js";
 import {
 	type PlannerCLIProvider,
 	type PlannerReasoningEffort,
@@ -56,7 +54,6 @@ import {
 import { PM_SYSTEM_PROMPT, buildPlan, estimatePlanCost } from "../pm-agent.js";
 import { getProjectTemplate, listProjectTemplates, scaffoldFromTemplate } from "../project-templates.js";
 import { initSonarConfig, isSonarEnabled } from "../sonar-runner.js";
-import { taskEngine } from "../task-engine.js";
 import type { IntakeQuestionCategory } from "../types.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("project-routes");
