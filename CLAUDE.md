@@ -5,83 +5,121 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Backend (root)
-pnpm dev              # Start backend with tsx watch (port 3141, studio API at /api/studio)
-pnpm typecheck        # tsc --noEmit
-pnpm lint             # biome check ./src
-pnpm lint:fix         # biome check --write ./src
-pnpm test             # vitest run (all backend tests)
+# Workspace (root)
+pnpm dev              # Start kernel with tsx watch (port 3141, studio API at /api/studio)
+pnpm dev:console      # Start frontend Vite dev server (port 5173)
+pnpm build            # Build all packages + apps
+pnpm typecheck        # tsc --noEmit across all workspaces
+pnpm lint             # biome check on kernel
+pnpm lint:fix         # biome check --write on kernel
+pnpm test             # vitest run (kernel tests — serialized, DB-backed)
 pnpm test -- --testPathPattern=task-engine   # Run single test file
 
-# Frontend (console/)
-cd console && pnpm dev        # Vite dev server (port 5173)
-cd console && pnpm test:run   # vitest run (all frontend tests)
-cd console && pnpm tsc -b     # Frontend typecheck
+# Per-app
+pnpm --filter @oscorpex/kernel dev       # Kernel only
+pnpm --filter console test:run           # Frontend tests (jsdom)
+pnpm --filter console tsc -b             # Frontend typecheck
 
 # Docker
 pnpm docker:up        # Start PostgreSQL + services
 pnpm docker:down      # Stop all containers
 ```
 
+## Monorepo Structure
+
+```
+apps/
+  kernel/              # Backend — Hono server + execution engine + pipeline
+    src/studio/        # Core platform modules (~53K LOC)
+    scripts/init.sql   # DB schema (85 tables, idempotent)
+  console/             # Frontend — React 19 + Vite + Tailwind 4 (~52K LOC)
+  kernel-src/          # Legacy source (do not edit — migration artifact)
+
+packages/
+  core/                # @oscorpex/core — shared types + utilities
+  event-schema/        # @oscorpex/event-schema — event type definitions
+  memory-kit/          # @oscorpex/memory-kit — agent memory utilities
+  observability-sdk/   # @oscorpex/observability-sdk
+  policy-kit/          # @oscorpex/policy-kit — policy enforcement
+  provider-sdk/        # @oscorpex/provider-sdk — CLI adapter contracts
+  task-graph/          # @oscorpex/task-graph — DAG data structures
+  verification-kit/    # @oscorpex/verification-kit — output verification
+
+adapters/
+  provider-claude/     # Claude CLI adapter (stub)
+  provider-codex/      # Codex CLI adapter (stub)
+  provider-cursor/     # Cursor adapter (stub)
+```
+
 ## Architecture
 
-Oscorpex is an AI-powered software development platform where users describe an idea, and a 12-agent Scrum team (PM, Tech Lead, Frontend Dev, Backend Dev, QA, Security, etc.) builds it autonomously through a DAG pipeline.
+Oscorpex is an AI-powered software development platform. Users describe an idea, and a 12-agent Scrum team builds it autonomously through a DAG pipeline.
 
-### Backend (`src/`)
+### Kernel (`apps/kernel/src/`)
 
-**Entry point**: `src/index.ts` — VoltAgent app with Hono server. Studio routes mounted at `/api/studio`.
+**Entry**: `index.ts` → boots as kernel (default) or VoltAgent mode (`OSCORPEX_MODE` env).
 
-**Core engine flow** (all in `src/studio/`):
-1. **pm-agent.ts** — PM agent analyzes requirements, asks user questions, generates a phased plan with tasks
-2. **execution-engine.ts** — Dispatches tasks to agents via CLI execution (Claude Code / Codex / Aider). Auto-decomposes L/XL tasks into micro-tasks via `task-decomposer.ts`
-3. **task-engine.ts** — Task lifecycle: assign → start → done/fail. Handles review loops, sub-task rollup, escalation/fallback edges, auto work-item creation on failure
-4. **pipeline-engine.ts** — DAG orchestrator using Kahn's algorithm (`buildDAGWaves()`). Manages phase progression with 12 edge types. `refreshPipeline()` rebuilds DAG without resetting completed stages
+**Core engine flow** (all in `studio/`):
+1. **pm-agent.ts** — PM analyzes requirements, generates phased plan with tasks
+2. **execution-engine.ts** (1306 LOC, 7 responsibilities) — Dispatches tasks via CLI, manages adapter chain, session lifecycle, sandbox, retry
+3. **task-engine.ts** — Task lifecycle: assign → start → done/fail. Review loops, sub-task rollup, escalation
+4. **pipeline-engine.ts** — DAG orchestrator via Kahn's algorithm. Phase progression, replan gate
 
-**Database layer** (`src/studio/db/`):
-- `pg.ts` — PostgreSQL pool with `query()`, `queryOne()`, `execute()`, `withTransaction()` helpers
-- `db/index.ts` — Re-exports all 17 repo modules (single import: `from "./db.js"`)
-- `helpers.ts` — Row mappers (`rowToTask`, `rowToProject`, etc.) and `now()` utility
-- Schema: `scripts/init.sql` (idempotent, applied at startup via `db-bootstrap.ts`)
+**Extracted modules** (from execution-engine):
+- `execution-gates.ts` — Verification + test + goal validation gates
+- `proposal-processor.ts` — Routes structured output markers (task proposals, agent messages, graph mutations)
+- `prompt-builder.ts` — Task prompt assembly with RAG, context, error injection
+- `review-dispatcher.ts` — Review task lifecycle + agent resolution
 
-**Routes** (`src/studio/routes/`):
-- 12 Hono sub-routers registered in `routes/index.ts`, mounted under `/api/studio`
-- Route files import from `../db.js` (the barrel export), not individual repos
+**Safety & correctness**:
+- `graph-coordinator.ts` — DAG mutations with `GraphInvariantError` (cycle DFS, self-edge, duplicate edge)
+- `sandbox-manager.ts` — Realpath + symlink hardened path checks, tool enforcement
+- `task-injection.ts` — `InjectionLimitError` (per-task quota 3, per-phase budget 10, recursion depth 2, dedup)
+- `budget-guard.ts` — Cost circuit breaker, auto-pause pipeline
+- `roles.ts` — Canonical hyphen-case role normalization
 
-**Key supporting modules**:
-- `event-bus.ts` — Event sourcing for state transitions (`task:completed`, `task:failed`, `pipeline:completed`, etc.)
-- `context-packet.ts` — Token-efficient prompt assembly with mode-based context (planner/execution/review)
-- `model-router.ts` — Complexity-based model selection (S→Haiku, M→Sonnet, L→Sonnet, XL→Opus)
-- `team-architect.ts` — AI-powered team composition from templates
-- `app-runner.ts` — Runs generated apps, reserves ports 5173/4242/3142
+**Logging**: `logger.ts` — Pino structured JSON logging. Every module uses `createLogger("module-name")`.
 
-### Frontend (`console/`)
+**Database**: `db/` — 39 repo modules, barrel-exported via `db/index.ts`. Schema in `scripts/init.sql` (85 tables, idempotent).
 
-React 19 + Vite + Tailwind 4 + React Router. Dark theme: bg `#0a0a0a`, cards `#111111`, borders `#262626`, accent `#22c55e`.
+**Routes**: `routes/` — 32 Hono sub-routers registered in `routes/index.ts`. 5 YAGNI-deferred (cli-usage, ceremony, marketplace, cluster, collaboration).
 
-- **Pages**: `console/src/pages/studio/` — 36 pages (ProjectPage, KanbanBoard, AgentDashboard, PMChat, BacklogBoard, SprintBoard, etc.)
-- **API layer**: `console/src/lib/studio-api/` — Modular API client (17 files: base, types, projects, plans, tasks, agents, chat, pipeline, messaging, analytics, providers, settings, git, app-runner, work-items, misc + barrel index). Original `studio-api.ts` re-exports from `./studio-api/index.js` so all import paths remain unchanged.
-- **Tests**: `console/src/__tests__/` — Testing Library + jsdom
+### Console (`apps/console/src/`)
+
+React 19 + Vite + Tailwind 4 + React Router. Dark theme: bg `#0a0a0a`, accent `#22c55e`.
+
+- **Pages**: `pages/studio/` — 49 pages
+- **API**: `lib/studio-api/` — 25 modular client files, barrel index
+- **Hooks**: `hooks/` — WebSocket, notifications, collaboration, infinite scroll
+- **Proxy**: Dev server proxies to kernel at `localhost:3141` (configurable via `VITE_PROXY_TARGET`)
 
 ### Database
 
-PostgreSQL (default: `postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex`). Key tables: `projects`, `project_plans`, `tasks`, `project_agents`, `agent_dependencies`, `events`, `work_items`, `sprints`, `token_usage`, `agent_capabilities`.
+PostgreSQL (`postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex`). 85 tables including `projects`, `tasks`, `phases`, `events`, `agent_sessions`, `agent_episodes`, `task_proposals`, `graph_mutations`, `replan_events`, `learning_patterns`, `provider_state`.
 
-All migrations use `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` for idempotency.
+All migrations use `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`.
 
 ## Critical Patterns
 
-- **Import convention**: Backend files use `.js` extension in imports (`from "./db.js"`) even for `.ts` files (ESM resolution)
-- **DB access**: Always import from `./db.js` (barrel), never directly from individual repo files
-- **UUID generation**: Use `randomUUID()` from `node:crypto`, not the `uuid` package
-- **Task status guard**: `executeTask()` accepts both `"queued"` and `"running"` status (revision restart sets running)
-- **Review dispatch**: `dispatchReadyTasks()` allows review tasks even in failed phases
-- **Event-sourced metrics**: Failure/rejection counts come from `events` table (survives task retries)
-- **Agent scoring**: Configurable via `project_settings` category `scoring`
-- **Reserved ports**: 5173 (Vite), 4242 (preview), 3142 (WebSocket) — agents cannot bind to these
+- **Import convention**: `.js` extension in ESM imports (`from "./db.js"`) even for `.ts` files
+- **DB access**: Always import from `./db.js` barrel, never individual repo files
+- **UUID**: `randomUUID()` from `node:crypto`, not the `uuid` package
+- **Logging**: `import { createLogger } from "./logger.js"` → `log.info()` / `log.warn({ err }, "msg")`. Never `log.warn("msg", err)` (pino type error)
+- **Graph mutations**: Every `addEdge` must pass through `validateAddEdge()` (cycle detection)
+- **Sandbox paths**: Use `resolve() + normalize() + sep` for scope checks — never bare `startsWith()`
+- **Injection limits**: `checkInjectionLimits()` before `proposeTask()` — enforces quota/depth/dedup
+- **Claim-based dispatch**: `claimTask()` with SELECT FOR UPDATE SKIP LOCKED — no in-memory guards
+- **Pipeline state**: DB-authoritative via `mutatePipelineState()`. `_cache` is read-through only
+- **Pipeline advance**: `advanceStage()` checks for pending `replan_events` and blocks if any
+- **Budget**: `enforceBudgetGuard()` after token recording. Canonical key: `budget.maxCostUsd`
+- **Session lifecycle**: `initSession()` → `recordStep()` ×4 → `completeSession()`/`failSession()`
 - **Formatting**: Tabs, 120 char line width (biome.json)
+- **Reserved ports**: 5173 (Vite), 4242 (preview), 3142 (WebSocket)
 
 ## Constraints
 
-- Never edit files under `.voltagent/repos/` — these are AI-generated project outputs
+- Never edit files under `.voltagent/repos/` or `apps/kernel-src/` — these are legacy/generated
 - Use `pnpm` exclusively (not npm or yarn)
+- Workspace packages use `workspace:*` protocol for inter-package deps
+- Kernel tests run serialized (`fileParallelism: false`) due to shared DB
 - Respond to the user in Turkish
