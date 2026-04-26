@@ -17,7 +17,7 @@ const COPY_EXCLUDES = new Set([
 	"build",
 	".next",
 	".turbo",
-	".voltagent",
+	".oscorpex",
 	"coverage",
 ]);
 

@@ -472,7 +472,7 @@ projectRoutes.post("/projects", requirePermission("projects:create"), async (c) 
 	}
 
 	try {
-		const repoPath = join(resolve(".voltagent/repos"), project.id);
+		const repoPath = join(resolve(".oscorpex/repos"), project.id);
 		await mkdir(repoPath, { recursive: true });
 		await gitManager.initRepo(repoPath);
 		await gitManager.initDocs(repoPath);
@@ -1195,7 +1195,7 @@ projectRoutes.post("/projects/from-template", async (c) => {
 	}
 
 	try {
-		const repoPath = join(resolve(".voltagent/repos"), project.id);
+		const repoPath = join(resolve(".oscorpex/repos"), project.id);
 		await mkdir(repoPath, { recursive: true });
 		await gitManager.initRepo(repoPath);
 

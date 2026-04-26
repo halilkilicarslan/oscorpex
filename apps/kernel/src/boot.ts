@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
-// Oscorpex — Kernel Boot (VoltAgent-free)
-// Starts the core Oscorpex platform without VoltAgent.
+// Oscorpex — Kernel Boot
+// Starts the core Oscorpex platform.
 // The studio HTTP server, WebSocket, DB bootstrap, and execution recovery
-// all run independently of any VoltAgent integration.
+// run as a standalone kernel.
 // ---------------------------------------------------------------------------
 
 import "dotenv/config";
@@ -27,7 +27,7 @@ export interface KernelBootOptions {
 }
 
 /**
- * Boot the Oscorpex kernel without VoltAgent.
+ * Boot the Oscorpex kernel.
  * Initializes DB, event bus, provider state, WebSocket, and HTTP server.
  * Returns the Hono app and the Node server for programmatic control.
  */

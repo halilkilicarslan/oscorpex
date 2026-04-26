@@ -62,7 +62,7 @@ Oscorpex is a full-stack development studio that orchestrates a team of 12 speci
 | Backend | Node.js, Hono, PostgreSQL |
 | Frontend | React 19, Vite, Tailwind CSS 4 |
 | AI Execution | Claude CLI, Codex CLI, Cursor (multi-provider) |
-| AI Framework | VoltAgent |
+| AI Framework | Oscorpex Kernel (custom execution engine) |
 | Container | Docker (Dockerode), container pool with health checks |
 | Terminal | xterm.js v6 |
 | Git | simple-git |

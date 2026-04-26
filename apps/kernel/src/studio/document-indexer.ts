@@ -53,7 +53,7 @@ export interface ReindexSummary {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".py", ".md", ".json", ".css"];
-const DEFAULT_EXCLUDE_DIRS = ["node_modules", ".git", "dist", "build", ".next", ".voltagent"];
+const DEFAULT_EXCLUDE_DIRS = ["node_modules", ".git", "dist", "build", ".next", ".oscorpex"];
 const DEFAULT_MAX_FILE_SIZE = 100 * 1024; // 100 KB
 
 // ---------------------------------------------------------------------------

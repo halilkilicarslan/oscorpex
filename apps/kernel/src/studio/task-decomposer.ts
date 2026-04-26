@@ -94,7 +94,7 @@ const IGNORE_DIRS = new Set([
 	"build",
 	".next",
 	".turbo",
-	".voltagent",
+	".oscorpex",
 	"coverage",
 	".cache",
 ]);

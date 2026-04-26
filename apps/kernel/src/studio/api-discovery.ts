@@ -422,7 +422,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createLogger } from "./logger.js";
 const log = createLogger("api-discovery");
 
-const COLLECTIONS_BASE = join(process.cwd(), ".voltagent", "api-collections");
+const COLLECTIONS_BASE = join(process.cwd(), ".oscorpex", "api-collections");
 
 export interface SavedRequest {
 	id: string;

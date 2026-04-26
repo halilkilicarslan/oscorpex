@@ -57,9 +57,13 @@ import { authMiddleware } from "../auth/auth-middleware.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("index");
 
-// Preset agentları ve takım şablonlarını başlat
-seedPresetAgents();
-seedTeamTemplates();
+// Preset agentları ve takım şablonlarını başlat (non-blocking, errors swallowed to avoid crashing the server on stale DB)
+seedPresetAgents().catch((err) => {
+	log.warn({ err }, "[routes/index] seedPresetAgents failed");
+});
+seedTeamTemplates().catch((err) => {
+	log.warn({ err }, "[routes/index] seedTeamTemplates failed");
+});
 
 // v4.0: Context session event bridge — crash recovery tracking
 initContextSession(eventBus);

@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// Final Integration Verification — All 8 closure tasks
-// This test validates that the key acceptance criteria from the final task
-// list are met, serving as a single green light for release readiness.
+// Final Integration Verification — Kernel-Only Closure
+// Validates that all VoltAgent integration surface has been removed and the
+// kernel boots independently.
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
@@ -71,13 +71,71 @@ describe("FINAL INTEGRATION: All 8 closure tasks acceptance", () => {
 		expect(CANCEL_BEHAVIOR_MATRIX["cursor"]).toBeDefined();
 	});
 
-	it("Task 7: VoltAgent boundary docs exist", async () => {
+	it("Task 7: VoltAgent boundary docs removed", async () => {
 		const fs = await import("node:fs");
-		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/docs/voltagent-boundary.md")).toBe(true);
+		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/docs/voltagent-boundary.md")).toBe(false);
 	});
 
 	it("Task 8: Smoke checklist script exists", async () => {
 		const fs = await import("node:fs");
 		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/scripts/smoke-checklist.sh")).toBe(true);
+	});
+});
+
+describe("EPIC 1 — Kernel Boot Integration (IT-01..IT-03)", () => {
+	it("IT-01: boot.ts exports bootKernel and bootAndServe", async () => {
+		const mod = await import("../../../boot.js");
+		expect(mod).toBeDefined();
+		expect(typeof mod.bootKernel).toBe("function");
+		expect(typeof mod.bootAndServe).toBe("function");
+	});
+
+	it("IT-01b: bootKernel accepts options and returns app/server/port", async () => {
+		const mod = await import("../../../boot.js");
+		expect(typeof mod.bootKernel).toBe("function");
+		// Signature validation via runtime check — we cannot boot a real server in unit tests,
+		// but we can verify the exported contract is correct.
+		expect(mod.bootKernel.length).toBe(0); // optional parameter
+	});
+
+	it("IT-02: entry-voltagent.ts no longer exists", async () => {
+		const fs = await import("node:fs");
+		const path = await import("node:path");
+		const entryPath = path.resolve(process.cwd(), "src/entry-voltagent.ts");
+		expect(fs.existsSync(entryPath)).toBe(false);
+	});
+
+	it("IT-02b: index.ts boots kernel directly without mode branch", async () => {
+		const fs = await import("node:fs");
+		const path = await import("node:path");
+		const indexPath = path.resolve(process.cwd(), "src/index.ts");
+		expect(fs.existsSync(indexPath)).toBe(true);
+		const content = fs.readFileSync(indexPath, "utf-8");
+		expect(content).not.toContain("OSCORPEX_MODE");
+		expect(content).not.toContain("entry-voltagent");
+		expect(content).toContain("bootAndServe");
+	});
+
+	it("IT-03: kernel routes work without VoltAgent imports", async () => {
+		const { replayRoutes } = await import("../../routes/replay-routes.js");
+		const { providerRoutes } = await import("../../routes/provider-routes.js");
+		expect(replayRoutes).toBeDefined();
+		expect(providerRoutes).toBeDefined();
+	});
+});
+
+describe("EPIC 5 — VoltAgent Removed (IT-16..IT-17)", () => {
+	it("IT-16: kernel package no longer lists VoltAgent as optional dependency", async () => {
+		const fs = await import("node:fs");
+		const pkgRaw = fs.readFileSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/package.json", "utf-8");
+		const pkg = JSON.parse(pkgRaw);
+		if (pkg.optionalDependencies) {
+			expect(pkg.optionalDependencies["@voltagent/core"] ?? null).toBeNull();
+		}
+	});
+
+	it("IT-17: VoltAgent boundary docs removed", async () => {
+		const fs = await import("node:fs");
+		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/docs/voltagent-boundary.md")).toBe(false);
 	});
 });

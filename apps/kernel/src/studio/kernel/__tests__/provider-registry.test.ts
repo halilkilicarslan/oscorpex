@@ -187,3 +187,28 @@ describe("ProviderRegistry contract", () => {
 		expect(new Date(result.completedAt).getTime()).toBeGreaterThanOrEqual(new Date(result.startedAt).getTime());
 	});
 });
+
+describe("EPIC 3 — Provider Registry Integration (IT-10..IT-13)", () => {
+	it("IT-10: registerDefaultProviders registers all known providers", () => {
+		const registry = new ProviderRegistry();
+		registry.registerDefaultProviders();
+		expect(registry.get("claude-code")).toBeDefined();
+		expect(registry.get("codex")).toBeDefined();
+		expect(registry.get("cursor")).toBeDefined();
+	});
+
+	it("IT-13: all default providers expose consistent capability shape", () => {
+		const registry = new ProviderRegistry();
+		registry.registerDefaultProviders();
+		for (const { id, adapter } of registry.list()) {
+			const caps = adapter.capabilities();
+			expect(caps).toHaveProperty("supportsToolRestriction");
+			expect(caps).toHaveProperty("supportsStreaming");
+			expect(caps).toHaveProperty("supportsResume");
+			expect(caps).toHaveProperty("supportsCancel");
+			expect(caps).toHaveProperty("supportsStructuredOutput");
+			expect(caps).toHaveProperty("supportsSandboxHinting");
+			expect(typeof caps.supportsCancel).toBe("boolean");
+		}
+	});
+});

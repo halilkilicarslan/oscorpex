@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Oscorpex — Agent Log Store (Dosya Tabanlı)
-// Agent terminal çıktılarını .voltagent/logs/{projectId}/{agentId}.log
+// Agent terminal çıktılarını .oscorpex/logs/{projectId}/{agentId}.log
 // dosyalarına persist eder. DB'ye yük binmez.
 // ---------------------------------------------------------------------------
 
@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { createLogger } from "./logger.js";
 const log = createLogger("agent-log-store");
 
-const LOGS_BASE = join(process.cwd(), ".voltagent", "logs");
+const LOGS_BASE = join(process.cwd(), ".oscorpex", "logs");
 
 function logDir(projectId: string): string {
 	return join(LOGS_BASE, projectId);

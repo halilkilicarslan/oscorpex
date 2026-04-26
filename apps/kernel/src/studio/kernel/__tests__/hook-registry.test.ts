@@ -149,3 +149,31 @@ describe("runHooks", () => {
 		expect(hook).toHaveBeenCalledTimes(1);
 	});
 });
+
+describe("EPIC 4 — Hook & Lifecycle Integration (IT-14..IT-15)", () => {
+	beforeEach(() => {
+		hookRegistry.clear();
+	});
+
+	it("IT-14: multiple registrations with same id do not create duplicates", () => {
+		const hook = vi.fn().mockResolvedValue({ proceed: true });
+		hookRegistry.register({ id: "dup-hook", phase: "before_task_start", priority: 0, hook });
+		hookRegistry.register({ id: "dup-hook", phase: "before_task_start", priority: 0, hook });
+		hookRegistry.register({ id: "dup-hook", phase: "before_task_start", priority: 0, hook });
+
+		const hooks = hookRegistry.getHooks("before_task_start");
+		const count = hooks.filter((h) => h.id === "dup-hook").length;
+		expect(count).toBe(1);
+	});
+
+	it("IT-15: before_task_start hook can block task execution", async () => {
+		const blocker = vi.fn().mockResolvedValue({ proceed: false });
+		hookRegistry.register({ id: "blocker", phase: "before_task_start", priority: 0, hook: blocker });
+
+		const ctx = { projectId: "p1", runId: "r1", taskId: "t1" };
+		const result = await runHooks("before_task_start", ctx);
+
+		expect(result).toBe(false);
+		expect(blocker).toHaveBeenCalledWith(ctx);
+	});
+});

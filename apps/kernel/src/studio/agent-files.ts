@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { createLogger } from "./logger.js";
 const log = createLogger("agent-files");
 
-const AGENTS_BASE = resolve(".voltagent/agents");
+const AGENTS_BASE = resolve(".oscorpex/agents");
 
 function slugify(name: string): string {
 	return name
