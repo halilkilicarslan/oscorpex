@@ -58,10 +58,11 @@ describe("FINAL INTEGRATION: All 8 closure tasks acceptance", () => {
 		expect(snap.metadata!.truthSources).toBeDefined();
 	});
 
-	it("Task 5: Provider registry has native init path", async () => {
+	it("Task 5: Provider registry has native init path and no legacy bridge", async () => {
 		const { ProviderRegistry } = await import("../../kernel/provider-registry.js");
 		const registry = new ProviderRegistry();
 		expect(typeof registry.registerDefaultProviders).toBe("function");
+		expect(typeof (registry as any).initializeFromLegacy).toBe("undefined");
 	});
 
 	it("Task 6: Cancel behavior matrix is documented", async () => {

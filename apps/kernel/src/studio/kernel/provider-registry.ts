@@ -94,8 +94,8 @@ export class ProviderRegistry {
 
 	/**
 	 * Native provider registration — does NOT depend on legacy cli-adapter.ts.
-	 * Registers providers using the factory layer. This is the preferred
-	 * initialization path for new deployments.
+	 * Registers providers using the factory layer. This is the sole
+	 * initialization path for all deployments.
 	 */
 	registerDefaultProviders(): void {
 		const configs: ProviderFactoryConfig[] = [
@@ -111,33 +111,6 @@ export class ProviderRegistry {
 				log.info(`[provider-registry] Native registration: ${config.id}`);
 			} catch (err) {
 				log.warn(`[provider-registry] Could not native-register ${config.id}: ${String(err)}`);
-			}
-		}
-	}
-
-	/**
-	 * Boot-time initialization: register known CLI adapters.
-	 * This bridges legacy cli-adapter.ts with the new provider registry.
-	 *
-	 * @deprecated Transitional API — will be removed once all providers have
-	 * native adapter implementations. Use registerDefaultProviders() or
-	 * register() with real ProviderAdapter instances for new providers.
-	 */
-	async initializeFromLegacy(): Promise<void> {
-		const { getAdapter } = await import("../cli-adapter.js");
-		const mapping: Array<{ name: string; ctor: new (legacy?: any) => ProviderAdapter }> = [
-			{ name: "claude-code", ctor: ClaudeCodeAdapter },
-			{ name: "codex", ctor: CodexAdapter },
-			{ name: "cursor", ctor: CursorAdapter },
-		];
-
-		for (const { name, ctor } of mapping) {
-			try {
-				const legacy = getAdapter(name as any);
-				const adapter = new ctor(legacy);
-				this.register(name, adapter);
-			} catch (err) {
-				log.warn(`[provider-registry] Could not register ${name}: ${String(err)}`);
 			}
 		}
 	}

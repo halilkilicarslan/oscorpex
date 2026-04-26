@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { replayRoutes, buildInspectResponse } from "../../routes/replay-routes.js";
+import { buildReplaySnapshot } from "./replay-fixtures.js";
 
 describe("Replay Routes", () => {
 	const app = new Hono();
@@ -152,22 +153,9 @@ describe("Replay Routes", () => {
 	});
 });
 
-describe("buildInspectResponse standardization", () => {
+	describe("buildInspectResponse standardization", () => {
 	it("returns consistent shape for both inspect endpoints", () => {
-		const snapshot = {
-			id: "snap-1",
-			runId: "r1",
-			projectId: "p1",
-			checkpoint: "cp1",
-			createdAt: "2024-01-01T00:00:00Z",
-			run: { id: "r1", projectId: "p1", goal: "test", mode: "execute", status: "running" },
-			stages: [{ order: 0, agents: [], tasks: [], status: "pending" as const }],
-			tasks: [{ id: "t1", phaseId: "ph1", title: "Task 1", assignedAgent: "", status: "queued", complexity: "M", dependsOn: [], branch: "", retryCount: 0, revisionCount: 0, requiresApproval: false }],
-			artifacts: [{ taskId: "t1", filesCreated: ["file.ts"], filesModified: [] }],
-			policyDecisions: [{ runId: "r1", action: "allow", reasons: [], policyVersion: "1.0", createdAt: "2024-01-01T00:00:00Z" }],
-			verificationReports: [{ runId: "r1", taskId: "t1", passed: true, checks: [], createdAt: "2024-01-01T00:00:00Z" }],
-			metadata: { truthSources: { run: "db" } },
-		};
+		const snapshot = buildReplaySnapshot();
 
 		const response = buildInspectResponse(snapshot as any);
 

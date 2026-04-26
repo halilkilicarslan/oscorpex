@@ -88,11 +88,10 @@ describe("FINAL: Replay fidelity — persisted truth", () => {
 });
 
 describe("FINAL: Provider transitional audit", () => {
-	it("ProviderRegistry.initializeFromLegacy is marked @deprecated", async () => {
+	it("ProviderRegistry no longer exposes initializeFromLegacy", async () => {
 		const { ProviderRegistry } = await import("../../kernel/provider-registry.js");
-		// Verify the method exists and has deprecated JSDoc in source
 		const registry = new ProviderRegistry();
-		expect(typeof registry.initializeFromLegacy).toBe("function");
+		expect(typeof (registry as any).initializeFromLegacy).toBe("undefined");
 	});
 
 	it("cancel behavior matrix documents all providers", async () => {

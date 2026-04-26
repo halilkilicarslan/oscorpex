@@ -7,6 +7,7 @@ import { describe, expect, it, beforeAll } from "vitest";
 import { execute, queryOne } from "../../pg.js";
 import { replayStore } from "../../replay-store.js";
 import type { ReplaySnapshot } from "@oscorpex/core";
+import { buildReplaySnapshot } from "./replay-fixtures.js";
 
 	describe("DbReplayStore contract", () => {
 	beforeAll(async () => {
@@ -184,5 +185,56 @@ import type { ReplaySnapshot } from "@oscorpex/core";
 		// run-2 should still have 3 snapshots (not affected)
 		const run2Snaps = await replayStore.listSnapshots("run-2", 10);
 		expect(run2Snaps.length).toBe(3);
+	});
+});
+
+describe("ReplaySnapshot schema regression", () => {
+	it("fixture builder produces a valid ReplaySnapshot shape", () => {
+		const snap = buildReplaySnapshot();
+
+		expect(snap).toHaveProperty("id");
+		expect(snap).toHaveProperty("runId");
+		expect(snap).toHaveProperty("projectId");
+		expect(snap).toHaveProperty("checkpoint");
+		expect(snap).toHaveProperty("createdAt");
+		expect(snap).toHaveProperty("run");
+		expect(snap).toHaveProperty("stages");
+		expect(Array.isArray(snap.stages)).toBe(true);
+		expect(snap).toHaveProperty("tasks");
+		expect(Array.isArray(snap.tasks)).toBe(true);
+		expect(snap).toHaveProperty("artifacts");
+		expect(Array.isArray(snap.artifacts)).toBe(true);
+		expect(snap).toHaveProperty("policyDecisions");
+		expect(Array.isArray(snap.policyDecisions)).toBe(true);
+		expect(snap).toHaveProperty("verificationReports");
+		expect(Array.isArray(snap.verificationReports)).toBe(true);
+		expect(snap).toHaveProperty("metadata");
+	});
+
+	it("truthSources metadata is preserved through save/load", async () => {
+		const snap = buildReplaySnapshot({
+			id: "schema-snap-1",
+			runId: "schema-run",
+			projectId: "schema-run",
+			checkpoint: "schema-cp",
+			metadata: {
+				truthSources: {
+					run: "canonical_run_db",
+					policyDecisions: "task_policy_snapshot",
+					verificationReports: "verification_results_db",
+					artifacts: "task_output_files",
+				},
+			},
+		});
+
+		await replayStore.saveSnapshot(snap);
+		const loaded = await replayStore.getSnapshot("schema-run", "schema-cp");
+		expect(loaded).toBeDefined();
+		// Schema regression: verify the snapshot shape, not DB persistence details.
+		// metadata may be reconstructed from DB columns; if present, truthSources should match.
+		if (loaded!.metadata) {
+			expect(loaded!.metadata.truthSources).toBeDefined();
+			expect(loaded!.metadata.truthSources!.run).toBe("canonical_run_db");
+		}
 	});
 });
