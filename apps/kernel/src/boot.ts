@@ -1,24 +1,31 @@
 // ---------------------------------------------------------------------------
 // Oscorpex — Kernel Boot
-// Starts the core Oscorpex platform.
-// The studio HTTP server, WebSocket, DB bootstrap, and execution recovery
-// run as a standalone kernel.
+// Orchestrates the boot sequence via discrete phase modules.
+// Each phase is imported from ./boot-phases/ and has a single responsibility.
 // ---------------------------------------------------------------------------
 
 import "dotenv/config";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
-import { observabilityRoutes } from "./observability-routes.js";
-import { containerPool } from "./studio/container-pool.js";
-import { applyDbBootstrap } from "./studio/db-bootstrap.js";
-import { authRoutes, studioRoutes } from "./studio/index.js";
-import { providerState } from "./studio/provider-state.js";
-import { webhookSender } from "./studio/webhook-sender.js";
-import { startWSServer } from "./studio/ws-server.js";
 import { createLogger } from "./studio/logger.js";
-import { eventBus } from "./studio/event-bus.js";
-import { createCheckpointSnapshot } from "./studio/replay-store.js";
-import { randomUUID } from "node:crypto";
+
+import { dbPhase } from "./boot-phases/db-phase.js";
+import { providerStatePhase } from "./boot-phases/provider-state-phase.js";
+import { websocketPhase } from "./boot-phases/websocket-phase.js";
+import { webhookPhase } from "./boot-phases/webhook-phase.js";
+import { containerPoolPhase } from "./boot-phases/container-pool-phase.js";
+import { recoveryPhase } from "./boot-phases/recovery-phase.js";
+import { pipelinePhase } from "./boot-phases/pipeline-phase.js";
+import { providerRegistryPhase } from "./boot-phases/provider-registry-phase.js";
+import { replayPhase } from "./boot-phases/replay-phase.js";
+import { httpPhase } from "./boot-phases/http-phase.js";
+import {
+	registerSeeders,
+	registerEventBridges,
+	registerWebhookBridge,
+	registerPluginBridge,
+	registerNotificationBridge,
+} from "./studio/composition/index.js";
 
 const log = createLogger("boot");
 
@@ -28,8 +35,7 @@ export interface KernelBootOptions {
 
 /**
  * Boot the Oscorpex kernel.
- * Initializes DB, event bus, provider state, WebSocket, and HTTP server.
- * Returns the Hono app and the Node server for programmatic control.
+ * Phases are executed in order; each phase is isolated and has a single responsibility.
  */
 export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 	app: Hono;
@@ -40,79 +46,45 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 
 	log.info(`[boot] Starting Oscorpex kernel on port ${port}...`);
 
-	// 1. DB schema migrations (idempotent — safe on every startup)
-	await applyDbBootstrap();
-	log.info("[boot] DB schema bootstrap complete");
+	// Phase 1: DB schema migrations (fatal on failure)
+	await dbPhase();
 
-	// 2. Provider state
-	await providerState.loadFromDb().catch((err) => {
-		log.warn("[boot] Provider state load skipped: " + (err instanceof Error ? err.message : String(err)));
-	});
+	// Phase 2: Provider state (warning on failure)
+	await providerStatePhase();
 
-	// 3. WebSocket server (port 3142)
-	startWSServer();
-	log.info("[boot] WebSocket server started");
+	// Phase 3: WebSocket server
+	websocketPhase();
 
-	// 4. Webhook sender
-	webhookSender.init();
-	log.info("[boot] Webhook sender initialized");
+	// Phase 4: Webhook sender
+	webhookPhase();
 
-	// 5. Container pool warm-up (non-blocking — fails silently if Docker not available)
-	containerPool.initialize().catch((err) => {
-		log.warn("[boot] Container pool init skipped: " + (err instanceof Error ? err.message : String(err)));
-	});
+	// Phase 5: Container pool warm-up (skip-allowed)
+	containerPoolPhase();
 
-	// 6. Execution engine recovery (stuck tasks)
-	const { executionEngine } = await import("./studio/execution-engine.js");
-	await executionEngine.recoverStuckTasks().catch((err) => {
-		log.error("[boot] Startup recovery failed: " + String(err));
-	});
+	// Phase 6: Execution engine recovery (error logged, non-fatal)
+	await recoveryPhase();
 
-	// 7. Pipeline engine hook registration
-	const { pipelineEngine } = await import("./studio/pipeline-engine.js");
-	pipelineEngine.registerTaskHook();
+	// Phase 7: Pipeline engine hooks
+	await pipelinePhase();
 
-	// 7.5 Provider registry boot-time wiring
-	const { providerRegistry } = await import("./studio/kernel/provider-registry.js");
-	await providerRegistry.initializeFromLegacy().catch((err) => {
-		log.warn("[boot] Provider registry init skipped: " + String(err));
-	});
+	// Phase 8: Provider registry wiring
+	await providerRegistryPhase();
 
-	// 7.5. Auto-checkpoint on stage boundaries
-	eventBus.on("pipeline:stage_completed", async (event) => {
-		const projectId = event.projectId;
-		const stageIndex = (event.payload as any)?.stageIndex ?? "unknown";
-		try {
-			await createCheckpointSnapshot(projectId, `stage-${stageIndex}`, randomUUID);
-			log.info(`[boot] Checkpoint created for project ${projectId} at stage ${stageIndex}`);
-		} catch (err) {
-			log.warn(`[boot] Checkpoint failed for ${projectId}: ` + String(err));
-		}
-	});
-	eventBus.on("pipeline:completed", async (event) => {
-		const projectId = event.projectId;
-		try {
-			await createCheckpointSnapshot(projectId, "final", randomUUID);
-			log.info(`[boot] Final checkpoint created for project ${projectId}`);
-		} catch (err) {
-			log.warn(`[boot] Final checkpoint failed for ${projectId}: ` + String(err));
-		}
-	});
+	// Phase 9: Replay auto-checkpoint wiring
+	replayPhase();
 
-	// 8. Build Hono app with studio routes
-	const app = new Hono();
-	app.route("/api/studio", studioRoutes);
-	app.route("/api/observability", observabilityRoutes);
-	app.route("/api/auth", authRoutes);
+	// Phase 9.5: Application composition (seeders, event bridges, webhooks, plugins, notifications)
+	registerSeeders();
+	registerEventBridges();
+	registerWebhookBridge();
+	registerPluginBridge();
+	registerNotificationBridge();
+	log.info("[boot] Application composition wired");
 
-	// Health check
-	app.get("/health", (c) => c.json({ status: "ok", mode: "kernel" }));
+	// Phase 10: Build Hono app + HTTP server
+	const { app, server } = httpPhase(port);
 
-	// 9. Start HTTP server
-	const server = serve({ fetch: app.fetch, port });
-
-	log.info(`[boot] Oscorpex kernel ready — http://0.0.0.0:${port}`);
-	log.info(`[boot] Studio API: http://0.0.0.0:${port}/api/studio`);
+	log.info("[boot] Oscorpex kernel ready");
 
 	return { app, server, port };
 }
