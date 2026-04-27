@@ -370,6 +370,35 @@ export default function ProviderTelemetryPage() {
     ? Math.round(latency.reduce((sum, p) => sum + p.averageLatencyMs, 0) / latency.length)
     : 0;
 
+  // TASK 13: Performance metrics
+  const avgQueueWait = records.length > 0
+    ? Math.round(records.reduce((sum, r) => sum + (r.queueWaitMs ?? 0), 0) / records.length)
+    : 0;
+  const fallbackRate = totalRuns > 0
+    ? Math.round((records.filter((r) => r.fallbackCount > 0).length / records.length) * 100)
+    : 0;
+  const timeoutRate = totalRuns > 0
+    ? Math.round((records.filter((r) => r.errorClassification === 'timeout').length / records.length) * 100)
+    : 0;
+
+  const topSlowProviders = useMemo(() => {
+    return [...latency]
+      .sort((a, b) => b.averageLatencyMs - a.averageLatencyMs)
+      .slice(0, 5);
+  }, [latency]);
+
+  const topFailureClassifications = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of records) {
+      if (r.errorClassification) {
+        counts.set(r.errorClassification, (counts.get(r.errorClassification) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+  }, [records]);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -419,6 +448,28 @@ export default function ProviderTelemetryPage() {
         </div>
       </div>
 
+      {/* Performance summary cards (TASK 13) */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-2xl border border-[#262626] bg-[#111111] p-4">
+          <div className="text-[10px] uppercase tracking-wider text-[#525252]">Avg queue wait</div>
+          <div className="mt-2 text-2xl font-bold">{formatDuration(avgQueueWait)}</div>
+        </div>
+        <div className="rounded-2xl border border-[#262626] bg-[#111111] p-4">
+          <div className="text-[10px] uppercase tracking-wider text-[#525252]">Fallback rate</div>
+          <div className="mt-2 text-2xl font-bold text-[#f59e0b]">{fallbackRate}%</div>
+        </div>
+        <div className="rounded-2xl border border-[#262626] bg-[#111111] p-4">
+          <div className="text-[10px] uppercase tracking-wider text-[#525252]">Timeout rate</div>
+          <div className="mt-2 text-2xl font-bold text-[#f97316]">{timeoutRate}%</div>
+        </div>
+        <div className="rounded-2xl border border-[#262626] bg-[#111111] p-4">
+          <div className="text-[10px] uppercase tracking-wider text-[#525252]">Cooldown active</div>
+          <div className="mt-2 text-2xl font-bold text-[#ef4444]">
+            {latency.filter((p) => p.lastFailureAt && !p.lastFailureClassification?.includes('success')).length}
+          </div>
+        </div>
+      </div>
+
       {/* Latency cards */}
       {latency.length > 0 && (
         <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -427,6 +478,42 @@ export default function ProviderTelemetryPage() {
           ))}
         </div>
       )}
+
+      {/* Top slow providers & failure classifications (TASK 13) */}
+      <div className="mb-6 grid gap-3 md:grid-cols-2">
+        {topSlowProviders.length > 0 && (
+          <div className="rounded-2xl border border-[#262626] bg-[#111111] p-4">
+            <div className="mb-3 flex items-center gap-2 text-[12px] font-medium text-[#fafafa]">
+              <Gauge size={14} className="text-[#f59e0b]" />
+              Top Slow Providers
+            </div>
+            <div className="space-y-2">
+              {topSlowProviders.map((p) => (
+                <div key={p.providerId} className="flex items-center justify-between text-[11px]">
+                  <span className="text-[#a3a3a3]">{p.providerId}</span>
+                  <span className="text-[#f59e0b]">{formatDuration(p.averageLatencyMs)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {topFailureClassifications.length > 0 && (
+          <div className="rounded-2xl border border-[#262626] bg-[#111111] p-4">
+            <div className="mb-3 flex items-center gap-2 text-[12px] font-medium text-[#fafafa]">
+              <AlertTriangle size={14} className="text-[#ef4444]" />
+              Top Failure Classifications
+            </div>
+            <div className="space-y-2">
+              {topFailureClassifications.map(([classification, count]) => (
+                <div key={classification} className="flex items-center justify-between text-[11px]">
+                  <ClassificationBadge classification={classification as ProviderErrorClassification} />
+                  <span className="text-[#ef4444]">{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Records table */}
       <div className="rounded-3xl border border-[#262626] bg-[#111111]">

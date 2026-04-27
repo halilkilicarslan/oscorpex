@@ -116,8 +116,8 @@ describe('ProviderTelemetryPage — latency kartlari', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('claude-code')).toBeInTheDocument();
-      expect(screen.getByText('codex')).toBeInTheDocument();
+      expect(screen.getAllByText('claude-code').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('codex').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -125,9 +125,9 @@ describe('ProviderTelemetryPage — latency kartlari', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('3.5s')).toBeInTheDocument(); // avg claude
-      expect(screen.getByText('8.9s')).toBeInTheDocument(); // p95 claude
-      expect(screen.getByText('2.1s')).toBeInTheDocument(); // avg codex
+      expect(screen.getAllByText('3.5s').length).toBeGreaterThanOrEqual(1); // avg claude
+      expect(screen.getAllByText('8.9s').length).toBeGreaterThanOrEqual(1); // p95 claude
+      expect(screen.getAllByText('2.1s').length).toBeGreaterThanOrEqual(1); // avg codex
     });
   });
 
