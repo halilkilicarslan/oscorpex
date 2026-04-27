@@ -185,6 +185,26 @@ class TaskTimeoutError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Queue wait computation helper (TASK 2.2 — visible calculation point)
+// ---------------------------------------------------------------------------
+
+/**
+ * Computes queue wait time in milliseconds from a task's createdAt and startedAt timestamps.
+ * Returns 0 if either timestamp is missing.
+ *
+ * Definition: queue wait = task startedAt − task createdAt
+ *   - createdAt: set when task is first inserted into DB (tasks.created_at DEFAULT now())
+ *   - startedAt: set when task transitions from "assigned" → "running"
+ *
+ * This is the **single source of truth** for queue wait calculation.
+ */
+export function computeQueueWaitMs(task: { createdAt?: string | null; startedAt?: string | null }): number {
+	if (!task.createdAt || !task.startedAt) return 0;
+	const wait = new Date(task.startedAt).getTime() - new Date(task.createdAt).getTime();
+	return Math.max(0, wait);
+}
+
+// ---------------------------------------------------------------------------
 // Execution Engine
 // ---------------------------------------------------------------------------
 
@@ -599,23 +619,9 @@ class ExecutionEngine {
 
 		// Assign + start — task is already claimed via SELECT FOR UPDATE SKIP LOCKED,
 		// so no concurrent dispatch race is possible. Transition status based on current state.
-		let queueWaitMs = 0;
 		let lastFailureClassification: import("@oscorpex/provider-sdk").ProviderErrorClassification | undefined;
-		{
-			const currentTask = await getTask(task.id);
-			const currentStatus = currentTask?.status ?? task.status;
-			let startedTask: import("./types.js").Task | undefined;
-			if (currentStatus === "queued") {
-				await taskEngine.assignTask(task.id, agent.id);
-				startedTask = await taskEngine.startTask(task.id);
-			} else if (currentStatus === "assigned") {
-				startedTask = await taskEngine.startTask(task.id);
-			}
-			// status === "running" → already started (e.g. revision restart), skip both
-			if (startedTask?.createdAt && startedTask?.startedAt) {
-				queueWaitMs = new Date(startedTask.startedAt).getTime() - new Date(startedTask.createdAt).getTime();
-			}
-		}
+		const startedTask = await this._startTaskForExecution(task, agent.id);
+		const queueWaitMs = startedTask ? computeQueueWaitMs(startedTask) : 0;
 
 		// --- Agent Runtime: init session + behavioral memory + protocol ---
 		let sessionId: string | undefined;
@@ -1389,6 +1395,29 @@ class ExecutionEngine {
 	// -------------------------------------------------------------------------
 	// Execution status
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Transition a task from "queued" or "assigned" to "running" and return the
+	 * updated task record. This is the single point where queue-wait timestamps
+	 * are produced.
+	 */
+	private async _startTaskForExecution(
+		task: import("./types.js").Task,
+		agentId: string,
+	): Promise<import("./types.js").Task | undefined> {
+		const currentTask = await getTask(task.id);
+		const currentStatus = currentTask?.status ?? task.status;
+		let startedTask: import("./types.js").Task | undefined;
+
+		if (currentStatus === "queued") {
+			await taskEngine.assignTask(task.id, agentId);
+			startedTask = await taskEngine.startTask(task.id);
+		} else if (currentStatus === "assigned") {
+			startedTask = await taskEngine.startTask(task.id);
+		}
+		// status === "running" → already started (e.g. revision restart), return undefined
+		return startedTask;
+	}
 
 	/**
 	 * Return a snapshot of currently running tasks and active containers for a

@@ -136,6 +136,48 @@ router.get("/providers/records", (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Queue Wait Debug Surface (TASK 2.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /telemetry/providers/queue-wait
+ * Recent provider execution records with queue wait times exposed.
+ * Useful for verifying that queueWaitMs is being recorded correctly.
+ * Query params:
+ *   limit — max records (default 20, max 100)
+ */
+router.get("/providers/queue-wait", (c) => {
+	const limitParam = c.req.query("limit");
+	const limit = limitParam ? Math.min(Number.parseInt(limitParam, 10) || 20, 100) : 20;
+
+	const records = executionEngine.telemetry.getRecentRecords(limit);
+	const withQueueWait = records.map((r) => ({
+		runId: r.runId,
+		taskId: r.taskId,
+		provider: r.finalProvider ?? r.primaryProvider,
+		queueWaitMs: r.queueWaitMs ?? 0,
+		latencyMs: r.latencyMs ?? 0,
+		success: r.success,
+		errorClassification: r.errorClassification,
+		startedAt: r.startedAt,
+	}));
+
+	const queueWaits = withQueueWait.map((r) => r.queueWaitMs).filter((v) => v > 0);
+	const avgQueueWait = queueWaits.length > 0
+		? Math.round(queueWaits.reduce((a, b) => a + b, 0) / queueWaits.length)
+		: 0;
+	const maxQueueWait = queueWaits.length > 0 ? Math.max(...queueWaits) : 0;
+
+	return c.json({
+		total: withQueueWait.length,
+		recordsWithQueueWait: queueWaits.length,
+		avgQueueWaitMs: avgQueueWait,
+		maxQueueWaitMs: maxQueueWait,
+		records: withQueueWait,
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Performance Baseline (EPIC Performance)
 // ---------------------------------------------------------------------------
 
