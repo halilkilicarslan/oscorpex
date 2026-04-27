@@ -255,6 +255,24 @@ router.get("/cooldown", (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Preflight Warm-up Telemetry (TASK 7)
+// ---------------------------------------------------------------------------
+
+import { getLastPreflightTelemetry } from "../preflight-warmup.js";
+
+/**
+ * GET /telemetry/preflight
+ * Last preflight warm-up results and cold-start state.
+ */
+router.get("/preflight", (c) => {
+	const telemetry = getLastPreflightTelemetry();
+	return c.json({
+		hasRun: telemetry !== null,
+		telemetry,
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Performance Baseline (EPIC Performance)
 // ---------------------------------------------------------------------------
 

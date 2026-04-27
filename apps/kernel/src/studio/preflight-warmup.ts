@@ -41,6 +41,21 @@ export interface PreflightResult {
 	durationMs: number;
 }
 
+/** Telemetry for the most recent preflight run (TASK 7.2) */
+export interface PreflightTelemetry {
+	ranAt: string;
+	totalProviders: number;
+	successCount: number;
+	failCount: number;
+	results: PreflightResult[];
+}
+
+let lastPreflightTelemetry: PreflightTelemetry | null = null;
+
+export function getLastPreflightTelemetry(): PreflightTelemetry | null {
+	return lastPreflightTelemetry;
+}
+
 /**
  * Runs preflight health checks for all providers.
  * Populates the runtime availability cache so first real execution is warm.
@@ -74,6 +89,14 @@ export async function runPreflightHealthChecks(
 			log.warn(`[preflight-warmup] ${adapter.name} health check failed: ${String(err)}`);
 		}
 	}
+
+	lastPreflightTelemetry = {
+		ranAt: new Date().toISOString(),
+		totalProviders: adapters.length,
+		successCount: results.filter((r) => r.available).length,
+		failCount: results.filter((r) => !r.available).length,
+		results,
+	};
 
 	return results;
 }

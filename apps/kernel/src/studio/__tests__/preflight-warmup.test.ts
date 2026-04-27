@@ -10,6 +10,7 @@ import {
 	runPreflightHealthChecks,
 	resolveBinaryPath,
 	clearBinaryPathCache,
+	getLastPreflightTelemetry,
 } from "../preflight-warmup.js";
 import { providerRuntimeCache } from "../provider-runtime-cache.js";
 
@@ -74,6 +75,33 @@ describe("runPreflightHealthChecks", () => {
 		const adapters = [{ name: "cursor", isAvailable: vi.fn().mockResolvedValue(true) }];
 		const results = await runPreflightHealthChecks(adapters);
 		expect(results[0]!.durationMs).toBeGreaterThanOrEqual(10);
+	});
+
+	it("stores telemetry after run (TASK 7.3)", async () => {
+		vi.mocked(providerRuntimeCache.resolveAvailability)
+			.mockResolvedValueOnce(true)
+			.mockResolvedValueOnce(false);
+		const adapters = [
+			{ name: "claude-code", isAvailable: vi.fn().mockResolvedValue(true) },
+			{ name: "codex", isAvailable: vi.fn().mockResolvedValue(false) },
+		];
+		await runPreflightHealthChecks(adapters);
+
+		const telemetry = getLastPreflightTelemetry();
+		expect(telemetry).not.toBeNull();
+		expect(telemetry!.totalProviders).toBe(2);
+		expect(telemetry!.successCount).toBe(1);
+		expect(telemetry!.failCount).toBe(1);
+		expect(telemetry!.results).toHaveLength(2);
+		expect(telemetry!.ranAt).toBeTruthy();
+	});
+
+	it("first call is cold start, second is warm (TASK 7.3)", () => {
+		resetColdStart();
+		const first = markExecutionStarted();
+		const second = markExecutionStarted();
+		expect(first.isColdStart).toBe(true);
+		expect(second.isColdStart).toBe(false);
 	});
 });
 
