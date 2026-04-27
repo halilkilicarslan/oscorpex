@@ -33,6 +33,15 @@ vi.mock("../cli-adapter.js", () => {
 	const adapter = {
 		name: "mock-cli",
 		isAvailable: vi.fn().mockResolvedValue(true),
+		capabilities: vi.fn().mockResolvedValue({
+			supportedModels: ["mock-model"],
+			supportsToolRestriction: true,
+			supportsStreaming: false,
+			supportsResume: false,
+			supportsCancel: true,
+			supportsStructuredOutput: false,
+			supportsSandboxHinting: false,
+		}),
 		execute: vi.fn(),
 	};
 	return {

@@ -9,6 +9,7 @@ import { executeWithCLI, isClaudeCliAvailable } from "./cli-runtime.js";
 import type { AgentCliTool } from "./types.js";
 import type { CLIAdapterOptions } from "@oscorpex/provider-sdk";
 import { buildToolGovernanceSection, hasFullToolAccess, checkBinaryCached, checkBinaryAsync } from "@oscorpex/provider-sdk";
+import type { ProviderCapabilities } from "./provider-runtime-cache.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("cli-adapter");
 
@@ -19,6 +20,7 @@ export { buildToolGovernanceSection, hasFullToolAccess, FULL_TOOL_ACCESS } from 
 export interface CLIAdapter {
 	readonly name: string;
 	isAvailable(): Promise<boolean>;
+	capabilities(): Promise<ProviderCapabilities>;
 	execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult>;
 }
 
@@ -31,6 +33,18 @@ export class ClaudeAdapter implements CLIAdapter {
 
 	async isAvailable(): Promise<boolean> {
 		return isClaudeCliAvailable();
+	}
+
+	async capabilities(): Promise<ProviderCapabilities> {
+		return {
+			supportedModels: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"],
+			supportsToolRestriction: true,
+			supportsStreaming: false,
+			supportsResume: false,
+			supportsCancel: true,
+			supportsStructuredOutput: false,
+			supportsSandboxHinting: true,
+		};
 	}
 
 	async execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult> {
@@ -48,6 +62,18 @@ export class CodexAdapter implements CLIAdapter {
 	async isAvailable(): Promise<boolean> {
 		const result = await checkBinaryCached(checkBinaryAsync, "codex", ["--version"]);
 		return result.available;
+	}
+
+	async capabilities(): Promise<ProviderCapabilities> {
+		return {
+			supportedModels: ["gpt-4o", "gpt-4o-mini", "o3"],
+			supportsToolRestriction: false,
+			supportsStreaming: false,
+			supportsResume: false,
+			supportsCancel: true,
+			supportsStructuredOutput: true,
+			supportsSandboxHinting: false,
+		};
 	}
 
 	async execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult> {
@@ -157,6 +183,18 @@ export class CursorAdapter implements CLIAdapter {
 	async isAvailable(): Promise<boolean> {
 		const result = await checkBinaryCached(checkBinaryAsync, "cursor", ["agent", "--version"]);
 		return result.available;
+	}
+
+	async capabilities(): Promise<ProviderCapabilities> {
+		return {
+			supportedModels: ["cursor-small", "cursor-large"],
+			supportsToolRestriction: false,
+			supportsStreaming: false,
+			supportsResume: false,
+			supportsCancel: true,
+			supportsStructuredOutput: true,
+			supportsSandboxHinting: false,
+		};
 	}
 
 	async execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult> {

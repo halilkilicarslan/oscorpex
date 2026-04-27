@@ -11,6 +11,7 @@ const mockAdapterChain: Array<{
 	name: string;
 	execute: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
 	isAvailable: () => Promise<boolean>;
+	capabilities: () => Promise<Record<string, unknown>>;
 }> = [];
 
 vi.mock("../cli-adapter.js", () => ({
@@ -100,6 +101,15 @@ describe("Execution Engine Provider Telemetry", () => {
 		mockAdapterChain.push({
 			name: "claude-code",
 			isAvailable: async () => true,
+			capabilities: async () => ({
+				supportedModels: ["claude-sonnet-4-6"],
+				supportsToolRestriction: true,
+				supportsStreaming: false,
+				supportsResume: false,
+				supportsCancel: true,
+				supportsStructuredOutput: false,
+				supportsSandboxHinting: true,
+			}),
 			execute: async () => ({
 				text: "ok",
 				filesCreated: ["a.ts"],
@@ -141,6 +151,15 @@ describe("Execution Engine Provider Telemetry", () => {
 		mockAdapterChain.push({
 			name: "claude-code",
 			isAvailable: async () => true,
+			capabilities: async () => ({
+				supportedModels: ["claude-sonnet-4-6"],
+				supportsToolRestriction: true,
+				supportsStreaming: false,
+				supportsResume: false,
+				supportsCancel: true,
+				supportsStructuredOutput: false,
+				supportsSandboxHinting: true,
+			}),
 			execute: async () => {
 				throw new Error("exited with code 1: crash");
 			},
@@ -148,6 +167,15 @@ describe("Execution Engine Provider Telemetry", () => {
 		mockAdapterChain.push({
 			name: "cursor",
 			isAvailable: async () => true,
+			capabilities: async () => ({
+				supportedModels: ["cursor-small"],
+				supportsToolRestriction: false,
+				supportsStreaming: false,
+				supportsResume: false,
+				supportsCancel: true,
+				supportsStructuredOutput: true,
+				supportsSandboxHinting: false,
+			}),
 			execute: async () => ({
 				text: "fallback ok",
 				filesCreated: [],
@@ -191,6 +219,15 @@ describe("Execution Engine Provider Telemetry", () => {
 		mockAdapterChain.push({
 			name: "claude-code",
 			isAvailable: async () => true,
+			capabilities: async () => ({
+				supportedModels: ["claude-sonnet-4-6"],
+				supportsToolRestriction: true,
+				supportsStreaming: false,
+				supportsResume: false,
+				supportsCancel: true,
+				supportsStructuredOutput: false,
+				supportsSandboxHinting: true,
+			}),
 			execute: async () => {
 				throw new Error("exited with code 1: fail");
 			},
@@ -220,6 +257,15 @@ describe("Execution Engine Provider Telemetry", () => {
 		mockAdapterChain.push({
 			name: "claude-code",
 			isAvailable: async () => true,
+			capabilities: async () => ({
+				supportedModels: ["claude-sonnet-4-6"],
+				supportsToolRestriction: true,
+				supportsStreaming: false,
+				supportsResume: false,
+				supportsCancel: true,
+				supportsStructuredOutput: false,
+				supportsSandboxHinting: true,
+			}),
 			execute: async (opts: Record<string, unknown>) => {
 				// Respect abort signal so cancel works immediately
 				if (opts.signal && (opts.signal as AbortSignal).aborted) {
@@ -289,6 +335,15 @@ describe("Execution Engine Provider Telemetry", () => {
 			mockAdapterChain.push({
 				name: "claude-code",
 				isAvailable: async () => true,
+				capabilities: async () => ({
+					supportedModels: ["claude-sonnet-4-6"],
+					supportsToolRestriction: true,
+					supportsStreaming: false,
+					supportsResume: false,
+					supportsCancel: true,
+					supportsStructuredOutput: false,
+					supportsSandboxHinting: true,
+				}),
 				execute: async () => ({
 					text: "ok",
 					filesCreated: [],

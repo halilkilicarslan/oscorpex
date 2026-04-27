@@ -6,6 +6,7 @@
 import type { AgentCliTool } from "./types.js";
 import { eventBus } from "./event-bus.js";
 import { query, execute as pgExec } from "./pg.js";
+import { providerRuntimeCache } from "./provider-runtime-cache.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("provider-state");
 
@@ -45,6 +46,8 @@ class ProviderStateManager {
 		if (state) {
 			state.rateLimited = true;
 			state.cooldownUntil = new Date(Date.now() + cooldownMs);
+			// Invalidate runtime availability cache on cooldown start
+			providerRuntimeCache.invalidateAvailability(adapter, "cooldown_start");
 			// Emit provider:degraded event (v7.0 Section 13)
 			eventBus.emitTransient({
 				projectId: "__global__",
@@ -70,6 +73,8 @@ class ProviderStateManager {
 		const state = this.states.get(adapter);
 		if (state) {
 			state.consecutiveFailures++;
+			// Invalidate runtime availability cache on failure
+			providerRuntimeCache.invalidateAvailability(adapter, "execution_failure");
 			if (state.consecutiveFailures >= 3) {
 				this.markRateLimited(adapter, 120_000);
 			} else {

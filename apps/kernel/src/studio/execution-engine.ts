@@ -65,6 +65,7 @@ import { resolveWorkspace, type ExecutionWorkspace } from "./execution-workspace
 import { execute as pgExecute, queryOne as pgQueryOne } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { providerState } from "./provider-state.js";
+import { providerRuntimeCache } from "./provider-runtime-cache.js";
 import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import {
 	startProviderTelemetry,
@@ -837,8 +838,12 @@ class ExecutionEngine {
 					continue;
 				}
 
-				const adapterReady = await adapter.isAvailable();
-				log.info(`[execution] CLI adapter: ${adapter.name}, ready=${adapterReady}`);
+			const adapterReady = await providerRuntimeCache.resolveAvailability(
+				adapter.name,
+				() => adapter.isAvailable(),
+				"health_check",
+			);
+			log.info(`[execution] CLI adapter: ${adapter.name}, ready=${adapterReady}`);
 
 				if (!adapterReady) {
 					log.info(`[execution] Adapter "${adapter.name}" is not installed, skipping.`);

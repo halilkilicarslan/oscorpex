@@ -125,6 +125,7 @@ describe("CodexAdapter.isAvailable", () => {
 		mockExecFile.mockImplementationOnce((...args: any[]) => {
 			const cb = args.find((a) => typeof a === "function");
 			if (cb) cb(null, "1.0.0", "");
+			return undefined as any;
 		});
 		const adapter = new CodexAdapter();
 		expect(await adapter.isAvailable()).toBe(true);
@@ -134,6 +135,7 @@ describe("CodexAdapter.isAvailable", () => {
 		mockExecFile.mockImplementationOnce((...args: any[]) => {
 			const cb = args.find((a) => typeof a === "function");
 			if (cb) cb(new Error("not found"), "", "");
+			return undefined as any;
 		});
 		const adapter = new CodexAdapter();
 		expect(await adapter.isAvailable()).toBe(false);
