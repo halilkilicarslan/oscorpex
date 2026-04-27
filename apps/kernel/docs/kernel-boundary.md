@@ -62,13 +62,28 @@ This document defines the architectural boundaries between the core packages, th
 - Provider execution
 
 ### 5. adapters/ (Workspace-level adapters)
-**Responsibility:** External tool integrations (stubs for now).
-**Current state:**
-- `provider-claude-code/` — stub
-- `provider-codex/` — stub
-- `provider-cursor/` — stub
+**Responsibility:** External tool integrations.
 
-**Migration plan:** Move real adapter implementations from `apps/kernel/src/studio/adapters/` into these packages once the contract surface stabilizes.
+**Current State:**
+- `provider-claude/` — Package created, stub implementation (`src/index.ts`)
+- `provider-codex/` — Empty stub
+- `provider-cursor/` — Empty stub
+- `cancel-behavior.ts` — ✅ Extracted to `@oscorpex/provider-sdk`
+
+**Target State:**
+- `provider-claude/` — Full ClaudeCodeAdapter with tests
+- `provider-codex/` — Full CodexAdapter with tests
+- `provider-cursor/` — Full CursorAdapter with tests
+- `apps/kernel/src/studio/adapters/` — Removed (zero adapter code in kernel)
+
+**Migration Progress:**
+| Adapter | Status | Sprint |
+|---------|--------|--------|
+| cancel-behavior | ✅ Extracted to `@oscorpex/provider-sdk` | Sprint 0 |
+| provider-claude | 🔄 Package created, implementation stubbed | Sprint 1 |
+| provider-codex | 📋 Planned | Sprint 2 |
+| provider-cursor | 📋 Planned | Sprint 3 |
+| kernel cleanup | 📋 Remove `apps/kernel/src/studio/adapters/` | Sprint 4 |
 
 ## Responsibility Matrix
 

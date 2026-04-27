@@ -102,6 +102,19 @@ await withCorrelation(async () => {
 }, "optional-fixed-id");
 ```
 
+## Implementation Status
+
+| Feature | Status | Commit |
+|---------|--------|--------|
+| Module-scoped child loggers | **Implemented** | Initial |
+| Log level standardization | **Implemented** | Initial |
+| Structured JSON output | **Implemented** | Initial |
+| Correlation ID auto-injection | **Implemented** | `8161288` |
+| WebSocket/SSE correlation propagation | **Implemented** | `3da4fbe` |
+| Guaranteed header on error responses | **Implemented** | `3da4fbe` |
+| Pino-pretty auto-install | Planned | — |
+| OpenTelemetry trace integration | Planned | — |
+
 ## Log Destination
 
 - **Development**: stdout (human-readable via `pino-pretty` if installed)

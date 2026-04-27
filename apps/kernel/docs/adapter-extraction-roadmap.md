@@ -11,23 +11,51 @@ apps/kernel/src/studio/adapters/
   ├── provider-claude-code.ts   (real adapter)
   ├── provider-codex.ts         (real adapter)
   ├── provider-cursor.ts        (real adapter)
-  └── cancel-behavior.ts        (behavior matrix)
 ```
 
-Workspace `adapters/` directory exists but only contains stubs:
+`cancel-behavior.ts` has been extracted to `@oscorpex/provider-sdk`.
 
-```
-adapters/
-  ├── provider-claude-code/     (stub)
-  ├── provider-codex/           (stub)
-  └── provider-cursor/          (stub)
-```
+## Sprint Plan
+
+### ✅ Sprint 0 — Stabilize Contracts (Done)
+- [x] `ProviderAdapter` interface defined in `@oscorpex/core`
+- [x] `ProviderExecutionInput` / `ProviderExecutionResult` types stable
+- [x] `ProviderCapabilities` contract documented
+- [x] `cancel-behavior.ts` extracted to `@oscorpex/provider-sdk`
+
+### 🔄 Sprint 1 — Claude Adapter Extraction (In Progress)
+- [x] Create `adapters/provider-claude/package.json`
+- [x] Create `adapters/provider-claude/tsconfig.json`
+- [x] Create `adapters/provider-claude/src/index.ts` (ClaudeCodeAdapter)
+- [ ] Add unit tests in `adapters/provider-claude/__tests__/`
+- [ ] Update kernel `adapters/index.ts` to re-export from workspace package
+- [ ] Verify build + test pass
+
+### 📋 Sprint 2 — Codex Adapter Extraction
+- [ ] Create `adapters/provider-codex/package.json`
+- [ ] Create `adapters/provider-codex/tsconfig.json`
+- [ ] Create `adapters/provider-codex/src/index.ts` (CodexAdapter)
+- [ ] Add unit tests
+- [ ] Update kernel re-exports
+
+### 📋 Sprint 3 — Cursor Adapter Extraction
+- [ ] Create `adapters/provider-cursor/package.json`
+- [ ] Create `adapters/provider-cursor/tsconfig.json`
+- [ ] Create `adapters/provider-cursor/src/index.ts` (CursorAdapter)
+- [ ] Add unit tests
+- [ ] Update kernel re-exports
+
+### 📋 Sprint 4 — Kernel Cleanup
+- [ ] Remove `apps/kernel/src/studio/adapters/` directory
+- [ ] Update kernel imports to use `@oscorpex/provider-claude` etc.
+- [ ] Remove `adapters/index.ts` barrel (kernel imports directly from packages)
+- [ ] Provider registry imports from workspace packages
 
 ## Target Architecture
 
 ```
 adapters/
-  ├── provider-claude-code/
+  ├── provider-claude/
   │   ├── src/
   │   │   └── index.ts          (exports ClaudeCodeAdapter)
   │   ├── package.json
@@ -43,41 +71,6 @@ adapters/
       ├── package.json
       └── tsconfig.json
 ```
-
-Each adapter package:
-- Depends on `@oscorpex/core` and `@oscorpex/provider-sdk`
-- Exports a single `ProviderAdapter` implementation
-- Has its own test suite
-- Has its own build pipeline
-
-## Migration Steps
-
-### Phase 1 — Stabilize Contracts (Done)
-- [x] `ProviderAdapter` interface defined in `@oscorpex/core`
-- [x] `ProviderExecutionInput` / `ProviderExecutionResult` types stable
-- [x] `ProviderCapabilities` contract documented
-- [x] `cancel-behavior.ts` matrix documented
-
-### Phase 2 — Extract Cancel Behavior (Short-term)
-- [ ] Move `cancel-behavior.ts` to `@oscorpex/provider-sdk`
-- [ ] Update kernel to import from `@oscorpex/provider-sdk`
-- [ ] Verify no behavioral changes
-
-### Phase 3 — Extract Adapters (Medium-term)
-For each adapter (claude-code → codex → cursor):
-
-1. Create `adapters/provider-<name>/src/index.ts`
-2. Copy adapter class from kernel
-3. Add `package.json` with `workspace:*` deps on `@oscorpex/core` and `@oscorpex/provider-sdk`
-4. Add unit tests in `adapters/provider-<name>/__tests__/`
-5. Update kernel `adapters/index.ts` to re-export from workspace package
-6. Remove old file from `apps/kernel/src/studio/adapters/`
-7. Verify build + test pass
-
-### Phase 4 — Kernel Cleanup (Post-extraction)
-- [ ] Remove `apps/kernel/src/studio/adapters/` directory
-- [ ] Update kernel imports to use `@oscorpex/provider-claude-code` etc.
-- [ ] Remove `adapters/index.ts` barrel (kernel imports directly from packages)
 
 ## Risks & Mitigations
 
