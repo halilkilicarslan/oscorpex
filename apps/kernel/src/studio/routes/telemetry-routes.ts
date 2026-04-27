@@ -201,6 +201,60 @@ router.get("/concurrency", (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Cache & Cooldown Debug Surface (TASK 6)
+// ---------------------------------------------------------------------------
+
+import { providerRuntimeCache } from "../provider-runtime-cache.js";
+import { providerState } from "../provider-state.js";
+
+/**
+ * GET /telemetry/cache
+ * Runtime cache hit/miss statistics and entries.
+ */
+router.get("/cache", (c) => {
+	const stats = providerRuntimeCache.getStats();
+	const availabilityEntries = Array.from(
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(providerRuntimeCache as any).availability.entries() as Iterable<[string, { providerId: string; available: boolean; expiresAt: number; source: string }]>,
+	).map(([id, e]) => ({
+		providerId: id,
+		available: e.available,
+		expiresInMs: Math.max(0, e.expiresAt - Date.now()),
+		source: e.source,
+	}));
+
+	return c.json({
+		stats,
+		availabilityEntries,
+	});
+});
+
+/**
+ * GET /telemetry/cooldown
+ * Active cooldown states per provider.
+ */
+router.get("/cooldown", (c) => {
+	const states = providerState.getAllStates();
+	const now = Date.now();
+	const activeCooldowns = states
+		.filter((s) => s.rateLimited && s.cooldownUntil && s.cooldownUntil.getTime() > now)
+		.map((s) => ({
+			provider: s.adapter,
+			trigger: s.lastCooldownTrigger ?? "unknown",
+			cooldownUntil: s.cooldownUntil?.toISOString(),
+			remainingMs: s.cooldownUntil ? Math.max(0, s.cooldownUntil.getTime() - now) : 0,
+			consecutiveFailures: s.consecutiveFailures,
+		}));
+
+	return c.json({
+		totalProviders: states.length,
+		activeCooldownCount: activeCooldowns.length,
+		activeCooldowns,
+		earliestRecoveryMs: providerState.getEarliestRecoveryMs(),
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Performance Baseline (EPIC Performance)
 // ---------------------------------------------------------------------------
 
