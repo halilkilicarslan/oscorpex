@@ -273,6 +273,21 @@ router.get("/preflight", (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// DB Pool Telemetry (EPIC 2)
+// ---------------------------------------------------------------------------
+
+import { getDbPoolSnapshot } from "../db-pool-metrics.js";
+
+/**
+ * GET /telemetry/db-pool
+ * Current DB connection pool snapshot.
+ */
+router.get("/db-pool", (c) => {
+	const snapshot = getDbPoolSnapshot();
+	return c.json({ pool: snapshot });
+});
+
+// ---------------------------------------------------------------------------
 // Performance Baseline (EPIC Performance)
 // ---------------------------------------------------------------------------
 
