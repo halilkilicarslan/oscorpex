@@ -1742,3 +1742,40 @@ ALTER TABLE replay_snapshots ADD COLUMN IF NOT EXISTS verification_reports_json 
 
 CREATE INDEX IF NOT EXISTS idx_replay_run ON replay_snapshots(run_id);
 CREATE INDEX IF NOT EXISTS idx_replay_checkpoint ON replay_snapshots(run_id, checkpoint_id);
+
+-- ---------------------------------------------------------------------------
+-- Control Plane Tables (Phase 1)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS agent_instances (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  role          TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'idle',
+  project_id    TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  registered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_agent_instances_project ON agent_instances(project_id);
+CREATE INDEX IF NOT EXISTS idx_agent_instances_status ON agent_instances(status);
+
+CREATE TABLE IF NOT EXISTS provider_runtime_registry (
+  id                  TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  type                TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'available',
+  last_health_check_at TIMESTAMPTZ,
+  cooldown_until      TIMESTAMPTZ,
+  capabilities        TEXT NOT NULL DEFAULT '[]',
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_provider_runtime_status ON provider_runtime_registry(status);
+
+CREATE TABLE IF NOT EXISTS capability_snapshots (
+  id            TEXT PRIMARY KEY,
+  provider_id   TEXT NOT NULL REFERENCES provider_runtime_registry(id) ON DELETE CASCADE,
+  capabilities  TEXT NOT NULL DEFAULT '[]',
+  recorded_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_capability_snapshots_provider ON capability_snapshots(provider_id, recorded_at DESC);

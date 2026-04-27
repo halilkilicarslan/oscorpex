@@ -41,6 +41,7 @@ import { agenticRoutes } from "./agentic-routes.js";
 import { graphRoutes } from "./graph-routes.js";
 import { sandboxRoutes } from "./sandbox-routes.js";
 import { replayRoutes } from "./replay-routes.js";
+import { cpRegistryRoutes } from "../control-plane/registry/registry-routes.js";
 
 const studio = new Hono();
 
@@ -146,6 +147,9 @@ studio.route("/", memoryRoutes);
 
 // CLI usage routes (used by console CLI usage monitor page)
 studio.route("/", cliUsageRoutes);
+
+// Control Plane — Phase 1
+studio.route("/", cpRegistryRoutes);
 
 // YAGNI-deferred: marketplace, cluster, collaboration
 // Re-enable when needed.
