@@ -65,6 +65,10 @@ import { resolveWorkspace, type ExecutionWorkspace } from "./execution-workspace
 import { execute as pgExecute, queryOne as pgQueryOne } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { providerState } from "./provider-state.js";
+import {
+	ProviderTelemetryCollector,
+	classifyProviderError,
+} from "@oscorpex/provider-sdk";
 import { taskEngine } from "./task-engine.js";
 import { runIntegrationTest } from "./task-runners.js";
 import type { AgentConfig, Project, Task, TaskOutput } from "./types.js";
@@ -253,6 +257,9 @@ class ExecutionEngine {
 
 	/** Semaphore limiting concurrent CLI executions */
 	private _semaphore = new Semaphore(MAX_CONCURRENT_TASKS);
+
+	/** Provider execution telemetry collector (EPIC 3 observability) */
+	readonly telemetry = new ProviderTelemetryCollector();
 
 	/** Unique worker ID for distributed task claiming (PID-based) */
 	private _workerId = `worker-${process.pid}-${Date.now()}`;
@@ -576,6 +583,16 @@ class ExecutionEngine {
 		const controllerKey = `${projectId}:${task.id}`;
 		this._activeControllers.set(controllerKey, taskController);
 
+		// --- Telemetry: cancel audit — record when abort signal fires
+		let telemetryRecord: ReturnType<ProviderTelemetryCollector["startExecution"]> | undefined;
+		let cancelPending = false;
+		taskController.signal.addEventListener("abort", () => {
+			cancelPending = true;
+			if (telemetryRecord) {
+				this.telemetry.recordCancel(telemetryRecord, "pipeline_pause");
+			}
+		}, { once: true });
+
 		// --- Non-AI task types: integration-test & run-app ---
 		if (task.taskType === "integration-test" || task.taskType === "run-app") {
 			await this.executeSpecialTask(projectId, project, task);
@@ -769,7 +786,26 @@ class ExecutionEngine {
 			let cliResult: Awaited<ReturnType<(typeof adapterChain)[0]["execute"]>> | null = null;
 			let lastAdapterError: Error | null = null;
 
-			for (const adapter of adapterChain) {
+			// --- Telemetry: start provider execution record (EPIC 3) ---
+			telemetryRecord = this.telemetry.startExecution({
+				runId: projectId,
+				taskId: task.id,
+				provider: primaryCliTool,
+				repoPath: runtimeRepoPath,
+				prompt,
+				systemPrompt: agent.systemPrompt
+					? composeSystemPrompt(agent.systemPrompt)
+					: defaultSystemPrompt(agent),
+				timeoutMs,
+				allowedTools,
+				model: routedModel,
+			});
+			if (cancelPending && telemetryRecord) {
+				this.telemetry.recordCancel(telemetryRecord, "pipeline_pause");
+			}
+
+			for (let i = 0; i < adapterChain.length; i++) {
+				const adapter = adapterChain[i]!;
 				const adapterName = adapter.name as import("./types.js").AgentCliTool;
 
 				if (!providerState.isAvailable(adapterName)) {
@@ -790,6 +826,7 @@ class ExecutionEngine {
 					recordStep(sessionId, { step: 1, type: "action_executed", summary: `CLI execution started: ${adapter.name}` }).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
 				}
 
+				const adapterStartMs = Date.now();
 				try {
 					cliResult = await adapter.execute({
 						projectId,
@@ -806,17 +843,45 @@ class ExecutionEngine {
 						allowedTools,
 					});
 					providerState.markSuccess(adapterName);
+					// Telemetry: finish success
+					if (telemetryRecord) {
+						this.telemetry.finishExecution(telemetryRecord, {
+							provider: adapterName,
+							model: routedModel,
+							text: cliResult.text,
+							filesCreated: cliResult.filesCreated,
+							filesModified: cliResult.filesModified,
+							logs: cliResult.logs,
+							startedAt: telemetryRecord.startedAt,
+							completedAt: new Date().toISOString(),
+							metadata: { durationMs: cliResult.durationMs },
+						});
+					}
 					break; // success — exit chain
 				} catch (adapterErr) {
 					lastAdapterError = adapterErr instanceof Error ? adapterErr : new Error(String(adapterErr));
 					const errMsg = lastAdapterError.message;
+					const latencyMs = Date.now() - adapterStartMs;
+					const classification = classifyProviderError(adapterErr);
 					if (isRateLimitError(errMsg)) {
 						log.warn(`[execution] Rate limit on adapter "${adapter.name}" — marking cooldown.`);
 						providerState.markRateLimited(adapterName);
 					} else {
 						providerState.markFailure(adapterName);
 					}
-					log.warn(`[execution] Adapter "${adapter.name}" failed: ${errMsg.slice(0, 200)}`);
+					log.warn(`[execution] Adapter "${adapter.name}" failed (${classification}): ${errMsg.slice(0, 200)}`);
+					// Telemetry: record fallback if there is a next provider in chain
+					if (telemetryRecord && i < adapterChain.length - 1) {
+						const nextAdapter = adapterChain[i + 1]!;
+						this.telemetry.recordFallback(
+							telemetryRecord,
+							adapterName,
+							nextAdapter.name,
+							errMsg,
+							classification,
+							latencyMs,
+						);
+					}
 				}
 			}
 
@@ -828,6 +893,14 @@ class ExecutionEngine {
 					log.warn(
 						`[execution-engine] All providers exhausted — deferring "${task.title}" for ${Math.round(retryMs / 1000)}s`,
 					);
+					// Telemetry: record degraded mode
+					if (telemetryRecord) {
+						this.telemetry.recordDegraded(
+							telemetryRecord,
+							`All providers exhausted for task "${task.title}". Retry in ${Math.round(retryMs / 1000)}s.`,
+						);
+						this.telemetry.finishExecution(telemetryRecord, null, lastAdapterError ?? new Error("All providers exhausted"));
+					}
 					await updateTask(task.id, { status: "queued" });
 					eventBus.emit({
 						projectId,
@@ -848,6 +921,10 @@ class ExecutionEngine {
 						});
 					}, retryMs + 1000);
 					return;
+				}
+				// Telemetry: finish with error before throwing
+				if (telemetryRecord) {
+					this.telemetry.finishExecution(telemetryRecord, null, lastAdapterError ?? new Error("All CLI adapters exhausted"));
 				}
 				throw lastAdapterError ?? new Error("All CLI adapters exhausted — no provider available.");
 			}
@@ -1013,6 +1090,11 @@ class ExecutionEngine {
 			// Review task dispatch: task-engine creates a review task which
 			// will be picked up by dispatchReadyTasks below.
 		} catch (err) {
+			// Telemetry: finish any open record for non-adapter errors
+			if (telemetryRecord && !telemetryRecord.completedAt) {
+				this.telemetry.finishExecution(telemetryRecord, null, err);
+			}
+
 			// If task was aborted by pipeline pause, don't mark as failed — cancelRunningTasks
 			// already reset it to queued. Just bail out silently.
 			if (taskController.signal.aborted) {

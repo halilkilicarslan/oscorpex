@@ -5,6 +5,7 @@
 
 import { Hono } from "hono";
 import { tracer } from "../telemetry.js";
+import { executionEngine } from "../execution-engine.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("telemetry-routes");
 
@@ -68,6 +69,67 @@ router.get("/active", (c) => {
 		total: spans.length,
 		spans,
 	});
+});
+
+// ---------------------------------------------------------------------------
+// Provider Telemetry (EPIC 3 observability)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /telemetry/providers/latency
+ * Per-provider latency and failure aggregates.
+ */
+router.get("/providers/latency", (c) => {
+	const providers = ["claude-code", "codex", "cursor"];
+	const results = providers.map((id) => ({
+		provider: id,
+		...executionEngine.telemetry.getLatencySnapshot(id),
+	}));
+	return c.json({ providers: results });
+});
+
+/**
+ * GET /telemetry/providers/records
+ * Recent provider execution records.
+ * Query params:
+ *   limit — max records (default 50, max 200)
+ *   provider — filter by provider id
+ *   success — filter by success boolean ("true" | "false")
+ */
+router.get("/providers/records", (c) => {
+	const limitParam = c.req.query("limit");
+	const providerFilter = c.req.query("provider");
+	const successFilter = c.req.query("success");
+	const limit = limitParam ? Math.min(Number.parseInt(limitParam, 10) || 50, 200) : 50;
+
+	let records = executionEngine.telemetry.getRecentRecords(limit);
+
+	if (providerFilter) {
+		records = records.filter(
+			(r) => (r.finalProvider ?? r.primaryProvider) === providerFilter,
+		);
+	}
+	if (successFilter === "true") {
+		records = records.filter((r) => r.success === true);
+	} else if (successFilter === "false") {
+		records = records.filter((r) => r.success === false);
+	}
+
+	return c.json({ total: records.length, records });
+});
+
+/**
+ * GET /telemetry/providers/records/:runId/:taskId
+ * Single provider execution record by runId:taskId.
+ */
+router.get("/providers/records/:runId/:taskId", (c) => {
+	const runId = c.req.param("runId");
+	const taskId = c.req.param("taskId");
+	const record = executionEngine.telemetry.getRecord(runId, taskId);
+	if (!record) {
+		return c.json({ error: "Record not found" }, 404);
+	}
+	return c.json({ record });
 });
 
 export { router as telemetryRoutes };

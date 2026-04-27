@@ -168,6 +168,11 @@ export class ProviderTelemetryCollector {
 		 return this.records.get(`${runId}:${taskId}`);
 	 }
 
+	 getRecentRecords(limit = 50): ProviderExecutionTelemetry[] {
+		 const all = Array.from(this.records.values());
+		 return all.slice(-limit);
+	 }
+
 	 getLatencySnapshot(providerId: string): ProviderLatencySnapshot {
 		 const history = this.latencyHistory.get(providerId) ?? [];
 		 const total = history.length;

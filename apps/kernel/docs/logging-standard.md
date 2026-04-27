@@ -74,6 +74,10 @@ log.info("Checkpoint created for project " + projectId);  // Avoid string concat
 | Replay checkpoint created | info | `projectId`, `checkpoint` |
 | Replay restore requested | info | `projectId`, `runId`, `dryRun` |
 | Provider execution cancelled | info | `runId`, `taskId` |
+| Provider execution started | info | `runId`, `taskId`, `provider` |
+| Provider execution finished | info | `runId`, `taskId`, `provider`, `success`, `durationMs` |
+| Provider fallback | warn | `runId`, `taskId`, `fromProvider`, `toProvider`, `reason` |
+| Provider degraded mode | warn | `runId`, `taskId`, `message` |
 | Policy violation | warn | `projectId`, `taskId`, `violation` |
 | Sandbox violation | warn | `projectId`, `taskId`, `tool`, `reason` |
 
@@ -102,6 +106,59 @@ await withCorrelation(async () => {
 }, "optional-fixed-id");
 ```
 
+## Provider Execution Telemetry (EPIC 3)
+
+The kernel collects structured telemetry for every provider execution via `executionEngine.telemetry`.
+
+### Telemetry Record Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `runId` | string | Project ID (used as run identifier) |
+| `taskId` | string | Task ID |
+| `primaryProvider` | string | Provider initially requested |
+| `finalProvider` | string | Provider that actually executed (after fallback) |
+| `success` | boolean | Whether execution completed without error |
+| `latencyMs` | number | Wall-clock duration of execution |
+| `fallbackCount` | number | How many fallback transitions occurred |
+| `fallbackTimeline` | array | Ordered list of fallback entries |
+| `errorClassification` | string | Categorized error: `unavailable`, `timeout`, `rate_limited`, `killed`, `tool_restriction_unsupported`, `cli_error`, `spawn_failure`, `unknown` |
+| `errorMessage` | string | Original error message (when failed) |
+| `degradedMode` | boolean | True if all providers were exhausted |
+| `degradedMessage` | string | Human-readable degraded reason |
+| `canceled` | boolean | True if execution was cancelled |
+| `cancelReason` | string | Cancel reason: `pipeline_pause` |
+
+### Access
+
+```typescript
+// Get a specific record
+const record = executionEngine.telemetry.getRecord(projectId, taskId);
+
+// List recent records
+const recent = executionEngine.telemetry.getRecentRecords(50);
+
+// Per-provider latency snapshot
+const snapshot = executionEngine.telemetry.getLatencySnapshot("claude-code");
+```
+
+### HTTP Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/studio/telemetry/providers/latency` | Per-provider latency and failure aggregates |
+| `GET /api/studio/telemetry/providers/records` | Recent provider execution records (filterable) |
+| `GET /api/studio/telemetry/providers/records/:runId/:taskId` | Single execution record |
+
+### Wiring
+
+- **Entrypoint**: `execution-engine.ts` calls `telemetry.startExecution()` before the adapter fallback chain
+- **Success**: `finishExecution(record, result)` when an adapter returns successfully
+- **Failure**: `finishExecution(record, null, err)` when all adapters fail or an error occurs
+- **Fallback**: `recordFallback()` is called in the adapter catch block when a fallback provider is tried
+- **Degraded**: `recordDegraded()` is called when `providerState.isAllExhausted()` is true
+- **Cancel**: `recordCancel()` is called when the task's `AbortController` fires an abort event
+
 ## Implementation Status
 
 | Feature | Status | Commit |
@@ -114,6 +171,10 @@ await withCorrelation(async () => {
 | Guaranteed header on error responses | **Implemented** | `3da4fbe` |
 | Pino-pretty auto-install | Planned | — |
 | OpenTelemetry trace integration | Planned | — |
+| Provider execution telemetry | **Implemented** | `5036dfb` |
+| Provider fallback timeline | **Implemented** | `5036dfb` |
+| Provider latency snapshot | **Implemented** | `5036dfb` |
+| Provider cancel audit | **Implemented** | `5036dfb` |
 
 ## Log Destination
 
