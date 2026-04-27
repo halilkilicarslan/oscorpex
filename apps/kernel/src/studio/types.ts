@@ -117,6 +117,8 @@ export interface Task {
 	riskLevel?: RiskLevel;
 	// v8.1: Persisted policy evaluation snapshot for replay truth
 	policySnapshot?: string;
+	// EPIC Performance: task creation timestamp for queue-wait metrics
+	createdAt?: string;
 }
 
 // ---- Agent Configuration ---------------------------------------------------

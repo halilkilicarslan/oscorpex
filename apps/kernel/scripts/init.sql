@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   review_task_id            TEXT,
   revision_count            INTEGER NOT NULL DEFAULT 0,
   assigned_agent_id         TEXT,
-  policy_snapshot           TEXT NOT NULL DEFAULT '{}'
+  policy_snapshot           TEXT NOT NULL DEFAULT '{}',
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Migration: policy_snapshot for persisted policy truth

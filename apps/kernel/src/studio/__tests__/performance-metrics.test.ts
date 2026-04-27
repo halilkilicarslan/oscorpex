@@ -33,12 +33,13 @@ describe("buildPerformanceBaseline", () => {
 		const collector = new ProviderTelemetryCollector();
 		const baseline = buildPerformanceBaseline(collector, 3600000);
 
-		expect(baseline.totalExecutions).toBe(0);
-		expect(baseline.successRate).toBe(0);
-		expect(baseline.fallbackRate).toBe(0);
-		expect(baseline.providerSnapshots).toEqual([]);
-		expect(baseline.topSlowestPatterns).toEqual([]);
-		expect(baseline.topFallbackPatterns).toEqual([]);
+    expect(baseline.totalExecutions).toBe(0);
+    expect(baseline.successRate).toBe(0);
+    expect(baseline.fallbackRate).toBe(0);
+    expect(baseline.providerSnapshots).toEqual([]);
+    expect(baseline.topSlowestPatterns).toEqual([]);
+    expect(baseline.topFallbackPatterns).toEqual([]);
+    expect(baseline.queueWaitMetrics.recordedCount).toBe(0);
 	});
 
 	it("aggregates basic metrics correctly", () => {

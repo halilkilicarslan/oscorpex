@@ -115,6 +115,8 @@ export function rowToTask(row: any): Task {
 		riskLevel: row.risk_level ?? undefined,
 		// v8.1: Persisted policy evaluation snapshot
 		policySnapshot: row.policy_snapshot ?? undefined,
+		// EPIC Performance: task creation timestamp
+		createdAt: row.created_at ?? undefined,
 	};
 }
 

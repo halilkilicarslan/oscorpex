@@ -637,16 +637,21 @@ class ExecutionEngine {
 
 		// Assign + start — task is already claimed via SELECT FOR UPDATE SKIP LOCKED,
 		// so no concurrent dispatch race is possible. Transition status based on current state.
+		let queueWaitMs = 0;
 		{
 			const currentTask = await getTask(task.id);
 			const currentStatus = currentTask?.status ?? task.status;
+			let startedTask: import("./types.js").Task | undefined;
 			if (currentStatus === "queued") {
 				await taskEngine.assignTask(task.id, agent.id);
-				await taskEngine.startTask(task.id);
+				startedTask = await taskEngine.startTask(task.id);
 			} else if (currentStatus === "assigned") {
-				await taskEngine.startTask(task.id);
+				startedTask = await taskEngine.startTask(task.id);
 			}
 			// status === "running" → already started (e.g. revision restart), skip both
+			if (startedTask?.createdAt && startedTask?.startedAt) {
+				queueWaitMs = new Date(startedTask.startedAt).getTime() - new Date(startedTask.createdAt).getTime();
+			}
 		}
 
 		// --- Agent Runtime: init session + behavioral memory + protocol ---
@@ -816,6 +821,9 @@ class ExecutionEngine {
 				allowedTools,
 				model: routedModel,
 			});
+			if (telemetryRecord) {
+				telemetryRecord.queueWaitMs = queueWaitMs;
+			}
 			if (cancelPending && telemetryRecord) {
 				recordProviderCancel(this.telemetry, telemetryRecord, CANCEL_REASONS.pipeline_pause);
 			}

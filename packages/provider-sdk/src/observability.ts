@@ -45,6 +45,7 @@ export interface ProviderExecutionTelemetry {
 	 degradedMessage?: string;
 	 canceled?: boolean;
 	 cancelReason?: string;
+	 queueWaitMs?: number;
 }
 
 export interface ProviderLatencySnapshot {

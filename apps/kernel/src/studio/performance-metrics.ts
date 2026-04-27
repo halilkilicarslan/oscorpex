@@ -51,7 +51,12 @@ export interface ExecutionBaseline {
 		reason: string;
 		count: number;
 	}>;
-	queueWaitMs?: number; // placeholder — populated by TASK 2
+	queueWaitMetrics: {
+		avgQueueWaitMs: number;
+		p95QueueWaitMs: number;
+		maxQueueWaitMs: number;
+		recordedCount: number;
+	};
 }
 
 /**
@@ -85,6 +90,11 @@ export function buildPerformanceBaseline(
 	const overallP95LatencyMs = percentile(latencies, 0.95);
 	const overallP99LatencyMs = percentile(latencies, 0.99);
 
+	const queueWaits = records
+		.map((r) => r.queueWaitMs)
+		.filter((v): v is number => v !== undefined)
+		.sort((a, b) => a - b);
+
 	const providerIds = new Set<string>();
 	for (const r of records) {
 		providerIds.add(r.finalProvider ?? r.primaryProvider);
@@ -109,6 +119,12 @@ export function buildPerformanceBaseline(
 		providerSnapshots,
 		topSlowestPatterns: buildTopSlowest(records),
 		topFallbackPatterns: buildTopFallbackPatterns(records),
+		queueWaitMetrics: {
+			avgQueueWaitMs: queueWaits.length > 0 ? Math.round(queueWaits.reduce((a, b) => a + b, 0) / queueWaits.length) : 0,
+			p95QueueWaitMs: percentile(queueWaits, 0.95),
+			maxQueueWaitMs: queueWaits.length > 0 ? queueWaits[queueWaits.length - 1] : 0,
+			recordedCount: queueWaits.length,
+		},
 	};
 }
 
