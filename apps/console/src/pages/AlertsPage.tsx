@@ -75,7 +75,7 @@ interface AlertStats {
 // Sabitler
 // ---------------------------------------------------------------------------
 
-const API_BASE = 'http://localhost:3141/api/observability';
+const API_BASE = '/api/observability';
 
 // Alert tipi renkleri
 const TYPE_STYLES: Record<AlertType, { label: string; badge: string; dot: string }> = {

@@ -147,7 +147,7 @@ logsRoutes.get("/events", async (c) => {
 	const limitIdx = params.length + 1;
 	const offsetIdx = params.length + 2;
 	const rows = await query<StudioEventRow>(
-		`SELECT * FROM events ${where} ORDER BY created_at DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+		`SELECT id, project_id, type, payload, timestamp as created_at FROM events ${where} ORDER BY timestamp DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
 		[...params, limit, offset],
 	);
 

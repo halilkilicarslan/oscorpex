@@ -118,7 +118,7 @@ export async function getSearchObservability(projectId: string, days = 7): Promi
 	);
 
 	const hourlyRows = await query<any>(
-		`SELECT SUBSTRING(created_at, 1, 13) AS hour,
+		`SELECT TO_CHAR(created_at, 'YYYY-MM-DD HH24') AS hour,
 		        COUNT(*) AS searches,
 		        SUM(CASE WHEN result_count > 0 THEN 1 ELSE 0 END) AS hits,
 		        AVG(latency_ms) AS avg_latency

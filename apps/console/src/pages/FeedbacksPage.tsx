@@ -49,7 +49,7 @@ type Tab = 'all' | 'byAgent' | 'analytics';
 // Constants
 // ---------------------------------------------------------------------------
 
-const API_BASE = 'http://localhost:3141/api/observability';
+const API_BASE = '/api/observability';
 const PAGE_SIZE = 50;
 
 const AVAILABLE_TAGS = [

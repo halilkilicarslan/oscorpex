@@ -1,17 +1,26 @@
 import type { AgentInfo, WorkflowInfo } from '../types';
 
-const BASE = '';
+const BASE = '/api/studio';
 
 export async function fetchAgents(): Promise<AgentInfo[]> {
   const res = await fetch(`${BASE}/agents`);
   const json = await res.json();
-  return json.data ?? [];
+  const items = Array.isArray(json) ? json : (json.data ?? []);
+  // Map Oscorpex AgentConfig → Dashboard AgentInfo
+  return items.map((a: any) => ({
+    id: a.id,
+    name: a.name,
+    description: a.personality || a.systemPrompt?.slice(0, 120) || a.role,
+    status: a.isPreset ? 'preset' : 'active',
+    model: a.model,
+    tools: (a.skills || []).map((s: string) => ({ id: s, name: s, description: '', type: 'skill' })),
+    subAgents: [],
+  }));
 }
 
 export async function fetchWorkflows(): Promise<WorkflowInfo[]> {
-  const res = await fetch(`${BASE}/workflows`);
-  const json = await res.json();
-  return json.data ?? [];
+  // Oscorpex does not have a /workflows endpoint (VoltAgent legacy)
+  return [];
 }
 
 export async function sendText(agentId: string, input: string): Promise<string> {

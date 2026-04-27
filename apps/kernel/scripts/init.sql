@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Migration: created_at for task tracking
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 -- Migration: policy_snapshot for persisted policy truth
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS policy_snapshot TEXT NOT NULL DEFAULT '{}';
 

@@ -18,7 +18,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:3141/api/observability';
+const API_BASE = '/api/observability';
 
 // ---------------------------------------------------------------------------
 // Types

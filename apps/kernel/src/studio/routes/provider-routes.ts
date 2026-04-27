@@ -107,6 +107,12 @@ providerRoutes.put("/providers/fallback-chain", async (c) => {
 	return c.json(await getFallbackChain());
 });
 
+// GET /providers/status — CLI adapter runtime state (rate limits, cooldowns, failures)
+// NOTE: must be before /:id to avoid Hono matching "status" as an ID
+providerRoutes.get("/providers/status", async (c) => {
+	return c.json(providerState.getAllStates());
+});
+
 providerRoutes.get("/providers/:id", async (c) => {
 	const provider = await getProvider(c.req.param("id"));
 	if (!provider) return c.json({ error: "Provider not found" }, 404);
@@ -150,11 +156,6 @@ providerRoutes.post("/providers/:id/default", async (c) => {
 	const provider = await setDefaultProvider(c.req.param("id"));
 	if (!provider) return c.json({ error: "Provider not found" }, 404);
 	return c.json(provider);
-});
-
-// GET /providers/status — CLI adapter runtime state (rate limits, cooldowns, failures)
-providerRoutes.get("/providers/status", async (c) => {
-	return c.json(providerState.getAllStates());
 });
 
 providerRoutes.post("/providers/:id/test", async (c) => {

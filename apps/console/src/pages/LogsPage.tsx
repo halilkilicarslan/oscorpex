@@ -38,7 +38,7 @@ type Severity = 'ALL' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 // Constants
 // ---------------------------------------------------------------------------
 
-const API_BASE = 'http://localhost:3141/api/observability';
+const API_BASE = '/api/observability';
 const PAGE_SIZE = 100;
 
 const SEVERITY_STYLES: Record<string, string> = {
@@ -438,7 +438,7 @@ export default function LogsPage() {
                   : 'text-[#525252] hover:text-[#a3a3a3]'
               }`}
             >
-              VoltAgent Logs
+              Observability Logs
             </button>
             <button
               onClick={() => setSource('events')}

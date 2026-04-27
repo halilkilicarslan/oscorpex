@@ -66,7 +66,7 @@ interface TemplateListResponse {
 // Constants
 // ---------------------------------------------------------------------------
 
-const API_BASE = 'http://localhost:3141/api/observability/prompts';
+const API_BASE = '/api/observability/prompts';
 
 const CATEGORIES: Array<{ value: string; label: string }> = [
   { value: 'all', label: 'All' },

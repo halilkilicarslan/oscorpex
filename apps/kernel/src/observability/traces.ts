@@ -158,9 +158,9 @@ tracesRoutes.get("/traces/stats", async (c) => {
 	const errorTraceCount = Number(errorCountRow?.n ?? 0);
 	const errorRate = totalTraces > 0 ? Math.round((errorTraceCount / totalTraces) * 1000) / 10 : 0;
 
-	// PostgreSQL JSON operator: attributes->>'llm.usage.total_tokens'
+	// PostgreSQL JSON operator: attributes is TEXT, cast to jsonb
 	const [tokenRow] = await query<{ total: string | null }>(
-		`SELECT SUM((attributes->>'llm.usage.total_tokens')::numeric) as total FROM observability_spans`,
+		`SELECT SUM((attributes::jsonb->>'llm.usage.total_tokens')::numeric) as total FROM observability_spans`,
 	);
 	const totalTokens = tokenRow?.total != null ? Number(tokenRow.total) : 0;
 

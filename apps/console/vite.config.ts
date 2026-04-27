@@ -17,10 +17,6 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
-        '/agents': target,
-        '/workflows': target,
-        '/tools': target,
-        '/doc': target,
         '/api/studio': {
           target,
           changeOrigin: true,
@@ -34,6 +30,14 @@ export default defineConfig(({ mode }) => {
               try { if ('writeHead' in res) (res as any).writeHead(502); (res as any).end(); } catch { /* noop */ }
             });
           },
+        },
+        '/api/observability': {
+          target,
+          changeOrigin: true,
+        },
+        '/api/auth': {
+          target,
+          changeOrigin: true,
         },
       },
     },

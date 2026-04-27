@@ -138,18 +138,18 @@ studio.route("/cost", costRoutes);
 studio.route("/notifications", notificationRoutes);
 studio.route("/replay", replayRoutes);
 
-// Telemetry debug endpoints — only mounted when tracing is enabled
-if (process.env.OSCORPEX_TRACE_ENABLED === "true") {
-	studio.route("/telemetry", telemetryRoutes);
-}
+// Telemetry endpoints (performance config, provider records, queue wait)
+studio.route("/telemetry", telemetryRoutes);
 
 // Memory routes (archived — VoltAgent integration removed)
 studio.route("/", memoryRoutes);
 
-// YAGNI-deferred: cli-usage, ceremony, marketplace, cluster, collaboration
+// CLI usage routes (used by console CLI usage monitor page)
+studio.route("/", cliUsageRoutes);
+
+// YAGNI-deferred: marketplace, cluster, collaboration
 // Re-enable when needed.
-// studio.route("/", cliUsageRoutes);
-// studio.route("/", ceremonyRoutes);
+studio.route("/", ceremonyRoutes);
 // studio.route("/cluster", clusterRoutes);
 // studio.route("/collaboration", collaborationRoutes);
 // studio.route("/marketplace", marketplaceRoutes);

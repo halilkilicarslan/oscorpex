@@ -92,7 +92,7 @@ interface TriggerStats {
 // Constants
 // ---------------------------------------------------------------------------
 
-const API_BASE = 'http://localhost:3141/api/observability';
+const API_BASE = '/api/observability';
 
 const TYPE_META: Record<TriggerType, { label: string; badge: string; dot: string; icon: React.ReactNode }> = {
   webhook:   { label: 'Webhook',   badge: 'text-[#3b82f6] bg-[#172554] border border-[#1d4ed8]', dot: 'bg-[#3b82f6]', icon: <Globe className="w-3.5 h-3.5" /> },

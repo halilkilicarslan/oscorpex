@@ -91,9 +91,9 @@ feedbacksRoutes.get("/feedbacks/stats", async (c) => {
 		.slice(0, 20);
 
 	const recentTrendRows = await query<{ day: string; cnt: string }>(
-		`SELECT DATE(created_at) as day, COUNT(*) as cnt
+		`SELECT TO_CHAR(created_at::date, 'YYYY-MM-DD') as day, COUNT(*) as cnt
      FROM feedbacks
-     WHERE created_at >= CURRENT_DATE - INTERVAL '6 days'
+     WHERE created_at::date >= CURRENT_DATE - INTERVAL '6 days'
      GROUP BY day
      ORDER BY day ASC`,
 	);

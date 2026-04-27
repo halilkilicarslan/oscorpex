@@ -561,7 +561,7 @@ export async function getActivityTimeline(projectId: string, days = 7) {
 	const [taskRows, runsStartedRows, runsCompletedRows] = await Promise.all([
 		query<any>(
 			`
-    SELECT SUBSTRING(t.completed_at, 1, 10) AS day, COUNT(*) AS cnt
+    SELECT TO_CHAR(t.completed_at, 'YYYY-MM-DD') AS day, COUNT(*) AS cnt
     FROM tasks t JOIN phases ph ON ph.id = t.phase_id JOIN project_plans pp ON pp.id = ph.plan_id
     WHERE pp.project_id = $1 AND t.status = 'done' AND t.completed_at >= $2
     GROUP BY day
@@ -570,14 +570,14 @@ export async function getActivityTimeline(projectId: string, days = 7) {
 		),
 		query<any>(
 			`
-    SELECT SUBSTRING(started_at, 1, 10) AS day, COUNT(*) AS cnt
+    SELECT TO_CHAR(started_at, 'YYYY-MM-DD') AS day, COUNT(*) AS cnt
     FROM agent_runs WHERE project_id = $1 AND started_at >= $2 GROUP BY day
   `,
 			[projectId, dates[0]],
 		),
 		query<any>(
 			`
-    SELECT SUBSTRING(stopped_at, 1, 10) AS day, COUNT(*) AS cnt
+    SELECT TO_CHAR(stopped_at, 'YYYY-MM-DD') AS day, COUNT(*) AS cnt
     FROM agent_runs WHERE project_id = $1 AND status IN ('stopped','error') AND stopped_at >= $2 GROUP BY day
   `,
 			[projectId, dates[0]],

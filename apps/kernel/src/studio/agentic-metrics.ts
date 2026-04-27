@@ -87,7 +87,7 @@ async function getDuplicateDispatchCount(projectId: string): Promise<number> {
 	const row = await queryOne(
 		`SELECT COUNT(*) AS cnt FROM events
 		 WHERE project_id = $1 AND type = 'execution:error'
-		   AND payload->>'error' ILIKE '%already claimed%'`,
+		   AND payload::jsonb->>'error' ILIKE '%already claimed%'`,
 		[projectId],
 	);
 	return Number(row?.cnt ?? 0);
@@ -225,12 +225,12 @@ async function getReplanTriggerFrequency(projectId: string): Promise<{ total: nu
 
 async function getDegradedProviderDuration(projectId: string): Promise<Array<{ provider: string; totalMs: number; incidents: number }>> {
 	const rows = await query(
-		`SELECT payload->>'provider' AS provider,
+		`SELECT payload::jsonb->>'provider' AS provider,
 			COUNT(*) AS incidents,
-			COALESCE(SUM((payload->>'cooldownMs')::numeric), 0) AS total_ms
+			COALESCE(SUM((payload::jsonb->>'cooldownMs')::numeric), 0) AS total_ms
 		 FROM events
 		 WHERE project_id = $1 AND type = 'provider:degraded'
-		 GROUP BY payload->>'provider'
+		 GROUP BY payload::jsonb->>'provider'
 		 ORDER BY incidents DESC`,
 		[projectId],
 	);

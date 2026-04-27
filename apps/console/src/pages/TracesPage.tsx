@@ -22,7 +22,7 @@ import {
 // API taban URL
 // ---------------------------------------------------------------------------
 
-const API_BASE = 'http://localhost:3141/api/observability';
+const API_BASE = '/api/observability';
 
 // ---------------------------------------------------------------------------
 // Tipler
@@ -737,7 +737,7 @@ function StudioTraceDetailPanel({ traceId }: { traceId: string }) {
 // ---------------------------------------------------------------------------
 
 export default function TracesPage() {
-  const [source, setSource] = useState<TraceSource>('voltagent');
+  const [source, setSource] = useState<TraceSource>('studio');
   const [stats, setStats] = useState<TraceStats | null>(null);
   const [traces, setTraces] = useState<ApiTrace[]>([]);
   const [total, setTotal] = useState(0);
@@ -857,13 +857,8 @@ export default function TracesPage() {
   }, [offset, entityFilter, statusFilter, source]);
 
   useEffect(() => {
-    loadStats();
     loadStudioStats();
-  }, [loadStats, loadStudioStats]);
-
-  useEffect(() => {
-    loadTraces();
-  }, [loadTraces]);
+  }, [loadStudioStats]);
 
   useEffect(() => {
     loadStudioTraces();
@@ -919,30 +914,8 @@ export default function TracesPage() {
       <div className="px-6 py-4 border-b border-[#1a1a1a] shrink-0">
         <h1 className="text-[15px] font-semibold text-[#fafafa]">Traces</h1>
         <p className="text-[13px] text-[#525252] mt-0.5">
-          Execution traces recorded by VoltAgent observability
+          Execution traces recorded by Oscorpex studio pipeline
         </p>
-        <div className="flex items-center gap-1 mt-3">
-          <button
-            onClick={() => setSource('voltagent')}
-            className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
-              source === 'voltagent'
-                ? 'bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/30'
-                : 'text-[#525252] hover:text-[#a3a3a3] border border-transparent'
-            }`}
-          >
-            VoltAgent Traces
-          </button>
-          <button
-            onClick={() => setSource('studio')}
-            className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
-              source === 'studio'
-                ? 'bg-[#a855f7]/15 text-[#a855f7] border border-[#a855f7]/30'
-                : 'text-[#525252] hover:text-[#a3a3a3] border border-transparent'
-            }`}
-          >
-            Studio Traces
-          </button>
-        </div>
       </div>
 
       {/* Stats satırı */}

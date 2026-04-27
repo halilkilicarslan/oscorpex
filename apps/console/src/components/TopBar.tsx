@@ -8,22 +8,20 @@ interface TopBarProps {
 }
 
 export default function TopBar({ onOpenChat, chatOpen }: TopBarProps) {
-  const [apiUrl, setApiUrl] = useState('http://localhost:4242');
   const [connected, setConnected] = useState(false);
   const [checking, setChecking] = useState(false);
 
   const checkConnection = useCallback(async () => {
     setChecking(true);
     try {
-      const base = apiUrl.replace(/\/+$/, '');
-      const res = await fetch(`${base}/agents`, { signal: AbortSignal.timeout(3000) });
+      const res = await fetch('/api/studio/agents', { signal: AbortSignal.timeout(3000) });
       setConnected(res.ok);
     } catch {
       setConnected(false);
     } finally {
       setChecking(false);
     }
-  }, [apiUrl]);
+  }, []);
 
   useEffect(() => {
     checkConnection();
@@ -57,12 +55,7 @@ export default function TopBar({ onOpenChat, chatOpen }: TopBarProps) {
                   : 'bg-[#ef4444]'
             }`}
           />
-          <input
-            type="text"
-            value={apiUrl}
-            onChange={(e) => setApiUrl(e.target.value)}
-            className="bg-transparent text-[12px] text-[#a3a3a3] font-mono w-44 outline-none"
-          />
+          <span className="text-[12px] text-[#a3a3a3] font-mono">Kernel</span>
         </div>
         <div
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${

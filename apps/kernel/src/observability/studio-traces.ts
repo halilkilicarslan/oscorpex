@@ -9,6 +9,7 @@ import { safeParseJSON } from "./_shared.js";
 export const studioTracesRoutes = new Hono();
 
 studioTracesRoutes.get("/studio/traces", async (c) => {
+	try {
 	const limit = Math.min(Number.parseInt(c.req.query("limit") ?? "50", 10), 200);
 	const offset = Number.parseInt(c.req.query("offset") ?? "0", 10);
 	const agent = c.req.query("agent");
@@ -64,7 +65,7 @@ studioTracesRoutes.get("/studio/traces", async (c) => {
      JOIN phases ph ON ph.id = t.phase_id
      JOIN project_plans pp ON pp.id = ph.plan_id
      ${where}
-     ORDER BY COALESCE(t.started_at, t.completed_at, ph.id::text) DESC
+     ORDER BY t.started_at DESC NULLS LAST, t.completed_at DESC NULLS LAST, t.id DESC
      LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
 		[...params, limit, offset],
 	);
@@ -150,6 +151,10 @@ studioTracesRoutes.get("/studio/traces", async (c) => {
 		limit,
 		offset,
 	});
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		return c.json({ error: msg }, 500);
+	}
 });
 
 // GET /api/observability/studio/traces/stats

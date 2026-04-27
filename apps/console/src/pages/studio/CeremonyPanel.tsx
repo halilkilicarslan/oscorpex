@@ -107,9 +107,12 @@ export default function CeremonyPanel({ projectId }: { projectId: string }) {
   const [loadingStandup, setLoadingStandup] = useState(false);
   const [loadingRetro, setLoadingRetro] = useState(false);
   const [running, setRunning] = useState<Tab | null>(null);
+  const [standupTried, setStandupTried] = useState(false);
+  const [retroTried, setRetroTried] = useState(false);
 
   const loadStandup = useCallback(async () => {
     setLoadingStandup(true);
+    setStandupTried(true);
     const result = await fetchCeremony(
       `${BASE}/api/studio/projects/${projectId}/ceremonies/standup`,
       parseStandup,
@@ -120,6 +123,7 @@ export default function CeremonyPanel({ projectId }: { projectId: string }) {
 
   const loadRetro = useCallback(async () => {
     setLoadingRetro(true);
+    setRetroTried(true);
     const result = await fetchCeremony(
       `${BASE}/api/studio/projects/${projectId}/ceremonies/retrospective`,
       parseRetro,
@@ -128,11 +132,11 @@ export default function CeremonyPanel({ projectId }: { projectId: string }) {
     setLoadingRetro(false);
   }, [projectId]);
 
-  // Lazy load per tab
+  // Lazy load per tab — guard with tried flags to prevent infinite loops on 404/500
   useEffect(() => {
-    if (tab === 'standup' && !standup && !loadingStandup) loadStandup();
-    if (tab === 'retro' && !retro && !loadingRetro) loadRetro();
-  }, [tab, standup, retro, loadingStandup, loadingRetro, loadStandup, loadRetro]);
+    if (tab === 'standup' && !standup && !loadingStandup && !standupTried) loadStandup();
+    if (tab === 'retro' && !retro && !loadingRetro && !retroTried) loadRetro();
+  }, [tab, standup, retro, loadingStandup, loadingRetro, standupTried, retroTried, loadStandup, loadRetro]);
 
   const runStandup = async () => {
     setRunning('standup');

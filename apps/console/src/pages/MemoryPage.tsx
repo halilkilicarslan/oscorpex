@@ -98,7 +98,7 @@ interface Workflow {
 // API helpers
 // ---------------------------------------------------------------------------
 
-const BASE = 'http://localhost:3141/api/observability/memory';
+const BASE = '/api/observability/memory';
 
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
