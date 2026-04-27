@@ -72,6 +72,7 @@ import {
 	markProviderUnavailable,
 	getFallbackSeverity,
 } from "./fallback-decision.js";
+import { resolveTaskTimeoutMs, TIMEOUT_WARNING_THRESHOLD } from "./timeout-policy.js";
 import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import {
 	startProviderTelemetry,
@@ -106,56 +107,6 @@ const RATE_LIMIT_PATTERNS = [
 
 function isRateLimitError(message: string): boolean {
 	return RATE_LIMIT_PATTERNS.some((rx) => rx.test(message));
-}
-
-// ---------------------------------------------------------------------------
-// Timeout configuration
-// ---------------------------------------------------------------------------
-
-/**
- * Complexity'ye göre temel timeout değerleri (milisaniye):
- *   S  → 5 dakika
- *   M  → 15 dakika
- *   L  → 30 dakika
- *   XL → 60 dakika
- */
-const COMPLEXITY_TIMEOUT_MS: Record<string, number> = {
-	S: 30 * 60 * 1000,
-	M: 30 * 60 * 1000,
-	L: 45 * 60 * 1000,
-	XL: 60 * 60 * 1000,
-};
-
-/** Bilinmeyen complexity için varsayılan: 5 dakika */
-const DEFAULT_TASK_TIMEOUT_MS = COMPLEXITY_TIMEOUT_MS.S;
-
-/**
- * Timeout'a yaklaşıldığında uyarı vermek için eşik: son %20.
- * Örneğin 30 dk'lık timeout'ta 24. dakikada warning emit edilir.
- */
-const TIMEOUT_WARNING_THRESHOLD = 0.8; // Timeout'un %80'i geçince warning
-
-/**
- * Task complexity ve proje timeout_multiplier ayarına göre efektif timeout hesaplar.
- * Öncelik sırası: agent.taskTimeout > complexity tabanlı değer × multiplier
- */
-async function resolveTaskTimeoutMs(
-	projectId: string,
-	complexity: string | undefined,
-	agentTimeout: number | undefined,
-): Promise<number> {
-	// Agent seviyesinde açıkça belirlenmiş timeout önceliklidir
-	if (agentTimeout != null && agentTimeout > 0) return agentTimeout;
-
-	// Complexity bazlı temel timeout
-	const baseMs = COMPLEXITY_TIMEOUT_MS[complexity ?? "S"] ?? DEFAULT_TASK_TIMEOUT_MS;
-
-	// Proje ayarlarından kullanıcının belirlediği çarpan (varsayılan 1.0)
-	const multiplierStr = await getProjectSetting(projectId, "execution", "task_timeout_multiplier");
-	const multiplier = multiplierStr ? Number.parseFloat(multiplierStr) : 1.0;
-	const safeMultiplier = Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1.0;
-
-	return Math.round(baseMs * safeMultiplier);
 }
 
 /**
@@ -609,6 +560,7 @@ class ExecutionEngine {
 		// ═══════════════════════════════════════════════════════════════════════
 		let telemetryRecord: TelemetryRecord | undefined;
 		let cancelPending = false;
+		let timeoutMs = 0;
 		taskController.signal.addEventListener("abort", () => {
 			cancelPending = true;
 			if (telemetryRecord) {
@@ -739,28 +691,6 @@ class ExecutionEngine {
 			log.warn("[execution-engine] Sandbox init failed (non-blocking):" + " " + String(err));
 		}
 
-		// Complexity ve proje timeout_multiplier ayarına göre efektif timeout hesapla
-		const timeoutMs = await resolveTaskTimeoutMs(projectId, task.complexity, agent.taskTimeout);
-
-		// Timeout'un %80'ine girildiğinde warning event emit edecek callback
-		const onTimeoutWarning = () => {
-			const remainingMs = Math.round(timeoutMs * (1 - TIMEOUT_WARNING_THRESHOLD));
-			const remainingSec = Math.round(remainingMs / 1000);
-			log.warn(`[execution-engine] Timeout uyarısı: "${task.title}" — ${remainingSec}sn kaldı`);
-			eventBus.emit({
-				projectId,
-				type: "task:timeout_warning",
-				agentId: agent.id,
-				taskId: task.id,
-				payload: {
-					timeoutMs,
-					remainingMs,
-					taskTitle: task.title,
-					message: `Görev timeout'a ${remainingSec} saniye kaldı (toplam ${(timeoutMs / 60_000).toFixed(0)} dk).`,
-				},
-			});
-		};
-
 		try {
 			// CLI-only execution — no API fallback
 			if (!project.repoPath) {
@@ -796,6 +726,28 @@ class ExecutionEngine {
 			} catch (err) {
 				log.warn("[execution-engine] resolveModel failed, using fallback:" + " " + String(err));
 			}
+
+			// TASK 7: Provider-aware timeout resolution
+			timeoutMs = await resolveTaskTimeoutMs(projectId, task.complexity, agent.taskTimeout, primaryCliTool);
+
+			// Timeout'un %80'ine girildiğinde warning event emit edecek callback
+			const onTimeoutWarning = () => {
+				const remainingMs = Math.round(timeoutMs * (1 - TIMEOUT_WARNING_THRESHOLD));
+				const remainingSec = Math.round(remainingMs / 1000);
+				log.warn(`[execution-engine] Timeout uyarısı: "${task.title}" — ${remainingSec}sn kaldı`);
+				eventBus.emit({
+					projectId,
+					type: "task:timeout_warning",
+					agentId: agent.id,
+					taskId: task.id,
+					payload: {
+						timeoutMs,
+						remainingMs,
+						taskTitle: task.title,
+						message: `Görev timeout'a ${remainingSec} saniye kaldı (toplam ${(timeoutMs / 60_000).toFixed(0)} dk).`,
+					},
+				});
+			};
 
 			// Sandbox pre-execution gate: in hard mode, verify tools before spawning CLI
 			if (sandboxPolicy?.enforcementMode === "hard" && sandboxPolicy.deniedTools.length > 0) {
