@@ -536,14 +536,14 @@ describe.skipIf(!dbReady)("E2E Pipeline", () => {
 		it("should give up after MAX_AUTO_RETRIES exhausted", async () => {
 			const { project, t1 } = await setupE2EProject();
 
-			// All attempts fail (initial + 2 retries = 3 failures)
+			// All attempts fail (initial + 3 retries = 4 failures)
 			getMockExecute().mockRejectedValue(new Error("persistent error"));
 
 			await executionEngine.startProjectExecution(project.id);
 
 			const task1 = await getTask(t1.id);
 			expect(task1?.status).toBe("failed");
-			expect(task1?.retryCount).toBe(2);
+			expect(task1?.retryCount).toBe(3);
 		});
 	});
 
@@ -630,7 +630,7 @@ describe.skipIf(!dbReady)("E2E Pipeline", () => {
 
 			const task1 = await getTask(t1.id);
 			expect(task1?.status).toBe("failed");
-			expect(task1?.retryCount).toBe(2);
+			expect(task1?.retryCount).toBe(3);
 
 			// Transient failure events should be persisted in DB
 			const transientEvents = await query(

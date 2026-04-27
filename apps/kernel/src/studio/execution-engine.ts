@@ -79,6 +79,7 @@ import {
 	AdaptiveConcurrencyController,
 } from "./adaptive-concurrency.js";
 import { sortTasksByFairness } from "./task-scheduler.js";
+import { evaluateRetry, MAX_AUTO_RETRIES, type RetryTelemetry } from "./retry-policy.js";
 import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import {
 	startProviderTelemetry,
@@ -588,6 +589,7 @@ class ExecutionEngine {
 		// Assign + start — task is already claimed via SELECT FOR UPDATE SKIP LOCKED,
 		// so no concurrent dispatch race is possible. Transition status based on current state.
 		let queueWaitMs = 0;
+		let lastFailureClassification: import("@oscorpex/provider-sdk").ProviderErrorClassification | undefined;
 		{
 			const currentTask = await getTask(task.id);
 			const currentStatus = currentTask?.status ?? task.status;
@@ -769,7 +771,6 @@ class ExecutionEngine {
 			let cliResult: Awaited<ReturnType<(typeof adapterChain)[0]["execute"]>> | null = null;
 			let lastAdapterError: Error | null = null;
 			let lastFailureProvider: string | undefined;
-			let lastFailureClassification: import("@oscorpex/provider-sdk").ProviderErrorClassification | undefined;
 
 			// --- Telemetry lifecycle: START ---
 			telemetryRecord = startProviderTelemetry(this.telemetry, {
@@ -1197,12 +1198,13 @@ class ExecutionEngine {
 				isolatedWorkspace.cleanup().catch((e) => log.warn("[execution-engine] Workspace cleanup failed:" + " " + String(e)));
 			}
 
-			// --- Self-healing: auto-retry with error context ---
-			const MAX_AUTO_RETRIES = 2;
+			// --- Self-healing: auto-retry with error context (TASK 10) ---
 			const failedTask = await getTask(task.id);
-			if (!isTimeout && failedTask && failedTask.retryCount < MAX_AUTO_RETRIES) {
-				log.info(`[execution-engine] Self-healing: auto-retry #${failedTask.retryCount + 1} for "${task.title}"`);
-				// Transient failure: will be retried
+			const failureClass = lastFailureClassification ?? "unknown";
+			const { shouldRetry, delayMs } = evaluateRetry(failureClass, failedTask?.retryCount ?? 0);
+
+			if (!isTimeout && shouldRetry && failedTask) {
+				log.info(`[execution-engine] Self-healing: auto-retry #${failedTask.retryCount + 1} for "${task.title}" after ${delayMs}ms`);
 				eventBus.emit({
 					projectId,
 					type: "task:transient_failure",
@@ -1212,6 +1214,8 @@ class ExecutionEngine {
 						error: errorMsg.slice(0, 500),
 						retryCount: failedTask.retryCount + 1,
 						maxRetries: MAX_AUTO_RETRIES,
+						backoffMs: delayMs,
+						classification: failureClass,
 					},
 				});
 				eventBus.emitTransient({
@@ -1220,9 +1224,15 @@ class ExecutionEngine {
 					agentId: agent.id,
 					taskId: task.id,
 					payload: {
-						output: `[self-heal] Otomatik yeniden deneme #${failedTask.retryCount + 1}: ${errorMsg.slice(0, 200)}`,
+						output: `[self-heal] Retry #${failedTask.retryCount + 1} (${failureClass}) after ${delayMs}ms: ${errorMsg.slice(0, 200)}`,
 					},
 				});
+
+				// Exponential backoff before retry
+				if (delayMs > 0) {
+					await new Promise((r) => setTimeout(r, delayMs));
+				}
+
 				const retried = await taskEngine.retryTask(task.id);
 				// Re-execute with error context — bypass guard since we're retrying within the same dispatch
 				await this._executeTaskInner(projectId, { ...retried, error: errorMsg });
