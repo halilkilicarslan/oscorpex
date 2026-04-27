@@ -7,6 +7,12 @@
 import { getProjectSettings } from "./db.js";
 import type { AgentCliTool, Task } from "./types.js";
 import { createLogger } from "./logger.js";
+import {
+	normalizeProviderPolicyProfile,
+	selectPrimaryProvider,
+	getProfileBehavior,
+	type ProviderPolicyProfile,
+} from "./provider-policy-profiles.js";
 const log = createLogger("model-router");
 
 // ---------------------------------------------------------------------------
@@ -19,6 +25,7 @@ export interface ResolvedModel {
 	effort: "low" | "medium" | "high";
 	cliTool?: AgentCliTool;
 	decisionReason?: string;
+	selectedProfile?: ProviderPolicyProfile;
 }
 
 // Complexity tiers in order — used for escalation arithmetic
@@ -97,9 +104,12 @@ function effortForTier(tier: Tier): ResolvedModel["effort"] {
 /** Relative cost score — higher = more expensive */
 const MODEL_COST_SCORES: Record<string, number> = {
 	"gpt-4o-mini": 1,
+	"gemini-1.5-flash": 1,
+	"gemini-2.0-flash": 1,
 	"claude-haiku-4-5-20251001": 2,
 	"cursor-small": 2,
 	"gpt-4o": 5,
+	"gemini-1.5-pro": 5,
 	"claude-sonnet-4-6": 6,
 	"cursor-large": 6,
 	"o3": 8,
@@ -111,6 +121,8 @@ const PROVIDER_MODELS_BY_COST: Record<string, string[]> = {
 	anthropic: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"],
 	openai: ["gpt-4o-mini", "gpt-4o", "o3"],
 	cursor: ["cursor-small", "cursor-large"],
+	gemini: ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
+	ollama: ["llama3.2", "codellama", "mistral", "phi4"],
 };
 
 function getCostScore(model: string): number {
@@ -126,6 +138,7 @@ function selectCostAwareModel(
 	tier: Tier,
 	baseModel: string,
 	priorFailures: number,
+	allowDowngrade = true,
 ): { model: string; reason: string } {
 	const models = PROVIDER_MODELS_BY_COST[provider] ?? [baseModel];
 	const baseScore = getCostScore(baseModel);
@@ -135,7 +148,12 @@ function selectCostAwareModel(
 		return { model: baseModel, reason: `quality_preserve (priorFailures=${priorFailures})` };
 	}
 
-	// High tier tasks don't get downgraded
+	// If profile disallows downgrade for this tier, skip cost optimization
+	if (!allowDowngrade) {
+		return { model: baseModel, reason: `quality_first (downgrade_disabled, tier=${tier})` };
+	}
+
+	// High tier tasks don't get downgraded unless profile explicitly allows
 	if (tier === "L" || tier === "XL") {
 		return { model: baseModel, reason: `quality_first (tier=${tier})` };
 	}
@@ -176,16 +194,25 @@ export async function resolveModel(
 		reviewRejections?: number;
 		riskLevel?: string;
 		cliTool?: AgentCliTool;
+		profile?: ProviderPolicyProfile;
 	},
 ): Promise<ResolvedModel> {
-	const { projectId, priorFailures = 0, reviewRejections = 0, riskLevel, cliTool } = context;
+	const { projectId, priorFailures = 0, reviewRejections = 0, riskLevel, cliTool, profile } = context;
 
-	// 1. Load project-level routing config
+	// 1. Load project-level routing config and profile
 	const settings = await getProjectSettings(projectId, "model_routing");
 	const configOverrides: Record<string, string> = {};
+	let profileOverride: string | undefined;
 	for (const s of settings) {
-		configOverrides[s.key] = s.value;
+		if (s.key === "provider_policy_profile") {
+			profileOverride = s.value;
+		} else {
+			configOverrides[s.key] = s.value;
+		}
 	}
+	const resolvedProfile = profile ?? normalizeProviderPolicyProfile(profileOverride);
+	const behavior = getProfileBehavior(resolvedProfile);
+
 	const routingConfig = { ...getDefaultRoutingConfig(), ...configOverrides };
 
 	// 2. Determine base tier from task complexity
@@ -214,14 +241,27 @@ export async function resolveModel(
 
 	const effort = effortForTier(tier);
 
-	// 6. Provider-native model mapping based on cliTool
-	const resolvedCliTool = cliTool ?? "claude-code";
+	// 6. Provider-native model mapping based on profile + cliTool
+	const primary = selectPrimaryProvider(resolvedProfile, cliTool);
+	const resolvedCliTool = primary.cliTool as AgentCliTool;
+
+	// Profile-aware cost selection
+	const allowDowngrade =
+		behavior.allowCostDowngrade && behavior.downgradeTiers.includes(tier);
+	const effectivePriorFailures = behavior.preserveQualityOnFailure ? priorFailures : 0;
 
 	if (resolvedCliTool === "codex") {
 		const codexModels: Record<Tier, string> = { S: "gpt-4o-mini", M: "gpt-4o", L: "o3", XL: "o3" };
 		const baseModel = codexModels[tier] ?? "gpt-4o";
-		const { model, reason } = selectCostAwareModel("openai", tier, baseModel, priorFailures);
-		return { provider: "openai", model, effort, cliTool: resolvedCliTool, decisionReason: reason };
+		const { model, reason } = selectCostAwareModel("openai", tier, baseModel, effectivePriorFailures, allowDowngrade);
+		return {
+			provider: "openai",
+			model,
+			effort,
+			cliTool: resolvedCliTool,
+			decisionReason: `${reason} | profile=${resolvedProfile}`,
+			selectedProfile: resolvedProfile,
+		};
 	}
 
 	if (resolvedCliTool === "cursor") {
@@ -232,13 +272,65 @@ export async function resolveModel(
 			XL: "cursor-large",
 		};
 		const baseModel = cursorModels[tier] ?? "cursor-small";
-		const { model, reason } = selectCostAwareModel("cursor", tier, baseModel, priorFailures);
-		return { provider: "cursor", model, effort, cliTool: resolvedCliTool, decisionReason: reason };
+		const { model, reason } = selectCostAwareModel("cursor", tier, baseModel, effectivePriorFailures, allowDowngrade);
+		return {
+			provider: "cursor",
+			model,
+			effort,
+			cliTool: resolvedCliTool,
+			decisionReason: `${reason} | profile=${resolvedProfile}`,
+			selectedProfile: resolvedProfile,
+		};
 	}
 
-	// Default: anthropic
+	if (resolvedCliTool === "gemini") {
+		const geminiModels: Record<Tier, string> = {
+			S: "gemini-1.5-flash",
+			M: "gemini-1.5-flash",
+			L: "gemini-1.5-pro",
+			XL: "gemini-1.5-pro",
+		};
+		const baseModel = geminiModels[tier] ?? "gemini-1.5-flash";
+		const { model, reason } = selectCostAwareModel("gemini", tier, baseModel, effectivePriorFailures, allowDowngrade);
+		return {
+			provider: "gemini",
+			model,
+			effort,
+			cliTool: resolvedCliTool,
+			decisionReason: `${reason} | profile=${resolvedProfile}`,
+			selectedProfile: resolvedProfile,
+		};
+	}
+
+	if (resolvedCliTool === "ollama") {
+		const ollamaModels: Record<Tier, string> = {
+			S: "llama3.2",
+			M: "llama3.2",
+			L: "codellama",
+			XL: "codellama",
+		};
+		const baseModel = ollamaModels[tier] ?? "llama3.2";
+		// Ollama is free — no cost optimization needed
+		return {
+			provider: "ollama",
+			model: baseModel,
+			effort,
+			cliTool: resolvedCliTool,
+			decisionReason: `local_free | profile=${resolvedProfile}`,
+			selectedProfile: resolvedProfile,
+		};
+	}
+
+	// Default: anthropic / claude-code
 	const baseModel = routingConfig[tier] ?? routingConfig["M"] ?? "claude-sonnet-4-6";
-	const { model, reason } = selectCostAwareModel("anthropic", tier, baseModel, priorFailures);
-	log.info(`[model-router] ${task.id} → ${model} (${reason})`);
-	return { provider: "anthropic", model, effort, cliTool: resolvedCliTool, decisionReason: reason };
+	const { model, reason } = selectCostAwareModel("anthropic", tier, baseModel, effectivePriorFailures, allowDowngrade);
+	log.info(`[model-router] ${task.id} → ${model} (${reason}, profile=${resolvedProfile})`);
+	return {
+		provider: "anthropic",
+		model,
+		effort,
+		cliTool: resolvedCliTool,
+		decisionReason: `${reason} | profile=${resolvedProfile}`,
+		selectedProfile: resolvedProfile,
+	};
 }
