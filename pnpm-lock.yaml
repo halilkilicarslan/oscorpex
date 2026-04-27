@@ -18,6 +18,48 @@ importers:
         specifier: ^4.1.2
         version: 4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(jsdom@29.0.2)(vite@8.0.5(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
+  adapters/provider-claude:
+    dependencies:
+      '@oscorpex/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@oscorpex/provider-sdk':
+        specifier: workspace:*
+        version: link:../../packages/provider-sdk
+    devDependencies:
+      tsdown:
+        specifier: ^0.15.2
+        version: 0.15.12(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
+  adapters/provider-codex:
+    dependencies:
+      '@oscorpex/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+    devDependencies:
+      tsdown:
+        specifier: ^0.15.2
+        version: 0.15.12(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
+  adapters/provider-cursor:
+    dependencies:
+      '@oscorpex/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+    devDependencies:
+      tsdown:
+        specifier: ^0.15.2
+        version: 0.15.12(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   apps/console:
     dependencies:
       '@tailwindcss/vite':
@@ -144,6 +186,15 @@ importers:
       '@oscorpex/policy-kit':
         specifier: workspace:*
         version: link:../../packages/policy-kit
+      '@oscorpex/provider-claude':
+        specifier: workspace:*
+        version: link:../../adapters/provider-claude
+      '@oscorpex/provider-codex':
+        specifier: workspace:*
+        version: link:../../adapters/provider-codex
+      '@oscorpex/provider-cursor':
+        specifier: workspace:*
+        version: link:../../adapters/provider-cursor
       '@oscorpex/provider-sdk':
         specifier: workspace:*
         version: link:../../packages/provider-sdk

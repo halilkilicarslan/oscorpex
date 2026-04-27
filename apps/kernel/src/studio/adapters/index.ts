@@ -1,3 +1,6 @@
-export { ClaudeCodeAdapter } from "./provider-claude-code.js";
-export { CodexAdapter } from "./provider-codex.js";
-export { CursorAdapter } from "./provider-cursor.js";
+// Adapter barrel — re-exports from workspace packages
+// Kernel-local implementations have been extracted to standalone packages.
+
+export { ClaudeCodeAdapter } from "@oscorpex/provider-claude";
+export { CodexAdapter } from "@oscorpex/provider-codex";
+export { CursorAdapter } from "@oscorpex/provider-cursor";

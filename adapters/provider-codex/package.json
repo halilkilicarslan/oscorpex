@@ -1,0 +1,19 @@
+{
+  "name": "@oscorpex/provider-codex",
+  "version": "0.1.0",
+  "description": "Codex provider adapter for Oscorpex",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@oscorpex/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "^0.15.2",
+    "typescript": "^5.7.3"
+  }
+}
