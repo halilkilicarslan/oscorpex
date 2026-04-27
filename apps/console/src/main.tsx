@@ -27,6 +27,7 @@ const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const FeedbacksPage = lazy(() => import('./pages/FeedbacksPage'));
 const TriggersPage = lazy(() => import('./pages/TriggersPage'));
 const RagPage = lazy(() => import('./pages/RagPage'));
+const ControlPlanePage = lazy(() => import('./pages/studio/ControlPlanePage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 
@@ -137,6 +138,14 @@ createRoot(document.getElementById('root')!).render(
                   element={
                     <ProtectedRoute>
                       <AdminSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/studio/control-plane"
+                  element={
+                    <ProtectedRoute>
+                      <ControlPlanePage />
                     </ProtectedRoute>
                   }
                 />

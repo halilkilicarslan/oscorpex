@@ -84,6 +84,7 @@ const sections: NavSection[] = [
       { to: '/studio/providers/compare', label: 'Compare', icon: <BarChart3 size={18} />, badge: 'New' },
       { to: '/studio/cli-monitor', label: 'CLI Monitor', icon: <Terminal size={18} /> },
       { to: '/studio/telemetry', label: 'Telemetry', icon: <Radio size={18} />, badge: 'New' },
+      { to: '/studio/control-plane', label: 'Control Plane', icon: <Shield size={18} />, badge: 'New' },
       { to: '/studio/admin', label: 'Admin', icon: <Shield size={18} />, badge: 'New' },
     ],
   },
