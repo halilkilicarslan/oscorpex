@@ -71,6 +71,20 @@ Oscorpex is an AI-powered software development platform. Users describe an idea,
 - `prompt-builder.ts` — Task prompt assembly with RAG, context, error injection
 - `review-dispatcher.ts` — Review task lifecycle + agent resolution
 
+**Performance & scheduling** (EPIC 3 — 17 tasks):
+- `performance-config.ts` — Centralized tunables via env vars + feature flags (`OSCORPEX_PERF_FEATURES`)
+- `performance-metrics.ts` — Baseline aggregation endpoint (`GET /telemetry/performance/baseline`)
+- `health-cache.ts` — Binary availability TTL cache (provider-sdk)
+- `provider-runtime-cache.ts` — Availability + capability caches with invalidation
+- `fallback-decision.ts` — Severity-weighted skipping, cooldown-aware chain sorting
+- `provider-state.ts` — Trigger-aware cooldown (unavailable 30s, spawn_failure 60s, repeated_timeout 90s)
+- `timeout-policy.ts` — Provider × complexity × project multiplier timeout resolution
+- `adaptive-concurrency.ts` — Dynamic semaphore (1-10), auto-adjusts every 30s
+- `task-scheduler.ts` — Fair scheduling: short tasks first, then retry count, then FIFO
+- `retry-policy.ts` — Classification-aware retry with exponential backoff (max 3 retries)
+- `model-router.ts` — Cost-aware model selection with `decisionReason` telemetry
+- `preflight-warmup.ts` — Cold-start tracking + preflight health checks
+
 **Safety & correctness**:
 - `graph-coordinator.ts` — DAG mutations with `GraphInvariantError` (cycle DFS, self-edge, duplicate edge)
 - `sandbox-manager.ts` — Realpath + symlink hardened path checks, tool enforcement
@@ -113,8 +127,31 @@ All migrations use `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`.
 - **Pipeline advance**: `advanceStage()` checks for pending `replan_events` and blocks if any
 - **Budget**: `enforceBudgetGuard()` after token recording. Canonical key: `budget.maxCostUsd`
 - **Session lifecycle**: `initSession()` → `recordStep()` ×4 → `completeSession()`/`failSession()`
+- **Performance config**: All tunables live in `performance-config.ts`. Override via `OSCORPEX_*` env vars. Feature flags via `OSCORPEX_PERF_FEATURES` (comma-list or `-deny_list`).
 - **Formatting**: Tabs, 120 char line width (biome.json)
 - **Reserved ports**: 5173 (Vite), 4242 (preview), 3142 (WebSocket)
+
+## Performance Configuration
+
+All performance/scheduling subsystems read from `performance-config.ts`. Key environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSCORPEX_PERF_FEATURES` | *(all enabled)* | Gradual rollout flags. `"retryPolicy,timeoutPolicy"` = allow-list. `"-adaptiveConcurrency"` = deny-list. |
+| `OSCORPEX_MAX_CONCURRENT_TASKS` | 3 | Default adaptive semaphore max |
+| `OSCORPEX_ADJUSTMENT_INTERVAL_MS` | 30000 | Concurrency controller adjustment window |
+| `OSCORPEX_FAILURE_RATE_THRESHOLD` | 0.5 | Threshold to reduce concurrency |
+| `OSCORPEX_QUEUE_DEPTH_THRESHOLD` | 5 | Threshold to consider increasing concurrency |
+| `OSCORPEX_MAX_AUTO_RETRIES` | 3 | Max auto-retries per task |
+| `OSCORPEX_BASE_BACKOFF_MS` | 5000 | Retry backoff base (0 in test env) |
+| `OSCORPEX_TIMEOUT_S` / `_M` / `_L` / `_XL` | 1800000 / 1800000 / 2700000 / 3600000 | Complexity base timeouts (ms) |
+| `OSCORPEX_MULTIPLIER_CLAUDE` / `_CODEX` / `_CURSOR` | 1.0 / 1.2 / 1.1 | Provider timeout multipliers |
+| `OSCORPEX_COOLDOWN_UNAVAILABLE_MS` | 30000 | Cooldown duration for unavailable trigger |
+| `OSCORPEX_COOLDOWN_SPAWN_FAILURE_MS` | 60000 | Cooldown duration for spawn_failure trigger |
+| `OSCORPEX_COOLDOWN_REPEATED_TIMEOUT_MS` | 90000 | Cooldown duration for repeated_timeout trigger |
+| `OSCORPEX_AVAILABILITY_CACHE_TTL_MS` | 30000 | Health cache TTL for availability checks |
+| `OSCORPEX_CAPABILITY_CACHE_TTL_MS` | 300000 | Health cache TTL for capability checks |
+| `OSCORPEX_PREFLIGHT_ENABLED` | true | Enable preflight warm-up health checks |
 
 ## Constraints
 
