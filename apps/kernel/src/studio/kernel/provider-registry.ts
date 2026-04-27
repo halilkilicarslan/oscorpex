@@ -1,7 +1,13 @@
 // @oscorpex/kernel — Provider registry + execution adapter
 // Manages provider adapters and dispatches execution via the execution engine.
+// Integrates telemetry for fallback timeline, latency, cancel audit, and failure
+// classification (EPIC 3 — Provider Observability).
 
 import type { ProviderExecutionInput, ProviderExecutionResult, ProviderAdapter } from "@oscorpex/core";
+import {
+	ProviderTelemetryCollector,
+	classifyProviderError,
+} from "@oscorpex/provider-sdk";
 import { createLogger } from "../logger.js";
 import { ClaudeCodeAdapter, CodexAdapter, CursorAdapter } from "../adapters/index.js";
 
@@ -33,6 +39,8 @@ export class ProviderRegistry {
 	private adapters = new Map<string, ProviderAdapter>();
 	/** Active abort controllers keyed by runId:taskId */
 	private activeControllers = new Map<string, AbortController>();
+	/** Observability telemetry collector */
+	readonly telemetry = new ProviderTelemetryCollector();
 
 	private controllerKey(runId: string, taskId: string): string {
 		return `${runId}:${taskId}`;
@@ -57,6 +65,9 @@ export class ProviderRegistry {
 			throw new Error(`Provider "${providerId}" not found in registry`);
 		}
 
+		// Start telemetry for this execution
+		const telemetryRecord = this.telemetry.startExecution({ ...input, provider: providerId });
+
 		// Create an abort controller for this execution so cancel() can terminate it
 		const controller = new AbortController();
 		const key = this.controllerKey(input.runId, input.taskId);
@@ -64,18 +75,81 @@ export class ProviderRegistry {
 
 		try {
 			const result = await adapter.execute({ ...input, signal: controller.signal });
+			this.telemetry.finishExecution(telemetryRecord, result);
 			return result;
+		} catch (err) {
+			this.telemetry.finishExecution(telemetryRecord, null, err);
+			throw err;
 		} finally {
 			this.activeControllers.delete(key);
 		}
 	}
 
+	async executeWithFallback(
+		primaryId: string,
+		fallbackIds: string[],
+		input: ProviderExecutionInput,
+	): Promise<ProviderExecutionResult> {
+		const telemetryRecord = this.telemetry.startExecution({ ...input, provider: primaryId });
+		const chain = [primaryId, ...fallbackIds];
+		let lastError: unknown = null;
+
+		for (let i = 0; i < chain.length; i++) {
+			const providerId = chain[i]!;
+			const adapter = this.adapters.get(providerId);
+			if (!adapter) continue;
+
+			const startMs = Date.now();
+			const controller = new AbortController();
+			const key = this.controllerKey(input.runId, input.taskId);
+			this.activeControllers.set(key, controller);
+
+			try {
+				const result = await adapter.execute({ ...input, signal: controller.signal });
+				this.telemetry.finishExecution(telemetryRecord, result);
+				return result;
+			} catch (err) {
+				lastError = err;
+				const latencyMs = Date.now() - startMs;
+				const classification = classifyProviderError(err);
+				log.warn(
+					`[provider-registry] Provider "${providerId}" failed (${classification}) after ${latencyMs}ms for ${key}`,
+				);
+				if (i < chain.length - 1) {
+					this.telemetry.recordFallback(
+						telemetryRecord,
+						providerId,
+						chain[i + 1]!,
+						String(err instanceof Error ? err.message : err),
+						classification,
+						latencyMs,
+					);
+				}
+			} finally {
+				this.activeControllers.delete(key);
+			}
+		}
+
+		// All providers exhausted — record degraded mode
+		this.telemetry.recordDegraded(
+			telemetryRecord,
+			`All providers exhausted: ${chain.join(" → ")}`,
+		);
+		this.telemetry.finishExecution(telemetryRecord, null, lastError);
+		throw lastError ?? new Error("All providers exhausted — no provider available.");
+	}
+
 	async cancel(runId: string, taskId: string): Promise<void> {
 		const key = this.controllerKey(runId, taskId);
 		const controller = this.activeControllers.get(key);
+		const record = this.telemetry.getRecord(runId, taskId);
+
 		if (controller) {
 			controller.abort();
 			this.activeControllers.delete(key);
+			if (record) {
+				this.telemetry.recordCancel(record, "User/system-initiated cancel via registry");
+			}
 			log.info(`[provider-registry] Cancelled execution ${key}`);
 		} else {
 			log.warn(`[provider-registry] No active execution to cancel for ${key}`);

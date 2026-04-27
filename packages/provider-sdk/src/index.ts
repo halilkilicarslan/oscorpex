@@ -42,6 +42,19 @@ export { MODEL_PRICING, calculateCost, defaultModelForType } from "./cost.js";
 export { CANCEL_BEHAVIOR_MATRIX } from "./cancel-behavior.js";
 export type { CancelBehaviorEntry } from "./cancel-behavior.js";
 
+// Observability — telemetry, fallback timeline, latency, failure classification
+export type {
+	ProviderErrorClassification,
+	FallbackEntry,
+	ProviderExecutionTelemetry,
+	ProviderLatencySnapshot,
+} from "./observability.js";
+export {
+	classifyProviderError,
+	ProviderTelemetryCollector,
+	providerTelemetry,
+} from "./observability.js";
+
 // Re-export core errors that providers should throw
 export {
 	ProviderUnavailableError,
