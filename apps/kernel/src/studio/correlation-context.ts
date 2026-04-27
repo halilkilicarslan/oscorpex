@@ -47,3 +47,8 @@ export function getCorrelationIds(): { correlationId: string; causationId?: stri
 		causationId: store?.causationId,
 	};
 }
+
+/** Returns true if we are currently inside a correlation context. */
+export function hasCorrelationContext(): boolean {
+	return correlationStorage.getStore() !== undefined;
+}

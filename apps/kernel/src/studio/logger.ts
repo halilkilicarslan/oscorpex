@@ -1,6 +1,7 @@
 // ---------------------------------------------------------------------------
 // Oscorpex — Structured Logger
 // Wraps pino for JSON structured logging with child logger support.
+// Automatically injects correlationId from the active AsyncLocalStorage context.
 // Usage:
 //   import { createLogger } from "./logger.js";
 //   const log = createLogger("execution-engine");
@@ -9,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import pino from "pino";
+import { getCurrentCorrelationId, hasCorrelationContext } from "./correlation-context.js";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -25,10 +27,15 @@ const root = pino({
 
 /**
  * Create a child logger scoped to a module.
- * Adds `module` field to every log entry.
+ * Automatically injects correlationId from the active AsyncLocalStorage context
+ * when running inside an HTTP request or explicit correlation context.
  */
 export function createLogger(module: string): pino.Logger {
-	return root.child({ module });
+	const bindings: Record<string, unknown> = { module };
+	if (hasCorrelationContext()) {
+		bindings.correlationId = getCurrentCorrelationId();
+	}
+	return root.child(bindings);
 }
 
 /**
