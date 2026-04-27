@@ -107,3 +107,46 @@ describe("groupTasksByLane", () => {
 		expect(lanes[0]!.category).toBe("short");
 	});
 });
+
+describe("starvation prevention (TASK 4.3)", () => {
+	it("short tasks are never blocked behind 100 long tasks", () => {
+		const tasks: Task[] = [];
+		for (let i = 0; i < 100; i++) {
+			tasks.push(makeTask({ id: `long-${i}`, complexity: "XL", createdAt: new Date(Date.now() - 1000 - i).toISOString() }));
+		}
+		tasks.push(makeTask({ id: "short-0", complexity: "S", createdAt: new Date().toISOString() }));
+
+		const sorted = sortTasksByFairness(tasks);
+		expect(sorted[0]!.id).toBe("short-0");
+	});
+
+	it("short tasks dispatch before medium tasks regardless of arrival order", () => {
+		const tasks = [
+			makeTask({ id: "med-1", complexity: "M", createdAt: new Date(Date.now() - 1000).toISOString() }),
+			makeTask({ id: "short-1", complexity: "S", createdAt: new Date().toISOString() }),
+		];
+		const sorted = sortTasksByFairness(tasks);
+		expect(sorted[0]!.id).toBe("short-1");
+		expect(sorted[1]!.id).toBe("med-1");
+	});
+
+	it("within same category, older tasks go first", () => {
+		const tasks = [
+			makeTask({ id: "old-short", complexity: "S", createdAt: new Date(Date.now() - 5000).toISOString() }),
+			makeTask({ id: "new-short", complexity: "S", createdAt: new Date().toISOString() }),
+		];
+		const sorted = sortTasksByFairness(tasks);
+		expect(sorted[0]!.id).toBe("old-short");
+		expect(sorted[1]!.id).toBe("new-short");
+	});
+
+	it("fresh tasks dispatch before retried tasks of same category", () => {
+		const tasks = [
+			makeTask({ id: "retry", complexity: "S", retryCount: 2, createdAt: new Date(Date.now() - 1000).toISOString() }),
+			makeTask({ id: "fresh", complexity: "S", retryCount: 0, createdAt: new Date().toISOString() }),
+		];
+		const sorted = sortTasksByFairness(tasks);
+		expect(sorted[0]!.id).toBe("fresh");
+		expect(sorted[1]!.id).toBe("retry");
+	});
+});
