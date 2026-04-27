@@ -22,6 +22,7 @@ vi.mock("../provider-state.js", () => ({
 	providerState: {
 		isAvailable: vi.fn().mockReturnValue(true),
 		markRateLimited: vi.fn(),
+		markCooldown: vi.fn(),
 	},
 }));
 
@@ -181,8 +182,8 @@ describe("sortAdapterChain", () => {
 });
 
 describe("markProviderUnavailable", () => {
-	it("calls providerState.markRateLimited with 30s cooldown", () => {
+	it("calls providerState.markCooldown with unavailable trigger", () => {
 		markProviderUnavailable("codex");
-		expect(providerState.markRateLimited).toHaveBeenCalledWith("codex", 30_000);
+		expect(providerState.markCooldown).toHaveBeenCalledWith("codex", "unavailable");
 	});
 });

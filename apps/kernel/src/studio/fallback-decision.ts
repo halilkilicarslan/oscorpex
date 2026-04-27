@@ -155,7 +155,7 @@ export function sortAdapterChain(
  */
 export function markProviderUnavailable(adapterName: string): void {
 	log.info(`[fallback-decision] Marking ${adapterName} unavailable — 30s cooldown`);
-	providerState.markRateLimited(adapterName as import("./types.js").AgentCliTool, 30_000);
+	providerState.markCooldown(adapterName as import("./types.js").AgentCliTool, "unavailable");
 }
 
 // ---------------------------------------------------------------------------

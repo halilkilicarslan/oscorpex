@@ -930,7 +930,7 @@ class ExecutionEngine {
 						log.warn(`[execution] Rate limit on adapter "${adapter.name}" — marking cooldown.`);
 						providerState.markRateLimited(adapterName);
 					} else {
-						providerState.markFailure(adapterName);
+						providerState.markFailure(adapterName, classification);
 					}
 					log.warn(`[execution] Adapter "${adapter.name}" failed (${classification}, reason=${reason}): ${errMsg.slice(0, 200)}`);
 					// Telemetry lifecycle: FALLBACK (if next provider exists)

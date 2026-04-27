@@ -7,6 +7,7 @@ import type { AgentCliTool } from "./types.js";
 import { eventBus } from "./event-bus.js";
 import { query, execute as pgExec } from "./pg.js";
 import { providerRuntimeCache } from "./provider-runtime-cache.js";
+import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
 import { createLogger } from "./logger.js";
 const log = createLogger("provider-state");
 
@@ -14,13 +15,36 @@ const log = createLogger("provider-state");
 // Types
 // ---------------------------------------------------------------------------
 
+export type CooldownTrigger =
+	| "unavailable"
+	| "spawn_failure"
+	| "rate_limited"
+	| "repeated_timeout"
+	| "cli_error"
+	| "manual";
+
 export interface ProviderState {
 	adapter: AgentCliTool;
 	rateLimited: boolean;
 	cooldownUntil: Date | null;
 	consecutiveFailures: number;
 	lastSuccess: Date | null;
+	lastCooldownTrigger?: CooldownTrigger;
+	lastCooldownAt?: Date;
 }
+
+// ---------------------------------------------------------------------------
+// Cooldown durations per trigger (milliseconds)
+// ---------------------------------------------------------------------------
+
+const COOLDOWN_DURATIONS: Record<CooldownTrigger, number> = {
+	unavailable: 30_000,
+	spawn_failure: 60_000,
+	rate_limited: 60_000,
+	repeated_timeout: 90_000,
+	cli_error: 0, // no automatic cooldown for single cli errors
+	manual: 30_000,
+};
 
 // ---------------------------------------------------------------------------
 // ProviderStateManager
@@ -41,21 +65,43 @@ class ProviderStateManager {
 		}
 	}
 
-	markRateLimited(adapter: AgentCliTool, cooldownMs = 60_000): void {
+	// ---------------------------------------------------------------------------
+	// Cooldown entry points
+	// ---------------------------------------------------------------------------
+
+	/**
+	 * Puts provider into cooldown with a specific trigger classification.
+	 * Uses trigger-aware durations.
+	 */
+	markCooldown(adapter: AgentCliTool, trigger: CooldownTrigger, customMs?: number): void {
 		const state = this.states.get(adapter);
-		if (state) {
-			state.rateLimited = true;
-			state.cooldownUntil = new Date(Date.now() + cooldownMs);
-			// Invalidate runtime availability cache on cooldown start
-			providerRuntimeCache.invalidateAvailability(adapter, "cooldown_start");
-			// Emit provider:degraded event (v7.0 Section 13)
-			eventBus.emitTransient({
-				projectId: "__global__",
-				type: "provider:degraded",
-				payload: { provider: adapter, cooldownMs, reason: "rate_limited" },
-			});
-			this.persistToDb().catch((err) => log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
-		}
+		if (!state) return;
+
+		const durationMs = customMs ?? COOLDOWN_DURATIONS[trigger] ?? 30_000;
+		if (durationMs <= 0) return; // zero-duration triggers skip cooldown
+
+		state.rateLimited = true;
+		state.cooldownUntil = new Date(Date.now() + durationMs);
+		state.lastCooldownTrigger = trigger;
+		state.lastCooldownAt = new Date();
+
+		// Invalidate runtime availability cache on cooldown start
+		providerRuntimeCache.invalidateAvailability(adapter, "cooldown_start");
+
+		// Emit provider:degraded event with classification
+		eventBus.emitTransient({
+			projectId: "__global__",
+			type: "provider:degraded",
+			payload: { provider: adapter, cooldownMs: durationMs, reason: trigger },
+		});
+
+		log.info(`[provider-state] ${adapter} cooldown: ${trigger} (${durationMs}ms)`);
+		this.persistToDb().catch((err) => log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
+	}
+
+	/** Legacy alias — defaults to rate_limited trigger */
+	markRateLimited(adapter: AgentCliTool, cooldownMs = 60_000): void {
+		this.markCooldown(adapter, "rate_limited", cooldownMs);
 	}
 
 	markSuccess(adapter: AgentCliTool): void {
@@ -69,17 +115,29 @@ class ProviderStateManager {
 		}
 	}
 
-	markFailure(adapter: AgentCliTool): void {
+	markFailure(adapter: AgentCliTool, classification?: ProviderErrorClassification): void {
 		const state = this.states.get(adapter);
-		if (state) {
-			state.consecutiveFailures++;
-			// Invalidate runtime availability cache on failure
-			providerRuntimeCache.invalidateAvailability(adapter, "execution_failure");
-			if (state.consecutiveFailures >= 3) {
-				this.markRateLimited(adapter, 120_000);
-			} else {
-				this.persistToDb().catch((err) => log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
+		if (!state) return;
+
+		state.consecutiveFailures++;
+		providerRuntimeCache.invalidateAvailability(adapter, "execution_failure");
+
+		// TASK 6: Trigger cooldown based on classification
+		if (classification) {
+			if (classification === "spawn_failure") {
+				this.markCooldown(adapter, "spawn_failure");
+			} else if (classification === "unavailable") {
+				this.markCooldown(adapter, "unavailable");
+			} else if (classification === "timeout" && state.consecutiveFailures >= 3) {
+				this.markCooldown(adapter, "repeated_timeout");
 			}
+		}
+
+		// Legacy: after 3 failures of any kind, hard cooldown
+		if (state.consecutiveFailures >= 3) {
+			this.markCooldown(adapter, "cli_error", 120_000);
+		} else {
+			this.persistToDb().catch((err) => log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
 		}
 	}
 
@@ -88,8 +146,10 @@ class ProviderStateManager {
 		if (!state) return false;
 		if (!state.rateLimited) return true;
 		if (state.cooldownUntil && state.cooldownUntil <= new Date()) {
+			// Cooldown expired — clear state and invalidate cache so next check refreshes
 			state.rateLimited = false;
 			state.cooldownUntil = null;
+			providerRuntimeCache.invalidateAvailability(adapter, "cooldown_recheck");
 			return true;
 		}
 		return false;
@@ -161,6 +221,8 @@ class ProviderStateManager {
 				cooldown_until: string | null;
 				consecutive_failures: number;
 				last_success: string | null;
+				last_cooldown_trigger: string | null;
+				last_cooldown_at: string | null;
 			}>("SELECT * FROM provider_state");
 			for (const row of rows) {
 				const adapter = row.adapter as AgentCliTool;
@@ -172,6 +234,8 @@ class ProviderStateManager {
 				existing.cooldownUntil = stillCooling ? cooldownUntil : null;
 				existing.consecutiveFailures = row.consecutive_failures;
 				existing.lastSuccess = row.last_success ? new Date(row.last_success) : null;
+				existing.lastCooldownTrigger = (row.last_cooldown_trigger as CooldownTrigger) ?? undefined;
+				existing.lastCooldownAt = row.last_cooldown_at ? new Date(row.last_cooldown_at) : undefined;
 			}
 			log.info("[provider-state] Loaded state from DB");
 		} catch {
