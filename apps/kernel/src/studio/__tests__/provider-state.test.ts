@@ -148,4 +148,31 @@ describe("ProviderStateManager", () => {
 	it("unknown adapter returns false for isAvailable", () => {
 		expect(manager.isAvailable("unknown-provider" as any)).toBe(false);
 	});
+
+	it("cooldown durations are trigger-aware (TASK 9.2)", () => {
+		// unavailable trigger → 30s cooldown
+		manager.markRateLimited("claude-code", 30_000);
+		expect(manager.isAvailable("claude-code")).toBe(false);
+		vi.advanceTimersByTime(29_000);
+		expect(manager.isAvailable("claude-code")).toBe(false);
+		vi.advanceTimersByTime(2_000);
+		expect(manager.isAvailable("claude-code")).toBe(true);
+
+		// spawn_failure trigger → 60s cooldown
+		manager.markRateLimited("codex", 60_000);
+		expect(manager.isAvailable("codex")).toBe(false);
+		vi.advanceTimersByTime(59_000);
+		expect(manager.isAvailable("codex")).toBe(false);
+		vi.advanceTimersByTime(2_000);
+		expect(manager.isAvailable("codex")).toBe(true);
+	});
+
+	it("consecutive failures accumulate and reset on success", () => {
+		manager.markFailure("cursor");
+		expect(manager.getState("cursor")?.consecutiveFailures).toBe(1);
+		manager.markFailure("cursor");
+		expect(manager.getState("cursor")?.consecutiveFailures).toBe(2);
+		manager.markSuccess("cursor");
+		expect(manager.getState("cursor")?.consecutiveFailures).toBe(0);
+	});
 });

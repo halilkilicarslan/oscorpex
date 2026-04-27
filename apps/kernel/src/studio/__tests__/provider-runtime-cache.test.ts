@@ -166,6 +166,19 @@ describe("ProviderRuntimeCache", () => {
 			expect(stats.capabilityMisses).toBe(1);
 			expect(stats.capabilityHits).toBe(0);
 		});
+
+		it("hit ratio improves with repeated access (TASK 9.1)", async () => {
+			const checkFn = vi.fn().mockResolvedValue(true);
+			await providerRuntimeCache.resolveAvailability("p1", checkFn); // miss
+			await providerRuntimeCache.resolveAvailability("p1", checkFn); // hit
+			await providerRuntimeCache.resolveAvailability("p1", checkFn); // hit
+
+			const stats = providerRuntimeCache.getStats();
+			expect(stats.availabilityHits).toBe(2);
+			expect(stats.availabilityMisses).toBe(1);
+			const ratio = stats.availabilityHits / (stats.availabilityHits + stats.availabilityMisses);
+			expect(ratio).toBeGreaterThan(0.5);
+		});
 	});
 
 	describe("clear", () => {
