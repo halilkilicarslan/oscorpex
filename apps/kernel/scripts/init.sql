@@ -1779,3 +1779,29 @@ CREATE TABLE IF NOT EXISTS capability_snapshots (
   recorded_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_capability_snapshots_provider ON capability_snapshots(provider_id, recorded_at DESC);
+
+CREATE TABLE IF NOT EXISTS agent_presence (
+  agent_id      TEXT PRIMARY KEY REFERENCES agent_instances(id) ON DELETE CASCADE,
+  state         TEXT NOT NULL DEFAULT 'unknown',
+  last_heartbeat_at TIMESTAMPTZ,
+  payload       TEXT NOT NULL DEFAULT '{}',
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_agent_presence_state ON agent_presence(state);
+
+CREATE TABLE IF NOT EXISTS runtime_heartbeats (
+  id            TEXT PRIMARY KEY,
+  agent_id      TEXT,
+  provider_id   TEXT,
+  project_id    TEXT,
+  state         TEXT NOT NULL DEFAULT 'unknown',
+  payload       TEXT NOT NULL DEFAULT '{}',
+  recorded_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_runtime_heartbeats_agent ON runtime_heartbeats(agent_id, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runtime_heartbeats_provider ON runtime_heartbeats(provider_id, recorded_at DESC);
+
+-- Migration: remove FK constraints from runtime_heartbeats for flexible heartbeat recording
+ALTER TABLE runtime_heartbeats DROP CONSTRAINT IF EXISTS runtime_heartbeats_agent_id_fkey;
+ALTER TABLE runtime_heartbeats DROP CONSTRAINT IF EXISTS runtime_heartbeats_provider_id_fkey;
+ALTER TABLE runtime_heartbeats DROP CONSTRAINT IF EXISTS runtime_heartbeats_project_id_fkey;
