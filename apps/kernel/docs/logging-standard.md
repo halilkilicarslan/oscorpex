@@ -1,0 +1,91 @@
+# Oscorpex — Logging & Trace Standardization
+
+This document defines the conventions for structured logging across the Oscorpex kernel.
+
+## Logger Setup
+
+Every module must use Pino via the internal `createLogger` helper:
+
+```typescript
+import { createLogger } from "./logger.js";
+const log = createLogger("module-name");
+```
+
+The module name should be:
+- Lowercase with hyphens (e.g., `boot:db`, `provider-registry`, `replay-store`)
+- Hierarchical for boot phases: `boot:<phase>` (e.g., `boot:http`, `boot:replay`)
+
+## Log Levels
+
+| Level | Usage |
+|-------|-------|
+| `fatal` | System cannot continue (e.g., DB unreachable at boot) |
+| `error` | Operation failed but system continues (e.g., recovery phase failed) |
+| `warn` | Non-blocking anomaly (e.g., provider state load skipped) |
+| `info` | Normal lifecycle events (e.g., "HTTP server ready") |
+| `debug` | Detailed execution trace (disabled in production) |
+
+## Structured Log Fields
+
+### Required for every log
+- `level` — Pino level
+- `time` — ISO timestamp
+- `service` — Always `"oscorpex"`
+- `module` — Module name from `createLogger`
+
+### Contextual fields (add when relevant)
+- `projectId` — Project context
+- `runId` — Execution run context
+- `taskId` — Task context
+- `agentId` — Agent context
+- `provider` — Provider ID
+- `err` — Error object (always as first positional arg: `log.warn({ err }, "msg")`)
+
+## Patterns
+
+### Correct
+```typescript
+log.info("Checkpoint created for project %s at stage %s", projectId, stageIndex);
+log.warn({ err }, "Provider registry init skipped");
+log.error({ err }, "Startup recovery failed");
+```
+
+### Incorrect
+```typescript
+log.warn("msg", err);           // Pino type error — err must be in object
+log.info("Checkpoint created for project " + projectId);  // Avoid string concat
+```
+
+## Critical Events That Must Be Logged
+
+| Event | Level | Required Fields |
+|-------|-------|-----------------|
+| Boot start | info | `port` |
+| Boot complete | info | `port` |
+| DB bootstrap failure | fatal | `err` |
+| Provider registry init | info | `adapterCount` |
+| Task assigned | info | `taskId`, `agentId`, `projectId` |
+| Task completed | info | `taskId`, `agentId`, `projectId`, `durationMs` |
+| Task failed | error | `taskId`, `agentId`, `projectId`, `err` |
+| Pipeline stage completed | info | `projectId`, `stageIndex` |
+| Pipeline completed | info | `projectId`, `status` |
+| Budget warning | warn | `projectId`, `currentCost`, `limitCost` |
+| Budget exceeded | error | `projectId`, `currentCost`, `limitCost` |
+| Replay checkpoint created | info | `projectId`, `checkpoint` |
+| Replay restore requested | info | `projectId`, `runId`, `dryRun` |
+| Provider execution cancelled | info | `runId`, `taskId` |
+| Policy violation | warn | `projectId`, `taskId`, `violation` |
+| Sandbox violation | warn | `projectId`, `taskId`, `tool`, `reason` |
+
+## Correlation ID
+
+Currently correlation IDs are not propagated automatically. Future enhancement:
+- Add `correlationId` to event bus payloads
+- Include `correlationId` in all log entries within a request context
+- Expose `x-correlation-id` header in HTTP responses
+
+## Log Destination
+
+- **Development**: stdout (human-readable via `pino-pretty` if installed)
+- **Production**: stdout as structured JSON (ingested by log aggregator)
+- **Never** write logs to files inside the container
