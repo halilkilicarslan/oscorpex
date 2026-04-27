@@ -66,7 +66,7 @@ describe("FINAL INTEGRATION: All 8 closure tasks acceptance", () => {
 	});
 
 	it("Task 6: Cancel behavior matrix is documented", async () => {
-		const { CANCEL_BEHAVIOR_MATRIX } = await import("../../adapters/cancel-behavior.js");
+		const { CANCEL_BEHAVIOR_MATRIX } = await import("@oscorpex/provider-sdk");
 		expect(CANCEL_BEHAVIOR_MATRIX["claude-code"]).toBeDefined();
 		expect(CANCEL_BEHAVIOR_MATRIX["codex"]).toBeDefined();
 		expect(CANCEL_BEHAVIOR_MATRIX["cursor"]).toBeDefined();

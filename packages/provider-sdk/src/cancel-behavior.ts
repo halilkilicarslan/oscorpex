@@ -1,4 +1,4 @@
-// @oscorpex/kernel — Provider Cancel Behavior Matrix
+// @oscorpex/provider-sdk — Provider Cancel Behavior Matrix
 // Documents how each provider handles cancellation and what the registry does.
 //
 // | Provider      | supportsCancel | Registry Behavior               | Adapter Behavior                          |

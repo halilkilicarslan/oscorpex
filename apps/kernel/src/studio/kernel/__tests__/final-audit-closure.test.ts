@@ -95,7 +95,7 @@ describe("FINAL: Provider transitional audit", () => {
 	});
 
 	it("cancel behavior matrix documents all providers", async () => {
-		const { CANCEL_BEHAVIOR_MATRIX } = await import("../../adapters/cancel-behavior.js");
+		const { CANCEL_BEHAVIOR_MATRIX } = await import("@oscorpex/provider-sdk");
 		expect(CANCEL_BEHAVIOR_MATRIX["claude-code"]).toBeDefined();
 		expect(CANCEL_BEHAVIOR_MATRIX["claude-code"].supportsCancel).toBe(true);
 		expect(CANCEL_BEHAVIOR_MATRIX["codex"]).toBeDefined();
