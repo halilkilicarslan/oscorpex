@@ -288,6 +288,31 @@ router.get("/db-pool", (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Runtime Infra Debug Surface (EPIC 13)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /telemetry/runtime
+ * Active execution runtime state.
+ */
+router.get("/runtime", (c) => {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const engine = executionEngine as any;
+	return c.json({
+		runtime: {
+			dispatchingTaskCount: engine._dispatchingTasks?.size ?? 0,
+			activeControllerCount: engine._activeControllers?.size ?? 0,
+			semaphore: {
+				active: engine._semaphore?.activeCount ?? 0,
+				pending: engine._semaphore?.pendingCount ?? 0,
+				max: engine._semaphore?.maxConcurrency ?? 0,
+			},
+			workerId: engine._workerId,
+		},
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Performance Baseline (EPIC Performance)
 // ---------------------------------------------------------------------------
 
