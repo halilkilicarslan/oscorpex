@@ -44,6 +44,10 @@ import { replayRoutes } from "./replay-routes.js";
 import { cpRegistryRoutes } from "../control-plane/registry/registry-routes.js";
 import { cpPresenceRoutes } from "../control-plane/presence/presence-routes.js";
 import { cpApprovalRoutes } from "../control-plane/approvals/approval-routes.js";
+import { cpAuditRoutes } from "../control-plane/audit/audit-routes.js";
+import { cpUsageCostRoutes } from "../control-plane/usage-cost/usage-cost-routes.js";
+import { cpIncidentRoutes } from "../control-plane/incidents/incident-routes.js";
+import { cpProjectionRoutes } from "../control-plane/projections/projection-routes.js";
 
 const studio = new Hono();
 
@@ -154,6 +158,10 @@ studio.route("/", cliUsageRoutes);
 studio.route("/", cpRegistryRoutes);
 studio.route("/", cpPresenceRoutes);
 studio.route("/", cpApprovalRoutes);
+studio.route("/", cpAuditRoutes);
+studio.route("/", cpUsageCostRoutes);
+studio.route("/", cpIncidentRoutes);
+studio.route("/", cpProjectionRoutes);
 
 // YAGNI-deferred: marketplace, cluster, collaboration
 // Re-enable when needed.

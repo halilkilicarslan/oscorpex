@@ -1833,3 +1833,56 @@ CREATE TABLE IF NOT EXISTS approval_events (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_approval_events_approval ON approval_events(approval_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS audit_events (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  category      TEXT NOT NULL,
+  severity      TEXT NOT NULL DEFAULT 'info',
+  actor         TEXT NOT NULL DEFAULT '',
+  action        TEXT NOT NULL,
+  details       TEXT NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_events_category ON audit_events(category, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_events_severity ON audit_events(severity, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_events_project ON audit_events(project_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS security_events (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  event_type    TEXT NOT NULL,
+  severity      TEXT NOT NULL DEFAULT 'warning',
+  payload       TEXT NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_security_events_type ON security_events(event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_events_severity ON security_events(severity, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS incidents (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  type          TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'open',
+  title         TEXT NOT NULL,
+  description   TEXT NOT NULL DEFAULT '',
+  severity      TEXT NOT NULL DEFAULT 'warning',
+  acknowledged_by TEXT,
+  resolved_by   TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  acknowledged_at TIMESTAMPTZ,
+  resolved_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
+CREATE INDEX IF NOT EXISTS idx_incidents_project ON incidents(project_id);
+CREATE INDEX IF NOT EXISTS idx_incidents_type ON incidents(type);
+
+CREATE TABLE IF NOT EXISTS incident_events (
+  id            TEXT PRIMARY KEY,
+  incident_id   TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+  event_type    TEXT NOT NULL,
+  actor         TEXT NOT NULL DEFAULT '',
+  payload       TEXT NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_incident_events_incident ON incident_events(incident_id, created_at DESC);
