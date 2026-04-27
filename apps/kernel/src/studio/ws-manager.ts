@@ -48,7 +48,7 @@ export type WSMessageType =
 	| "subscribed" // Abone onayı
 	| "unsubscribed"; // Abonelik iptali onayı
 
-/** Bağlı client'ı temsil eden dahili kayıt */
+	/** Bağlı client'ı temsil eden dahili kayıt */
 interface ClientRecord {
 	ws: WebSocket;
 	/** Client'ın abone olduğu proje ID'leri */
@@ -63,6 +63,8 @@ interface ClientRecord {
 	 * Dolu = sadece bu tenant'ın projeleri için gelen event'ler iletilir.
 	 */
 	tenantId: string | null;
+	/** Correlation ID from the HTTP upgrade request (query param) */
+	correlationId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +157,7 @@ class WebSocketManager {
 				subscriptions: new Set(),
 				lastPong: Date.now(),
 				tenantId,
+				correlationId: (req as any).correlationId,
 			};
 			this.clients.set(ws, record);
 

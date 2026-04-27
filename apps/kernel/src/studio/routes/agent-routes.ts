@@ -421,6 +421,7 @@ agentRoutes.get("/projects/:id/agents/:agentId/stream", async (c) => {
 			"Cache-Control": "no-cache",
 			Connection: "keep-alive",
 			"X-Accel-Buffering": "no",
+			"x-correlation-id": c.req.header("x-correlation-id") ?? "",
 		},
 	});
 });

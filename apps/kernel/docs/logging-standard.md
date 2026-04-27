@@ -77,12 +77,30 @@ log.info("Checkpoint created for project " + projectId);  // Avoid string concat
 | Policy violation | warn | `projectId`, `taskId`, `violation` |
 | Sandbox violation | warn | `projectId`, `taskId`, `tool`, `reason` |
 
-## Correlation ID
+## Correlation ID (Implemented)
 
-Currently correlation IDs are not propagated automatically. Future enhancement:
-- Add `correlationId` to event bus payloads
-- Include `correlationId` in all log entries within a request context
-- Expose `x-correlation-id` header in HTTP responses
+Correlation ID propagation is active across the kernel:
+
+- **HTTP requests**: `x-correlation-id` header is read from incoming requests; generated if missing; always returned in response headers
+- **WebSocket connections**: `correlationId` query parameter is accepted and propagated through WebSocket events
+- **SSE streams**: `x-correlation-id` header is included in SSE response headers
+- **Event bus**: All events automatically carry `correlationId` and `causationId` from the async context
+- **Logger**: `createLogger()` automatically injects `correlationId` when inside an active correlation context
+- **Guaranteed header**: A fallback middleware ensures `x-correlation-id` is present even on error responses
+
+### Usage
+
+```typescript
+import { withCorrelation, getCurrentCorrelationId } from "./correlation-context.js";
+
+// Inside HTTP handlers — automatic (correlationMiddleware handles it)
+// Inside manual async flows:
+await withCorrelation(async () => {
+  const id = getCurrentCorrelationId();
+  log.info("Processing task %s", taskId);
+  // correlationId is automatically attached to this log entry
+}, "optional-fixed-id");
+```
 
 ## Log Destination
 

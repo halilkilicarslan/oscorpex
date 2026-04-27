@@ -49,6 +49,17 @@ export function startWSServer(): void {
 			return;
 		}
 
+		// Extract correlationId from query param for tracing WebSocket events
+		try {
+			const parsed = new URL(url, "http://localhost");
+			const correlationId = parsed.searchParams.get("correlationId");
+			if (correlationId) {
+				(req as any).correlationId = correlationId;
+			}
+		} catch {
+			// ignore parse errors
+		}
+
 		wsManager.handleUpgrade(req, socket, head);
 	});
 

@@ -8,6 +8,7 @@ import { cors } from "hono/cors";
 import { budgetGuard } from "../middleware/policy-middleware.js";
 import { authMiddleware } from "../auth/auth-middleware.js";
 import { correlationMiddleware } from "../middleware/correlation-middleware.js";
+import { guaranteedCorrelationHeader } from "../middleware/guaranteed-correlation-header.js";
 
 import { agentRoutes } from "./agent-routes.js";
 import { costRoutes } from "./cost-routes.js";
@@ -65,6 +66,7 @@ studio.use(
 // Correlation ID — propagate request tracing across logs and events
 // ---------------------------------------------------------------------------
 studio.use("*", correlationMiddleware);
+studio.use("*", guaranteedCorrelationHeader);
 
 // ---------------------------------------------------------------------------
 // Auth middleware — Bearer token (opt-in via OSCORPEX_API_KEY env var)
