@@ -239,6 +239,26 @@ export function getPreflightConfig(): PreflightConfig {
 }
 
 // ---------------------------------------------------------------------------
+// DB Pool config
+// ---------------------------------------------------------------------------
+
+export interface DbPoolConfig {
+	minConnections: number;
+	maxConnections: number;
+	idleTimeoutMs: number;
+	acquireTimeoutMs: number;
+}
+
+export function getDbPoolConfig(): DbPoolConfig {
+	return {
+		minConnections: Math.max(0, Number(process.env.OSCORPEX_DB_POOL_MIN) || 2),
+		maxConnections: Math.max(1, Number(process.env.OSCORPEX_DB_POOL_MAX) || 20),
+		idleTimeoutMs: Math.max(1_000, Number(process.env.OSCORPEX_DB_IDLE_TIMEOUT_MS) || 30_000),
+		acquireTimeoutMs: Math.max(1_000, Number(process.env.OSCORPEX_DB_ACQUIRE_TIMEOUT_MS) || 5_000),
+	};
+}
+
+// ---------------------------------------------------------------------------
 // Full config snapshot (for telemetry / debugging)
 // ---------------------------------------------------------------------------
 
@@ -251,6 +271,7 @@ export interface PerformanceConfigSnapshot {
 	fallback: FallbackConfig;
 	healthCache: HealthCacheConfig;
 	preflight: PreflightConfig;
+	dbPool: DbPoolConfig;
 }
 
 export function getPerformanceConfigSnapshot(): PerformanceConfigSnapshot {
@@ -263,6 +284,7 @@ export function getPerformanceConfigSnapshot(): PerformanceConfigSnapshot {
 		fallback: getFallbackConfig(),
 		healthCache: getHealthCacheConfig(),
 		preflight: getPreflightConfig(),
+		dbPool: getDbPoolConfig(),
 	};
 }
 
@@ -281,4 +303,5 @@ export function logPerformanceConfig(): void {
 	log.info(`  retryPolicy: maxRetries=${snap.retryPolicy.maxAutoRetries}, baseBackoff=${snap.retryPolicy.baseBackoffMs}ms`);
 	log.info(`  timeoutPolicy: S=${snap.timeoutPolicy.complexityBaseMs.S}ms, M=${snap.timeoutPolicy.complexityBaseMs.M}ms, L=${snap.timeoutPolicy.complexityBaseMs.L}ms, XL=${snap.timeoutPolicy.complexityBaseMs.XL}ms`);
 	log.info(`  cooldown: unavailable=${snap.cooldown.durationsMs.unavailable}ms, spawn_failure=${snap.cooldown.durationsMs.spawn_failure}ms`);
+	log.info(`  dbPool: min=${snap.dbPool.minConnections}, max=${snap.dbPool.maxConnections}, idleTimeout=${snap.dbPool.idleTimeoutMs}ms, acquireTimeout=${snap.dbPool.acquireTimeoutMs}ms`);
 }

@@ -12,6 +12,7 @@ import {
 	getFallbackConfig,
 	getHealthCacheConfig,
 	getPreflightConfig,
+	getDbPoolConfig,
 	getPerformanceConfigSnapshot,
 	logPerformanceConfig,
 	type PerformanceFeatureFlags,
@@ -247,6 +248,46 @@ describe("getPreflightConfig", () => {
 // Snapshot
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// DB Pool config
+// ---------------------------------------------------------------------------
+
+describe("getDbPoolConfig", () => {
+	it("returns defaults", () => {
+		const cfg = withEnv("OSCORPEX_DB_POOL_MAX", undefined, () =>
+			withEnv("OSCORPEX_DB_POOL_MIN", undefined, getDbPoolConfig),
+		);
+		expect(cfg.minConnections).toBe(2);
+		expect(cfg.maxConnections).toBe(20);
+		expect(cfg.idleTimeoutMs).toBe(30_000);
+		expect(cfg.acquireTimeoutMs).toBe(5_000);
+	});
+
+	it("reads OSCORPEX_DB_POOL_MAX", () => {
+		const cfg = withEnv("OSCORPEX_DB_POOL_MAX", "50", getDbPoolConfig);
+		expect(cfg.maxConnections).toBe(50);
+	});
+
+	it("reads OSCORPEX_DB_POOL_MIN", () => {
+		const cfg = withEnv("OSCORPEX_DB_POOL_MIN", "5", getDbPoolConfig);
+		expect(cfg.minConnections).toBe(5);
+	});
+
+	it("clamps negative max to 1", () => {
+		const cfg = withEnv("OSCORPEX_DB_POOL_MAX", "-5", getDbPoolConfig);
+		expect(cfg.maxConnections).toBe(1);
+	});
+
+	it("clamps negative min to 0", () => {
+		const cfg = withEnv("OSCORPEX_DB_POOL_MIN", "-3", getDbPoolConfig);
+		expect(cfg.minConnections).toBe(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Snapshot
+// ---------------------------------------------------------------------------
+
 describe("getPerformanceConfigSnapshot", () => {
 	it("returns a complete snapshot with all subsystems", () => {
 		const snap = getPerformanceConfigSnapshot();
@@ -258,6 +299,7 @@ describe("getPerformanceConfigSnapshot", () => {
 		expect(snap.fallback).toBeDefined();
 		expect(snap.healthCache).toBeDefined();
 		expect(snap.preflight).toBeDefined();
+		expect(snap.dbPool).toBeDefined();
 	});
 });
 
