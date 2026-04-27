@@ -1805,3 +1805,31 @@ CREATE INDEX IF NOT EXISTS idx_runtime_heartbeats_provider ON runtime_heartbeats
 ALTER TABLE runtime_heartbeats DROP CONSTRAINT IF EXISTS runtime_heartbeats_agent_id_fkey;
 ALTER TABLE runtime_heartbeats DROP CONSTRAINT IF EXISTS runtime_heartbeats_provider_id_fkey;
 ALTER TABLE runtime_heartbeats DROP CONSTRAINT IF EXISTS runtime_heartbeats_project_id_fkey;
+
+CREATE TABLE IF NOT EXISTS approvals (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  kind          TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'pending',
+  title         TEXT NOT NULL,
+  description   TEXT NOT NULL DEFAULT '',
+  requested_by  TEXT NOT NULL DEFAULT '',
+  approved_by   TEXT,
+  rejected_by   TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at   TIMESTAMPTZ,
+  expires_at    TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '24 hours')
+);
+CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
+CREATE INDEX IF NOT EXISTS idx_approvals_project ON approvals(project_id);
+CREATE INDEX IF NOT EXISTS idx_approvals_expires ON approvals(expires_at);
+
+CREATE TABLE IF NOT EXISTS approval_events (
+  id            TEXT PRIMARY KEY,
+  approval_id   TEXT NOT NULL REFERENCES approvals(id) ON DELETE CASCADE,
+  event_type    TEXT NOT NULL,
+  actor         TEXT NOT NULL DEFAULT '',
+  payload       TEXT NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_approval_events_approval ON approval_events(approval_id, created_at DESC);

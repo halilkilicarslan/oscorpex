@@ -43,6 +43,7 @@ import { sandboxRoutes } from "./sandbox-routes.js";
 import { replayRoutes } from "./replay-routes.js";
 import { cpRegistryRoutes } from "../control-plane/registry/registry-routes.js";
 import { cpPresenceRoutes } from "../control-plane/presence/presence-routes.js";
+import { cpApprovalRoutes } from "../control-plane/approvals/approval-routes.js";
 
 const studio = new Hono();
 
@@ -152,6 +153,7 @@ studio.route("/", cliUsageRoutes);
 // Control Plane — Phase 1
 studio.route("/", cpRegistryRoutes);
 studio.route("/", cpPresenceRoutes);
+studio.route("/", cpApprovalRoutes);
 
 // YAGNI-deferred: marketplace, cluster, collaboration
 // Re-enable when needed.
