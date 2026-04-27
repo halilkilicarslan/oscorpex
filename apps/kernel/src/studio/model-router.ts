@@ -18,6 +18,7 @@ export interface ResolvedModel {
 	model: string;
 	effort: "low" | "medium" | "high";
 	cliTool?: AgentCliTool;
+	decisionReason?: string;
 }
 
 // Complexity tiers in order — used for escalation arithmetic
@@ -90,6 +91,69 @@ function effortForTier(tier: Tier): ResolvedModel["effort"] {
 }
 
 // ---------------------------------------------------------------------------
+// Cost-aware selection (TASK 11)
+// ---------------------------------------------------------------------------
+
+/** Relative cost score — higher = more expensive */
+const MODEL_COST_SCORES: Record<string, number> = {
+	"gpt-4o-mini": 1,
+	"claude-haiku-4-5-20251001": 2,
+	"cursor-small": 2,
+	"gpt-4o": 5,
+	"claude-sonnet-4-6": 6,
+	"cursor-large": 6,
+	"o3": 8,
+	"claude-opus-4-6": 10,
+};
+
+/** Models available per provider, sorted by cost ascending */
+const PROVIDER_MODELS_BY_COST: Record<string, string[]> = {
+	anthropic: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"],
+	openai: ["gpt-4o-mini", "gpt-4o", "o3"],
+	cursor: ["cursor-small", "cursor-large"],
+};
+
+function getCostScore(model: string): number {
+	return MODEL_COST_SCORES[model] ?? 5;
+}
+
+/**
+ * For low-risk tasks, attempts to select a cheaper model within the same provider.
+ * Returns the cheapest model that still meets the tier requirement.
+ */
+function selectCostAwareModel(
+	provider: string,
+	tier: Tier,
+	baseModel: string,
+	priorFailures: number,
+): { model: string; reason: string } {
+	const models = PROVIDER_MODELS_BY_COST[provider] ?? [baseModel];
+	const baseScore = getCostScore(baseModel);
+
+	// If there were prior failures, don't downgrade — stick with base model
+	if (priorFailures > 0) {
+		return { model: baseModel, reason: `quality_preserve (priorFailures=${priorFailures})` };
+	}
+
+	// High tier tasks don't get downgraded
+	if (tier === "L" || tier === "XL") {
+		return { model: baseModel, reason: `quality_first (tier=${tier})` };
+	}
+
+	// For S/M tiers with no failures, prefer cheapest available model
+	const cheapest = models[0];
+	if (cheapest && cheapest !== baseModel) {
+		const saved = baseScore - getCostScore(cheapest);
+		return {
+			model: cheapest,
+			reason: `cost_optimize (saved=${saved}pts, tier=${tier})`,
+		};
+	}
+
+	return { model: baseModel, reason: `default (no cheaper alternative)` };
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -155,7 +219,9 @@ export async function resolveModel(
 
 	if (resolvedCliTool === "codex") {
 		const codexModels: Record<Tier, string> = { S: "gpt-4o-mini", M: "gpt-4o", L: "o3", XL: "o3" };
-		return { provider: "openai", model: codexModels[tier] ?? "gpt-4o", effort, cliTool: resolvedCliTool };
+		const baseModel = codexModels[tier] ?? "gpt-4o";
+		const { model, reason } = selectCostAwareModel("openai", tier, baseModel, priorFailures);
+		return { provider: "openai", model, effort, cliTool: resolvedCliTool, decisionReason: reason };
 	}
 
 	if (resolvedCliTool === "cursor") {
@@ -165,10 +231,14 @@ export async function resolveModel(
 			L: "cursor-large",
 			XL: "cursor-large",
 		};
-		return { provider: "cursor", model: cursorModels[tier] ?? "cursor-small", effort, cliTool: resolvedCliTool };
+		const baseModel = cursorModels[tier] ?? "cursor-small";
+		const { model, reason } = selectCostAwareModel("cursor", tier, baseModel, priorFailures);
+		return { provider: "cursor", model, effort, cliTool: resolvedCliTool, decisionReason: reason };
 	}
 
 	// Default: anthropic
-	const model = routingConfig[tier] ?? routingConfig["M"] ?? "claude-sonnet-4-6";
-	return { provider: "anthropic", model, effort, cliTool: resolvedCliTool };
+	const baseModel = routingConfig[tier] ?? routingConfig["M"] ?? "claude-sonnet-4-6";
+	const { model, reason } = selectCostAwareModel("anthropic", tier, baseModel, priorFailures);
+	log.info(`[model-router] ${task.id} → ${model} (${reason})`);
+	return { provider: "anthropic", model, effort, cliTool: resolvedCliTool, decisionReason: reason };
 }

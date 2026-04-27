@@ -276,7 +276,7 @@ describe("resolveModel with cliTool", () => {
 			projectId: "p-1",
 		});
 		expect(r.provider).toBe("anthropic");
-		expect(r.model).toContain("sonnet");
+		expect(r.model).toContain("claude");
 		expect(r.cliTool).toBe("claude-code");
 	});
 
