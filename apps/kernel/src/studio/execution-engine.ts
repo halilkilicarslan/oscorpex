@@ -73,6 +73,11 @@ import {
 	getFallbackSeverity,
 } from "./fallback-decision.js";
 import { resolveTaskTimeoutMs, TIMEOUT_WARNING_THRESHOLD } from "./timeout-policy.js";
+import {
+	AdaptiveSemaphore,
+	ConcurrencyTracker,
+	AdaptiveConcurrencyController,
+} from "./adaptive-concurrency.js";
 import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import {
 	startProviderTelemetry,
@@ -177,41 +182,8 @@ class TaskTimeoutError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Semaphore — limits concurrent CLI process executions
-// ---------------------------------------------------------------------------
-
-class Semaphore {
-	private current = 0;
-	private queue: (() => void)[] = [];
-	constructor(private max: number) {}
-	async acquire(): Promise<void> {
-		if (this.current < this.max) {
-			this.current++;
-			return;
-		}
-		return new Promise<void>((resolve) => this.queue.push(resolve));
-	}
-	release(): void {
-		this.current--;
-		const next = this.queue.shift();
-		if (next) {
-			this.current++;
-			next();
-		}
-	}
-	get activeCount(): number {
-		return this.current;
-	}
-	get pendingCount(): number {
-		return this.queue.length;
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Execution Engine
 // ---------------------------------------------------------------------------
-
-const MAX_CONCURRENT_TASKS = Number(process.env.OSCORPEX_MAX_CONCURRENT_TASKS) || 3;
 
 class ExecutionEngine {
 	/** Guard: prevents the same task from being dispatched concurrently */
@@ -220,8 +192,14 @@ class ExecutionEngine {
 	/** Active AbortControllers for running tasks, keyed by `projectId:taskId` */
 	private _activeControllers = new Map<string, AbortController>();
 
-	/** Semaphore limiting concurrent CLI executions */
-	private _semaphore = new Semaphore(MAX_CONCURRENT_TASKS);
+	/** Adaptive semaphore limiting concurrent CLI executions */
+	private _semaphore = new AdaptiveSemaphore();
+
+	/** Per-project / per-provider concurrency tracker */
+	private _concurrencyTracker = new ConcurrencyTracker();
+
+	/** Adaptive concurrency controller (adjusts max based on health signals) */
+	private _concurrencyController: AdaptiveConcurrencyController;
 
 	/** Provider execution telemetry collector (EPIC 3 observability) */
 	readonly telemetry = new ProviderTelemetryCollector();
@@ -233,6 +211,18 @@ class ExecutionEngine {
 		// Ready-task dispatch is handled explicitly at the end of task execution.
 		// Avoiding an onTaskCompleted callback here prevents duplicate dispatch
 		// races with the inline dispatch path.
+
+		// TASK 8: Adaptive concurrency controller
+		this._concurrencyController = new AdaptiveConcurrencyController(
+			this._semaphore,
+			() => {
+				const snap = this.telemetry.getLatencySnapshot("global");
+				const total = (snap?.successfulExecutions ?? 0) + (snap?.failedExecutions ?? 0);
+				return total > 0 ? (snap?.failedExecutions ?? 0) / total : 0;
+			},
+			() => this._semaphore.pendingCount,
+		);
+		this._concurrencyController.start();
 	}
 
 	// -------------------------------------------------------------------------
@@ -1389,7 +1379,7 @@ class ExecutionEngine {
 			concurrency: {
 				active: this._semaphore.activeCount,
 				pending: this._semaphore.pendingCount,
-				max: MAX_CONCURRENT_TASKS,
+				max: this._semaphore.maxConcurrency,
 			},
 		};
 	}
