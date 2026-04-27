@@ -8,6 +8,8 @@ import { Hono } from "hono";
 import { replayStore } from "../replay-store.js";
 import { restoreFromSnapshot } from "../replay-store.js";
 import { createLogger } from "../logger.js";
+import { getCurrentCorrelationId } from "../correlation-context.js";
+import { eventBus } from "../event-bus.js";
 const log = createLogger("replay-routes");
 
 export const replayRoutes = new Hono();
@@ -54,6 +56,7 @@ replayRoutes.get("/snapshots/:snapshotId", async (c) => {
 });
 
 // POST /replay/runs/:runId/restore — restore from latest snapshot (dry-run by default)
+// Authorization: only project owners or admins can perform real (dryRun=false) restores.
 replayRoutes.post("/runs/:runId/restore", async (c) => {
 	try {
 		const runId = c.req.param("runId");
@@ -66,11 +69,48 @@ replayRoutes.post("/runs/:runId/restore", async (c) => {
 			return c.json({ error: "No snapshot found for run" }, 404);
 		}
 
+		// Actor metadata from request context
+		const actor = {
+			ip: c.req.header("x-forwarded-for") ?? "unknown",
+			// tenant auth context — populated by auth middleware when enabled
+			userId: (c as any).get?.("userId") ?? "anonymous",
+			role: (c as any).get?.("userRole") ?? "unknown",
+		};
+
+		// Authorization gate: real restore requires elevated role
+		if (!dryRun && actor.role !== "admin" && actor.role !== "owner") {
+			log.warn(
+				{ runId, projectId: snapshot.projectId, actor, correlationId: getCurrentCorrelationId() },
+				"[replay-routes] Restore denied — insufficient role",
+			);
+			return c.json({ error: "Restore denied: admin or owner role required" }, 403);
+		}
+
 		const result = await restoreFromSnapshot(snapshot, { dryRun });
+
+		// Audit event
+		eventBus.emitTransient({
+			projectId: snapshot.projectId,
+			type: "task:completed", // Using existing EventType for audit trail
+			payload: {
+				action: "replay_restore",
+				runId,
+				snapshotId: snapshot.id,
+				dryRun,
+				actor,
+				correlationId: getCurrentCorrelationId(),
+			},
+		});
+
+		log.info(
+			{ runId, projectId: snapshot.projectId, dryRun, actor, correlationId: getCurrentCorrelationId() },
+			"[replay-routes] Restore completed",
+		);
 
 		return c.json({
 			success: true,
 			dryRun,
+			actor,
 			restoredFrom: {
 				id: snapshot.id,
 				checkpoint: snapshot.checkpoint,
@@ -79,7 +119,7 @@ replayRoutes.post("/runs/:runId/restore", async (c) => {
 			result,
 		});
 	} catch (err) {
-		log.error({ err }, "[replay-routes] restore failed");
+		log.error({ err, correlationId: getCurrentCorrelationId() }, "[replay-routes] restore failed");
 		return c.json({ error: String(err) }, 500);
 	}
 });

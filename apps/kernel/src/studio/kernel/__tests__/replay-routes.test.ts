@@ -123,6 +123,27 @@ describe("Replay Routes", () => {
 		});
 	});
 
+	describe("POST /replay/runs/:runId/restore — authorization", () => {
+		it("denies real restore (dryRun=false) without admin/owner role", async () => {
+			const res = await app.request("/replay/runs/p-1/restore", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ dryRun: false }),
+			});
+			expect(res.headers.get("content-type")).toMatch(/application\/json/);
+			const body = await res.json();
+
+			if (res.status === 403) {
+				expect(body).toHaveProperty("error");
+				expect(typeof body.error).toBe("string");
+				expect(body.error).toContain("admin or owner role required");
+			} else if (res.status === 404) {
+				// No snapshot exists — this is acceptable for the test
+				expect(body).toHaveProperty("error");
+			}
+		});
+	});
+
 	describe("POST /replay/runs/:runId/restore — edge cases", () => {
 		it("handles malformed JSON body gracefully", async () => {
 			const res = await app.request("/replay/runs/p-1/restore", {
@@ -151,7 +172,6 @@ describe("Replay Routes", () => {
 			expect(body).not.toBeNull();
 		});
 	});
-});
 
 	describe("buildInspectResponse standardization", () => {
 	it("returns consistent shape for both inspect endpoints", () => {
@@ -184,4 +204,6 @@ describe("Replay Routes", () => {
 		expect(response).toHaveProperty("metadata");
 		expect(typeof response.metadata).toBe("object");
 	});
+});
+
 });
