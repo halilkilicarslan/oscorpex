@@ -169,7 +169,7 @@ describe("Execution Engine Provider Telemetry", () => {
 			isAvailable: async () => true,
 			capabilities: async () => ({
 				supportedModels: ["cursor-small"],
-				supportsToolRestriction: false,
+				supportsToolRestriction: true, // mocked true for telemetry test
 				supportsStreaming: false,
 				supportsResume: false,
 				supportsCancel: true,

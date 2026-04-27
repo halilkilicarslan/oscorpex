@@ -66,6 +66,12 @@ import { execute as pgExecute, queryOne as pgQueryOne } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { providerState } from "./provider-state.js";
 import { providerRuntimeCache } from "./provider-runtime-cache.js";
+import {
+	shouldSkipProvider,
+	sortAdapterChain,
+	markProviderUnavailable,
+	getFallbackSeverity,
+} from "./fallback-decision.js";
 import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import {
 	startProviderTelemetry,
@@ -804,9 +810,23 @@ class ExecutionEngine {
 			}
 
 			// M4: Adapter fallback chain — primary + fallback providers
-			const adapterChain = getAdapterChain(primaryCliTool, ["claude-code", "cursor"]);
+			let adapterChain = getAdapterChain(primaryCliTool, ["claude-code", "cursor"]);
+
+			// TASK 5: Sort chain by telemetry-based priority
+			adapterChain = sortAdapterChain(adapterChain, (providerId) => {
+				const snap = this.telemetry.getLatencySnapshot(providerId);
+				if (!snap) return undefined;
+				const total = snap.successfulExecutions + snap.failedExecutions;
+				return {
+					successRate: total > 0 ? snap.successfulExecutions / total : 0.5,
+					avgLatencyMs: snap.averageLatencyMs,
+				};
+			});
+
 			let cliResult: Awaited<ReturnType<(typeof adapterChain)[0]["execute"]>> | null = null;
 			let lastAdapterError: Error | null = null;
+			let lastFailureProvider: string | undefined;
+			let lastFailureClassification: import("@oscorpex/provider-sdk").ProviderErrorClassification | undefined;
 
 			// --- Telemetry lifecycle: START ---
 			telemetryRecord = startProviderTelemetry(this.telemetry, {
@@ -833,6 +853,17 @@ class ExecutionEngine {
 				const adapter = adapterChain[i]!;
 				const adapterName = adapter.name as import("./types.js").AgentCliTool;
 
+				// TASK 5: Smart provider skipping
+				const skipCheck = await shouldSkipProvider(adapter, {
+					allowedTools,
+					lastFailureProvider,
+					lastFailureClassification,
+				});
+				if (skipCheck.shouldSkip) {
+					log.info(`[execution] Adapter "${adapter.name}" skipped: ${skipCheck.reason}`);
+					continue;
+				}
+
 				if (!providerState.isAvailable(adapterName)) {
 					log.info(`[execution] Adapter "${adapter.name}" is in cooldown, skipping.`);
 					continue;
@@ -847,6 +878,7 @@ class ExecutionEngine {
 
 				if (!adapterReady) {
 					log.info(`[execution] Adapter "${adapter.name}" is not installed, skipping.`);
+					markProviderUnavailable(adapter.name);
 					continue;
 				}
 
@@ -892,6 +924,8 @@ class ExecutionEngine {
 					const errMsg = lastAdapterError.message;
 					const latencyMs = Date.now() - adapterStartMs;
 					const { classification, reason } = classifyProviderErrorWithReason(adapterErr);
+					lastFailureProvider = adapter.name;
+					lastFailureClassification = classification;
 					if (isRateLimitError(errMsg)) {
 						log.warn(`[execution] Rate limit on adapter "${adapter.name}" — marking cooldown.`);
 						providerState.markRateLimited(adapterName);
