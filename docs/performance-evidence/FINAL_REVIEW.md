@@ -79,9 +79,9 @@
 
 | Category | Tests |
 |----------|-------|
-| Original EPIC 3 | 1,329 passed |
-| Mini tasks additions | +42 tests |
-| **Total** | **1,371 passed** |
+| Total kernel tests | **1,384 passed** |
+| Skipped | 5 |
+| Test files | 102 |
 
 ---
 
@@ -89,7 +89,7 @@
 
 ```
 docs/performance-evidence/
-├── INDEX.md                           # This index
+├── INDEX.md                           # Evidence index
 ├── FINAL_REVIEW.md                    # This review
 ├── 01-baseline.md                     # Pre-optimization metrics
 ├── 02-final-benchmark.md              # Post-optimization metrics
@@ -108,8 +108,15 @@ docs/performance-evidence/
 ## Verification
 
 ```bash
-# All tests
+# Kernel tests
 pnpm --filter @oscorpex/kernel test
+# Result: 102 test files passed, 1,384 tests passed, 5 skipped
 
-# Result: 100 test files passed, 1,371 tests passed, 5 skipped
+# Kernel typecheck
+pnpm --filter @oscorpex/kernel typecheck
+# Result: PASS (no errors)
+
+# Console build
+pnpm --filter console build
+# Result: PASS (tsc + vite build)
 ```
