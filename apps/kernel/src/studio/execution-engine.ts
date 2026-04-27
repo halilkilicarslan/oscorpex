@@ -78,6 +78,7 @@ import {
 	ConcurrencyTracker,
 	AdaptiveConcurrencyController,
 } from "./adaptive-concurrency.js";
+import { sortTasksByFairness } from "./task-scheduler.js";
 import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import {
 	startProviderTelemetry,
@@ -1349,8 +1350,11 @@ class ExecutionEngine {
 		const toDispatch = phaseFailed ? ready.filter((t) => t.title.startsWith("Code Review: ")) : ready;
 		if (toDispatch.length === 0) return;
 
+		// TASK 9: Fair scheduling — short tasks first to prevent head-of-line blocking
+		const fairOrder = sortTasksByFairness(toDispatch);
+
 		// Execute tasks sequentially to avoid rate-limit issues with AI providers
-		for (const task of toDispatch) {
+		for (const task of fairOrder) {
 			await this.executeTask(projectId, task);
 		}
 	}
