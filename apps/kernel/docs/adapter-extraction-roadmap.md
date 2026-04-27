@@ -23,33 +23,31 @@ apps/kernel/src/studio/adapters/
 - [x] `ProviderCapabilities` contract documented
 - [x] `cancel-behavior.ts` extracted to `@oscorpex/provider-sdk`
 
-### 🔄 Sprint 1 — Claude Adapter Extraction (In Progress)
+### ✅ Sprint 1 — Claude Adapter Extraction (Done)
 - [x] Create `adapters/provider-claude/package.json`
 - [x] Create `adapters/provider-claude/tsconfig.json`
 - [x] Create `adapters/provider-claude/src/index.ts` (ClaudeCodeAdapter)
-- [ ] Add unit tests in `adapters/provider-claude/__tests__/`
-- [ ] Update kernel `adapters/index.ts` to re-export from workspace package
-- [ ] Verify build + test pass
+- [x] Add unit tests in `adapters/provider-claude/__tests__/`
+- [x] Update kernel `adapters/index.ts` to re-export from workspace package
+- [x] Verify build + test pass
 
-### 📋 Sprint 2 — Codex Adapter Extraction
-- [ ] Create `adapters/provider-codex/package.json`
-- [ ] Create `adapters/provider-codex/tsconfig.json`
-- [ ] Create `adapters/provider-codex/src/index.ts` (CodexAdapter)
-- [ ] Add unit tests
-- [ ] Update kernel re-exports
+### ✅ Sprint 2 — Codex Adapter Extraction (Done)
+- [x] Create `adapters/provider-codex/package.json`
+- [x] Create `adapters/provider-codex/tsconfig.json`
+- [x] Create `adapters/provider-codex/src/index.ts` (CodexAdapter)
+- [x] Update kernel re-exports
 
-### 📋 Sprint 3 — Cursor Adapter Extraction
-- [ ] Create `adapters/provider-cursor/package.json`
-- [ ] Create `adapters/provider-cursor/tsconfig.json`
-- [ ] Create `adapters/provider-cursor/src/index.ts` (CursorAdapter)
-- [ ] Add unit tests
-- [ ] Update kernel re-exports
+### ✅ Sprint 3 — Cursor Adapter Extraction (Done)
+- [x] Create `adapters/provider-cursor/package.json`
+- [x] Create `adapters/provider-cursor/tsconfig.json`
+- [x] Create `adapters/provider-cursor/src/index.ts` (CursorAdapter)
+- [x] Update kernel re-exports
 
-### 📋 Sprint 4 — Kernel Cleanup
-- [ ] Remove `apps/kernel/src/studio/adapters/` directory
-- [ ] Update kernel imports to use `@oscorpex/provider-claude` etc.
-- [ ] Remove `adapters/index.ts` barrel (kernel imports directly from packages)
-- [ ] Provider registry imports from workspace packages
+### ✅ Sprint 4 — Kernel Cleanup (Done)
+- [x] Remove kernel-local adapter implementation files
+- [x] Update kernel imports to use `@oscorpex/provider-claude` etc.
+- [x] Barrel re-exports from workspace packages
+- [x] Provider registry imports from workspace packages via barrel
 
 ## Target Architecture
 

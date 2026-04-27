@@ -65,25 +65,20 @@ This document defines the architectural boundaries between the core packages, th
 **Responsibility:** External tool integrations.
 
 **Current State:**
-- `provider-claude/` — Package created, stub implementation (`src/index.ts`)
-- `provider-codex/` — Empty stub
-- `provider-cursor/` — Empty stub
+- `provider-claude/` — ✅ Full implementation with tests
+- `provider-codex/` — ✅ Full implementation
+- `provider-cursor/` — ✅ Full implementation
 - `cancel-behavior.ts` — ✅ Extracted to `@oscorpex/provider-sdk`
-
-**Target State:**
-- `provider-claude/` — Full ClaudeCodeAdapter with tests
-- `provider-codex/` — Full CodexAdapter with tests
-- `provider-cursor/` — Full CursorAdapter with tests
-- `apps/kernel/src/studio/adapters/` — Removed (zero adapter code in kernel)
+- `apps/kernel/src/studio/adapters/` — ✅ Barrel only (re-exports from workspace packages)
 
 **Migration Progress:**
 | Adapter | Status | Sprint |
 |---------|--------|--------|
 | cancel-behavior | ✅ Extracted to `@oscorpex/provider-sdk` | Sprint 0 |
-| provider-claude | 🔄 Package created, implementation stubbed | Sprint 1 |
-| provider-codex | 📋 Planned | Sprint 2 |
-| provider-cursor | 📋 Planned | Sprint 3 |
-| kernel cleanup | 📋 Remove `apps/kernel/src/studio/adapters/` | Sprint 4 |
+| provider-claude | ✅ Extracted to `adapters/provider-claude/` | Sprint 1 |
+| provider-codex | ✅ Extracted to `adapters/provider-codex/` | Sprint 2 |
+| provider-cursor | ✅ Extracted to `adapters/provider-cursor/` | Sprint 3 |
+| kernel cleanup | ✅ Local implementations removed, barrel re-exports | Sprint 4 |
 
 ## Responsibility Matrix
 
