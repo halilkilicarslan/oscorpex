@@ -80,6 +80,7 @@ import {
 } from "./adaptive-concurrency.js";
 import { sortTasksByFairness } from "./task-scheduler.js";
 import { evaluateRetry, MAX_AUTO_RETRIES, type RetryTelemetry } from "./retry-policy.js";
+import { markExecutionStarted } from "./preflight-warmup.js";
 import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import {
 	startProviderTelemetry,
@@ -541,6 +542,9 @@ class ExecutionEngine {
 		this._activeControllers.set(controllerKey, taskController);
 
 		// ═══════════════════════════════════════════════════════════════════════
+		// TASK 12: Cold-start tracking
+		const { isColdStart } = markExecutionStarted();
+
 		// Provider Telemetry Lifecycle (EPIC 3 — Observability)
 		// ═══════════════════════════════════════════════════════════════════════
 		// 1. Abort listener (cancel audit) — fires before telemetryRecord exists
@@ -859,8 +863,8 @@ class ExecutionEngine {
 							logs: cliResult.logs,
 							startedAt: telemetryRecord.startedAt,
 							completedAt: new Date().toISOString(),
-							metadata: { durationMs: cliResult.durationMs },
-						});
+						metadata: { durationMs: cliResult.durationMs, isColdStart },
+					});
 					}
 					break; // success — exit chain
 				} catch (adapterErr) {
