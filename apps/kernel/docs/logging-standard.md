@@ -110,6 +110,40 @@ await withCorrelation(async () => {
 
 The kernel collects structured telemetry for every provider execution via `executionEngine.telemetry`.
 
+### Helper Layer (`provider-telemetry.ts`)
+
+All telemetry calls go through typed helpers to ensure consistency:
+
+```typescript
+import {
+  startProviderTelemetry,
+  finishProviderTelemetry,
+  recordProviderFallback,
+  recordProviderDegraded,
+  recordProviderCancel,
+  classifyProviderErrorWithReason,
+  FALLBACK_REASONS,
+  CANCEL_REASONS,
+} from "./provider-telemetry.js";
+```
+
+| Helper | Purpose |
+|--------|---------|
+| `startProviderTelemetry(collector, input)` | Creates a new telemetry record |
+| `finishProviderTelemetry(collector, record, result, err?)` | Closes the record (success or failure) |
+| `recordProviderFallback(collector, record, from, to, reason, latencyMs, err)` | Logs a fallback transition |
+| `recordProviderDegraded(collector, record, message)` | Marks degraded mode + emits log + event |
+| `recordProviderCancel(collector, record, reason)` | Marks cancel + emits log |
+| `classifyProviderErrorWithReason(err)` | Returns `{ classification, reason }` pair |
+
+### Standardized Constants
+
+**Fallback reasons** (`FALLBACK_REASONS`):
+`provider_unavailable`, `timeout`, `rate_limited`, `tool_restriction_unsupported`, `cli_error`, `spawn_failure`, `unknown`
+
+**Cancel reasons** (`CANCEL_REASONS`):
+`user_cancel`, `pipeline_pause`, `timeout_abort`, `provider_abort`, `shutdown_recovery`
+
 ### Telemetry Record Fields
 
 | Field | Type | Description |
@@ -127,7 +161,21 @@ The kernel collects structured telemetry for every provider execution via `execu
 | `degradedMode` | boolean | True if all providers were exhausted |
 | `degradedMessage` | string | Human-readable degraded reason |
 | `canceled` | boolean | True if execution was cancelled |
-| `cancelReason` | string | Cancel reason: `pipeline_pause` |
+| `cancelReason` | string | Cancel reason from `CANCEL_REASONS` |
+
+### Lifecycle (in `execution-engine.ts`)
+
+```
+┌─ startProviderTelemetry(...) ─┐
+│                               │
+├─ [adapter loop]               │
+│   ├─ success ──► finishProviderTelemetry(record, result)
+│   └─ fail ─────► recordProviderFallback(...) ──► next adapter
+│                               │
+├─ all exhausted ──► recordProviderDegraded(...) ──► finishProviderTelemetry(record, null, err)
+│                               │
+└─ abort ──► recordProviderCancel(...) ──► finishProviderTelemetry(record, null, err)
+```
 
 ### Access
 
@@ -149,15 +197,6 @@ const snapshot = executionEngine.telemetry.getLatencySnapshot("claude-code");
 | `GET /api/studio/telemetry/providers/latency` | Per-provider latency and failure aggregates |
 | `GET /api/studio/telemetry/providers/records` | Recent provider execution records (filterable) |
 | `GET /api/studio/telemetry/providers/records/:runId/:taskId` | Single execution record |
-
-### Wiring
-
-- **Entrypoint**: `execution-engine.ts` calls `telemetry.startExecution()` before the adapter fallback chain
-- **Success**: `finishExecution(record, result)` when an adapter returns successfully
-- **Failure**: `finishExecution(record, null, err)` when all adapters fail or an error occurs
-- **Fallback**: `recordFallback()` is called in the adapter catch block when a fallback provider is tried
-- **Degraded**: `recordDegraded()` is called when `providerState.isAllExhausted()` is true
-- **Cancel**: `recordCancel()` is called when the task's `AbortController` fires an abort event
 
 ## Implementation Status
 

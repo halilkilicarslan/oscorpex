@@ -65,10 +65,17 @@ import { resolveWorkspace, type ExecutionWorkspace } from "./execution-workspace
 import { execute as pgExecute, queryOne as pgQueryOne } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { providerState } from "./provider-state.js";
+import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import {
-	ProviderTelemetryCollector,
-	classifyProviderError,
-} from "@oscorpex/provider-sdk";
+	startProviderTelemetry,
+	finishProviderTelemetry,
+	recordProviderFallback,
+	recordProviderDegraded,
+	recordProviderCancel,
+	classifyProviderErrorWithReason,
+	CANCEL_REASONS,
+	type TelemetryRecord,
+} from "./provider-telemetry.js";
 import { taskEngine } from "./task-engine.js";
 import { runIntegrationTest } from "./task-runners.js";
 import type { AgentConfig, Project, Task, TaskOutput } from "./types.js";
@@ -583,13 +590,22 @@ class ExecutionEngine {
 		const controllerKey = `${projectId}:${task.id}`;
 		this._activeControllers.set(controllerKey, taskController);
 
-		// --- Telemetry: cancel audit — record when abort signal fires
-		let telemetryRecord: ReturnType<ProviderTelemetryCollector["startExecution"]> | undefined;
+		// ═══════════════════════════════════════════════════════════════════════
+		// Provider Telemetry Lifecycle (EPIC 3 — Observability)
+		// ═══════════════════════════════════════════════════════════════════════
+		// 1. Abort listener (cancel audit) — fires before telemetryRecord exists
+		// 2. startProviderTelemetry(...) — before adapter chain
+		// 3. recordProviderFallback(...) — on adapter failure when fallback exists
+		// 4. finishProviderTelemetry(...) — on success or final failure
+		// 5. recordProviderDegraded(...) — when all providers exhausted
+		// 6. recordProviderCancel(...) — when abort signal fires after step 2
+		// ═══════════════════════════════════════════════════════════════════════
+		let telemetryRecord: TelemetryRecord | undefined;
 		let cancelPending = false;
 		taskController.signal.addEventListener("abort", () => {
 			cancelPending = true;
 			if (telemetryRecord) {
-				this.telemetry.recordCancel(telemetryRecord, "pipeline_pause");
+				recordProviderCancel(this.telemetry, telemetryRecord, CANCEL_REASONS.pipeline_pause);
 			}
 		}, { once: true });
 
@@ -786,8 +802,8 @@ class ExecutionEngine {
 			let cliResult: Awaited<ReturnType<(typeof adapterChain)[0]["execute"]>> | null = null;
 			let lastAdapterError: Error | null = null;
 
-			// --- Telemetry: start provider execution record (EPIC 3) ---
-			telemetryRecord = this.telemetry.startExecution({
+			// --- Telemetry lifecycle: START ---
+			telemetryRecord = startProviderTelemetry(this.telemetry, {
 				runId: projectId,
 				taskId: task.id,
 				provider: primaryCliTool,
@@ -801,7 +817,7 @@ class ExecutionEngine {
 				model: routedModel,
 			});
 			if (cancelPending && telemetryRecord) {
-				this.telemetry.recordCancel(telemetryRecord, "pipeline_pause");
+				recordProviderCancel(this.telemetry, telemetryRecord, CANCEL_REASONS.pipeline_pause);
 			}
 
 			for (let i = 0; i < adapterChain.length; i++) {
@@ -843,9 +859,9 @@ class ExecutionEngine {
 						allowedTools,
 					});
 					providerState.markSuccess(adapterName);
-					// Telemetry: finish success
+					// Telemetry lifecycle: SUCCESS
 					if (telemetryRecord) {
-						this.telemetry.finishExecution(telemetryRecord, {
+						finishProviderTelemetry(this.telemetry, telemetryRecord, {
 							provider: adapterName,
 							model: routedModel,
 							text: cliResult.text,
@@ -862,24 +878,25 @@ class ExecutionEngine {
 					lastAdapterError = adapterErr instanceof Error ? adapterErr : new Error(String(adapterErr));
 					const errMsg = lastAdapterError.message;
 					const latencyMs = Date.now() - adapterStartMs;
-					const classification = classifyProviderError(adapterErr);
+					const { classification, reason } = classifyProviderErrorWithReason(adapterErr);
 					if (isRateLimitError(errMsg)) {
 						log.warn(`[execution] Rate limit on adapter "${adapter.name}" — marking cooldown.`);
 						providerState.markRateLimited(adapterName);
 					} else {
 						providerState.markFailure(adapterName);
 					}
-					log.warn(`[execution] Adapter "${adapter.name}" failed (${classification}): ${errMsg.slice(0, 200)}`);
-					// Telemetry: record fallback if there is a next provider in chain
+					log.warn(`[execution] Adapter "${adapter.name}" failed (${classification}, reason=${reason}): ${errMsg.slice(0, 200)}`);
+					// Telemetry lifecycle: FALLBACK (if next provider exists)
 					if (telemetryRecord && i < adapterChain.length - 1) {
 						const nextAdapter = adapterChain[i + 1]!;
-						this.telemetry.recordFallback(
+						recordProviderFallback(
+							this.telemetry,
 							telemetryRecord,
 							adapterName,
 							nextAdapter.name,
-							errMsg,
-							classification,
+							reason,
 							latencyMs,
+							adapterErr,
 						);
 					}
 				}
@@ -893,13 +910,14 @@ class ExecutionEngine {
 					log.warn(
 						`[execution-engine] All providers exhausted — deferring "${task.title}" for ${Math.round(retryMs / 1000)}s`,
 					);
-					// Telemetry: record degraded mode
+					// Telemetry lifecycle: DEGRADED
 					if (telemetryRecord) {
-						this.telemetry.recordDegraded(
+						recordProviderDegraded(
+							this.telemetry,
 							telemetryRecord,
 							`All providers exhausted for task "${task.title}". Retry in ${Math.round(retryMs / 1000)}s.`,
 						);
-						this.telemetry.finishExecution(telemetryRecord, null, lastAdapterError ?? new Error("All providers exhausted"));
+						finishProviderTelemetry(this.telemetry, telemetryRecord, null, lastAdapterError ?? new Error("All providers exhausted"));
 					}
 					await updateTask(task.id, { status: "queued" });
 					eventBus.emit({
@@ -922,9 +940,9 @@ class ExecutionEngine {
 					}, retryMs + 1000);
 					return;
 				}
-				// Telemetry: finish with error before throwing
+				// Telemetry lifecycle: ERROR (all adapters failed, not exhausted)
 				if (telemetryRecord) {
-					this.telemetry.finishExecution(telemetryRecord, null, lastAdapterError ?? new Error("All CLI adapters exhausted"));
+					finishProviderTelemetry(this.telemetry, telemetryRecord, null, lastAdapterError ?? new Error("All CLI adapters exhausted"));
 				}
 				throw lastAdapterError ?? new Error("All CLI adapters exhausted — no provider available.");
 			}
@@ -1090,9 +1108,9 @@ class ExecutionEngine {
 			// Review task dispatch: task-engine creates a review task which
 			// will be picked up by dispatchReadyTasks below.
 		} catch (err) {
-			// Telemetry: finish any open record for non-adapter errors
+			// Telemetry lifecycle: OUTER ERROR (sandbox, verification, etc.)
 			if (telemetryRecord && !telemetryRecord.completedAt) {
-				this.telemetry.finishExecution(telemetryRecord, null, err);
+				finishProviderTelemetry(this.telemetry, telemetryRecord, null, err);
 			}
 
 			// If task was aborted by pipeline pause, don't mark as failed — cancelRunningTasks

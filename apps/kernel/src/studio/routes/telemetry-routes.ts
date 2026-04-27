@@ -89,6 +89,22 @@ router.get("/providers/latency", (c) => {
 });
 
 /**
+ * GET /telemetry/providers/records/:runId/:taskId
+ * Single provider execution record by runId:taskId.
+ * NOTE: Must be registered BEFORE /providers/records to avoid Hono
+ * matching ":runId" as a query parameter.
+ */
+router.get("/providers/records/:runId/:taskId", (c) => {
+	const runId = c.req.param("runId");
+	const taskId = c.req.param("taskId");
+	const record = executionEngine.telemetry.getRecord(runId, taskId);
+	if (!record) {
+		return c.json({ error: "Record not found" }, 404);
+	}
+	return c.json({ record });
+});
+
+/**
  * GET /telemetry/providers/records
  * Recent provider execution records.
  * Query params:
@@ -116,20 +132,6 @@ router.get("/providers/records", (c) => {
 	}
 
 	return c.json({ total: records.length, records });
-});
-
-/**
- * GET /telemetry/providers/records/:runId/:taskId
- * Single provider execution record by runId:taskId.
- */
-router.get("/providers/records/:runId/:taskId", (c) => {
-	const runId = c.req.param("runId");
-	const taskId = c.req.param("taskId");
-	const record = executionEngine.telemetry.getRecord(runId, taskId);
-	if (!record) {
-		return c.json({ error: "Record not found" }, 404);
-	}
-	return c.json({ record });
 });
 
 export { router as telemetryRoutes };
