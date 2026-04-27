@@ -6,6 +6,7 @@
 import { Hono } from "hono";
 import { tracer } from "../telemetry.js";
 import { executionEngine } from "../execution-engine.js";
+import { buildPerformanceBaseline } from "../performance-metrics.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("telemetry-routes");
 
@@ -132,6 +133,24 @@ router.get("/providers/records", (c) => {
 	}
 
 	return c.json({ total: records.length, records });
+});
+
+// ---------------------------------------------------------------------------
+// Performance Baseline (EPIC Performance)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /telemetry/performance/baseline
+ * Aggregated performance snapshot for optimization decisions.
+ * Query params:
+ *   window — lookback in milliseconds (default 1h = 3600000)
+ */
+router.get("/performance/baseline", (c) => {
+	const windowParam = c.req.query("window");
+	const windowMs = windowParam ? Math.min(Number.parseInt(windowParam, 10) || 3600000, 24 * 3600000) : 3600000;
+
+	const baseline = buildPerformanceBaseline(executionEngine.telemetry, windowMs);
+	return c.json({ baseline });
 });
 
 export { router as telemetryRoutes };
