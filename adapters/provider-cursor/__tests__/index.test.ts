@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// ClaudeCodeAdapter Tests
+// CursorAdapter Tests
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { ClaudeCodeAdapter } from "../src/index.js";
+import { CursorAdapter } from "../src/index.js";
 
 const mockRunCLI = vi.fn();
 const mockCheckBinaryAsync = vi.fn();
@@ -17,49 +17,42 @@ vi.mock("@oscorpex/provider-sdk", async (importOriginal) => {
 	};
 });
 
-describe("ClaudeCodeAdapter", () => {
-	let adapter: ClaudeCodeAdapter;
+describe("CursorAdapter", () => {
+	let adapter: CursorAdapter;
 
 	beforeEach(() => {
-		adapter = new ClaudeCodeAdapter();
+		adapter = new CursorAdapter();
 		vi.clearAllMocks();
 	});
 
 	it("has correct id", () => {
-		expect(adapter.id).toBe("claude-code");
+		expect(adapter.id).toBe("cursor");
 	});
 
 	it("reports correct capabilities", () => {
 		const caps = adapter.capabilities();
-		expect(caps.supportsCancel).toBe(true);
-		expect(caps.supportsToolRestriction).toBe(true);
-		expect(caps.supportsStreaming).toBe(true);
-		expect(caps.supportsResume).toBe(true);
-		expect(caps.supportsStructuredOutput).toBe(true);
-		expect(caps.supportsSandboxHinting).toBe(true);
-		expect(caps.supportedModels).toContain("sonnet");
-		expect(caps.supportedModels).toContain("opus");
-		expect(caps.supportedModels).toContain("haiku");
+		expect(caps.supportsCancel).toBe(false);
+		expect(caps.supportsToolRestriction).toBe(false);
+		expect(caps.supportedModels).toEqual(["cursor-large"]);
 	});
 
-	it("isAvailable delegates to checkBinaryAsync", async () => {
-		mockCheckBinaryAsync.mockResolvedValue({ available: true, version: "1.2.3" });
+	it("isAvailable uses 'cursor agent --version'", async () => {
+		mockCheckBinaryAsync.mockResolvedValue({ available: true, version: "1.0.0" });
 		expect(await adapter.isAvailable()).toBe(true);
-		expect(mockCheckBinaryAsync).toHaveBeenCalledWith("claude", ["--version"]);
+		expect(mockCheckBinaryAsync).toHaveBeenCalledWith("cursor", ["agent", "--version"]);
 	});
 
 	it("health returns true when available", async () => {
-		mockCheckBinaryAsync.mockResolvedValue({ available: true, version: "1.2.3" });
+		mockCheckBinaryAsync.mockResolvedValue({ available: true, version: "1.0.0" });
 		const health = await adapter.health();
 		expect(health.healthy).toBe(true);
-		expect(health.message).toBe("1.2.3");
+		expect(health.message).toBe("1.0.0");
 	});
 
 	it("health returns false when unavailable", async () => {
 		mockCheckBinaryAsync.mockResolvedValue({ available: false, error: "ENOENT" });
 		const health = await adapter.health();
 		expect(health.healthy).toBe(false);
-		expect(health.message).toContain("ENOENT");
 	});
 
 	it("execute throws ProviderUnavailableError when binary missing", async () => {
@@ -68,7 +61,7 @@ describe("ClaudeCodeAdapter", () => {
 			adapter.execute({
 				runId: "r1",
 				taskId: "t1",
-				provider: "claude-code",
+				provider: "cursor",
 				repoPath: "/tmp",
 				prompt: "hello",
 				timeoutMs: 5000,
@@ -76,31 +69,19 @@ describe("ClaudeCodeAdapter", () => {
 		).rejects.toThrow("not found");
 	});
 
-	it("execute passes allowedTools as CLI arg when restricted", async () => {
+	it("execute throws when tool restriction requested", async () => {
 		mockCheckBinaryAsync.mockResolvedValue({ available: true });
-		mockRunCLI.mockResolvedValue({
-			exitCode: 0,
-			signal: null,
-			stdout: '{"output":"ok"}',
-			stderr: "",
-			durationMs: 1000,
-			killedByTimeout: false,
-			killedBySignal: false,
-		});
-
-		await adapter.execute({
-			runId: "r1",
-			taskId: "t1",
-			provider: "claude-code",
-			repoPath: "/tmp",
-			prompt: "hello",
-			timeoutMs: 5000,
-			allowedTools: ["Read", "Edit"],
-		});
-
-		const callArgs = mockRunCLI.mock.calls[0]![0] as Record<string, unknown>;
-		expect(callArgs.args).toContain("--allowed-tools");
-		expect(callArgs.args).toContain("Read,Edit");
+		await expect(
+			adapter.execute({
+				runId: "r1",
+				taskId: "t1",
+				provider: "cursor",
+				repoPath: "/tmp",
+				prompt: "hello",
+				timeoutMs: 5000,
+				allowedTools: ["Read"],
+			}),
+		).rejects.toThrow("cannot honor restricted tool policies");
 	});
 
 	it("execute returns normalized result on success", async () => {
@@ -108,15 +89,9 @@ describe("ClaudeCodeAdapter", () => {
 		mockRunCLI.mockResolvedValue({
 			exitCode: 0,
 			signal: null,
-			stdout: JSON.stringify({
-				output: "claude result",
-				files_created: ["a.ts"],
-				files_modified: ["b.ts"],
-				input_tokens: 100,
-				output_tokens: 200,
-			}),
+			stdout: '{"result":"cursor output","usage":{"input_tokens":5,"output_tokens":10}}',
 			stderr: "",
-			durationMs: 3000,
+			durationMs: 2000,
 			killedByTimeout: false,
 			killedBySignal: false,
 		});
@@ -124,23 +99,20 @@ describe("ClaudeCodeAdapter", () => {
 		const result = await adapter.execute({
 			runId: "r1",
 			taskId: "t1",
-			provider: "claude-code",
+			provider: "cursor",
 			repoPath: "/tmp",
 			prompt: "hello",
 			timeoutMs: 5000,
-			model: "sonnet",
+			model: "cursor-large",
 		});
 
-		expect(result.provider).toBe("claude-code");
-		expect(result.model).toBe("sonnet");
-		expect(result.text).toBe("claude result");
-		expect(result.filesCreated).toEqual(["a.ts"]);
-		expect(result.filesModified).toEqual(["b.ts"]);
-		expect(result.usage?.inputTokens).toBe(100);
-		expect(result.usage?.outputTokens).toBe(200);
-		expect(result.metadata?.durationMs).toBe(3000);
-		expect(result.startedAt).toBeDefined();
-		expect(result.completedAt).toBeDefined();
+		expect(result.provider).toBe("cursor");
+		expect(result.model).toBe("cursor-large");
+		expect(result.text).toBe("cursor output");
+		expect(result.usage?.inputTokens).toBe(5);
+		expect(result.usage?.outputTokens).toBe(10);
+		expect(result.usage?.billedCostUsd).toBe(0);
+		expect(result.metadata?.durationMs).toBe(2000);
 	});
 
 	it("execute falls back to raw stdout on non-JSON", async () => {
@@ -148,8 +120,8 @@ describe("ClaudeCodeAdapter", () => {
 		mockRunCLI.mockResolvedValue({
 			exitCode: 0,
 			signal: null,
-			stdout: "plain text result",
-			stderr: "",
+			stdout: "plain text",
+			stderr: "warn line",
 			durationMs: 500,
 			killedByTimeout: false,
 			killedBySignal: false,
@@ -158,15 +130,14 @@ describe("ClaudeCodeAdapter", () => {
 		const result = await adapter.execute({
 			runId: "r1",
 			taskId: "t1",
-			provider: "claude-code",
+			provider: "cursor",
 			repoPath: "/tmp",
 			prompt: "hello",
 			timeoutMs: 5000,
 		});
 
-		expect(result.text).toBe("plain text result");
-		expect(result.usage?.inputTokens).toBe(0);
-		expect(result.usage?.outputTokens).toBe(0);
+		expect(result.text).toBe("plain text");
+		expect(result.logs).toEqual(["warn line"]);
 	});
 
 	it("execute throws ProviderTimeoutError on timeout", async () => {
@@ -176,7 +147,7 @@ describe("ClaudeCodeAdapter", () => {
 			signal: "SIGKILL",
 			stdout: "",
 			stderr: "",
-			durationMs: 300_000,
+			durationMs: 120_000,
 			killedByTimeout: true,
 			killedBySignal: false,
 		});
@@ -185,10 +156,10 @@ describe("ClaudeCodeAdapter", () => {
 			adapter.execute({
 				runId: "r1",
 				taskId: "t1",
-				provider: "claude-code",
+				provider: "cursor",
 				repoPath: "/tmp",
 				prompt: "hello",
-				timeoutMs: 300_000,
+				timeoutMs: 120_000,
 			}),
 		).rejects.toThrow("timed out");
 	});
@@ -199,7 +170,7 @@ describe("ClaudeCodeAdapter", () => {
 			exitCode: 1,
 			signal: null,
 			stdout: "",
-			stderr: "claude error",
+			stderr: "cursor error",
 			durationMs: 1000,
 			killedByTimeout: false,
 			killedBySignal: false,
@@ -209,7 +180,7 @@ describe("ClaudeCodeAdapter", () => {
 			adapter.execute({
 				runId: "r1",
 				taskId: "t1",
-				provider: "claude-code",
+				provider: "cursor",
 				repoPath: "/tmp",
 				prompt: "hello",
 				timeoutMs: 5000,

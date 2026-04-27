@@ -14,6 +14,26 @@ export type { ProviderAdapter } from "@oscorpex/core";
 export type { CLIAdapter, CLIAdapterOptions, CLIExecutionResult } from "./cli-adapter.js";
 export { FULL_TOOL_ACCESS, buildToolGovernanceSection, hasFullToolAccess } from "./cli-adapter.js";
 
+// CLI runner — shared spawn wrapper for all provider adapters
+export type {
+	CLIRunOptions,
+	CLIRunResult,
+	ExitClassification,
+	ClassifiedExit,
+	ParsedOutput,
+	ExtractedUsage,
+	BinaryCheckResult,
+} from "./cli-runner.js";
+export {
+	runCLI,
+	classifyExit,
+	tryParseJson,
+	extractUsage,
+	extractText,
+	checkBinary,
+	checkBinaryAsync,
+} from "./cli-runner.js";
+
 // Cost calculation
 export type { ModelPricing } from "./cost.js";
 export { MODEL_PRICING, calculateCost, defaultModelForType } from "./cost.js";

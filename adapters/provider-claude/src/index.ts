@@ -1,16 +1,41 @@
-// @oscorpex/provider-claude — Claude Code adapter
-// Bridges the legacy cli-adapter.ts for Claude Code with the ProviderAdapter contract.
+// @oscorpex/provider-claude — Claude Code CLI adapter (native)
+// Spawns the `claude` CLI binary directly with stream-json parsing.
 
-import type { ProviderAdapter, ProviderCapabilities, ProviderExecutionInput, ProviderExecutionResult } from "@oscorpex/core";
+import type {
+	ProviderAdapter,
+	ProviderCapabilities,
+	ProviderExecutionInput,
+	ProviderExecutionResult,
+	ProviderHealth,
+} from "@oscorpex/core";
+import {
+	runCLI,
+	classifyExit,
+	tryParseJson,
+	extractUsage,
+	extractText,
+	checkBinaryAsync,
+	buildToolGovernanceSection,
+	hasFullToolAccess,
+	calculateCost,
+} from "@oscorpex/provider-sdk";
+import { ProviderUnavailableError, ProviderExecutionError, ProviderTimeoutError } from "@oscorpex/core";
+
+// ---------------------------------------------------------------------------
+// Binary resolution
+// ---------------------------------------------------------------------------
+
+function resolveBinary(): string {
+	return process.env.CLAUDE_CLI_PATH ?? "claude";
+}
+
+// ---------------------------------------------------------------------------
+// Adapter
+// ---------------------------------------------------------------------------
 
 export class ClaudeCodeAdapter implements ProviderAdapter {
 	readonly id = "claude-code";
-
-	private legacy: any;
-
-	constructor(legacyAdapter?: any) {
-		this.legacy = legacyAdapter;
-	}
+	private binary = resolveBinary();
 
 	capabilities(): ProviderCapabilities {
 		return {
@@ -25,60 +50,126 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
 	}
 
 	async isAvailable(): Promise<boolean> {
-		return this.legacy?.isAvailable?.() ?? false;
+		const result = await checkBinaryAsync(this.binary, ["--version"]);
+		return result.available;
+	}
+
+	async health(): Promise<ProviderHealth> {
+		const result = await checkBinaryAsync(this.binary, ["--version"]);
+		return {
+			healthy: result.available,
+			message: result.available ? result.version : result.error,
+		};
 	}
 
 	async execute(input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
 		const startedAt = new Date().toISOString();
-		try {
-			const result = await this.legacy.execute({
-				projectId: input.runId,
-				agentId: "",
-				agentName: "",
-				repoPath: input.repoPath,
-				prompt: input.prompt,
-				systemPrompt: input.systemPrompt ?? "",
-				timeoutMs: input.timeoutMs,
-				model: input.model ?? "sonnet",
-				allowedTools: input.allowedTools ?? [],
-				signal: input.signal,
-			});
 
-			const completedAt = new Date().toISOString();
-			const startedMs = new Date(startedAt).getTime();
-			const completedMs = new Date(completedAt).getTime();
-			return {
-				provider: this.id,
-				model: input.model,
-				text: result.logs?.join("\n") ?? "",
-				filesCreated: result.filesCreated ?? [],
-				filesModified: result.filesModified ?? [],
-				logs: result.logs ?? [],
-				usage: {
-					inputTokens: result.inputTokens ?? 0,
-					outputTokens: result.outputTokens ?? 0,
-					billedCostUsd: result.totalCostUsd ?? 0,
-				},
-				startedAt,
-				completedAt,
-				metadata: {
-					durationMs: completedMs - startedMs,
-				},
-			};
-		} catch (err) {
-			throw err;
+		// Availability pre-check
+		const available = await this.isAvailable();
+		if (!available) {
+			throw new ProviderUnavailableError(this.id, `Claude CLI binary "${this.binary}" not found`);
 		}
+
+		// Tool governance
+		const restricted = input.allowedTools && !hasFullToolAccess(input.allowedTools);
+		const governanceSection = restricted ? buildToolGovernanceSection(input.allowedTools) : "";
+		const fullPrompt = governanceSection ? `${governanceSection}\n\n${input.prompt}` : input.prompt;
+
+		// Build CLI args
+		const model = input.model ?? "sonnet";
+		const timeoutMs = input.timeoutMs ?? 300_000;
+		const args = [
+			"-p",
+			"--model",
+			model,
+			"--max-turns",
+			"25",
+			"--no-session-persistence",
+			"--max-budget-usd",
+			String(Math.max(2, (timeoutMs / 60000) * 1)),
+		];
+		if (restricted && input.allowedTools) {
+			args.push("--allowed-tools", input.allowedTools.join(","));
+		}
+
+		// Spawn
+		const runResult = await runCLI({
+			binary: this.binary,
+			args,
+			cwd: input.repoPath,
+			timeoutMs,
+			signal: input.signal,
+			stdin: fullPrompt,
+		});
+
+		// Classify exit
+		const classified = classifyExit(runResult);
+		const completedAt = new Date().toISOString();
+
+		if (classified.classification === "timeout") {
+			throw new ProviderTimeoutError(this.id, input.taskId, runResult.durationMs);
+		}
+		if (classified.classification === "killed") {
+			throw new ProviderExecutionError(
+				this.id,
+				input.taskId,
+				runResult.exitCode,
+				`Claude CLI killed: ${classified.message}`,
+			);
+		}
+		if (classified.classification !== "success") {
+			throw new ProviderExecutionError(
+				this.id,
+				input.taskId,
+				runResult.exitCode,
+				classified.message,
+			);
+		}
+
+		// Parse output — try JSON first, fall back to raw text
+		const parsed = tryParseJson(runResult.stdout);
+		const usage = parsed.ok ? extractUsage(parsed.data) : { inputTokens: 0, outputTokens: 0 };
+		const text = parsed.ok ? extractText(parsed.data) : runResult.stdout.trim();
+
+		// Build file lists from JSON if present
+		let filesCreated: string[] = [];
+		let filesModified: string[] = [];
+		if (parsed.ok && parsed.data && typeof parsed.data === "object") {
+			const record = parsed.data as Record<string, unknown>;
+			filesCreated = (record.files_created as string[]) ?? (record.filesCreated as string[]) ?? [];
+			filesModified = (record.files_modified as string[]) ?? (record.filesModified as string[]) ?? [];
+		}
+
+		// Cost normalization
+		const costUsd = calculateCost(model, usage.inputTokens, usage.outputTokens);
+
+		return {
+			provider: this.id,
+			model,
+			text,
+			filesCreated,
+			filesModified,
+			logs: runResult.stderr ? [runResult.stderr] : [],
+			usage: {
+				inputTokens: usage.inputTokens,
+				outputTokens: usage.outputTokens,
+				cacheReadTokens: usage.cacheReadTokens,
+				cacheWriteTokens: usage.cacheCreationTokens,
+				billedCostUsd: costUsd,
+			},
+			startedAt,
+			completedAt,
+			metadata: {
+				durationMs: runResult.durationMs,
+				exitCode: runResult.exitCode,
+			},
+		};
 	}
 
-	async cancel(): Promise<void> {
-		// Legacy adapter does not support granular cancel; signal-based abort is handled by the registry
-	}
-
-	async health(): Promise<{ healthy: boolean }> {
-		try {
-			return { healthy: await this.isAvailable() };
-		} catch {
-			return { healthy: false };
-		}
+	async cancel(input: { runId: string; taskId: string }): Promise<void> {
+		// Registry-level cancel handles AbortController.signal;
+		// adapter-level cancel is a no-op for now.
+		void input;
 	}
 }

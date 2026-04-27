@@ -1,15 +1,33 @@
-// @oscorpex/provider-codex — Codex adapter
+// @oscorpex/provider-codex — OpenAI Codex CLI adapter (native)
+// Spawns the `codex` CLI binary directly.
 
-import type { ProviderAdapter, ProviderCapabilities, ProviderExecutionInput, ProviderExecutionResult } from "@oscorpex/core";
+import type {
+	ProviderAdapter,
+	ProviderCapabilities,
+	ProviderExecutionInput,
+	ProviderExecutionResult,
+	ProviderHealth,
+} from "@oscorpex/core";
+import {
+	runCLI,
+	classifyExit,
+	tryParseJson,
+	extractUsage,
+	extractText,
+	checkBinaryAsync,
+	buildToolGovernanceSection,
+	hasFullToolAccess,
+	calculateCost,
+} from "@oscorpex/provider-sdk";
+import { ProviderUnavailableError, ProviderExecutionError, ProviderTimeoutError } from "@oscorpex/core";
+
+// ---------------------------------------------------------------------------
+// Adapter
+// ---------------------------------------------------------------------------
 
 export class CodexAdapter implements ProviderAdapter {
 	readonly id = "codex";
-
-	private legacy: any;
-
-	constructor(legacyAdapter?: any) {
-		this.legacy = legacyAdapter;
-	}
+	private binary = "codex";
 
 	capabilities(): ProviderCapabilities {
 		return {
@@ -24,51 +42,104 @@ export class CodexAdapter implements ProviderAdapter {
 	}
 
 	async isAvailable(): Promise<boolean> {
-		return this.legacy?.isAvailable?.() ?? false;
+		const result = await checkBinaryAsync(this.binary, ["--version"]);
+		return result.available;
+	}
+
+	async health(): Promise<ProviderHealth> {
+		const result = await checkBinaryAsync(this.binary, ["--version"]);
+		return {
+			healthy: result.available,
+			message: result.available ? result.version : result.error,
+		};
 	}
 
 	async execute(input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
 		const startedAt = new Date().toISOString();
-		const result = await this.legacy.execute({
-			projectId: input.runId,
-			agentId: "",
-			agentName: "",
-			repoPath: input.repoPath,
-			prompt: input.prompt,
-			systemPrompt: input.systemPrompt ?? "",
-			timeoutMs: input.timeoutMs,
-			model: input.model ?? "gpt-4o",
-			allowedTools: input.allowedTools ?? [],
+
+		const available = await this.isAvailable();
+		if (!available) {
+			throw new ProviderUnavailableError(this.id, `Codex CLI binary "${this.binary}" not found`);
+		}
+
+		// Codex cannot honor restricted tool policies
+		if (input.allowedTools && !hasFullToolAccess(input.allowedTools)) {
+			throw new ProviderExecutionError(
+				this.id,
+				input.taskId,
+				null,
+				"Codex adapter cannot honor restricted tool policies; fallback required",
+			);
+		}
+
+		const governanceSection = buildToolGovernanceSection(input.allowedTools);
+		const prompt = governanceSection ? `${governanceSection}\n\n${input.prompt}` : input.prompt;
+		const model = input.model ?? "gpt-4o";
+		const timeoutMs = input.timeoutMs ?? 120_000;
+
+		const args = ["--quiet", "--full-auto"];
+		if (model) args.push("--model", model);
+		args.push(prompt);
+
+		const runResult = await runCLI({
+			binary: this.binary,
+			args,
+			cwd: input.repoPath,
+			timeoutMs,
 			signal: input.signal,
 		});
 
+		const classified = classifyExit(runResult);
 		const completedAt = new Date().toISOString();
+
+		if (classified.classification === "timeout") {
+			throw new ProviderTimeoutError(this.id, input.taskId, runResult.durationMs);
+		}
+		if (classified.classification === "killed") {
+			throw new ProviderExecutionError(
+				this.id,
+				input.taskId,
+				runResult.exitCode,
+				`Codex CLI killed: ${classified.message}`,
+			);
+		}
+		if (classified.classification !== "success") {
+			throw new ProviderExecutionError(
+				this.id,
+				input.taskId,
+				runResult.exitCode,
+				classified.message,
+			);
+		}
+
+		const parsed = tryParseJson(runResult.stdout);
+		const usage = parsed.ok ? extractUsage(parsed.data) : { inputTokens: 0, outputTokens: 0 };
+		const text = parsed.ok ? extractText(parsed.data) : runResult.stdout.trim();
+		const costUsd = calculateCost(model, usage.inputTokens, usage.outputTokens);
+
 		return {
 			provider: this.id,
-			model: input.model,
-			text: result.logs?.join("\n") ?? "",
-			filesCreated: result.filesCreated ?? [],
-			filesModified: result.filesModified ?? [],
-			logs: result.logs ?? [],
+			model,
+			text,
+			filesCreated: [],
+			filesModified: [],
+			logs: runResult.stderr ? [runResult.stderr] : [],
 			usage: {
-				inputTokens: result.inputTokens ?? 0,
-				outputTokens: result.outputTokens ?? 0,
-				billedCostUsd: result.totalCostUsd ?? 0,
+				inputTokens: usage.inputTokens,
+				outputTokens: usage.outputTokens,
+				billedCostUsd: costUsd,
 			},
 			startedAt,
 			completedAt,
+			metadata: {
+				durationMs: runResult.durationMs,
+				exitCode: runResult.exitCode,
+			},
 		};
 	}
 
-	async cancel(): Promise<void> {
-		// No-op: codex does not support cancel
-	}
-
-	async health(): Promise<{ healthy: boolean }> {
-		try {
-			return { healthy: await this.isAvailable() };
-		} catch {
-			return { healthy: false };
-		}
+	async cancel(input: { runId: string; taskId: string }): Promise<void> {
+		// Codex does not support granular cancel
+		void input;
 	}
 }

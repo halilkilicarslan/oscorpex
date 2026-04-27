@@ -1,15 +1,32 @@
-// @oscorpex/provider-cursor — Cursor adapter
+// @oscorpex/provider-cursor — Cursor Agent CLI adapter (native)
+// Spawns the `cursor` CLI binary directly.
 
-import type { ProviderAdapter, ProviderCapabilities, ProviderExecutionInput, ProviderExecutionResult } from "@oscorpex/core";
+import type {
+	ProviderAdapter,
+	ProviderCapabilities,
+	ProviderExecutionInput,
+	ProviderExecutionResult,
+	ProviderHealth,
+} from "@oscorpex/core";
+import {
+	runCLI,
+	classifyExit,
+	tryParseJson,
+	extractUsage,
+	extractText,
+	checkBinaryAsync,
+	buildToolGovernanceSection,
+	hasFullToolAccess,
+} from "@oscorpex/provider-sdk";
+import { ProviderUnavailableError, ProviderExecutionError, ProviderTimeoutError } from "@oscorpex/core";
+
+// ---------------------------------------------------------------------------
+// Adapter
+// ---------------------------------------------------------------------------
 
 export class CursorAdapter implements ProviderAdapter {
 	readonly id = "cursor";
-
-	private legacy: any;
-
-	constructor(legacyAdapter?: any) {
-		this.legacy = legacyAdapter;
-	}
+	private binary = "cursor";
 
 	capabilities(): ProviderCapabilities {
 		return {
@@ -24,51 +41,105 @@ export class CursorAdapter implements ProviderAdapter {
 	}
 
 	async isAvailable(): Promise<boolean> {
-		return this.legacy?.isAvailable?.() ?? false;
+		const result = await checkBinaryAsync(this.binary, ["agent", "--version"]);
+		return result.available;
+	}
+
+	async health(): Promise<ProviderHealth> {
+		const result = await checkBinaryAsync(this.binary, ["agent", "--version"]);
+		return {
+			healthy: result.available,
+			message: result.available ? result.version : result.error,
+		};
 	}
 
 	async execute(input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
 		const startedAt = new Date().toISOString();
-		const result = await this.legacy.execute({
-			projectId: input.runId,
-			agentId: "",
-			agentName: "",
-			repoPath: input.repoPath,
-			prompt: input.prompt,
-			systemPrompt: input.systemPrompt ?? "",
-			timeoutMs: input.timeoutMs,
-			model: input.model ?? "cursor-large",
-			allowedTools: input.allowedTools ?? [],
+
+		const available = await this.isAvailable();
+		if (!available) {
+			throw new ProviderUnavailableError(this.id, `Cursor CLI binary "${this.binary}" not found`);
+		}
+
+		// Cursor cannot honor restricted tool policies
+		if (input.allowedTools && !hasFullToolAccess(input.allowedTools)) {
+			throw new ProviderExecutionError(
+				this.id,
+				input.taskId,
+				null,
+				"Cursor adapter cannot honor restricted tool policies; fallback required",
+			);
+		}
+
+		const governanceSection = buildToolGovernanceSection(input.allowedTools);
+		const model = input.model ?? "cursor-large";
+		const timeoutMs = input.timeoutMs ?? 120_000;
+
+		const args = ["agent", "-p", "--output-format", "json", "--trust", "--force"];
+		if (model) args.push("--model", model);
+
+		const fullPrompt = [input.systemPrompt, governanceSection, input.prompt].filter(Boolean).join("\n\n");
+
+		const runResult = await runCLI({
+			binary: this.binary,
+			args,
+			cwd: input.repoPath,
+			timeoutMs,
 			signal: input.signal,
+			stdin: fullPrompt,
 		});
 
+		const classified = classifyExit(runResult);
 		const completedAt = new Date().toISOString();
+
+		if (classified.classification === "timeout") {
+			throw new ProviderTimeoutError(this.id, input.taskId, runResult.durationMs);
+		}
+		if (classified.classification === "killed") {
+			throw new ProviderExecutionError(
+				this.id,
+				input.taskId,
+				runResult.exitCode,
+				`Cursor CLI killed: ${classified.message}`,
+			);
+		}
+		if (classified.classification !== "success") {
+			throw new ProviderExecutionError(
+				this.id,
+				input.taskId,
+				runResult.exitCode,
+				classified.message,
+			);
+		}
+
+		const parsed = tryParseJson(runResult.stdout);
+		const usage = parsed.ok ? extractUsage(parsed.data) : { inputTokens: 0, outputTokens: 0 };
+		const text = parsed.ok ? extractText(parsed.data) : runResult.stdout.trim();
+
+		// Cursor does not expose cost via CLI
 		return {
 			provider: this.id,
-			model: input.model,
-			text: result.logs?.join("\n") ?? "",
-			filesCreated: result.filesCreated ?? [],
-			filesModified: result.filesModified ?? [],
-			logs: result.logs ?? [],
+			model,
+			text,
+			filesCreated: [],
+			filesModified: [],
+			logs: runResult.stderr ? [runResult.stderr] : [],
 			usage: {
-				inputTokens: result.inputTokens ?? 0,
-				outputTokens: result.outputTokens ?? 0,
-				billedCostUsd: result.totalCostUsd ?? 0,
+				inputTokens: usage.inputTokens,
+				outputTokens: usage.outputTokens,
+				billedCostUsd: 0,
 			},
 			startedAt,
 			completedAt,
+			metadata: {
+				durationMs: runResult.durationMs,
+				exitCode: runResult.exitCode,
+			},
 		};
 	}
 
-	async cancel(): Promise<void> {
-		// No-op: cursor does not support cancel
-	}
-
-	async health(): Promise<{ healthy: boolean }> {
-		try {
-			return { healthy: await this.isAvailable() };
-		} catch {
-			return { healthy: false };
-		}
+	async cancel(input: { runId: string; taskId: string }): Promise<void> {
+		// Cursor does not support granular cancel
+		void input;
 	}
 }

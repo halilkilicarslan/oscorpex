@@ -8,23 +8,22 @@ import { ClaudeCodeAdapter, CodexAdapter, CursorAdapter } from "../adapters/inde
 const log = createLogger("provider-registry");
 
 // ---------------------------------------------------------------------------
-// Provider factory — decouples adapter construction from legacy cli-adapter.ts
+// Provider factory — native adapter construction (no legacy dependency)
 // ---------------------------------------------------------------------------
 
 export interface ProviderFactoryConfig {
 	id: string;
-	legacyName?: string;
 	defaultModel?: string;
 }
 
 export function createProviderAdapter(config: ProviderFactoryConfig): ProviderAdapter {
 	switch (config.id) {
 		case "claude-code":
-			return new ClaudeCodeAdapter(null);
+			return new ClaudeCodeAdapter();
 		case "codex":
-			return new CodexAdapter(null);
+			return new CodexAdapter();
 		case "cursor":
-			return new CursorAdapter(null);
+			return new CursorAdapter();
 		default:
 			throw new Error(`Unknown provider: ${config.id}`);
 	}
