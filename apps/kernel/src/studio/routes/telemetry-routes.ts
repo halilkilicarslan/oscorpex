@@ -178,6 +178,29 @@ router.get("/providers/queue-wait", (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Adaptive Concurrency Debug Surface (TASK 3.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /telemetry/concurrency
+ * Real-time adaptive concurrency state.
+ */
+router.get("/concurrency", (c) => {
+	// Access private controller via type assertion for debug endpoint
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const engine = executionEngine as any;
+	const controller = engine._concurrencyController as import("../adaptive-concurrency.js").AdaptiveConcurrencyController | undefined;
+
+	if (!controller) {
+		return c.json({ error: "Adaptive concurrency controller not available" }, 503);
+	}
+
+	return c.json({
+		adaptive: controller.getRuntimeState(),
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Performance Baseline (EPIC Performance)
 // ---------------------------------------------------------------------------
 

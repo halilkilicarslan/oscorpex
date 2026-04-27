@@ -175,6 +175,31 @@ export class AdaptiveConcurrencyController {
 		}
 	}
 
+	/**
+	 * Returns the current runtime decision state for observability.
+	 */
+	getRuntimeState(): {
+		currentMax: number;
+		activeCount: number;
+		pendingCount: number;
+		lastFailureRate: number;
+		lastQueueDepth: number;
+		failureRateThreshold: number;
+		queueDepthThreshold: number;
+		adjustmentIntervalMs: number;
+	} {
+		return {
+			currentMax: this.semaphore.maxConcurrency,
+			activeCount: this.semaphore.activeCount,
+			pendingCount: this.semaphore.pendingCount,
+			lastFailureRate: this.getFailureRate(),
+			lastQueueDepth: this.getQueueDepth(),
+			failureRateThreshold: FAILURE_RATE_THRESHOLD,
+			queueDepthThreshold: QUEUE_DEPTH_THRESHOLD,
+			adjustmentIntervalMs: ADJUSTMENT_INTERVAL_MS,
+		};
+	}
+
 	private _adjust(): void {
 		const failureRate = this.getFailureRate();
 		const queueDepth = this.getQueueDepth();

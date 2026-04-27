@@ -147,4 +147,24 @@ describe("AdaptiveConcurrencyController", () => {
 		controller.stop();
 		vi.useRealTimers();
 	});
+
+	it("getRuntimeState returns current decision inputs and outputs", () => {
+		const sem = new AdaptiveSemaphore(4);
+		const getFailureRate = vi.fn().mockReturnValue(0.6);
+		const getQueueDepth = vi.fn().mockReturnValue(10);
+		const controller = new AdaptiveConcurrencyController(sem, getFailureRate, getQueueDepth);
+		controller.start();
+
+		const state = controller.getRuntimeState();
+		expect(state.currentMax).toBe(4);
+		expect(state.activeCount).toBe(0);
+		expect(state.pendingCount).toBe(0);
+		expect(state.lastFailureRate).toBe(0.6);
+		expect(state.lastQueueDepth).toBe(10);
+		expect(state.failureRateThreshold).toBe(0.5);
+		expect(state.queueDepthThreshold).toBe(5);
+		expect(state.adjustmentIntervalMs).toBe(30_000);
+
+		controller.stop();
+	});
 });
