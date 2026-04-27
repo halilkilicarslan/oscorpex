@@ -906,3 +906,57 @@ export interface CustomTeamTemplate {
   dependencies: { from: string; to: string; type: DependencyType }[];
   createdAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Provider Telemetry (EPIC 3 — execution observability)
+// ---------------------------------------------------------------------------
+
+export type ProviderErrorClassification =
+  | 'unavailable'
+  | 'timeout'
+  | 'rate_limited'
+  | 'killed'
+  | 'tool_restriction_unsupported'
+  | 'cli_error'
+  | 'spawn_failure'
+  | 'unknown';
+
+export interface FallbackEntry {
+  timestamp: string;
+  fromProvider: string;
+  toProvider: string;
+  reason: string;
+  errorClassification: ProviderErrorClassification;
+  latencyMs: number;
+}
+
+export interface ProviderExecutionTelemetry {
+  runId: string;
+  taskId: string;
+  startedAt: string;
+  completedAt?: string;
+  primaryProvider: string;
+  finalProvider?: string;
+  success: boolean;
+  latencyMs: number;
+  fallbackCount: number;
+  fallbackTimeline: FallbackEntry[];
+  errorClassification?: ProviderErrorClassification;
+  errorMessage?: string;
+  retryReason?: string;
+  degradedMode?: boolean;
+  degradedMessage?: string;
+  canceled?: boolean;
+  cancelReason?: string;
+}
+
+export interface ProviderLatencySnapshot {
+  providerId: string;
+  totalExecutions: number;
+  successfulExecutions: number;
+  failedExecutions: number;
+  averageLatencyMs: number;
+  p95LatencyMs: number;
+  lastFailureAt?: string;
+  lastFailureClassification?: ProviderErrorClassification;
+}

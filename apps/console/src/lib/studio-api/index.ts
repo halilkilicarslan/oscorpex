@@ -25,5 +25,6 @@ export * from './templates.js';
 export * from './ci.js';
 export * from './collaboration.js';
 export * from './marketplace.js';
+export * from './telemetry.js';
 // v7.0: Agentic Platform API
 export * from './agentic.js';

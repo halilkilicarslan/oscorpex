@@ -21,6 +21,7 @@ import {
   Terminal,
   Gauge,
   LogOut,
+  Radio,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -80,6 +81,7 @@ const sections: NavSection[] = [
       { to: '/studio/teams', label: 'Team Builder', icon: <Users size={18} /> },
       { to: '/studio/providers', label: 'Providers', icon: <Settings size={18} /> },
       { to: '/studio/cli-monitor', label: 'CLI Monitor', icon: <Terminal size={18} /> },
+      { to: '/studio/telemetry', label: 'Telemetry', icon: <Radio size={18} />, badge: 'New' },
     ],
   },
 ];
