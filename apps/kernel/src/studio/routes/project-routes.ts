@@ -39,6 +39,11 @@ import {
 	updatePlanStatus,
 	updateProject,
 } from "../db.js";
+import {
+	normalizeProviderPolicyProfile,
+	VALID_PROFILES,
+	type ProviderPolicyProfile,
+} from "../provider-policy-profiles.js";
 import { eventBus } from "../event-bus.js";
 import { gitManager } from "../git-manager.js";
 import { initLintConfig } from "../lint-runner.js";
@@ -1288,4 +1293,24 @@ projectRoutes.get("/projects/:id/events/recent", async (c) => {
 	const [events, total] = await Promise.all([listEvents(projectId, limit, offset), countEvents(projectId)]);
 	c.header("X-Total-Count", String(total));
 	return c.json(events);
+});
+
+// ---- Policy Profile --------------------------------------------------------
+
+projectRoutes.get("/projects/:id/policy-profile", async (c) => {
+	const projectId = c.req.param("id");
+	const value = await getProjectSetting(projectId, "model_routing", "provider_policy_profile");
+	const profile = value ? normalizeProviderPolicyProfile(value) : null;
+	return c.json({ profile });
+});
+
+projectRoutes.put("/projects/:id/policy-profile", requirePermission("projects:update"), async (c) => {
+	const projectId = c.req.param("id");
+	const body = (await c.req.json()) as { profile?: string };
+	const profile = normalizeProviderPolicyProfile(body.profile);
+	if (!VALID_PROFILES.includes(profile)) {
+		return c.json({ error: `Invalid profile: ${body.profile}` }, 400);
+	}
+	await setProjectSettings(projectId, "model_routing", { provider_policy_profile: profile });
+	return c.json({ profile });
 });

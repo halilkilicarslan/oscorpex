@@ -23,7 +23,7 @@ export interface ResolvedModel {
 	provider: "anthropic" | "openai" | "cursor" | string;
 	model: string;
 	effort: "low" | "medium" | "high";
-	cliTool?: AgentCliTool;
+	cliTool?: string;
 	decisionReason?: string;
 	selectedProfile?: ProviderPolicyProfile;
 }
@@ -193,7 +193,7 @@ export async function resolveModel(
 		priorFailures?: number;
 		reviewRejections?: number;
 		riskLevel?: string;
-		cliTool?: AgentCliTool;
+	cliTool?: AgentCliTool | string;
 		profile?: ProviderPolicyProfile;
 	},
 ): Promise<ResolvedModel> {
@@ -243,7 +243,7 @@ export async function resolveModel(
 
 	// 6. Provider-native model mapping based on profile + cliTool
 	const primary = selectPrimaryProvider(resolvedProfile, cliTool);
-	const resolvedCliTool = primary.cliTool as AgentCliTool;
+	const resolvedCliTool = primary.cliTool;
 
 	// Profile-aware cost selection
 	const allowDowngrade =

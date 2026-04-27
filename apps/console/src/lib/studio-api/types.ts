@@ -961,3 +961,89 @@ export interface ProviderLatencySnapshot {
   lastFailureAt?: string;
   lastFailureClassification?: ProviderErrorClassification;
 }
+
+// ---- Performance Config (Admin Settings) ---------------------------------
+
+export interface PerformanceFeatureFlags {
+  adaptiveConcurrency: boolean;
+  fairScheduling: boolean;
+  fallbackDecisionMotor: boolean;
+  retryPolicy: boolean;
+  providerRuntimeCache: boolean;
+  providerHealthCache: boolean;
+  costAwareModelSelection: boolean;
+  preflightWarmup: boolean;
+  providerCooldown: boolean;
+  timeoutPolicy: boolean;
+  queueWaitTelemetry: boolean;
+}
+
+export interface AdaptiveConcurrencyConfig {
+  defaultMax: number;
+  adjustmentIntervalMs: number;
+  failureRateThreshold: number;
+  queueDepthThreshold: number;
+}
+
+export interface RetryPolicyConfig {
+  maxAutoRetries: number;
+  baseBackoffMs: number;
+}
+
+export interface TimeoutPolicyConfig {
+  complexityBaseMs: { S: number; M: number; L: number; XL: number };
+  providerMultipliers: Record<string, number>;
+}
+
+export interface CooldownConfig {
+  durationsMs: {
+    unavailable: number;
+    spawn_failure: number;
+    repeated_timeout: number;
+  };
+}
+
+export interface DbPoolConfig {
+  minConnections: number;
+  maxConnections: number;
+  idleTimeoutMs: number;
+  acquireTimeoutMs: number;
+}
+
+export interface PerformanceConfigSnapshot {
+  features: PerformanceFeatureFlags;
+  adaptiveConcurrency: AdaptiveConcurrencyConfig;
+  retryPolicy: RetryPolicyConfig;
+  timeoutPolicy: TimeoutPolicyConfig;
+  cooldown: CooldownConfig;
+  dbPool: DbPoolConfig;
+}
+
+// ---------------------------------------------------------------------------
+// Provider Runtime State (Admin Settings)
+// ---------------------------------------------------------------------------
+
+export type CooldownTrigger =
+  | 'unavailable'
+  | 'spawn_failure'
+  | 'rate_limited'
+  | 'repeated_timeout'
+  | 'cli_error'
+  | 'manual';
+
+export interface ProviderRuntimeState {
+  adapter: string;
+  rateLimited: boolean;
+  cooldownUntil: string | null;
+  consecutiveFailures: number;
+  lastSuccess: string | null;
+  lastCooldownTrigger?: CooldownTrigger;
+  lastCooldownAt?: string;
+}
+
+export type ProviderPolicyProfile =
+  | 'balanced'
+  | 'cheap'
+  | 'quality'
+  | 'local-first'
+  | 'fallback-heavy';

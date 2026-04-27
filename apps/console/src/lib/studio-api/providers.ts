@@ -8,6 +8,8 @@ import type {
   CLIProbeEvent,
   OscorpexUsageSnapshot,
   ProviderProbePermission,
+  ProviderRuntimeState,
+  ProviderPolicyProfile,
 } from './types.js';
 import { API, json } from './base.js';
 
@@ -138,4 +140,23 @@ export async function updateCLIUsageSettings(
 
 export async function fetchOscorpexCLIUsage(): Promise<Record<CLIProviderId, OscorpexUsageSnapshot>> {
   return json(`${API}/cli-usage/oscorpex`);
+}
+
+export async function fetchProviderStatus(): Promise<ProviderRuntimeState[]> {
+  return json(`${API}/providers/status`);
+}
+
+export async function fetchProjectPolicyProfile(projectId: string): Promise<{ profile: ProviderPolicyProfile | null }> {
+  return json(`${API}/projects/${projectId}/policy-profile`);
+}
+
+export async function updateProjectPolicyProfile(
+  projectId: string,
+  profile: ProviderPolicyProfile,
+): Promise<{ profile: ProviderPolicyProfile }> {
+  return json(`${API}/projects/${projectId}/policy-profile`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile }),
+  });
 }

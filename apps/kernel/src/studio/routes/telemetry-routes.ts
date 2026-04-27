@@ -277,6 +277,7 @@ router.get("/preflight", (c) => {
 // ---------------------------------------------------------------------------
 
 import { getDbPoolSnapshot } from "../db-pool-metrics.js";
+import { getPerformanceConfigSnapshot } from "../performance-config.js";
 
 /**
  * GET /telemetry/db-pool
@@ -328,6 +329,15 @@ router.get("/performance/baseline", (c) => {
 
 	const baseline = buildPerformanceBaseline(executionEngine.telemetry, windowMs);
 	return c.json({ baseline });
+});
+
+/**
+ * GET /telemetry/performance/config
+ * Current performance configuration snapshot (read-only).
+ */
+router.get("/performance/config", (c) => {
+	const config = getPerformanceConfigSnapshot();
+	return c.json({ config });
 });
 
 export { router as telemetryRoutes };

@@ -1,6 +1,7 @@
 import {
   type ProviderExecutionTelemetry,
   type ProviderLatencySnapshot,
+  type PerformanceConfigSnapshot,
 } from './types.js';
 import { API, json } from './base.js';
 
@@ -25,4 +26,8 @@ export async function fetchProviderRecord(
   taskId: string,
 ): Promise<{ record: ProviderExecutionTelemetry }> {
   return json(`${API}/telemetry/providers/records/${encodeURIComponent(runId)}/${encodeURIComponent(taskId)}`);
+}
+
+export async function fetchPerformanceConfig(): Promise<{ config: PerformanceConfigSnapshot }> {
+  return json(`${API}/telemetry/performance/config`);
 }
