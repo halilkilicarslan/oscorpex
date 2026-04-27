@@ -5,15 +5,17 @@
 
 import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
 import { createLogger } from "./logger.js";
+import { getRetryPolicyConfig } from "./performance-config.js";
 const log = createLogger("retry-policy");
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-export const MAX_AUTO_RETRIES = 3;
-export const BASE_BACKOFF_MS = process.env.VITEST === "true" ? 0 : 5_000;
-export const MAX_BACKOFF_MS = 60_000;
+const cfg = getRetryPolicyConfig();
+export const MAX_AUTO_RETRIES = cfg.maxAutoRetries;
+export const BASE_BACKOFF_MS = cfg.baseBackoffMs;
+export const MAX_BACKOFF_MS = cfg.maxBackoffMs;
 
 // ---------------------------------------------------------------------------
 // Retryability matrix

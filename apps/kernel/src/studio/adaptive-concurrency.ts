@@ -4,21 +4,23 @@
 // ---------------------------------------------------------------------------
 
 import { createLogger } from "./logger.js";
+import { getAdaptiveConcurrencyConfig } from "./performance-config.js";
 const log = createLogger("adaptive-concurrency");
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-const DEFAULT_MAX = Number(process.env.OSCORPEX_MAX_CONCURRENT_TASKS) || 3;
-const MIN_MAX = 1;
-const ABSOLUTE_MAX = 10;
-const ADJUSTMENT_INTERVAL_MS = 30_000;
+const cfg = getAdaptiveConcurrencyConfig();
+export const DEFAULT_MAX = cfg.defaultMax;
+export const MIN_MAX = cfg.minMax;
+export const ABSOLUTE_MAX = cfg.absoluteMax;
+const ADJUSTMENT_INTERVAL_MS = cfg.adjustmentIntervalMs;
 
 /** Failure rate threshold above which we reduce concurrency */
-const FAILURE_RATE_THRESHOLD = 0.5;
+const FAILURE_RATE_THRESHOLD = cfg.failureRateThreshold;
 /** Queue depth threshold above which we consider increasing concurrency */
-const QUEUE_DEPTH_THRESHOLD = 5;
+const QUEUE_DEPTH_THRESHOLD = cfg.queueDepthThreshold;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -190,5 +192,3 @@ export class AdaptiveConcurrencyController {
 		this.semaphore.maxConcurrency = newMax;
 	}
 }
-
-export { DEFAULT_MAX, MIN_MAX, ABSOLUTE_MAX };

@@ -6,7 +6,14 @@
 import type { AgentCliTool } from "./types.js";
 import { getProjectSetting } from "./db.js";
 import { createLogger } from "./logger.js";
+import { getTimeoutPolicyConfig } from "./performance-config.js";
 const log = createLogger("timeout-policy");
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+const cfg = getTimeoutPolicyConfig();
 
 // ---------------------------------------------------------------------------
 // Provider timeout profiles — multiplier over base complexity timeout
@@ -19,25 +26,20 @@ export interface ProviderTimeoutProfile {
 }
 
 const PROVIDER_TIMEOUT_PROFILES: Record<AgentCliTool, ProviderTimeoutProfile> = {
-	"claude-code": { multiplier: 1.0, minMs: 5 * 60 * 1000, maxMs: 90 * 60 * 1000 },
-	codex: { multiplier: 1.2, minMs: 5 * 60 * 1000, maxMs: 90 * 60 * 1000 },
-	cursor: { multiplier: 1.1, minMs: 5 * 60 * 1000, maxMs: 90 * 60 * 1000 },
-	none: { multiplier: 1.0, minMs: 5 * 60 * 1000, maxMs: 90 * 60 * 1000 },
+	"claude-code": { multiplier: cfg.providerMultipliers["claude-code"]!, minMs: cfg.minMs, maxMs: cfg.maxMs },
+	codex: { multiplier: cfg.providerMultipliers.codex!, minMs: cfg.minMs, maxMs: cfg.maxMs },
+	cursor: { multiplier: cfg.providerMultipliers.cursor!, minMs: cfg.minMs, maxMs: cfg.maxMs },
+	none: { multiplier: 1.0, minMs: cfg.minMs, maxMs: cfg.maxMs },
 };
 
 // ---------------------------------------------------------------------------
 // Complexity base timeouts
 // ---------------------------------------------------------------------------
 
-const COMPLEXITY_TIMEOUT_MS: Record<string, number> = {
-	S: 30 * 60 * 1000,
-	M: 30 * 60 * 1000,
-	L: 45 * 60 * 1000,
-	XL: 60 * 60 * 1000,
-};
+const COMPLEXITY_TIMEOUT_MS: Record<string, number> = cfg.complexityBaseMs;
 
 const DEFAULT_TASK_TIMEOUT_MS = COMPLEXITY_TIMEOUT_MS.S;
-export const TIMEOUT_WARNING_THRESHOLD = 0.8;
+export const TIMEOUT_WARNING_THRESHOLD = cfg.warningThreshold;
 
 // ---------------------------------------------------------------------------
 // Config surface

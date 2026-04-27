@@ -8,6 +8,7 @@ import type { ProviderCapabilities } from "./provider-runtime-cache.js";
 import { providerRuntimeCache } from "./provider-runtime-cache.js";
 import { providerState } from "./provider-state.js";
 import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
+import { getFallbackConfig } from "./performance-config.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("fallback-decision");
 
@@ -15,15 +16,17 @@ const log = createLogger("fallback-decision");
 // Severity weights — higher = more severe, more likely to skip provider
 // ---------------------------------------------------------------------------
 
+const fallbackCfg = getFallbackConfig();
+
 const FALLBACK_SEVERITY: Record<ProviderErrorClassification, number> = {
-	tool_restriction_unsupported: 100,
-	spawn_failure: 90,
-	unavailable: 80,
-	rate_limited: 70,
-	timeout: 60,
-	cli_error: 40,
-	killed: 30,
-	unknown: 20,
+	tool_restriction_unsupported: fallbackCfg.severity.tool_restriction_unsupported ?? 100,
+	spawn_failure: fallbackCfg.severity.spawn_failure ?? 90,
+	unavailable: fallbackCfg.severity.unavailable ?? 80,
+	rate_limited: fallbackCfg.severity.rate_limited ?? 70,
+	timeout: fallbackCfg.severity.timeout ?? 60,
+	cli_error: fallbackCfg.severity.cli_error ?? 40,
+	killed: fallbackCfg.severity.killed ?? 30,
+	unknown: fallbackCfg.severity.unknown ?? 20,
 };
 
 export function getFallbackSeverity(classification: ProviderErrorClassification): number {

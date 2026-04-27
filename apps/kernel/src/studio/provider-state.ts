@@ -8,6 +8,7 @@ import { eventBus } from "./event-bus.js";
 import { query, execute as pgExec } from "./pg.js";
 import { providerRuntimeCache } from "./provider-runtime-cache.js";
 import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
+import { getCooldownConfig } from "./performance-config.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("provider-state");
 
@@ -37,13 +38,14 @@ export interface ProviderState {
 // Cooldown durations per trigger (milliseconds)
 // ---------------------------------------------------------------------------
 
+const cooldownCfg = getCooldownConfig();
 const COOLDOWN_DURATIONS: Record<CooldownTrigger, number> = {
-	unavailable: 30_000,
-	spawn_failure: 60_000,
-	rate_limited: 60_000,
-	repeated_timeout: 90_000,
-	cli_error: 0, // no automatic cooldown for single cli errors
-	manual: 30_000,
+	unavailable: cooldownCfg.durationsMs.unavailable,
+	spawn_failure: cooldownCfg.durationsMs.spawn_failure,
+	rate_limited: cooldownCfg.durationsMs.rate_limited,
+	repeated_timeout: cooldownCfg.durationsMs.repeated_timeout,
+	cli_error: cooldownCfg.durationsMs.cli_error,
+	manual: cooldownCfg.durationsMs.manual,
 };
 
 // ---------------------------------------------------------------------------

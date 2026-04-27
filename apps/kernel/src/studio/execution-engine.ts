@@ -215,6 +215,13 @@ class ExecutionEngine {
 		// Avoiding an onTaskCompleted callback here prevents duplicate dispatch
 		// races with the inline dispatch path.
 
+		// TASK 15: Log active performance configuration at startup
+		import("./performance-config.js").then(({ logPerformanceConfig }) => {
+			logPerformanceConfig();
+		}).catch(() => {
+			// Non-blocking — config logging is best-effort
+		});
+
 		// TASK 8: Adaptive concurrency controller
 		this._concurrencyController = new AdaptiveConcurrencyController(
 			this._semaphore,

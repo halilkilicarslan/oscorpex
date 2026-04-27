@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { providerRuntimeCache } from "./provider-runtime-cache.js";
+import { getPreflightConfig } from "./performance-config.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("preflight-warmup");
 
@@ -47,6 +48,12 @@ export interface PreflightResult {
 export async function runPreflightHealthChecks(
 	adapters: Array<{ name: string; isAvailable: () => Promise<boolean> }>,
 ): Promise<PreflightResult[]> {
+	const cfg = getPreflightConfig();
+	if (!cfg.enabled) {
+		log.info("[preflight-warmup] Preflight health checks disabled by config");
+		return [];
+	}
+
 	const results: PreflightResult[] = [];
 	log.info(`[preflight-warmup] Starting health checks for ${adapters.length} providers`);
 

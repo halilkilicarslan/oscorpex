@@ -43,9 +43,12 @@ export interface RuntimeCacheStats {
 // Config
 // ---------------------------------------------------------------------------
 
-const DEFAULT_AVAILABILITY_TTL_MS = 30_000;
-const DEFAULT_UNAVAILABLE_TTL_MS = 10_000;
-const DEFAULT_CAPABILITY_TTL_MS = 300_000; // 5 min
+import { getHealthCacheConfig } from "./performance-config.js";
+
+const cacheCfg = getHealthCacheConfig();
+const DEFAULT_AVAILABILITY_TTL_MS = cacheCfg.availabilityTtlMs;
+const DEFAULT_UNAVAILABLE_TTL_MS = Math.max(5_000, Math.round(cacheCfg.availabilityTtlMs / 3));
+const DEFAULT_CAPABILITY_TTL_MS = cacheCfg.capabilityTtlMs;
 
 // ---------------------------------------------------------------------------
 // ProviderRuntimeCache
