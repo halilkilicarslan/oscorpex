@@ -55,6 +55,10 @@ export {
 	providerTelemetry,
 } from "./observability.js";
 
+// Health cache — TTL-cached binary availability checks
+export type { HealthCacheEntry, HealthCacheStats } from "./health-cache.js";
+export { healthCache, checkBinaryCached } from "./health-cache.js";
+
 // Re-export core errors that providers should throw
 export {
 	ProviderUnavailableError,

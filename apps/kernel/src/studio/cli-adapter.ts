@@ -8,7 +8,7 @@ import { type CLIExecutionResult } from "./cli-runtime.js";
 import { executeWithCLI, isClaudeCliAvailable } from "./cli-runtime.js";
 import type { AgentCliTool } from "./types.js";
 import type { CLIAdapterOptions } from "@oscorpex/provider-sdk";
-import { buildToolGovernanceSection, hasFullToolAccess } from "@oscorpex/provider-sdk";
+import { buildToolGovernanceSection, hasFullToolAccess, checkBinaryCached, checkBinaryAsync } from "@oscorpex/provider-sdk";
 import { createLogger } from "./logger.js";
 const log = createLogger("cli-adapter");
 
@@ -46,13 +46,8 @@ export class CodexAdapter implements CLIAdapter {
 	readonly name = "codex";
 
 	async isAvailable(): Promise<boolean> {
-		try {
-			const { execFileSync } = await import("node:child_process");
-			execFileSync("codex", ["--version"], { timeout: 5_000, stdio: "ignore" });
-			return true;
-		} catch {
-			return false;
-		}
+		const result = await checkBinaryCached(checkBinaryAsync, "codex", ["--version"]);
+		return result.available;
 	}
 
 	async execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult> {
@@ -160,13 +155,8 @@ export class CursorAdapter implements CLIAdapter {
 	readonly name = "cursor";
 
 	async isAvailable(): Promise<boolean> {
-		try {
-			const { execSync } = await import("node:child_process");
-			execSync("cursor agent --version", { timeout: 5_000, stdio: "ignore" });
-			return true;
-		} catch {
-			return false;
-		}
+		const result = await checkBinaryCached(checkBinaryAsync, "cursor", ["agent", "--version"]);
+		return result.available;
 	}
 
 	async execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult> {

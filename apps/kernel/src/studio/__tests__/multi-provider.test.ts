@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { healthCache } from "@oscorpex/provider-sdk";
 
 // ---------------------------------------------------------------------------
 // Mock child_process for CodexAdapter tests
@@ -10,6 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node:child_process", () => ({
 	execFileSync: vi.fn(),
+	execFile: vi.fn((...args: any[]) => {
+		const cb = args.find((a) => typeof a === "function");
+		if (cb) cb(null, "", "");
+	}),
 	spawn: vi.fn(),
 }));
 
@@ -42,8 +47,13 @@ import { resolveModel } from "../model-router.js";
 import type { Task } from "../types.js";
 
 const mockExecFileSync = vi.mocked(childProcess.execFileSync);
+const mockExecFile = vi.mocked(childProcess.execFile);
 const mockSpawn = vi.mocked(childProcess.spawn);
 const mockGetProjectSettings = vi.mocked(getProjectSettings);
+
+beforeEach(() => {
+	healthCache.clear();
+});
 
 function makeTask(overrides: Partial<Task> = {}): Task {
 	return {
@@ -112,14 +122,18 @@ describe("getAdapterChain", () => {
 
 describe("CodexAdapter.isAvailable", () => {
 	it("returns true when codex binary is found", async () => {
-		mockExecFileSync.mockReturnValueOnce(Buffer.from(""));
+		mockExecFile.mockImplementationOnce((...args: any[]) => {
+			const cb = args.find((a) => typeof a === "function");
+			if (cb) cb(null, "1.0.0", "");
+		});
 		const adapter = new CodexAdapter();
 		expect(await adapter.isAvailable()).toBe(true);
 	});
 
 	it("returns false when codex binary is not found", async () => {
-		mockExecFileSync.mockImplementationOnce(() => {
-			throw new Error("not found");
+		mockExecFile.mockImplementationOnce((...args: any[]) => {
+			const cb = args.find((a) => typeof a === "function");
+			if (cb) cb(new Error("not found"), "", "");
 		});
 		const adapter = new CodexAdapter();
 		expect(await adapter.isAvailable()).toBe(false);
