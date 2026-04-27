@@ -1,0 +1,24 @@
+{
+	"name": "@oscorpex/provider-gemini",
+	"version": "0.1.0",
+	"description": "Google Gemini provider adapter for Oscorpex",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"scripts": {
+		"build": "tsdown",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"dependencies": {
+		"@oscorpex/core": "workspace:*",
+		"@oscorpex/provider-sdk": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "^22.0.0",
+		"tsdown": "^0.15.2",
+		"typescript": "^5.7.3",
+		"vitest": "^4.1.2"
+	}
+}

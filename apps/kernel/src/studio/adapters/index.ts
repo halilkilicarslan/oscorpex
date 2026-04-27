@@ -4,3 +4,4 @@
 export { ClaudeCodeAdapter } from "@oscorpex/provider-claude";
 export { CodexAdapter } from "@oscorpex/provider-codex";
 export { CursorAdapter } from "@oscorpex/provider-cursor";
+export { GeminiAdapter } from "@oscorpex/provider-gemini";

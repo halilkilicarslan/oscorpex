@@ -84,6 +84,28 @@ importers:
         specifier: ^4.1.2
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.2)(jsdom@29.0.2)(vite@8.0.5(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
+  adapters/provider-gemini:
+    dependencies:
+      '@oscorpex/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@oscorpex/provider-sdk':
+        specifier: workspace:*
+        version: link:../../packages/provider-sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.17
+      tsdown:
+        specifier: ^0.15.2
+        version: 0.15.12(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.2)(jsdom@29.0.2)(vite@8.0.5(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
   apps/console:
     dependencies:
       '@tailwindcss/vite':
@@ -219,6 +241,9 @@ importers:
       '@oscorpex/provider-cursor':
         specifier: workspace:*
         version: link:../../adapters/provider-cursor
+      '@oscorpex/provider-gemini':
+        specifier: workspace:*
+        version: link:../../adapters/provider-gemini
       '@oscorpex/provider-sdk':
         specifier: workspace:*
         version: link:../../packages/provider-sdk

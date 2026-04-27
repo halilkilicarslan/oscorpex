@@ -9,7 +9,7 @@ import {
 	classifyProviderError,
 } from "@oscorpex/provider-sdk";
 import { createLogger } from "../logger.js";
-import { ClaudeCodeAdapter, CodexAdapter, CursorAdapter } from "../adapters/index.js";
+import { ClaudeCodeAdapter, CodexAdapter, CursorAdapter, GeminiAdapter } from "../adapters/index.js";
 
 const log = createLogger("provider-registry");
 
@@ -30,6 +30,8 @@ export function createProviderAdapter(config: ProviderFactoryConfig): ProviderAd
 			return new CodexAdapter();
 		case "cursor":
 			return new CursorAdapter();
+		case "gemini":
+			return new GeminiAdapter();
 		default:
 			throw new Error(`Unknown provider: ${config.id}`);
 	}
@@ -175,6 +177,7 @@ export class ProviderRegistry {
 			{ id: "claude-code", defaultModel: "sonnet" },
 			{ id: "codex", defaultModel: "gpt-4o" },
 			{ id: "cursor", defaultModel: "cursor-large" },
+			{ id: "gemini", defaultModel: "gemini-1.5-flash" },
 		];
 
 		for (const config of configs) {

@@ -31,6 +31,7 @@
     "@oscorpex/provider-claude": "workspace:*",
     "@oscorpex/provider-codex": "workspace:*",
     "@oscorpex/provider-cursor": "workspace:*",
+    "@oscorpex/provider-gemini": "workspace:*",
     "@oscorpex/provider-sdk": "workspace:*",
     "@oscorpex/task-graph": "workspace:*",
     "@oscorpex/verification-kit": "workspace:*",
