@@ -17,6 +17,7 @@ const ProvidersPage = lazy(() => import('./pages/studio/ProvidersPage'));
 const TeamBuilderPage = lazy(() => import('./pages/studio/TeamBuilderPage'));
 const CLIUsageMonitorPage = lazy(() => import('./pages/studio/CLIUsageMonitorPage'));
 const ProviderTelemetryPage = lazy(() => import('./pages/studio/ProviderTelemetryPage'));
+const ProviderComparisonPage = lazy(() => import('./pages/studio/ProviderComparisonPage'));
 const PlatformDashboard = lazy(() => import('./pages/studio/PlatformDashboard'));
 const InsightDashboard = lazy(() => import('./pages/studio/InsightDashboard'));
 const LogsPage = lazy(() => import('./pages/LogsPage'));
@@ -119,6 +120,14 @@ createRoot(document.getElementById('root')!).render(
                   element={
                     <ProtectedRoute>
                       <ProviderTelemetryPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/studio/providers/compare"
+                  element={
+                    <ProtectedRoute>
+                      <ProviderComparisonPage />
                     </ProtectedRoute>
                   }
                 />

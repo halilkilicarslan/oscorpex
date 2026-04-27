@@ -80,6 +80,7 @@ const sections: NavSection[] = [
       { to: '/studio', label: 'Projects', icon: <Code2 size={18} /> },
       { to: '/studio/teams', label: 'Team Builder', icon: <Users size={18} /> },
       { to: '/studio/providers', label: 'Providers', icon: <Settings size={18} /> },
+      { to: '/studio/providers/compare', label: 'Compare', icon: <BarChart3 size={18} />, badge: 'New' },
       { to: '/studio/cli-monitor', label: 'CLI Monitor', icon: <Terminal size={18} /> },
       { to: '/studio/telemetry', label: 'Telemetry', icon: <Radio size={18} />, badge: 'New' },
     ],
