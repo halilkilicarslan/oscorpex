@@ -62,7 +62,7 @@ import {
 } from "./sandbox-manager.js";
 import { resolveWorkspace, type ExecutionWorkspace } from "./execution-workspace.js";
 // test-gate imported via execution-gates.ts
-import { execute as pgExecute, queryOne as pgQueryOne } from "./pg.js";
+import { queryOne as pgQueryOne } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { providerState } from "./provider-state.js";
 import { providerRuntimeCache } from "./provider-runtime-cache.js";
@@ -402,7 +402,7 @@ class ExecutionEngine {
 		for (const task of tasks) {
 			if (task.status === "running" || task.status === "assigned") {
 				try {
-					await pgExecute("UPDATE tasks SET status = 'queued', started_at = NULL WHERE id = $1", [task.id]);
+					await updateTask(task.id, { status: "queued", startedAt: undefined });
 					log.info(`[execution-engine] Task "${task.title}" → queued (pipeline paused)`);
 				} catch (err) {
 					log.warn(`[execution-engine] Task reset failed: ${task.id}` + " " + String(err));
