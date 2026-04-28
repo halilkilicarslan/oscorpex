@@ -1886,3 +1886,29 @@ CREATE TABLE IF NOT EXISTS incident_events (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_incident_events_incident ON incident_events(incident_id, created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- Phase 2: Operator Actions & Governance Flags
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS operator_actions (
+  id            TEXT PRIMARY KEY,
+  action_type   TEXT NOT NULL,
+  target_id     TEXT,
+  target_type   TEXT,
+  actor         TEXT NOT NULL DEFAULT '',
+  reason        TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'success',
+  result        TEXT NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_operator_actions_type ON operator_actions(action_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_operator_actions_actor ON operator_actions(actor, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS operator_flags (
+  key           TEXT PRIMARY KEY,
+  value         TEXT NOT NULL DEFAULT '',
+  set_by        TEXT NOT NULL DEFAULT '',
+  reason        TEXT NOT NULL DEFAULT '',
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);

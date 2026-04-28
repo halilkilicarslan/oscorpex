@@ -48,6 +48,7 @@ import { cpAuditRoutes } from "../control-plane/audit/audit-routes.js";
 import { cpUsageCostRoutes } from "../control-plane/usage-cost/usage-cost-routes.js";
 import { cpIncidentRoutes } from "../control-plane/incidents/incident-routes.js";
 import { cpProjectionRoutes } from "../control-plane/projections/projection-routes.js";
+import { cpOperatorActionRoutes } from "../control-plane/operator-actions/operator-action-routes.js";
 
 const studio = new Hono();
 
@@ -162,6 +163,7 @@ studio.route("/", cpAuditRoutes);
 studio.route("/", cpUsageCostRoutes);
 studio.route("/", cpIncidentRoutes);
 studio.route("/", cpProjectionRoutes);
+studio.route("/", cpOperatorActionRoutes);
 
 // YAGNI-deferred: marketplace, cluster, collaboration
 // Re-enable when needed.

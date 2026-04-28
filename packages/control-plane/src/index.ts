@@ -40,6 +40,10 @@ export type {
 	CostSummary,
 } from "./projections/index.ts";
 
+// Operator Actions
+export * from "./operator-actions/index.ts";
+export * from "./operator-actions/service.ts";
+
 // Shared
 export * from "./shared/index.ts";
 
