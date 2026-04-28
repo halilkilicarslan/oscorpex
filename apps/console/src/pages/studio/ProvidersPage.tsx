@@ -32,64 +32,12 @@ import {
   type AIProviderType,
   type ProviderCliTool,
 } from '../../lib/studio-api';
-import { MODEL_OPTIONS } from '../../lib/model-options';
-
-// ---------------------------------------------------------------------------
-// Provider type metadata
-// ---------------------------------------------------------------------------
-
-interface ProviderMeta {
-  label: string;
-  defaultBaseUrl: string;
-  defaultModel: string;
-  models: string[];
-  color: string;
-}
-
-const PROVIDER_META: Record<AIProviderType, ProviderMeta> = {
-  openai: {
-    label: 'OpenAI',
-    defaultBaseUrl: '',
-    defaultModel: 'gpt-4o-mini',
-    models: MODEL_OPTIONS.openai,
-    color: 'text-[#10a37f]',
-  },
-  anthropic: {
-    label: 'Anthropic',
-    defaultBaseUrl: '',
-    defaultModel: 'claude-sonnet-4-20250514',
-    models: MODEL_OPTIONS.anthropic,
-    color: 'text-[#d97706]',
-  },
-  google: {
-    label: 'Google',
-    defaultBaseUrl: '',
-    defaultModel: 'gemini-2.0-flash',
-    models: MODEL_OPTIONS.google,
-    color: 'text-[#4285f4]',
-  },
-  ollama: {
-    label: 'Ollama',
-    defaultBaseUrl: 'http://localhost:11434',
-    defaultModel: 'llama3',
-    models: MODEL_OPTIONS.ollama,
-    color: 'text-[#a855f7]',
-  },
-  custom: {
-    label: 'Custom',
-    defaultBaseUrl: '',
-    defaultModel: '',
-    models: MODEL_OPTIONS.custom,
-    color: 'text-[#a3a3a3]',
-  },
-  cli: {
-    label: 'CLI (local)',
-    defaultBaseUrl: '',
-    defaultModel: 'sonnet',
-    models: MODEL_OPTIONS.cli,
-    color: 'text-[#22c55e]',
-  },
-};
+import {
+  PROVIDER_META,
+  PROVIDER_TYPE_ORDER,
+  providerStatusColor,
+  providerStatusDot,
+} from './settings/provider-meta.js';
 
 // ---------------------------------------------------------------------------
 // Type badge

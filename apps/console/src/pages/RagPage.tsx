@@ -17,62 +17,14 @@ import {
   AlertCircle,
   RefreshCw,
 } from 'lucide-react';
-
-const API_BASE = '/api/observability';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface KnowledgeBase {
-  id: string;
-  name: string;
-  description: string;
-  type: 'text' | 'pdf' | 'web' | 'code' | 'csv';
-  embedding_model: string;
-  chunk_size: number;
-  chunk_overlap: number;
-  status: 'active' | 'indexing' | 'error';
-  document_count: number;
-  total_chunks: number;
-  last_indexed_at: string | null;
-  created_at: string;
-  updated_at: string;
-  documents?: RagDocument[];
-}
-
-interface RagDocument {
-  id: string;
-  kb_id: string;
-  name: string;
-  source: string;
-  content_preview: string;
-  chunk_count: number;
-  size_bytes: number;
-  status: 'pending' | 'indexed' | 'error';
-  metadata: string;
-  created_at: string;
-}
-
-interface RagQuery {
-  id: string;
-  kb_id: string | null;
-  kb_name: string | null;
-  query: string;
-  results_count: number;
-  latency_ms: number | null;
-  agent_id: string | null;
-  created_at: string;
-}
-
-interface Stats {
-  totalKBs: number;
-  totalDocuments: number;
-  totalChunks: number;
-  totalQueries: number;
-  avgLatency: number;
-  byType: Record<string, number>;
-}
+import {
+  API_BASE,
+  type KnowledgeBase,
+  type RagDocument,
+  type RagQuery,
+  type Stats,
+  KB_TYPE_CONFIG,
+} from './studio/settings/rag-types.js';
 
 // ---------------------------------------------------------------------------
 // Constants
