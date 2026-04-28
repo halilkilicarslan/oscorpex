@@ -2,7 +2,7 @@
 // Messaging Helpers
 // ---------------------------------------------------------------------------
 
-import type { ProjectAgent } from '../../lib/studio-api';
+import type { ProjectAgent } from '../../../lib/studio-api';
 
 export function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();

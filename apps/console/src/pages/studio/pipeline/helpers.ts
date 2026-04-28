@@ -2,7 +2,7 @@
 // Pipeline Helpers
 // ---------------------------------------------------------------------------
 
-import type { ProjectAgent } from '../../lib/studio-api';
+import type { ProjectAgent } from '../../../lib/studio-api';
 import { ROLE_COLORS } from './constants.js';
 
 export function getAgentColor(agent: ProjectAgent): string {
@@ -22,6 +22,6 @@ export function formatElapsed(startedAt?: string): string {
   return `${Math.floor(elapsed / 3600)}s önce`;
 }
 
-export function countDoneTasks(tasks: import('../../lib/studio-api').Task[]): number {
+export function countDoneTasks(tasks: import('../../../lib/studio-api').Task[]): number {
   return tasks.filter((t) => t.status === 'done').length;
 }

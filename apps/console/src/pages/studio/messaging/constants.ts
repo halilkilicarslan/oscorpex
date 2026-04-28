@@ -2,7 +2,7 @@
 // Messaging Constants
 // ---------------------------------------------------------------------------
 
-import type { AgentMessageType } from '../../lib/studio-api';
+import type { AgentMessageType } from '../../../lib/studio-api';
 
 export const PAGE_SIZE = 50;
 export const MESSAGE_CENTER_WS_EVENTS = ['message:created'];

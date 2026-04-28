@@ -6,7 +6,7 @@ import { CheckCircle2, XCircle, Loader2, Clock } from 'lucide-react';
 import type { PipelineStage } from '../../../lib/studio-api';
 import AgentAvatarImg from '../../../components/AgentAvatar';
 import { roleLabel } from '../../../lib/studio-api';
-import { STAGE_STATUS_LABELS, TASK_STATUS_ICONS } from './constants.js';
+import { STAGE_STATUS_LABELS } from './constants.js';
 import { getAgentColor, countDoneTasks } from './helpers.js';
 
 interface StageCardProps {

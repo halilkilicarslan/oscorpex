@@ -1,10 +1,9 @@
 // ---------------------------------------------------------------------------
-// Oscorpex — Agent Dashboard (Metrikler ve Analizler)
+// Oscorpex — Agent Dashboard (refactored)
 // ---------------------------------------------------------------------------
 
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
-
 const CostTrendChart = lazy(() => import('./charts/CostTrendChart'));
 const AgentTimelineChart = lazy(() => import('./charts/AgentTimelineChart'));
 import {
@@ -32,6 +31,7 @@ import {
   fetchLatestSonarScan,
   triggerSonarScan,
   fetchPoolStatus,
+  roleLabel,
   type ProjectAnalytics,
   type AgentAnalytics,
   type ActivityTimeline,
@@ -40,303 +40,18 @@ import {
   type DocFreshnessItem,
   type SonarLatestScan,
   type PoolStatus,
-  roleLabel,
 } from '../../lib/studio-api';
-import AgentAvatarImg from '../../components/AgentAvatar';
 import { AgentHeatMap } from './AgentHeatMap';
-
-// ---------------------------------------------------------------------------
-// Yardımcı fonksiyonlar
-// ---------------------------------------------------------------------------
-
-/** Milisaniyeyi okunabilir süreye çevirir */
-function formatDuration(ms: number | null): string {
-  if (ms === null || ms <= 0) return '-';
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  if (ms < 3600000) return `${Math.round(ms / 60000)}dk`;
-  return `${(ms / 3600000).toFixed(1)}sa`;
-}
-
-
-function formatTokenCount(count: number): string {
-  if (!count) return '-';
-  if (count < 1000) return String(count);
-  if (count < 1_000_000) return `${(count / 1000).toFixed(1)}K`;
-  return `${(count / 1_000_000).toFixed(1)}M`;
-}
-
-/** Tamamlanma oranına göre renk sınıfı */
-function rateColor(rate: number): string {
-  if (rate >= 80) return 'text-[#22c55e]';
-  if (rate >= 50) return 'text-[#f59e0b]';
-  return 'text-[#ef4444]';
-}
-
-// ---------------------------------------------------------------------------
-// Özet Kart bileşeni
-// ---------------------------------------------------------------------------
-
-interface StatCardProps {
-  label: string;
-  value: string | number;
-  sub?: string;
-  icon: React.ReactNode;
-  accent?: string;
-}
-
-function StatCard({ label, value, sub, icon, accent = '#22c55e' }: StatCardProps) {
-  return (
-    <div className="bg-[#111111] border border-[#262626] rounded-xl p-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-[#737373] uppercase tracking-wider">{label}</span>
-        <span style={{ color: accent }} className="opacity-70">
-          {icon}
-        </span>
-      </div>
-      <div>
-        <span className="text-[26px] font-bold text-[#fafafa] leading-none">{value}</span>
-        {sub && <span className="ml-2 text-[11px] text-[#525252]">{sub}</span>}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Bar Chart (CSS tabanlı)
-// ---------------------------------------------------------------------------
-
-interface BarChartItem {
-  label: string;
-  value: number;
-  color: string;
-  avatar?: string;
-  role?: string;
-}
-
-interface BarChartProps {
-  items: BarChartItem[];
-  maxValue: number;
-}
-
-function BarChart({ items, maxValue }: BarChartProps) {
-  if (items.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-24 text-[#525252] text-[12px]">
-        Henuz veri yok
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {items.map((item) => {
-        const pct = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
-        return (
-          <div key={item.label} className="flex items-center gap-3">
-            <div className="flex items-center gap-2 w-36 shrink-0">
-              <AgentAvatarImg avatar={item.avatar ?? ''} name={item.label} size="xs" />
-              <div className="min-w-0">
-                <p className="text-[11px] text-[#a3a3a3] font-medium truncate">{item.label}</p>
-                {item.role && (
-                  <p className="text-[9px] text-[#525252] truncate">{roleLabel(item.role)}</p>
-                )}
-              </div>
-            </div>
-            <div className="flex-1 bg-[#1a1a1a] rounded-full h-2 overflow-hidden">
-              <div
-                className="h-2 rounded-full transition-all duration-500"
-                style={{ width: `${pct}%`, backgroundColor: item.color }}
-              />
-            </div>
-            <span className="text-[11px] text-[#a3a3a3] w-6 text-right shrink-0">{item.value}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Timeline Chart (son 7 gün)
-// ---------------------------------------------------------------------------
-
-interface TimelineChartProps {
-  data: ActivityTimeline[];
-}
-
-function TimelineChart({ data }: TimelineChartProps) {
-  const maxVal = Math.max(1, ...data.map((d) => d.tasksCompleted + d.runsStarted));
-
-  return (
-    <div className="flex items-end gap-1 h-20">
-      {data.map((d) => {
-        const total = d.tasksCompleted + d.runsStarted;
-        const pct = (total / maxVal) * 100;
-        const shortDate = d.date.slice(5); // MM-DD
-        return (
-          <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-            <div className="w-full flex flex-col items-center justify-end h-14">
-              {total > 0 && (
-                <div
-                  className="w-full rounded-t-sm transition-all duration-500"
-                  style={{
-                    height: `${Math.max(pct, 4)}%`,
-                    background: 'linear-gradient(to top, #22c55e88, #22c55e33)',
-                    border: '1px solid #22c55e44',
-                  }}
-                  title={`${d.date}: ${d.tasksCompleted} gorev, ${d.runsStarted} calistirma`}
-                />
-              )}
-              {total === 0 && (
-                <div className="w-full h-[2px] bg-[#1a1a1a] rounded" />
-              )}
-            </div>
-            <span className="text-[9px] text-[#525252] leading-none">{shortDate}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Ajan performans satırı
-// ---------------------------------------------------------------------------
-
-interface AgentRowProps {
-  agent: AgentAnalytics;
-}
-
-function scoreColor(score: number): string {
-  if (score >= 80) return '#22c55e';
-  if (score >= 60) return '#f59e0b';
-  if (score >= 40) return '#f97316';
-  return '#ef4444';
-}
-
-function AgentRow({ agent }: AgentRowProps) {
-  const successRate =
-    agent.tasksAssigned > 0
-      ? Math.round((agent.tasksCompleted / agent.tasksAssigned) * 100)
-      : 0;
-
-  const sc = agent.score ?? 0;
-
-  return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1a1a1a] last:border-0 hover:bg-[#0f0f0f] transition-colors">
-      {/* Avatar + ajan adı + rol + skor */}
-      <div className="flex items-center gap-2.5 w-44 shrink-0">
-        <div className="relative">
-          <AgentAvatarImg avatar={agent.avatar} name={agent.agentName} size="sm" />
-          {agent.tasksAssigned > 0 && (
-            <span
-              className="absolute -bottom-1 -right-1 text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center text-black"
-              style={{ backgroundColor: scoreColor(sc) }}
-              title={`Skor: ${sc}/100`}
-            >
-              {sc}
-            </span>
-          )}
-        </div>
-        <div className="min-w-0">
-          <p className="text-[12px] font-medium text-[#fafafa] truncate">{agent.agentName}</p>
-          <p className="text-[10px] text-[#525252] truncate">{roleLabel(agent.role)}</p>
-        </div>
-      </div>
-
-      {/* Atanan / Tamamlanan */}
-      <div className="flex gap-3 text-center flex-wrap">
-        <div className="w-12">
-          <p className="text-[13px] font-semibold text-[#fafafa]">{agent.tasksAssigned}</p>
-          <p className="text-[9px] text-[#525252]">Assigned</p>
-        </div>
-        <div className="w-12">
-          <p className="text-[13px] font-semibold text-[#22c55e]">{agent.tasksCompleted}</p>
-          <p className="text-[9px] text-[#525252]">Done</p>
-        </div>
-        <div className="w-12">
-          <p className="text-[13px] font-semibold text-[#ef4444]">{agent.totalFailures ?? agent.tasksFailed}</p>
-          <p className="text-[9px] text-[#525252]">Failed</p>
-        </div>
-        <div className="w-12">
-          <p className="text-[13px] font-semibold text-[#f97316]">{agent.totalReviewRejections ?? 0}</p>
-          <p className="text-[9px] text-[#525252]">Rejected</p>
-        </div>
-      </div>
-
-      {/* Basari orani bar */}
-      <div className="flex-1 flex flex-col gap-1 min-w-0">
-        <div className="flex items-center justify-between">
-          <span className={`text-[11px] font-semibold ${rateColor(successRate)}`}>
-            %{successRate}
-          </span>
-        </div>
-        <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
-          <div
-            className="h-1.5 rounded-full transition-all duration-500"
-            style={{
-              width: `${successRate}%`,
-              backgroundColor: successRate >= 80 ? '#22c55e' : successRate >= 50 ? '#f59e0b' : '#ef4444',
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Calistirma sayisi */}
-      <div className="w-16 text-center shrink-0">
-        <p className="text-[12px] font-medium text-[#a3a3a3]">{agent.runCount}</p>
-        <p className="text-[9px] text-[#525252]">Run</p>
-      </div>
-
-      {/* Toplam sure */}
-      <div className="w-16 text-center shrink-0">
-        <p className="text-[12px] font-medium text-[#a3a3a3]">{formatDuration(agent.totalRuntimeMs)}</p>
-        <p className="text-[9px] text-[#525252]">Sure</p>
-      </div>
-
-      {/* Token */}
-      <div className="w-16 text-center shrink-0">
-        <p className="text-[12px] font-medium text-[#38bdf8]">{formatTokenCount(agent.totalTokens)}</p>
-        <p className="text-[9px] text-[#525252]">Token</p>
-      </div>
-
-      {/* Maliyet */}
-      <div className="w-16 text-center shrink-0">
-        <p className="text-[12px] font-medium text-[#a78bfa]">${(agent.costUsd ?? 0).toFixed(2)}</p>
-        <p className="text-[9px] text-[#525252]">Cost</p>
-      </div>
-
-      {/* Mesaj sayilari */}
-      <div className="w-20 text-center shrink-0">
-        <p className="text-[11px] text-[#a3a3a3]">
-          <span className="text-[#22c55e]">{agent.messagesSent}</span>
-          {' / '}
-          <span className="text-[#3b82f6]">{agent.messagesReceived}</span>
-        </p>
-        <p className="text-[9px] text-[#525252]">Gonder/Al</p>
-      </div>
-
-      {/* Durum */}
-      <div className="w-16 flex justify-center shrink-0">
-        {agent.isRunning ? (
-          <span className="flex items-center gap-1 text-[10px] text-[#22c55e] bg-[#22c55e11] border border-[#22c55e33] px-2 py-0.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
-            Aktif
-          </span>
-        ) : (
-          <span className="text-[10px] text-[#525252] bg-[#1a1a1a] border border-[#262626] px-2 py-0.5 rounded-full">
-            Bekliyor
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Ana bileşen
-// ---------------------------------------------------------------------------
+import AgentAvatarImg from '../../components/AgentAvatar';
+import {
+  StatCard,
+  BarChart,
+  TimelineChart,
+  AgentRow,
+  scoreColor,
+} from './agent-dashboard/index.js';
+import type { BarChartItem } from './agent-dashboard/index.js';
+import { formatDuration } from './agent-dashboard/index.js';
 
 interface Props {
   projectId: string;
@@ -392,7 +107,6 @@ export default function AgentDashboard({ projectId }: Props) {
     }
   }, [projectId]);
 
-  // WS-driven refresh: task/pipeline event'leri gelince metrikleri yenile (debounced)
   const { isWsActive } = useWsEventRefresh(
     projectId,
     ['task:completed', 'task:failed', 'pipeline:completed'],
@@ -400,12 +114,10 @@ export default function AgentDashboard({ projectId }: Props) {
     { debounceMs: 2000 },
   );
 
-  // İlk yükleme
   useEffect(() => {
     load();
   }, [load]);
 
-  // Polling: yalnızca WS bağlantısı yokken çalışır
   useEffect(() => {
     if (isWsActive) return;
     const interval = setInterval(() => load(true), 30_000);
@@ -434,8 +146,7 @@ export default function AgentDashboard({ projectId }: Props) {
     );
   }
 
-  // Bar chart icin ajan gorev verileri
-  const barItems = (overview?.tasksPerAgent ?? []).map((a) => {
+  const barItems: BarChartItem[] = (overview?.tasksPerAgent ?? []).map((a) => {
     const ag = agents.find((ag) => ag.agentId === a.agentId);
     return {
       label: a.agentName,
@@ -456,7 +167,7 @@ export default function AgentDashboard({ projectId }: Props) {
 
   return (
     <div className="flex flex-col gap-5 p-5">
-      {/* Baslik ve yenile butonu */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-[15px] font-semibold text-[#fafafa]">Project Dashboard</h2>
@@ -472,7 +183,7 @@ export default function AgentDashboard({ projectId }: Props) {
         </button>
       </div>
 
-      {/* Ozet kartlar */}
+      {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard
           label="Total Tasks"
@@ -498,9 +209,7 @@ export default function AgentDashboard({ projectId }: Props) {
         <StatCard
           label="Pipeline Runs"
           value={overview?.pipelineRunCount ?? 0}
-          sub={overview?.pipelineRunCount
-            ? `${overview.pipelineSuccessRate}% success`
-            : undefined}
+          sub={overview?.pipelineRunCount ? `${overview.pipelineSuccessRate}% success` : undefined}
           icon={<GitBranch size={16} />}
           accent="#a855f7"
         />
@@ -513,9 +222,8 @@ export default function AgentDashboard({ projectId }: Props) {
         />
       </div>
 
-      {/* Orta satir: Bar chart + Timeline */}
+      {/* Middle row: Bar chart + Timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Ajan basi gorev dagilimi */}
         <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle2 size={14} className="text-[#22c55e]" />
@@ -524,7 +232,6 @@ export default function AgentDashboard({ projectId }: Props) {
           <BarChart items={barItems} maxValue={maxBarVal} />
         </div>
 
-        {/* Son 7 gun aktivite */}
         <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
           <div className="flex items-center gap-2 mb-4">
             <Clock size={14} className="text-[#3b82f6]" />
@@ -544,62 +251,48 @@ export default function AgentDashboard({ projectId }: Props) {
         </div>
       </div>
 
-      {/* Ortalama tamamlanma suresi + pipeline bilgisi */}
+      {/* Metrics row */}
       {(overview?.avgCompletionTimeMs !== null || (overview?.pipelineRunCount ?? 0) > 0) && (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
             <span className="text-[10px] text-[#525252] uppercase tracking-wider">Avg Completion</span>
-            <span className="text-[18px] font-bold text-[#fafafa]">
-              {formatDuration(overview?.avgCompletionTimeMs ?? null)}
-            </span>
+            <span className="text-[18px] font-bold text-[#fafafa]">{formatDuration(overview?.avgCompletionTimeMs ?? null)}</span>
             <span className="text-[10px] text-[#525252]">Per task</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
             <span className="text-[10px] text-[#525252] uppercase tracking-wider">Total Failures</span>
-            <span className="text-[18px] font-bold text-[#ef4444]">
-              {overview?.totalFailures ?? 0}
-            </span>
+            <span className="text-[18px] font-bold text-[#ef4444]">{overview?.totalFailures ?? 0}</span>
             <span className="text-[10px] text-[#525252]">Including retries</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
             <span className="text-[10px] text-[#525252] uppercase tracking-wider">Blocked Tasks</span>
-            <span className="text-[18px] font-bold text-[#ef4444]">
-              {overview?.blockedTasks ?? 0}
-            </span>
+            <span className="text-[18px] font-bold text-[#ef4444]">{overview?.blockedTasks ?? 0}</span>
             <span className="text-[10px] text-[#525252]">Needs attention</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
             <span className="text-[10px] text-[#525252] uppercase tracking-wider">Review Rejects</span>
-            <span className="text-[18px] font-bold text-[#f97316]">
-              {overview?.totalReviewRejections ?? 0}
-            </span>
+            <span className="text-[18px] font-bold text-[#f97316]">{overview?.totalReviewRejections ?? 0}</span>
             <span className="text-[10px] text-[#525252]">Code rejected</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
             <span className="text-[10px] text-[#525252] uppercase tracking-wider">Pipeline Success</span>
-            <span className="text-[18px] font-bold text-[#a855f7]">
-              {overview?.pipelineSuccessRate ?? 0}%
-            </span>
+            <span className="text-[18px] font-bold text-[#a855f7]">{overview?.pipelineSuccessRate ?? 0}%</span>
             <span className="text-[10px] text-[#525252]">{overview?.pipelineRunCount ?? 0} runs</span>
           </div>
           <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
             <span className="text-[10px] text-[#525252] uppercase tracking-wider">In Progress</span>
-            <span className="text-[18px] font-bold text-[#f59e0b]">
-              {overview?.inProgressTasks ?? 0}
-            </span>
+            <span className="text-[18px] font-bold text-[#f59e0b]">{overview?.inProgressTasks ?? 0}</span>
             <span className="text-[10px] text-[#525252]">Tasks running</span>
           </div>
           {agents.length > 0 && (() => {
-            const scored = agents.filter(a => a.tasksAssigned > 0);
+            const scored = agents.filter((a) => a.tasksAssigned > 0);
             const avgScore = scored.length > 0
               ? Math.round(scored.reduce((s, a) => s + (a.score ?? 0), 0) / scored.length)
               : 0;
             return (
               <div className="bg-[#111111] border border-[#262626] rounded-xl p-3 flex flex-col gap-1">
                 <span className="text-[10px] text-[#525252] uppercase tracking-wider">Team Score</span>
-                <span className="text-[18px] font-bold" style={{ color: scoreColor(avgScore) }}>
-                  {avgScore}
-                </span>
+                <span className="text-[18px] font-bold" style={{ color: scoreColor(avgScore) }}>{avgScore}</span>
                 <span className="text-[10px] text-[#525252]">{scored.length} agents avg</span>
               </div>
             );
@@ -607,7 +300,7 @@ export default function AgentDashboard({ projectId }: Props) {
         </div>
       )}
 
-      {/* Maliyet Breakdown Tablosu */}
+      {/* Cost Breakdown */}
       {costBreakdown.length > 0 && (
         <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
@@ -644,18 +337,10 @@ export default function AgentDashboard({ projectId }: Props) {
               </div>
               <span className="text-[11px] text-[#525252] w-28 truncate shrink-0 font-mono">{entry.model}</span>
               <span className="text-[11px] text-[#a3a3a3] w-14 text-center">{entry.taskCount}</span>
-              <span className="text-[11px] text-[#525252] w-20 text-right font-mono">
-                {(entry.inputTokens / 1000).toFixed(1)}K
-              </span>
-              <span className="text-[11px] text-[#525252] w-20 text-right font-mono">
-                {(entry.outputTokens / 1000).toFixed(1)}K
-              </span>
-              <span className="text-[11px] text-[#a3a3a3] w-20 text-right font-mono">
-                {(entry.totalTokens / 1000).toFixed(1)}K
-              </span>
-              <span className="text-[11px] text-[#10b981] w-20 text-right font-mono font-semibold">
-                ${entry.costUsd.toFixed(4)}
-              </span>
+              <span className="text-[11px] text-[#525252] w-20 text-right font-mono">{(entry.inputTokens / 1000).toFixed(1)}K</span>
+              <span className="text-[11px] text-[#525252] w-20 text-right font-mono">{(entry.outputTokens / 1000).toFixed(1)}K</span>
+              <span className="text-[11px] text-[#a3a3a3] w-20 text-right font-mono">{(entry.totalTokens / 1000).toFixed(1)}K</span>
+              <span className="text-[11px] text-[#10b981] w-20 text-right font-mono font-semibold">${entry.costUsd.toFixed(4)}</span>
             </div>
           ))}
         </div>
@@ -679,17 +364,13 @@ export default function AgentDashboard({ projectId }: Props) {
                   doc.status === 'filled'
                     ? 'border-[#166534] bg-[#052e16]/40'
                     : doc.status === 'tbd'
-                      ? 'border-[#854d0e] bg-[#422006]/40'
-                      : 'border-[#7f1d1d] bg-[#450a0a]/40'
+                    ? 'border-[#854d0e] bg-[#422006]/40'
+                    : 'border-[#7f1d1d] bg-[#450a0a]/40'
                 }`}
               >
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    doc.status === 'filled'
-                      ? 'bg-[#22c55e]'
-                      : doc.status === 'tbd'
-                        ? 'bg-[#eab308]'
-                        : 'bg-[#ef4444]'
+                    doc.status === 'filled' ? 'bg-[#22c55e]' : doc.status === 'tbd' ? 'bg-[#eab308]' : 'bg-[#ef4444]'
                   }`}
                 />
                 <span className="text-[11px] text-[#a3a3a3] truncate">{doc.file}</span>
@@ -699,7 +380,7 @@ export default function AgentDashboard({ projectId }: Props) {
         </div>
       )}
 
-      {/* SonarQube quality gate */}
+      {/* SonarQube */}
       {sonarEnabled && (
         <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
@@ -712,10 +393,10 @@ export default function AgentDashboard({ projectId }: Props) {
                     sonarScan.qualityGate === 'OK'
                       ? 'bg-[#052e16] text-[#22c55e]'
                       : sonarScan.qualityGate === 'ERROR'
-                        ? 'bg-[#450a0a] text-[#ef4444]'
-                        : sonarScan.qualityGate === 'WARN'
-                          ? 'bg-[#422006] text-[#eab308]'
-                          : 'bg-[#1a1a1a] text-[#525252]'
+                      ? 'bg-[#450a0a] text-[#ef4444]'
+                      : sonarScan.qualityGate === 'WARN'
+                      ? 'bg-[#422006] text-[#eab308]'
+                      : 'bg-[#1a1a1a] text-[#525252]'
                   }`}
                 >
                   {sonarScan.qualityGate}
@@ -748,11 +429,7 @@ export default function AgentDashboard({ projectId }: Props) {
                     <span className="text-[#525252] font-mono">{cond.actualValue ?? '-'}</span>
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        cond.status === 'OK'
-                          ? 'bg-[#22c55e]'
-                          : cond.status === 'ERROR'
-                            ? 'bg-[#ef4444]'
-                            : 'bg-[#eab308]'
+                        cond.status === 'OK' ? 'bg-[#22c55e]' : cond.status === 'ERROR' ? 'bg-[#ef4444]' : 'bg-[#eab308]'
                       }`}
                     />
                   </span>
@@ -770,7 +447,7 @@ export default function AgentDashboard({ projectId }: Props) {
         </div>
       )}
 
-      {/* Container Pool durumu */}
+      {/* Container Pool */}
       {poolStatus?.initialized && (
         <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
@@ -800,12 +477,17 @@ export default function AgentDashboard({ projectId }: Props) {
                 {poolStatus.containers.map((c) => (
                   <div key={c.id} className="flex items-center justify-between text-[11px] py-0.5">
                     <span className="text-[#737373] font-mono">{c.name}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                      c.status === 'ready' ? 'bg-[#052e16] text-[#22c55e]' :
-                      c.status === 'busy' ? 'bg-[#422006] text-[#f59e0b]' :
-                      'bg-[#450a0a] text-[#ef4444]'
-                    }`}>
-                      {c.status}{c.assignedTo ? ` (task)` : ''}
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] ${
+                        c.status === 'ready'
+                          ? 'bg-[#052e16] text-[#22c55e]'
+                          : c.status === 'busy'
+                          ? 'bg-[#422006] text-[#f59e0b]'
+                          : 'bg-[#450a0a] text-[#ef4444]'
+                      }`}
+                    >
+                      {c.status}
+                      {c.assignedTo ? ' (task)' : ''}
                     </span>
                   </div>
                 ))}
@@ -815,7 +497,7 @@ export default function AgentDashboard({ projectId }: Props) {
         </div>
       )}
 
-      {/* Ajan performans tablosu */}
+      {/* Agent Performance */}
       <div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
           <Activity size={14} className="text-[#22c55e]" />
@@ -829,7 +511,6 @@ export default function AgentDashboard({ projectId }: Props) {
           </div>
         ) : (
           <div>
-            {/* Tablo baslik satiri */}
             <div className="flex items-center gap-3 px-4 py-2 bg-[#0d0d0d]">
               <span className="text-[10px] text-[#525252] uppercase tracking-wider w-44 shrink-0">Agent</span>
               <div className="flex gap-4">
@@ -849,14 +530,14 @@ export default function AgentDashboard({ projectId }: Props) {
           </div>
         )}
 
-        {/* v4.1: Agent Heat Map + Comparison */}
+        {/* Agent Heat Map */}
         <div className="bg-[#0e0e0e] border border-[#1f1f1f] rounded-xl p-4">
           <h3 className="text-[13px] font-semibold text-[#fafafa] mb-3">Agent Performans Analizi</h3>
           <AgentHeatMap projectId={projectId} />
         </div>
       </div>
 
-      {/* Cost Trend Chart */}
+      {/* Cost Trend */}
       <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
         <div className="flex items-center gap-2 mb-4">
           <DollarSign size={14} className="text-[#22c55e]" />
@@ -867,7 +548,7 @@ export default function AgentDashboard({ projectId }: Props) {
         </Suspense>
       </div>
 
-      {/* Agent Timeline Chart */}
+      {/* Agent Timeline */}
       {agents.length > 0 && (
         <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
           <div className="flex items-center gap-2 mb-4">
@@ -880,7 +561,9 @@ export default function AgentDashboard({ projectId }: Props) {
                 className="appearance-none bg-[#0a0a0a] border border-[#262626] rounded px-2 py-1 text-[11px] text-[#e5e5e5] focus:outline-none focus:border-[#22c55e]/50"
               >
                 {agents.map((a) => (
-                  <option key={a.agentId} value={a.agentId}>{a.agentName}</option>
+                  <option key={a.agentId} value={a.agentId}>
+                    {a.agentName}
+                  </option>
                 ))}
               </select>
             </div>

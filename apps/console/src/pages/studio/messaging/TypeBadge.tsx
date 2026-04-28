@@ -2,7 +2,7 @@
 // Type Badge
 // ---------------------------------------------------------------------------
 
-import type { AgentMessageType } from '../../lib/studio-api';
+import type { AgentMessageType } from '../../../lib/studio-api';
 import { TYPE_CONFIG } from './constants.js';
 
 export default function TypeBadge({ type }: { type: AgentMessageType }) {

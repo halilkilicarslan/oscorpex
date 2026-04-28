@@ -12,7 +12,7 @@ import {
   CheckCircle2,
   XCircle,
 } from 'lucide-react';
-import type { Task } from '../../lib/studio-api';
+import type { Task } from '../../../lib/studio-api';
 
 export const ROLE_COLORS: Record<string, string> = {
   pm: '#f59e0b',

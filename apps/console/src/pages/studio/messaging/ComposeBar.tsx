@@ -3,11 +3,11 @@
 // ---------------------------------------------------------------------------
 
 import { useState, useEffect } from 'react';
-import { MessageSquare, ChevronDown, X, Radio, Send, Loader2 } from 'lucide-react';
+import { MessageSquare, ChevronDown, X, Radio, Send, Loader2, Reply } from 'lucide-react';
 import type { AgentMessageType, ProjectAgent, SendMessageData } from '../../../lib/studio-api';
 import { TYPE_CONFIG, MESSAGE_TYPES } from './constants.js';
 
-interface ComposeState {
+export interface ComposeState {
   fromAgentId: string;
   toAgentId: string;
   type: AgentMessageType;
