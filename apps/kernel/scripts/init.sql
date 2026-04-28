@@ -1880,6 +1880,11 @@ CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
 CREATE INDEX IF NOT EXISTS idx_incidents_project ON incidents(project_id);
 CREATE INDEX IF NOT EXISTS idx_incidents_type ON incidents(type);
 
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS assignee TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolution_note TEXT NOT NULL DEFAULT '';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS linked_task_id TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS linked_run_id TEXT;
+
 CREATE TABLE IF NOT EXISTS incident_events (
   id            TEXT PRIMARY KEY,
   incident_id   TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,

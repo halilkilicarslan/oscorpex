@@ -18,6 +18,10 @@ export interface IncidentRow {
 	created_at: string;
 	acknowledged_at: string | null;
 	resolved_at: string | null;
+	assignee: string | null;
+	resolution_note: string;
+	linked_task_id: string | null;
+	linked_run_id: string | null;
 }
 
 export interface IncidentEventRow {
@@ -74,6 +78,33 @@ export async function listIncidents(status?: string): Promise<IncidentRow[]> {
 
 export async function getIncident(id: string): Promise<IncidentRow | undefined> {
 	return queryOne<IncidentRow>("SELECT * FROM incidents WHERE id = $1", [id]) ?? undefined;
+}
+
+export async function assignIncident(id: string, assignee: string, actor: string): Promise<IncidentRow | undefined> {
+	await execute("UPDATE incidents SET assignee = $1 WHERE id = $2", [assignee, id]);
+	await appendIncidentEvent({ incidentId: id, eventType: "assigned", actor, payload: { assignee } });
+	return getIncident(id);
+}
+
+export async function addIncidentNote(id: string, note: string, actor: string): Promise<IncidentRow | undefined> {
+	await execute("UPDATE incidents SET resolution_note = resolution_note || '\n' || $1 WHERE id = $2", [note, id]);
+	await appendIncidentEvent({ incidentId: id, eventType: "note", actor, payload: { note } });
+	return getIncident(id);
+}
+
+export async function updateIncidentSeverity(id: string, severity: string, actor: string): Promise<IncidentRow | undefined> {
+	await execute("UPDATE incidents SET severity = $1 WHERE id = $2", [severity, id]);
+	await appendIncidentEvent({ incidentId: id, eventType: "severity_updated", actor, payload: { severity } });
+	return getIncident(id);
+}
+
+export async function reopenIncident(id: string, actor: string, reason?: string): Promise<IncidentRow | undefined> {
+	await execute(
+		"UPDATE incidents SET status = 'open', resolved_by = NULL, resolved_at = NULL WHERE id = $1",
+		[id],
+	);
+	await appendIncidentEvent({ incidentId: id, eventType: "reopened", actor, payload: { reason } });
+	return getIncident(id);
 }
 
 export async function appendIncidentEvent(data: {
