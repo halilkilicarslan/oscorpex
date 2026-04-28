@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # Workspace (root)
 pnpm dev              # Start kernel with tsx watch (port 3141, studio API at /api/studio)
-pnpm dev:console      # Start frontend Vite dev server (port 5173)
+pnpm dev:console      # Start frontend Vite dev server (port 5161)
 pnpm build            # Build all packages + apps
 pnpm typecheck        # tsc --noEmit across all workspaces
 pnpm lint             # biome check on kernel
@@ -135,7 +135,7 @@ All migrations use `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`.
 - **Session lifecycle**: `initSession()` → `recordStep()` ×4 → `completeSession()`/`failSession()`
 - **Performance config**: All tunables live in `performance-config.ts`. Override via `OSCORPEX_*` env vars. Feature flags via `OSCORPEX_PERF_FEATURES` (comma-list or `-deny_list`).
 - **Formatting**: Tabs, 120 char line width (biome.json)
-- **Reserved ports**: 5173 (Vite), 4242 (preview), 3142 (WebSocket)
+- **Reserved ports**: 5161 (Console Vite), 4242 (preview), 3142 (WebSocket)
 
 ## Performance Configuration
 
