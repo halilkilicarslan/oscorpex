@@ -87,6 +87,20 @@ export function httpDelete<T>(url: string, init?: Omit<RequestInit, 'method'>): 
 	return studioFetch<T>(url, { ...init, method: 'DELETE' });
 }
 
+/**
+ * Extract a user-facing message from any error.
+ * Prefers StudioApiError body, falls back to error.message, then generic text.
+ */
+export function getErrorMessage(err: unknown): string {
+	if (err instanceof StudioApiError) {
+		return err.message || `Request failed (${err.status})`;
+	}
+	if (err instanceof Error) {
+		return err.message;
+	}
+	return String(err || 'An unexpected error occurred');
+}
+
 /** Legacy helper — kept for backward compat with existing modules */
 export async function json<T>(url: string, init?: RequestInit): Promise<T> {
 	return studioFetch<T>(url, init);
