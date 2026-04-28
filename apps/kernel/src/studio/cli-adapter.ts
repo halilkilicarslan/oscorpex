@@ -11,6 +11,7 @@ import type { CLIAdapterOptions } from "@oscorpex/provider-sdk";
 import { buildToolGovernanceSection, hasFullToolAccess, checkBinaryCached, checkBinaryAsync } from "@oscorpex/provider-sdk";
 import type { ProviderCapabilities } from "./provider-runtime-cache.js";
 import type { ProviderAdapter } from "@oscorpex/core";
+import { getFeatureFlags } from "./performance-config.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("cli-adapter");
 
@@ -367,11 +368,27 @@ export async function getAdapter(cliTool: AgentCliTool): Promise<CLIAdapter> {
 		return registryAdapter;
 	}
 
+	const features = getFeatureFlags();
 	const adapter = legacyAdapters[cliTool];
+
 	if (!adapter) {
-		// Bilinmeyen veya 'none' → default olarak Claude kullan
+		// Unknown or 'none' → default to Claude
+		if (!features.legacyCliAdapter) {
+			throw new Error(
+				`Legacy CLI adapter fallback is disabled (legacyCliAdapter=false) and no registry adapter found for "${cliTool}"`,
+			);
+		}
+		log.warn(`[cli-adapter] DEPRECATED: Falling back to legacy ClaudeAdapter for unknown tool "${cliTool}"`);
 		return legacyAdapters["claude-code"];
 	}
+
+	if (!features.legacyCliAdapter) {
+		throw new Error(
+			`Legacy CLI adapter fallback is disabled (legacyCliAdapter=false) and no registry adapter found for "${cliTool}"`,
+		);
+	}
+
+	log.warn(`[cli-adapter] DEPRECATED: Using legacy ${adapter.constructor.name} for "${cliTool}" — migrate to provider-registry`);
 	return adapter;
 }
 
