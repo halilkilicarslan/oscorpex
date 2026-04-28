@@ -1,35 +1,24 @@
 // ---------------------------------------------------------------------------
 // Unified Access Guard
 // Single entry point for HTTP route authorization.
-// Default behavior: deny unless explicitly public.
+// Default behavior: deny unless explicitly public or listed in permission matrix.
 // ---------------------------------------------------------------------------
 
 import type { Context, Next } from "hono";
 import { authMiddleware } from "./auth-middleware.js";
 import { requireTenantContext } from "./tenant-context.js";
+import { isPublicRoute, isKnownRoute, getRoutePermission } from "./route-permissions.js";
 import { createLogger } from "../logger.js";
 
 const log = createLogger("access-guard");
-
-/** Routes that do not require authentication */
-const PUBLIC_ROUTES: Array<string | RegExp> = [
-	"/health",
-	"/auth/register",
-	"/auth/login",
-	"/api/studio/auth/register",
-	"/api/studio/auth/login",
-];
-
-function isPublicRoute(path: string): boolean {
-	return PUBLIC_ROUTES.some((r) => (typeof r === "string" ? path === r : r.test(path)));
-}
 
 /**
  * Unified access guard middleware.
  *
  * Behavior:
  *   1. Public routes → skip auth
- *   2. Otherwise → delegate to authMiddleware
+ *   2. Unknown routes → 403 (default deny)
+ *   3. Known routes → auth + tenant + optional RBAC
  *
  * When auth is not configured and NODE_ENV !== production,
  * authMiddleware sets authType="none" and allows the request.
@@ -40,19 +29,50 @@ function isPublicRoute(path: string): boolean {
  */
 export async function accessGuard(c: Context, next: Next): Promise<void | Response> {
 	const path = c.req.path;
+	const method = c.req.method;
 
-	// Public routes
+	// 1. Public routes — no auth required
 	if (isPublicRoute(path)) {
 		return next();
 	}
 
-	// Delegate to auth middleware (handles legacy key, JWT, DB API key)
+	// 2. Default deny — unknown routes are rejected
+	if (!isKnownRoute(path, method)) {
+		log.warn(`[access-guard] Denied unknown route: ${method} ${path}`);
+		return c.json({ error: "Forbidden — unknown route", route: path, method }, 403);
+	}
+
+	// 3. Authenticate
 	const authResult = await authMiddleware(c, async () => {});
 	if (authResult) return authResult;
 
-	// Tenant isolation: when auth is enabled, every protected request MUST have a tenant
+	// 4. Tenant isolation
 	const tenantError = requireTenantContext(c);
 	if (tenantError) return tenantError;
+
+	// 5. Route-level permission check (from permission matrix)
+	const routePermission = getRoutePermission(path, method);
+	if (routePermission !== null && routePermission !== undefined) {
+		// null = auth required but no specific permission; anything else = RBAC check
+		const { requirePermission: rbacRequire } = await import("./rbac.js");
+		const rbacResult = await rbacRequire(routePermission)(c, async () => {});
+		if (rbacResult) {
+			log.warn(
+				`[access-guard] Permission denied: ${method} ${path} requires ${routePermission} ` +
+				`(user=${c.get("userId") ?? "unknown"}, tenant=${c.get("tenantId") ?? "none"})`,
+			);
+			return rbacResult;
+		}
+	}
+
+	// 6. Audit log for sensitive operations
+	if (method !== "GET" && method !== "HEAD") {
+		log.info(
+			`[access-guard] Allowed: ${method} ${path} ` +
+			`(user=${c.get("userId") ?? "unknown"}, tenant=${c.get("tenantId") ?? "none"}, ` +
+			`permission=${routePermission ?? "auth-only"})`,
+		);
+	}
 
 	return next();
 }

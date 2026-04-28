@@ -32,16 +32,22 @@ describe("accessGuard — SSE requests", () => {
 		expect(next).toHaveBeenCalled();
 	});
 
-	it("denies SSE to protected routes when auth is disabled (no configured auth)", async () => {
-		// No env API key, no auth header → authMiddleware returns authType="none"
-		// But accessGuard still requires tenant when auth is "enabled" via env
+	it("denies SSE to unknown routes even when auth is disabled", async () => {
+		// Unknown route → default deny regardless of auth mode
 		delete process.env.OSCORPEX_AUTH_ENABLED;
 		const c = makeCtx({ path: "/api/studio/events/stream", accept: "text/event-stream" });
 		const next = vi.fn();
 		const result = await accessGuard(c, next);
-		// With no auth configured, authMiddleware allows through but tenant check
-		// does not block because auth is disabled. So the request passes.
-		// This is development-mode backward-compat behavior.
+		expect(next).not.toHaveBeenCalled();
+		expect((result as any).status).toBe(403);
+		expect((result as any).body.error).toContain("unknown route");
+	});
+
+	it("allows SSE to known routes when auth is disabled (backward compat)", async () => {
+		delete process.env.OSCORPEX_AUTH_ENABLED;
+		const c = makeCtx({ path: "/projects", accept: "text/event-stream", authType: "none" });
+		const next = vi.fn();
+		await accessGuard(c, next);
 		expect(next).toHaveBeenCalled();
 	});
 
