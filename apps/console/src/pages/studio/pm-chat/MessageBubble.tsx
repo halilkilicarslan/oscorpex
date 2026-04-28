@@ -1,0 +1,40 @@
+import { Bot, User, AlertCircle } from 'lucide-react';
+import type { ChatMessage } from '../../lib/studio-api';
+
+interface MessageBubbleProps {
+	message: ChatMessage;
+}
+
+export default function MessageBubble({ message }: MessageBubbleProps) {
+	const isUser = message.role === 'user';
+	const isError = message.id.startsWith('error-');
+
+	return (
+		<div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
+			<div
+				className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+					isError ? 'bg-[#ef4444]/10' : isUser ? 'bg-[#1f1f1f]' : 'bg-[#22c55e]/10'
+				}`}
+			>
+				{isError ? (
+					<AlertCircle size={14} className="text-[#ef4444]" />
+				) : isUser ? (
+					<User size={14} className="text-[#a3a3a3]" />
+				) : (
+					<Bot size={14} className="text-[#22c55e]" />
+				)}
+			</div>
+			<div
+				className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap ${
+					isError
+						? 'bg-[#ef4444]/10 text-[#fca5a5] border border-[#ef4444]/20 rounded-tl-md'
+						: isUser
+							? 'bg-[#22c55e]/10 text-[#e5e5e5] rounded-tr-md'
+							: 'bg-[#1a1a1a] text-[#d4d4d4] border border-[#262626] rounded-tl-md'
+				}`}
+			>
+				{message.content}
+			</div>
+		</div>
+	);
+}
