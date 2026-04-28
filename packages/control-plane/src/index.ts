@@ -4,38 +4,38 @@
 // ---------------------------------------------------------------------------
 
 // Registry
-export * from "./registry/index.js";
-export * from "./registry/repo.js";
-export * from "./registry/service.js";
+export * from "./registry/index.ts";
+export * from "./registry/repo.ts";
+export * from "./registry/service.ts";
 
 // Presence
-export * from "./presence/index.js";
-export * from "./presence/repo.js";
-export * from "./presence/service.js";
+export * from "./presence/index.ts";
+export * from "./presence/repo.ts";
+export * from "./presence/service.ts";
 
 // Approvals
-export * from "./approvals/index.js";
-export * from "./approvals/repo.js";
-export * from "./approvals/service.js";
+export * from "./approvals/index.ts";
+export * from "./approvals/repo.ts";
+export * from "./approvals/service.ts";
 
 // Audit
-export * from "./audit/index.js";
-export * from "./audit/repo.js";
+export * from "./audit/index.ts";
+export * from "./audit/repo.ts";
 
 // Usage/Cost
-export * from "./usage-cost/index.js";
-export * from "./usage-cost/repo.js";
+export * from "./usage-cost/index.ts";
+export * from "./usage-cost/repo.ts";
 
 // Incidents
-export * from "./incidents/index.js";
-export * from "./incidents/repo.js";
+export * from "./incidents/index.ts";
+export * from "./incidents/repo.ts";
 
 // Projections
-export * from "./projections/index.js";
-export * from "./projections/service.js";
+export * from "./projections/index.ts";
+export * from "./projections/service.ts";
 
 // Shared
-export * from "./shared/index.js";
+export * from "./shared/index.ts";
 
 // PG helpers
-export { query, queryOne, execute, getPool } from "./pg.js";
+export { query, queryOne, execute, getPool } from "./pg.ts";

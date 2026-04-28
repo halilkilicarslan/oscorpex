@@ -14,7 +14,7 @@ import {
 	listApprovalEvents,
 	listExpiredApprovals,
 	 type ApprovalRow,
-} from "./approval-repo.js";
+} from "./repo.ts";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "escalated";
 export type ApprovalKind = "high_risk_task" | "policy_override" | "provider_override" | "runtime_override";

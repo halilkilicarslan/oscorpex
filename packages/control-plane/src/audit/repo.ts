@@ -2,7 +2,7 @@
 // Control Plane — Audit Repository
 // ---------------------------------------------------------------------------
 
-import { execute, query, queryOne } from "../pg.js";
+import { execute, query, queryOne } from "../pg.ts";
 import { randomUUID } from "node:crypto";
 
 export interface AuditEventRow {

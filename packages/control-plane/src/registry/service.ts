@@ -15,7 +15,7 @@ import {
 	listCapabilitySnapshots,
 	 type AgentInstanceRow,
 	 type ProviderRuntimeRow,
-} from "./registry-repo.js";
+} from "./repo.ts";
 
 export interface RegistryState {
 	agents: Array<{

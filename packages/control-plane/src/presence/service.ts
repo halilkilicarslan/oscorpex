@@ -11,7 +11,7 @@ import {
 	getLatestHeartbeat,
 	 type AgentPresenceRow,
 	 type RuntimeHeartbeatRow,
-} from "./presence-repo.js";
+} from "./repo.ts";
 
 export type PresenceState = "online" | "degraded" | "cooldown" | "offline" | "unknown";
 
