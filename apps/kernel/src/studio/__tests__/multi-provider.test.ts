@@ -94,27 +94,27 @@ function makeMockProc(exitCode = 0, stdout = "", stderr = "") {
 // ---------------------------------------------------------------------------
 
 describe("getAdapterChain", () => {
-	it("returns primary adapter as first element", () => {
-		const chain = getAdapterChain("claude-code");
+	it("returns primary adapter as first element", async () => {
+		const chain = await getAdapterChain("claude-code");
 		expect(chain[0].name).toBe("claude-code");
 	});
 
-	it("appends fallback adapters after primary", () => {
-		const chain = getAdapterChain("codex", ["claude-code", "cursor"]);
+	it("appends fallback adapters after primary", async () => {
+		const chain = await getAdapterChain("codex", ["claude-code", "cursor"]);
 		expect(chain[0].name).toBe("codex");
 		expect(chain.map((a) => a.name)).toContain("claude-code");
 		expect(chain.map((a) => a.name)).toContain("cursor");
 	});
 
-	it("does not include duplicate adapters (primary not repeated in fallbacks)", () => {
-		const chain = getAdapterChain("claude-code", ["claude-code", "cursor"]);
+	it("does not include duplicate adapters (primary not repeated in fallbacks)", async () => {
+		const chain = await getAdapterChain("claude-code", ["claude-code", "cursor"]);
 		const names = chain.map((a) => a.name);
 		// claude-code should appear only once
 		expect(names.filter((n) => n === "claude-code")).toHaveLength(1);
 	});
 
-	it("returns single adapter when no fallbacks provided", () => {
-		const chain = getAdapterChain("cursor");
+	it("returns single adapter when no fallbacks provided", async () => {
+		const chain = await getAdapterChain("cursor");
 		expect(chain).toHaveLength(1);
 		expect(chain[0].name).toBe("cursor");
 	});
@@ -293,7 +293,7 @@ describe("resolveModel with cliTool", () => {
 describe("Fallback chain execution logic", () => {
 	it("uses second adapter when first fails", async () => {
 		// Simulate: first adapter (codex) fails, second (claude-code) succeeds
-		const chain = getAdapterChain("codex", ["claude-code"]);
+		const chain = await getAdapterChain("codex", ["claude-code"]);
 		expect(chain[0].name).toBe("codex");
 		expect(chain[1].name).toBe("claude-code");
 

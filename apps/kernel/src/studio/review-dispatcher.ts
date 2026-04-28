@@ -160,7 +160,7 @@ export async function executeReviewTask(
 
 	try {
 		const reviewTools = await resolveAllowedTools(projectId, reviewer.id, reviewer.role);
-		const reviewAdapter = getAdapter(reviewer.cliTool ?? "claude-code");
+		const reviewAdapter = await getAdapter(reviewer.cliTool ?? "claude-code");
 		reviewWorkspace = await resolveWorkspace(project.repoPath, reviewTask.id, {
 			id: "review-workspace",
 			projectId,

@@ -772,7 +772,7 @@ class ExecutionEngine {
 			}
 
 			// M4: Adapter fallback chain — primary + fallback providers
-			let adapterChain = getAdapterChain(primaryCliTool, ["claude-code", "cursor"]);
+			let adapterChain = await getAdapterChain(primaryCliTool, ["claude-code", "cursor"]);
 
 			// TASK 5: Sort chain by telemetry-based priority
 			adapterChain = sortAdapterChain(adapterChain, (providerId) => {

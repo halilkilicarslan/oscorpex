@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { budgetGuard } from "../middleware/policy-middleware.js";
-import { authMiddleware } from "../auth/auth-middleware.js";
+import { accessGuard } from "../auth/access-guard.js";
 import { correlationMiddleware } from "../middleware/correlation-middleware.js";
 import { guaranteedCorrelationHeader } from "../middleware/guaranteed-correlation-header.js";
 
@@ -78,29 +78,9 @@ studio.use("*", correlationMiddleware);
 studio.use("*", guaranteedCorrelationHeader);
 
 // ---------------------------------------------------------------------------
-// Auth middleware — Bearer token (opt-in via OSCORPEX_API_KEY env var)
+// Unified Access Guard — default deny, explicit public routes
 // ---------------------------------------------------------------------------
-const apiKey = process.env.OSCORPEX_API_KEY;
-if (apiKey) {
-	studio.use("*", async (c, next) => {
-		if (c.req.header("accept")?.includes("text/event-stream")) return next();
-		const authHeader = c.req.header("authorization");
-		if (!authHeader || authHeader !== `Bearer ${apiKey}`) {
-			return c.json({ error: "Unauthorized" }, 401);
-		}
-		return next();
-	});
-}
-
-// ---------------------------------------------------------------------------
-// M6.2: Tenant-aware auth middleware — only active when OSCORPEX_AUTH_ENABLED=true
-// ---------------------------------------------------------------------------
-if (process.env.OSCORPEX_AUTH_ENABLED === "true") {
-	studio.use("*", async (c, next) => {
-		if (c.req.header("accept")?.includes("text/event-stream")) return next();
-		return authMiddleware(c, next);
-	});
-}
+studio.use("*", accessGuard);
 
 // ---------------------------------------------------------------------------
 // Budget guard — execution routes

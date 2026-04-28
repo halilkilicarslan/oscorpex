@@ -135,9 +135,10 @@ class WebSocketManager {
 		this.wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 			// M6.4: Tenant isolation — URL query param ?token=<jwt> から tenantId çıkar.
 			// Browser WS API header gönderemediğinden token query param olarak iletilir.
-			// OSCORPEX_AUTH_ENABLED=false ya da token yoksa tenantId=null (backward compat).
+			// Auth enabled + no valid token → connection rejected (fail-closed).
 			let tenantId: string | null = null;
-			if (process.env.OSCORPEX_AUTH_ENABLED === "true") {
+			const authEnabled = process.env.OSCORPEX_AUTH_ENABLED === "true";
+			if (authEnabled) {
 				try {
 					const url = new URL(req.url ?? "", "http://localhost");
 					const token = url.searchParams.get("token");
@@ -145,10 +146,20 @@ class WebSocketManager {
 						const payload = verifyJwt(token);
 						if (payload) {
 							tenantId = payload.tenantId ?? null;
+						} else {
+							// Invalid token — close connection
+							ws.close(1008, "Invalid token");
+							return;
 						}
+					} else {
+						// Auth enabled but no token — close connection
+						ws.close(1008, "Authentication required");
+						return;
 					}
 				} catch {
-					// URL parse hatası — tenantId null kalır (backward compat)
+					// URL parse error — close connection in auth mode
+					ws.close(1008, "Invalid connection URL");
+					return;
 				}
 			}
 

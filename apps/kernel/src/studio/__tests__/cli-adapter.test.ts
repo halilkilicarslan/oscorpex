@@ -63,20 +63,24 @@ describe("CLI Adapter (Faz 4.1)", () => {
 	});
 
 	describe("getAdapter", () => {
-		it('should return ClaudeAdapter for "claude-code"', () => {
-			expect(getAdapter("claude-code").name).toBe("claude-code");
+		it('should return ClaudeAdapter for "claude-code"', async () => {
+			const adapter = await getAdapter("claude-code");
+			expect(adapter.name).toBe("claude-code");
 		});
 
-		it('should return CodexAdapter for "codex"', () => {
-			expect(getAdapter("codex").name).toBe("codex");
+		it('should return CodexAdapter for "codex"', async () => {
+			const adapter = await getAdapter("codex");
+			expect(adapter.name).toBe("codex");
 		});
 
-		it('should return CursorAdapter for "cursor"', () => {
-			expect(getAdapter("cursor").name).toBe("cursor");
+		it('should return CursorAdapter for "cursor"', async () => {
+			const adapter = await getAdapter("cursor");
+			expect(adapter.name).toBe("cursor");
 		});
 
-		it('should fallback to ClaudeAdapter for "none"', () => {
-			expect(getAdapter("none").name).toBe("claude-code");
+		it('should fallback to ClaudeAdapter for "none"', async () => {
+			const adapter = await getAdapter("none");
+			expect(adapter.name).toBe("claude-code");
 		});
 	});
 

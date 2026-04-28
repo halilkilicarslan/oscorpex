@@ -10,6 +10,7 @@ import type { AgentCliTool } from "./types.js";
 import type { CLIAdapterOptions } from "@oscorpex/provider-sdk";
 import { buildToolGovernanceSection, hasFullToolAccess, checkBinaryCached, checkBinaryAsync } from "@oscorpex/provider-sdk";
 import type { ProviderCapabilities } from "./provider-runtime-cache.js";
+import type { ProviderAdapter } from "@oscorpex/core";
 import { createLogger } from "./logger.js";
 const log = createLogger("cli-adapter");
 
@@ -285,30 +286,101 @@ export class CursorAdapter implements CLIAdapter {
 }
 
 // ---------------------------------------------------------------------------
-// Factory — CLITool tipine göre adapter döndürür
+// Registry-backed adapter bridge
+// Wraps a ProviderAdapter from provider-registry into the CLIAdapter interface.
+// This unifies execution so the registry is the primary source of adapters.
 // ---------------------------------------------------------------------------
 
-const adapters: Record<string, CLIAdapter> = {
+class RegistryBackedCLIAdapter implements CLIAdapter {
+	readonly name: string;
+
+	constructor(private readonly provider: ProviderAdapter) {
+		this.name = provider.id;
+	}
+
+	async isAvailable(): Promise<boolean> {
+		return this.provider.isAvailable();
+	}
+
+	async capabilities(): Promise<ProviderCapabilities> {
+		return this.provider.capabilities() as unknown as Promise<ProviderCapabilities>;
+	}
+
+	async execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult> {
+		const result = await this.provider.execute({
+			runId: opts.projectId,
+			taskId: opts.agentId,
+			provider: this.name,
+			repoPath: opts.repoPath,
+			prompt: opts.prompt,
+			systemPrompt: opts.systemPrompt,
+			timeoutMs: opts.timeoutMs,
+			allowedTools: opts.allowedTools,
+			model: opts.model,
+			signal: opts.signal,
+		});
+
+		return {
+			text: result.text,
+			filesCreated: result.filesCreated,
+			filesModified: result.filesModified,
+			logs: result.logs,
+			inputTokens: result.usage?.inputTokens ?? 0,
+			outputTokens: result.usage?.outputTokens ?? 0,
+			cacheCreationTokens: result.usage?.cacheWriteTokens ?? 0,
+			cacheReadTokens: result.usage?.cacheReadTokens ?? 0,
+			totalCostUsd: result.usage?.billedCostUsd ?? result.usage?.estimatedCostUsd ?? 0,
+			durationMs: result.metadata?.durationMs ?? 0,
+			model: result.model ?? opts.model ?? "unknown",
+		};
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Factory — CLITool tipine göre adapter döndürür
+// Registry öncelikli: eğer provider registry'de varsa onu kullan,
+// yoksa legacy adapter'a düş.
+// ---------------------------------------------------------------------------
+
+const legacyAdapters: Record<string, CLIAdapter> = {
 	"claude-code": new ClaudeAdapter(),
 	codex: new CodexAdapter(),
 	cursor: new CursorAdapter(),
 };
 
-export function getAdapter(cliTool: AgentCliTool): CLIAdapter {
-	const adapter = adapters[cliTool];
+async function getRegistryAdapter(id: string): Promise<CLIAdapter | undefined> {
+	try {
+		const { providerRegistry } = await import("./kernel/provider-registry.js");
+		const provider = providerRegistry.get(id);
+		if (provider) {
+			return new RegistryBackedCLIAdapter(provider);
+		}
+	} catch {
+		// Registry henüz init edilmemiş olabilir — legacy'ye düş
+	}
+	return undefined;
+}
+
+export async function getAdapter(cliTool: AgentCliTool): Promise<CLIAdapter> {
+	const registryAdapter = await getRegistryAdapter(cliTool);
+	if (registryAdapter) {
+		return registryAdapter;
+	}
+
+	const adapter = legacyAdapters[cliTool];
 	if (!adapter) {
 		// Bilinmeyen veya 'none' → default olarak Claude kullan
-		return adapters["claude-code"];
+		return legacyAdapters["claude-code"];
 	}
 	return adapter;
 }
 
-export function getAdapterChain(primary: AgentCliTool, fallbacks?: AgentCliTool[]): CLIAdapter[] {
-	const chain: CLIAdapter[] = [getAdapter(primary)];
+export async function getAdapterChain(primary: AgentCliTool, fallbacks?: AgentCliTool[]): Promise<CLIAdapter[]> {
+	const chain: CLIAdapter[] = [await getAdapter(primary)];
 	if (fallbacks) {
 		for (const fb of fallbacks) {
-			const adapter = adapters[fb];
-			if (adapter && adapter.name !== primary) {
+			const adapter = await getAdapter(fb);
+			if (adapter.name !== primary) {
 				chain.push(adapter);
 			}
 		}
