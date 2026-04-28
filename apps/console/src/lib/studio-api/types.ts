@@ -964,6 +964,7 @@ export interface ProviderLatencySnapshot {
 
 // ---- Performance Config (Admin Settings) ---------------------------------
 
+/** Mirrors kernel PerformanceFeatureFlags — keep in sync with apps/kernel/src/studio/performance-config.ts */
 export interface PerformanceFeatureFlags {
   adaptiveConcurrency: boolean;
   fairScheduling: boolean;
@@ -976,6 +977,9 @@ export interface PerformanceFeatureFlags {
   providerCooldown: boolean;
   timeoutPolicy: boolean;
   queueWaitTelemetry: boolean;
+  /** Allow fallback to legacy CLI adapters when native registry adapter is missing.
+   *  Default: true (backward compat). Set to false to enforce registry-only. */
+  legacyCliAdapter: boolean;
 }
 
 export interface AdaptiveConcurrencyConfig {
@@ -995,11 +999,15 @@ export interface TimeoutPolicyConfig {
   providerMultipliers: Record<string, number>;
 }
 
+/** Mirrors kernel CooldownConfig — keep in sync with apps/kernel/src/studio/performance-config.ts */
 export interface CooldownConfig {
   durationsMs: {
     unavailable: number;
     spawn_failure: number;
+    rate_limited: number;
     repeated_timeout: number;
+    cli_error: number;
+    manual: number;
   };
 }
 
