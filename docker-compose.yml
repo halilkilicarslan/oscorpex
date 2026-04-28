@@ -62,8 +62,8 @@ services:
   # ---- Console (Vite Frontend) --------------------------------------------
   console:
     build:
-      context: ./apps/console
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/console/Dockerfile
     container_name: oscorpex-console
     ports:
       - "5161:80"

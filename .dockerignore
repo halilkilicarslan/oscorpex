@@ -48,5 +48,10 @@ docs
 .gitlab-ci.yml
 .travis.yml
 
+# Runtime data
+.voltagent
+.vscode
+.planning
+
 # Console (has its own Dockerfile)
-console
+apps/console

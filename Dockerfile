@@ -44,7 +44,9 @@ RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile --production; \
     else npm ci --omit=dev; fi
 
 # Copy built application from builder stage
-COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+# Monorepo build outputs kernel artifact under apps/kernel/dist
+COPY --from=builder --chown=nodejs:nodejs /app/apps/kernel/dist ./apps/kernel/dist
+COPY --from=builder --chown=nodejs:nodejs /app/packages ./packages
 
 # NOTE: Do not bake .env into the image. Pass environment variables at
 # runtime via `docker run --env-file .env` or your orchestrator's secrets.
@@ -62,4 +64,4 @@ EXPOSE 3141
 ENTRYPOINT ["dumb-init", "--"]
 
 # Start the application (dotenv/config is already imported in the code)
-CMD ["node", "dist/index.js"]
+CMD ["node", "apps/kernel/dist/index.js"]

@@ -1,32 +1,37 @@
-# Build stage
+# Build stage — requires monorepo root context
 FROM node:22-alpine AS build
 
 WORKDIR /app
 
-# Copy package files
+# Copy monorepo workspace files
 COPY package*.json ./
-COPY yarn.lock* ./
-COPY pnpm-lock.yaml* ./
+COPY pnpm-lock.yaml ./
+COPY pnpm-workspace.yaml ./
 
-# Install dependencies based on lock file
-RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
-    elif [ -f pnpm-lock.yaml ]; then npm install -g pnpm && pnpm install --frozen-lockfile; \
-    else npm ci; fi
+# Copy package manifests for workspace resolution
+COPY apps/console/package.json ./apps/console/
+COPY packages ./packages
+
+# Install dependencies
+RUN npm install -g pnpm && pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build
+# Build workspace packages first (control-plane etc. are deps of console)
+RUN pnpm -r --filter './packages/*' build
+
+# Build the console application
+RUN pnpm --filter @oscorpex/console build
 
 # Production stage
 FROM nginx:alpine
 
 # Copy built console from builder stage
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/apps/console/dist /usr/share/nginx/html
 
 # Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/console/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port
 EXPOSE 80
