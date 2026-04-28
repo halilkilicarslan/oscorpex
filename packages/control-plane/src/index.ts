@@ -25,6 +25,7 @@ export * from "./audit/repo.ts";
 // Usage/Cost
 export * from "./usage-cost/index.ts";
 export * from "./usage-cost/repo.ts";
+export { getProjectBudgetStatus } from "./usage-cost/repo.ts";
 
 // Incidents
 export * from "./incidents/index.ts";
@@ -43,6 +44,10 @@ export type {
 // Operator Actions
 export * from "./operator-actions/index.ts";
 export * from "./operator-actions/service.ts";
+
+// Policy Surface
+export * from "./policy/index.ts";
+export * from "./policy/service.ts";
 
 // Shared
 export * from "./shared/index.ts";
