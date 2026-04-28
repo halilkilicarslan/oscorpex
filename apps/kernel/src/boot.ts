@@ -19,6 +19,7 @@ import { pipelinePhase } from "./boot-phases/pipeline-phase.js";
 import { providerRegistryPhase } from "./boot-phases/provider-registry-phase.js";
 import { replayPhase } from "./boot-phases/replay-phase.js";
 import { httpPhase } from "./boot-phases/http-phase.js";
+import { authConfigPhase } from "./boot-phases/auth-config-phase.js";
 import {
 	registerSeeders,
 	registerEventBridges,
@@ -48,6 +49,9 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 
 	// Phase 1: DB schema migrations (fatal on failure)
 	await dbPhase();
+
+	// Phase 1.5: Auth config validation (fatal in production)
+	authConfigPhase();
 
 	// Phase 2: Provider state (warning on failure)
 	await providerStatePhase();
