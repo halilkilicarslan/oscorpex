@@ -1,5 +1,5 @@
 import type { Project, ProjectTemplateInfo } from './types.js';
-import { API, json, fetchPaginated, type PaginatedResult } from './base.js';
+import { API, json, fetchPaginated, httpDelete, httpPost, httpPatch, type PaginatedResult } from './base.js';
 
 export interface PlatformStats {
   projects: { total: number; active: number; completed: number; failed: number };
@@ -79,23 +79,15 @@ export async function createProject(data: {
   plannerAgentId?: string;
   previewEnabled?: boolean;
 }): Promise<Project> {
-  return json(`${API}/projects`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
+  return httpPost<Project>(`${API}/projects`, data);
 }
 
 export async function updateProject(id: string, data: Partial<Project>): Promise<Project> {
-  return json(`${API}/projects/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
+  return httpPatch<Project>(`${API}/projects/${id}`, data);
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await fetch(`${API}/projects/${id}`, { method: 'DELETE' });
+  await httpDelete<void>(`${API}/projects/${id}`);
 }
 
 /**
@@ -103,10 +95,7 @@ export async function deleteProject(id: string): Promise<void> {
  * Backend template-based generation kullanır; AI çağrısı yapılmaz.
  */
 export async function generateReadme(projectId: string): Promise<{ success: boolean; logs: string[] }> {
-  return json(
-    `${API}/projects/${projectId}/generate-readme`,
-    { method: 'POST' },
-  );
+  return httpPost<{ success: boolean; logs: string[] }>(`${API}/projects/${projectId}/generate-readme`);
 }
 
 export async function fetchProjectTemplates(): Promise<ProjectTemplateInfo[]> {
@@ -120,11 +109,7 @@ export async function createProjectFromTemplate(data: {
   plannerAgentId?: string;
   previewEnabled?: boolean;
 }): Promise<Project & { filesCreated?: string[] }> {
-  return json(`${API}/projects/from-template`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
+  return httpPost<Project & { filesCreated?: string[] }>(`${API}/projects/from-template`, data);
 }
 
 export async function importProject(data: {
@@ -136,9 +121,5 @@ export async function importProject(data: {
   plannerAgentId?: string;
   previewEnabled?: boolean;
 }): Promise<Project> {
-  return json(`${API}/projects/import`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
+  return httpPost<Project>(`${API}/projects/import`, data);
 }

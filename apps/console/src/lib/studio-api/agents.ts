@@ -11,7 +11,7 @@ import type {
   OrgNode,
   PipelineAgent,
 } from './types.js';
-import { API, json } from './base.js';
+import { API, json, httpDelete, httpPost, httpPut } from './base.js';
 
 export async function fetchAgentConfigs(): Promise<AgentConfig[]> {
   return json(`${API}/agents`);
@@ -42,7 +42,7 @@ export async function updateAgent(id: string, data: Partial<AgentConfig>): Promi
 }
 
 export async function deleteAgent(id: string): Promise<void> {
-  await fetch(`${API}/agents/${id}`, { method: 'DELETE' });
+  await httpDelete<void>(`${API}/agents/${id}`);
 }
 
 export async function fetchTeamTemplates(): Promise<TeamTemplate[]> {
@@ -62,7 +62,7 @@ export async function updateCustomTeam(id: string, data: Partial<{ name: string;
 }
 
 export async function deleteCustomTeam(id: string): Promise<void> {
-  await fetch(`${API}/custom-teams/${id}`, { method: 'DELETE' });
+  await httpDelete<void>(`${API}/custom-teams/${id}`);
 }
 
 export async function fetchProjectAgents(projectId: string): Promise<ProjectAgent[]> {
@@ -106,7 +106,7 @@ export async function updateProjectAgent(
 }
 
 export async function deleteProjectAgent(projectId: string, agentId: string): Promise<void> {
-  await fetch(`${API}/projects/${projectId}/team/${agentId}`, { method: 'DELETE' });
+  await httpDelete<void>(`${API}/projects/${projectId}/team/${agentId}`);
 }
 
 export async function fetchOrgStructure(projectId: string): Promise<{ tree: OrgNode[]; pipeline: PipelineAgent[] }> {

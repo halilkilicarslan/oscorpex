@@ -2,6 +2,8 @@
 // Oscorpex — Auth API client
 // ---------------------------------------------------------------------------
 
+import { httpPost, StudioApiError } from './base.js';
+
 const AUTH_BASE = '/api/auth';
 
 export interface AuthUser {
@@ -41,29 +43,25 @@ export interface CreateApiKeyResponse {
 }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
-	const res = await fetch(`${AUTH_BASE}/login`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ email, password }),
-	});
-	if (!res.ok) {
-		const err = await res.json().catch(() => ({})) as { error?: string };
-		throw new Error(err.error ?? `Login failed (${res.status})`);
+	try {
+		return await httpPost<LoginResponse>(`${AUTH_BASE}/login`, { email, password });
+	} catch (err) {
+		if (err instanceof StudioApiError) {
+			throw new Error(err.message ?? `Login failed (${err.status})`);
+		}
+		throw err;
 	}
-	return res.json() as Promise<LoginResponse>;
 }
 
 export async function register(data: RegisterData): Promise<LoginResponse> {
-	const res = await fetch(`${AUTH_BASE}/register`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(data),
-	});
-	if (!res.ok) {
-		const err = await res.json().catch(() => ({})) as { error?: string };
-		throw new Error(err.error ?? `Registration failed (${res.status})`);
+	try {
+		return await httpPost<LoginResponse>(`${AUTH_BASE}/register`, data);
+	} catch (err) {
+		if (err instanceof StudioApiError) {
+			throw new Error(err.message ?? `Registration failed (${err.status})`);
+		}
+		throw err;
 	}
-	return res.json() as Promise<LoginResponse>;
 }
 
 export async function fetchCurrentUser(token: string): Promise<AuthUser> {

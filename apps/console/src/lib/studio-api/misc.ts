@@ -9,7 +9,7 @@ import type {
   ApiCollection,
   SavedRequest,
 } from './types.js';
-import { API, json } from './base.js';
+import { API, json, httpDelete, httpPost } from './base.js';
 
 export async function fetchDocsFreshness(projectId: string): Promise<DocFreshnessItem[]> {
   return json(`${API}/projects/${projectId}/docs/freshness`);
@@ -69,15 +69,11 @@ export async function loadApiCollection(projectId: string): Promise<ApiCollectio
 }
 
 export async function saveApiRequest(projectId: string, request: SavedRequest): Promise<void> {
-  await fetch(`${API}/projects/${projectId}/api/collection`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ request }),
-  });
+  await httpPost<void>(`${API}/projects/${projectId}/api/collection`, { request });
 }
 
 export async function deleteApiRequest(projectId: string, requestId: string): Promise<void> {
-  await fetch(`${API}/projects/${projectId}/api/collection/${requestId}`, { method: 'DELETE' });
+  await httpDelete<void>(`${API}/projects/${projectId}/api/collection/${requestId}`);
 }
 
 /** Proxy üzerinden API çağrısı yap */

@@ -1,5 +1,5 @@
 import type { PipelineState, AgentProcessInfo, AgentRunHistory } from './types.js';
-import { API, json } from './base.js';
+import { API, json, httpPost } from './base.js';
 
 // Pipeline'ı başlat
 export async function startPipeline(projectId: string): Promise<PipelineState> {
@@ -87,7 +87,7 @@ export async function startAgentProcess(
 
 // Ajan sürecini durdur
 export async function stopAgentProcess(projectId: string, agentId: string): Promise<void> {
-  await fetch(`${API}/projects/${projectId}/agents/${agentId}/stop`, { method: 'POST' });
+  await httpPost<void>(`${API}/projects/${projectId}/agents/${agentId}/stop`);
 }
 
 // Ajan durumunu sorgula

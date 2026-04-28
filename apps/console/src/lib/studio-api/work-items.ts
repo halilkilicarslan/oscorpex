@@ -6,7 +6,7 @@ import type {
 	ProjectReport,
 	LifecycleInfo,
 } from './types.js';
-import { API, json, fetchPaginated, type PaginatedResult } from './base.js';
+import { API, json, fetchPaginated, httpDelete, httpPatch, httpPost, type PaginatedResult } from './base.js';
 
 // --- Work Items (v3.2) ---
 export async function fetchWorkItems(projectId: string, filters?: Record<string, string>): Promise<WorkItem[]> {
@@ -19,23 +19,15 @@ export async function fetchWorkItemsPaginated(projectId: string, limit = 50, off
 }
 
 export async function createWorkItem(projectId: string, data: Partial<WorkItem>): Promise<WorkItem> {
-  return json(`${API}/projects/${projectId}/work-items`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
+  return httpPost<WorkItem>(`${API}/projects/${projectId}/work-items`, data);
 }
 
 export async function updateWorkItem(projectId: string, itemId: string, data: Partial<WorkItem>): Promise<WorkItem> {
-  return json(`${API}/projects/${projectId}/work-items/${itemId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
+  return httpPatch<WorkItem>(`${API}/projects/${projectId}/work-items/${itemId}`, data);
 }
 
 export async function deleteWorkItem(projectId: string, itemId: string): Promise<void> {
-  await fetch(`${API}/projects/${projectId}/work-items/${itemId}`, { method: 'DELETE' });
+  await httpDelete<void>(`${API}/projects/${projectId}/work-items/${itemId}`);
 }
 
 export async function convertWorkItemToPlan(projectId: string, itemId: string): Promise<unknown> {
@@ -48,11 +40,7 @@ export async function fetchSprints(projectId: string): Promise<Sprint[]> {
 }
 
 export async function createSprint(projectId: string, data: { name: string; goal?: string; startDate: string; endDate: string }): Promise<Sprint> {
-  return json(`${API}/projects/${projectId}/sprints`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
+  return httpPost<Sprint>(`${API}/projects/${projectId}/sprints`, data);
 }
 
 // --- Ceremonies (v3.6) ---

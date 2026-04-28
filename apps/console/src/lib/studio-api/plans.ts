@@ -1,14 +1,13 @@
 import type { ProjectPlan, ApproveResult, AutoStartStatus, PlanCostEstimate, Progress } from './types.js';
-import { API, json } from './base.js';
+import { API, json, httpGet, StudioApiError } from './base.js';
 
 export async function fetchPlan(projectId: string): Promise<ProjectPlan | null> {
-  const res = await fetch(`${API}/projects/${projectId}/plan`);
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  try {
+    return await httpGet<ProjectPlan>(`${API}/projects/${projectId}/plan`);
+  } catch (err) {
+    if (err instanceof StudioApiError && err.status === 404) return null;
+    throw err;
   }
-  return res.json();
 }
 
 export async function approvePlan(projectId: string): Promise<ApproveResult> {
