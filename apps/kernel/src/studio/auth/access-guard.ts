@@ -6,6 +6,7 @@
 
 import type { Context, Next } from "hono";
 import { authMiddleware } from "./auth-middleware.js";
+import { requireTenantContext } from "./tenant-context.js";
 import { createLogger } from "../logger.js";
 
 const log = createLogger("access-guard");
@@ -48,7 +49,14 @@ export async function accessGuard(c: Context, next: Next): Promise<void | Respon
 	}
 
 	// Delegate to auth middleware (handles legacy key, JWT, DB API key)
-	return authMiddleware(c, next);
+	const authResult = await authMiddleware(c, async () => {});
+	if (authResult) return authResult;
+
+	// Tenant isolation: when auth is enabled, every protected request MUST have a tenant
+	const tenantError = requireTenantContext(c);
+	if (tenantError) return tenantError;
+
+	return next();
 }
 
 /** Factory: create a guard scoped to a specific permission */

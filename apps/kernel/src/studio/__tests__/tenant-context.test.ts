@@ -25,7 +25,13 @@ const mockQueryOne = vi.mocked(queryOne);
 // ---------------------------------------------------------------------------
 
 import type { Context } from "hono";
-import { getTenantContext, verifyProjectAccess, withTenantFilter } from "../auth/tenant-context.js";
+import {
+	getTenantContext,
+	verifyProjectAccess,
+	withTenantFilter,
+	requireTenantContext,
+	isTenantIsolationEnabled,
+} from "../auth/tenant-context.js";
 
 // ---------------------------------------------------------------------------
 // Helper: minimal Hono Context mock
@@ -110,6 +116,18 @@ describe("withTenantFilter", () => {
 		expect(result.query).toBe(base);
 		expect(result.params).toEqual([]);
 	});
+
+	it("throws when tenantId is null and tenant isolation is enabled", () => {
+		const original = process.env.OSCORPEX_AUTH_ENABLED;
+		try {
+			process.env.OSCORPEX_AUTH_ENABLED = "true";
+			expect(() => withTenantFilter("SELECT * FROM projects", null, 1)).toThrow(
+				"Tenant isolation enabled but tenantId is null",
+			);
+		} finally {
+			process.env.OSCORPEX_AUTH_ENABLED = original;
+		}
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -127,6 +145,18 @@ describe("verifyProjectAccess", () => {
 		expect(result).toBe(true);
 		// DB must NOT be hit when auth is disabled
 		expect(mockQueryOne).not.toHaveBeenCalled();
+	});
+
+	it("returns false when tenantId is null and tenant isolation is enabled", async () => {
+		const original = process.env.OSCORPEX_AUTH_ENABLED;
+		try {
+			process.env.OSCORPEX_AUTH_ENABLED = "true";
+			const result = await verifyProjectAccess("project-1", null);
+			expect(result).toBe(false);
+			expect(mockQueryOne).not.toHaveBeenCalled();
+		} finally {
+			process.env.OSCORPEX_AUTH_ENABLED = original;
+		}
 	});
 
 	it("returns true when project tenant matches the requesting tenant", async () => {
@@ -165,6 +195,44 @@ describe("verifyProjectAccess", () => {
 // ---------------------------------------------------------------------------
 // 11–12. Auth middleware opt-in via OSCORPEX_AUTH_ENABLED
 // ---------------------------------------------------------------------------
+
+describe("requireTenantContext", () => {
+	it("returns null when tenant isolation is disabled", () => {
+		const original = process.env.OSCORPEX_AUTH_ENABLED;
+		try {
+			delete process.env.OSCORPEX_AUTH_ENABLED;
+			const c = makeMockContext();
+			const result = requireTenantContext(c);
+			expect(result).toBeNull();
+		} finally {
+			process.env.OSCORPEX_AUTH_ENABLED = original;
+		}
+	});
+
+	it("returns 403 response when tenant isolation is enabled but no tenantId", () => {
+		const original = process.env.OSCORPEX_AUTH_ENABLED;
+		try {
+			process.env.OSCORPEX_AUTH_ENABLED = "true";
+			const c = makeMockContext({ authType: "jwt" });
+			const result = requireTenantContext(c);
+			expect(result).toEqual({ body: { error: "Forbidden — tenant context required" }, status: 403 });
+		} finally {
+			process.env.OSCORPEX_AUTH_ENABLED = original;
+		}
+	});
+
+	it("returns null when tenant isolation is enabled and tenantId present", () => {
+		const original = process.env.OSCORPEX_AUTH_ENABLED;
+		try {
+			process.env.OSCORPEX_AUTH_ENABLED = "true";
+			const c = makeMockContext({ tenantId: "tenant-abc", authType: "jwt" });
+			const result = requireTenantContext(c);
+			expect(result).toBeNull();
+		} finally {
+			process.env.OSCORPEX_AUTH_ENABLED = original;
+		}
+	});
+});
 
 describe("Auth middleware opt-in (OSCORPEX_AUTH_ENABLED)", () => {
 	it("studioRoutes wires authMiddleware when OSCORPEX_AUTH_ENABLED=true", async () => {

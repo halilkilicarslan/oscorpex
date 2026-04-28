@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Oscorpex — Tenant Context Helper
+// Tenant Context Helper
 // Extracts tenant/user identity from Hono context (set by auth-middleware).
 // Also provides SQL query helpers for tenant-scoped data access.
 // ---------------------------------------------------------------------------
@@ -22,6 +22,14 @@ export interface TenantContext {
 }
 
 // ---------------------------------------------------------------------------
+// Tenant Isolation Switch
+// ---------------------------------------------------------------------------
+
+export function isTenantIsolationEnabled(): boolean {
+	return process.env.OSCORPEX_AUTH_ENABLED === "true";
+}
+
+// ---------------------------------------------------------------------------
 // Context Extraction
 // ---------------------------------------------------------------------------
 
@@ -35,6 +43,21 @@ export function getTenantContext(c: Context<any>): TenantContext {
 	};
 }
 
+/**
+ * Require a valid tenant context when tenant isolation is enabled.
+ * Returns a 403 response when auth is enabled but tenant is missing.
+ * This prevents cross-tenant access when running in multi-tenant mode.
+ */
+export function requireTenantContext(c: Context<any>): Response | null {
+	if (!isTenantIsolationEnabled()) return null;
+	const tenantId = c.get("tenantId") ?? null;
+	if (!tenantId) {
+		log.warn("[tenant-context] Tenant isolation enabled but no tenantId in context — rejecting request");
+		return c.json({ error: "Forbidden — tenant context required" }, 403);
+	}
+	return null;
+}
+
 // ---------------------------------------------------------------------------
 // Tenant-scoped Query Helper
 // Appends "WHERE tenant_id = $N" or "AND tenant_id = $N" to base query.
@@ -46,6 +69,10 @@ export function withTenantFilter(
 	tenantId: string | null,
 	paramIndex: number,
 ): { query: string; params: unknown[] } {
+	// Strict mode: when tenant isolation is enabled, missing tenant is an error
+	if (isTenantIsolationEnabled() && !tenantId) {
+		throw new Error("Tenant isolation enabled but tenantId is null — query aborted");
+	}
 	if (!tenantId) return { query: baseQuery, params: [] };
 
 	const hasWhere = /\bWHERE\b/i.test(baseQuery);
@@ -93,6 +120,12 @@ export async function logTenantActivity(
 // ---------------------------------------------------------------------------
 
 export async function verifyProjectAccess(projectId: string, tenantId: string | null): Promise<boolean> {
+	// Strict mode: when tenant isolation is enabled, missing tenant = denied
+	if (isTenantIsolationEnabled() && !tenantId) {
+		log.warn("[tenant-context] verifyProjectAccess denied: tenant isolation enabled but no tenantId provided");
+		return false;
+	}
+
 	// Auth disabled — allow everything (backward compat)
 	if (!tenantId) return true;
 
