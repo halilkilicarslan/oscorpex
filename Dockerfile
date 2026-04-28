@@ -55,8 +55,8 @@ RUN mkdir -p /app/.voltagent && chown -R nodejs:nodejs /app
 # Switch to non-root user
 USER nodejs
 
-# Expose port (VoltAgent default: 4242)
-EXPOSE 4242
+# Expose port (kernel studio API)
+EXPOSE 3141
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
