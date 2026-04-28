@@ -4,7 +4,7 @@
 
 import { json } from './base.js';
 import type {
-  ApprovalRequest,
+  ApprovalWithSla,
   AuditEvent,
   SecurityEvent,
   Incident,
@@ -23,16 +23,16 @@ export async function fetchControlPlaneSummary(): Promise<{
   return json(`${API}/api/studio/summary`);
 }
 
-export async function fetchApprovals(status?: string): Promise<{ approvals: ApprovalRequest[] }> {
+export async function fetchApprovals(status?: string): Promise<{ approvals: ApprovalWithSla[] }> {
   const qs = status ? `?status=${status}` : '';
   return json(`${API}/api/studio/approvals${qs}`);
 }
 
-export async function approveRequest(id: string): Promise<{ approval: ApprovalRequest }> {
+export async function approveRequest(id: string): Promise<{ approval: ApprovalWithSla }> {
   return json(`${API}/api/studio/approvals/${id}/approve`, { method: 'POST' });
 }
 
-export async function rejectRequest(id: string): Promise<{ approval: ApprovalRequest }> {
+export async function rejectRequest(id: string): Promise<{ approval: ApprovalWithSla }> {
   return json(`${API}/api/studio/approvals/${id}/reject`, { method: 'POST' });
 }
 
@@ -74,4 +74,29 @@ export async function fetchProjectCost(projectId: string, days = 30): Promise<{
   budget: { projectId: string; spentUsd: number; maxBudgetUsd: number | null; remainingUsd: number | null; alertFired: boolean } | undefined;
 }> {
   return json(`${API}/api/studio/cost/projects/${projectId}?days=${days}`);
+}
+
+// Operator Actions
+export async function executeOperatorAction(actionType: string, body: { targetId?: string; actor: string; reason: string }) {
+  return json(`${API}/api/studio/actions`, { method: 'POST', body: JSON.stringify({ actionType, ...body }) });
+}
+
+export async function pauseQueue(actor: string, reason: string) {
+  return json(`${API}/api/studio/actions/pause-queue`, { method: 'POST', body: JSON.stringify({ actor, reason }) });
+}
+
+export async function resumeQueue(actor: string, reason: string) {
+  return json(`${API}/api/studio/actions/resume-queue`, { method: 'POST', body: JSON.stringify({ actor, reason }) });
+}
+
+export async function resetProviderCooldown(providerId: string, actor: string, reason: string) {
+  return json(`${API}/api/studio/actions/reset-cooldown`, { method: 'POST', body: JSON.stringify({ targetId: providerId, actor, reason }) });
+}
+
+export async function escalateApproval(id: string, target: string, actor: string) {
+  return json(`${API}/api/studio/approvals/${id}/escalate`, { method: 'POST', body: JSON.stringify({ target, actor }) });
+}
+
+export async function reopenIncident(id: string, actor: string, reason?: string) {
+  return json(`${API}/api/studio/incidents/${id}/reopen`, { method: 'POST', body: JSON.stringify({ actor, reason }) });
 }

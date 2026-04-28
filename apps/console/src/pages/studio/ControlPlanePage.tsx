@@ -24,9 +24,12 @@ import {
   fetchRegistryAgents,
   fetchRegistryProviders,
   fetchAuditEvents,
+  escalateApproval,
+  reopenIncident,
+  resetProviderCooldown,
 } from '../../lib/studio-api/control-plane';
 import type {
-  ApprovalRequest,
+  ApprovalWithSla,
   Incident,
   AgentInstance,
   ProviderRuntime,
@@ -34,6 +37,12 @@ import type {
 } from '../../types/control-plane';
 
 type Tab = 'summary' | 'approvals' | 'incidents' | 'registry' | 'audit';
+
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h`;
+  return `${Math.floor(minutes / 1440)}d`;
+}
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
@@ -79,7 +88,7 @@ export default function ControlPlanePage() {
   const [summary, setSummary] = useState<any>(null);
 
   // Approvals state
-  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalWithSla[]>([]);
 
   // Incidents state
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -159,6 +168,24 @@ export default function ControlPlanePage() {
   const handleResolveIncident = async (id: string) => {
     await resolveIncident(id);
     loadIncidents();
+    loadSummary();
+  };
+
+  const handleEscalateApproval = async (id: string) => {
+    await escalateApproval(id, 'senior-operator', 'operator');
+    loadApprovals();
+    loadSummary();
+  };
+
+  const handleReopenIncident = async (id: string) => {
+    await reopenIncident(id, 'operator', 'reopened by operator');
+    loadIncidents();
+    loadSummary();
+  };
+
+  const handleResetCooldown = async (providerId: string) => {
+    await resetProviderCooldown(providerId, 'operator', 'manual reset');
+    loadRegistry();
     loadSummary();
   };
 
@@ -264,12 +291,22 @@ export default function ControlPlanePage() {
                     <StatusBadge status={a.status} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-medium text-[#fafafa]">{a.title}</p>
-                      <p className="text-[10px] text-[#525252]">{a.kind} · by {a.requested_by} · {new Date(a.created_at).toLocaleString()}</p>
+                      <p className="text-[10px] text-[#525252]">
+                        {a.kind} · by {a.requested_by} · {new Date(a.created_at).toLocaleString()}
+                        {'sla' in a && a.sla && (
+                          <span className="ml-2">
+                            {a.sla.isExpiringSoon && <span className="text-[#f59e0b]">expires in {formatDuration(a.sla.expiresInMinutes)}</span>}
+                            {a.sla.escalated && <span className="text-[#ef4444] ml-1">escalated{a.sla.escalationTarget ? ` → ${a.sla.escalationTarget}` : ''}</span>}
+                            {a.status === 'pending' && !a.sla.isExpiringSoon && <span>age {formatDuration(a.sla.pendingAgeMinutes)}</span>}
+                          </span>
+                        )}
+                      </p>
                     </div>
                     {a.status === 'pending' && (
                       <div className="flex items-center gap-1">
                         <button onClick={() => handleApprove(a.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20">Approve</button>
                         <button onClick={() => handleReject(a.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20">Reject</button>
+                        <button onClick={() => handleEscalateApproval(a.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20">Escalate</button>
                       </div>
                     )}
                   </div>
@@ -295,6 +332,9 @@ export default function ControlPlanePage() {
                     )}
                     {(i.status === 'open' || i.status === 'acknowledged') && (
                       <button onClick={() => handleResolveIncident(i.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20">Resolve</button>
+                    )}
+                    {i.status === 'resolved' && (
+                      <button onClick={() => handleReopenIncident(i.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20">Reopen</button>
                     )}
                   </div>
                 ))
@@ -336,6 +376,9 @@ export default function ControlPlanePage() {
                         <span className="text-[10px] text-[#525252]">{p.type}</span>
                         {p.capabilities.length > 0 && (
                           <span className="text-[10px] text-[#525252]">{p.capabilities.length} caps</span>
+                        )}
+                        {p.status === 'cooldown' && (
+                          <button onClick={() => handleResetCooldown(p.id)} className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#a855f7]/10 text-[#a855f7] hover:bg-[#a855f7]/20">Reset</button>
                         )}
                       </div>
                     ))}
