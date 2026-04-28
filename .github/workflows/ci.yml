@@ -41,3 +41,15 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Console tests
+        run: pnpm --filter console test:run
+
+      - name: Docker Compose config validation
+        run: docker compose config
+
+      - name: Docker build backend
+        run: docker compose build backend
+
+      - name: Docker build console
+        run: docker compose build console
