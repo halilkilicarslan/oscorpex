@@ -278,6 +278,7 @@ describe('ProtectedRoute', () => {
 
 	it('renders children when auth is not enabled (backward compat)', async () => {
 		vi.stubEnv('VITE_AUTH_ENABLED', 'false');
+		vi.mocked(authApi.fetchCurrentUser).mockResolvedValueOnce({ authDisabled: true } as any);
 
 		render(
 			<MemoryRouter initialEntries={['/studio']}>

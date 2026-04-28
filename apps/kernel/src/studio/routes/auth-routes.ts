@@ -140,8 +140,15 @@ router.post("/login", async (c) => {
 
 // ---------------------------------------------------------------------------
 // GET /auth/me — current user info (requires JWT or DB API key auth)
+// When auth is disabled, returns { authDisabled: true } so the frontend
+// knows the platform is running in open mode.
 // ---------------------------------------------------------------------------
 router.get("/me", async (c) => {
+	const authEnabled = process.env.OSCORPEX_AUTH_ENABLED === "true";
+	if (!authEnabled) {
+		return c.json({ authDisabled: true });
+	}
+
 	const userId = c.get("userId") as string | undefined;
 	if (!userId) {
 		return c.json({ error: "Not authenticated" }, 401);

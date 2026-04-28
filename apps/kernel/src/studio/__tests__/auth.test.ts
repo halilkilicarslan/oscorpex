@@ -278,6 +278,8 @@ describe("Auth routes", () => {
 		// The /me handler reads userId from context (set by authMiddleware).
 		// Since we're calling the route directly without middleware, we need to
 		// simulate the context variable. We do this by wrapping in a test app.
+		const originalAuthEnabled = process.env.OSCORPEX_AUTH_ENABLED;
+		process.env.OSCORPEX_AUTH_ENABLED = "true";
 		const { Hono } = await import("hono");
 		const app = new Hono();
 		// Simulate authMiddleware setting userId
@@ -305,5 +307,7 @@ describe("Auth routes", () => {
 		expect(body.id).toBe("u-1");
 		expect(body.email).toBe("user@example.com");
 		expect(body.role).toBe("owner");
+
+		process.env.OSCORPEX_AUTH_ENABLED = originalAuthEnabled;
 	});
 });

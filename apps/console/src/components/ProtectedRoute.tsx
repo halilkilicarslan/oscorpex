@@ -23,15 +23,10 @@ function LoadingSpinner() {
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
 	const { isAuthenticated, isLoading } = useAuth();
-	// Read at render time so test stubs (vi.stubEnv) take effect
-	const authEnabled = import.meta.env.VITE_AUTH_ENABLED === 'true';
 
 	if (isLoading) return <LoadingSpinner />;
 
-	// Auth disabled (default) — show content without authentication
-	if (!authEnabled) return <>{children}</>;
-
-	// Auth enabled but not authenticated → redirect to login
+	// Not authenticated → redirect to login
 	if (!isAuthenticated) return <Navigate to="/login" replace />;
 
 	return <>{children}</>;

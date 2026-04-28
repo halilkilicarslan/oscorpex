@@ -67,9 +67,11 @@ export async function register(data: RegisterData): Promise<LoginResponse> {
 }
 
 export async function fetchCurrentUser(token: string): Promise<AuthUser> {
-	const res = await fetch(`${AUTH_BASE}/me`, {
-		headers: { Authorization: `Bearer ${token}` },
-	});
+	const headers: Record<string, string> = {};
+	if (token) {
+		headers.Authorization = `Bearer ${token}`;
+	}
+	const res = await fetch(`${AUTH_BASE}/me`, { headers });
 	if (!res.ok) throw new Error('Not authenticated');
 	return res.json() as Promise<AuthUser>;
 }

@@ -36,11 +36,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	});
 	const [isLoading, setIsLoading] = useState(true);
 
-	// On mount: validate stored token
+	// On mount: validate stored token or detect auth-disabled mode
 	useEffect(() => {
 		if (token) {
 			fetchCurrentUser(token)
-				.then(setUser)
+				.then((data) => {
+					// Backend running in auth-disabled mode
+					if ((data as any).authDisabled) {
+						setUser({ id: 'anonymous', email: '', displayName: 'Anonymous', tenantId: '', role: 'viewer' } as AuthUser);
+					} else {
+						setUser(data);
+					}
+				})
 				.catch(() => {
 					try {
 						localStorage.removeItem(TOKEN_KEY);
@@ -51,7 +58,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				})
 				.finally(() => setIsLoading(false));
 		} else {
-			setIsLoading(false);
+			// Even without a token, try /me to detect auth-disabled mode
+			fetchCurrentUser('')
+				.then((data) => {
+					if ((data as any).authDisabled) {
+						setUser({ id: 'anonymous', email: '', displayName: 'Anonymous', tenantId: '', role: 'viewer' } as AuthUser);
+					}
+				})
+				.catch(() => {
+					// Auth enabled and no valid token — remain logged out
+				})
+				.finally(() => setIsLoading(false));
 		}
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
