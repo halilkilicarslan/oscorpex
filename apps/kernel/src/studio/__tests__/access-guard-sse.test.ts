@@ -6,11 +6,12 @@ import { describe, it, expect, vi } from "vitest";
 import { accessGuard } from "../auth/access-guard.js";
 
 describe("accessGuard — SSE requests", () => {
-	function makeCtx(opts: { path: string; accept?: string; tenantId?: string }): any {
+	function makeCtx(opts: { path: string; method?: string; accept?: string; tenantId?: string; authType?: string }): any {
 		const store: Record<string, unknown> = {};
 		return {
 			req: {
 				path: opts.path,
+				method: opts.method ?? "GET",
 				header: (name: string) => {
 					if (name.toLowerCase() === "accept") return opts.accept ?? "";
 					return "";
