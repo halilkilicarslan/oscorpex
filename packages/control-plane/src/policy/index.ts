@@ -2,8 +2,6 @@
 // Policy Surface — Explainability & Visibility
 // ---------------------------------------------------------------------------
 
-import { query, queryOne } from "../pg.ts";
-
 export interface PolicyProfile {
 	projectId: string;
 	profile: string;
@@ -40,3 +38,10 @@ export interface PolicySummary {
 	recentDecisions: PolicyDecision[];
 	lastUpdatedAt: string;
 }
+
+export {
+	getProjectPolicySummary,
+	getGlobalPolicySummary,
+	getProjectPolicyProfile,
+	getRecentPolicyDecisions,
+} from "./service.js";

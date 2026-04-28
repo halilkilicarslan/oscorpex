@@ -13,5 +13,17 @@ export type IncidentType =
 	| "stuck_task";
 
 // Canonical contract types — aliased from row types
-export type { IncidentRow as Incident } from "./repo.ts";
-export type { IncidentEventRow as IncidentEvent } from "./repo.ts";
+export type { IncidentRow as Incident } from "./repo.js";
+export type { IncidentEventRow as IncidentEvent } from "./repo.js";
+export {
+	openIncident,
+	ackIncident,
+	resolveIncident,
+	listIncidents,
+	getIncident,
+	appendIncidentEvent,
+	assignIncident,
+	addIncidentNote,
+	updateIncidentSeverity,
+	reopenIncident,
+} from "./repo.js";

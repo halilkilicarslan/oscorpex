@@ -2,9 +2,8 @@
 // Policy Surface — Service
 // ---------------------------------------------------------------------------
 
-import { query, queryOne } from "../pg.ts";
-import { getProjectBudgetStatus } from "../usage-cost/service.ts";
-import type { PolicySummary, PolicyProfile, BudgetStatus, PolicyDecision } from "./index.ts";
+import { query, queryOne } from "../pg.js";
+import type { PolicySummary, PolicyProfile, BudgetStatus, PolicyDecision } from "./index.js";
 
 export { type PolicySummary, type PolicyProfile, type BudgetStatus, type PolicyDecision };
 
@@ -18,7 +17,7 @@ export async function getProjectPolicySummary(projectId: string): Promise<Policy
 	return {
 		projectId,
 		activeProfile: profile?.profile ?? null,
-		budget,
+		budget: budget ?? null,
 		recentDecisions: decisions,
 		lastUpdatedAt: new Date().toISOString(),
 	};

@@ -4,53 +4,34 @@
 // ---------------------------------------------------------------------------
 
 // Registry
-export * from "./registry/index.ts";
-export * from "./registry/repo.ts";
-export * from "./registry/service.ts";
+export * from "./registry/index.js";
 
 // Presence
-export * from "./presence/index.ts";
-export * from "./presence/repo.ts";
-export * from "./presence/service.ts";
+export * from "./presence/index.js";
 
 // Approvals
-export * from "./approvals/index.ts";
-export * from "./approvals/repo.ts";
-export * from "./approvals/service.ts";
+export * from "./approvals/index.js";
 
 // Audit
-export * from "./audit/index.ts";
-export * from "./audit/repo.ts";
+export * from "./audit/index.js";
 
 // Usage/Cost
-export * from "./usage-cost/index.ts";
-export * from "./usage-cost/repo.ts";
-export { getProjectBudgetStatus } from "./usage-cost/repo.ts";
+export * from "./usage-cost/index.js";
 
 // Incidents
-export * from "./incidents/index.ts";
-export * from "./incidents/repo.ts";
+export * from "./incidents/index.js";
 
 // Projections
-export * from "./projections/index.ts";
-export * from "./projections/service.ts";
-export type {
-	ControlPlaneSummary,
-	ApprovalSummary,
-	RuntimeHealthSummary,
-	CostSummary,
-} from "./projections/index.ts";
+export * from "./projections/index.js";
 
 // Operator Actions
-export * from "./operator-actions/index.ts";
-export * from "./operator-actions/service.ts";
+export * from "./operator-actions/index.js";
 
 // Policy Surface
-export * from "./policy/index.ts";
-export * from "./policy/service.ts";
+export * from "./policy/index.js";
 
 // Shared
-export * from "./shared/index.ts";
+export * from "./shared/index.js";
 
 // PG helpers
-export { query, queryOne, execute, getPool } from "./pg.ts";
+export { query, queryOne, execute, getPool } from "./pg.js";

@@ -11,9 +11,8 @@ import {
 	getLatestHeartbeat,
 	 type AgentPresenceRow,
 	 type RuntimeHeartbeatRow,
-} from "./repo.ts";
-
-export type PresenceState = "online" | "degraded" | "cooldown" | "offline" | "unknown";
+} from "./repo.js";
+import type { PresenceState } from "./index.js";
 
 const STALE_THRESHOLD_MS = 60_000; // 60 seconds
 

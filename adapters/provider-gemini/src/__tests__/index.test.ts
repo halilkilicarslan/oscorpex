@@ -338,7 +338,7 @@ describe("GeminiAdapter.execute errors", () => {
 			return undefined as any;
 		});
 
-		mockSpawn.mockReturnValueOnce(makeMockProc(null, "", "spawn failed") as any);
+		mockSpawn.mockReturnValueOnce(makeMockProc(undefined, "", "spawn failed") as any);
 
 		const adapter = new GeminiAdapter();
 		await expect(

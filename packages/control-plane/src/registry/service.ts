@@ -15,25 +15,17 @@ import {
 	listCapabilitySnapshots,
 	 type AgentInstanceRow,
 	 type ProviderRuntimeRow,
-} from "./repo.ts";
+} from "./repo.js";
 
 export interface RegistryState {
-	agents: Array<{
-		id: string;
-		name: string;
-		role: string;
-		status: string;
-		projectId: string | null;
-		registeredAt: string;
-		lastSeenAt: string | null;
-	}>;
+	agents: AgentInstanceRow[];
 	providers: Array<{
 		id: string;
 		name: string;
 		type: string;
 		status: string;
-		lastHealthCheckAt: string | null;
-		cooldownUntil: string | null;
+		last_health_check_at: string | null;
+		cooldown_until: string | null;
 		capabilities: string[];
 	}>;
 }

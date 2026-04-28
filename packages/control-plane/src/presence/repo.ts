@@ -2,7 +2,7 @@
 // Control Plane — Presence Repository
 // ---------------------------------------------------------------------------
 
-import { execute, query, queryOne } from "../pg.ts";
+import { execute, query, queryOne } from "../pg.js";
 import { randomUUID } from "node:crypto";
 
 export interface AgentPresenceRow {

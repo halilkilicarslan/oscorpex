@@ -48,3 +48,21 @@ export interface OperatorFlagRow {
 	reason: string;
 	updated_at: string;
 }
+
+export {
+	executeOperatorAction,
+	listOperatorActions,
+	getOperatorFlag,
+	isQueuePaused,
+	disableProvider,
+	enableProvider,
+	retryTask,
+	cancelTask,
+	pauseQueue,
+	resumeQueue,
+	resetCooldown,
+	 type OperatorActionRequest as _OperatorActionRequest,
+	 type OperatorActionResult as _OperatorActionResult,
+	 type OperatorActionRow as _OperatorActionRow,
+	 type OperatorFlagRow as _OperatorFlagRow,
+} from "./service.js";

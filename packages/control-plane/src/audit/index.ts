@@ -13,5 +13,11 @@ export type AuditCategory =
 	| "operator";
 
 // Canonical contract types — aliased from row types
-export type { AuditEventRow as AuditEvent } from "./repo.ts";
-export type { SecurityEventRow as SecurityEvent } from "./repo.ts";
+export type { AuditEventRow as AuditEvent } from "./repo.js";
+export type { SecurityEventRow as SecurityEvent } from "./repo.js";
+export {
+	appendAuditEvent,
+	listAuditEvents,
+	appendSecurityEvent,
+	listSecurityEvents,
+} from "./repo.js";

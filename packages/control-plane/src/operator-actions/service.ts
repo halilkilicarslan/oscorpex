@@ -3,10 +3,10 @@
 // All actions directly mutate kernel tables and are audit-logged.
 // ---------------------------------------------------------------------------
 
-import { execute, query, queryOne } from "../pg.ts";
+import { execute, query, queryOne } from "../pg.js";
 import { randomUUID } from "node:crypto";
-import { appendAuditEvent } from "../audit/repo.ts";
-import type { OperatorActionRequest, OperatorActionResult, OperatorActionRow, OperatorFlagRow } from "./index.ts";
+import { appendAuditEvent } from "../audit/repo.js";
+import type { OperatorActionRequest, OperatorActionResult, OperatorActionRow, OperatorFlagRow } from "./index.js";
 
 export { type OperatorActionRequest, type OperatorActionResult, type OperatorActionRow, type OperatorFlagRow };
 

@@ -2,7 +2,7 @@
 // Control Plane — Approval Service
 // ---------------------------------------------------------------------------
 
-import { execute } from "../pg.ts";
+import { execute } from "../pg.js";
 import {
 	createApproval,
 	getApproval,
@@ -15,7 +15,7 @@ import {
 	listApprovalEvents,
 	listExpiredApprovals,
 	 type ApprovalRow,
-} from "./repo.ts";
+} from "./repo.js";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "escalated";
 export type ApprovalKind = "high_risk_task" | "policy_override" | "provider_override" | "runtime_override";

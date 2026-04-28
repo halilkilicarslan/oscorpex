@@ -13,9 +13,12 @@ export interface HeartbeatRecord {
 	recordedAt: string;
 }
 
-export interface PresenceSummary {
-	agentId: string;
-	state: PresenceState;
-	lastHeartbeatAt: string | null;
-	stale: boolean;
-}
+export type { PresenceSummary } from "./service.js";
+export {
+	recordHeartbeat,
+	markAgentOffline,
+	computePresenceState,
+	listPresence,
+	getAgentHeartbeats,
+	getProviderHeartbeats,
+} from "./service.js";

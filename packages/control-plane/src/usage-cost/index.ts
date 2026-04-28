@@ -32,4 +32,8 @@ export interface BudgetSnapshot {
 	alertFired: boolean;
 }
 
-export { getProjectUsageRollup, getProviderCostRollup, getProjectBudgetStatus } from "./repo.ts";
+export {
+	getProjectUsageRollup,
+	getProviderCostRollup,
+	getProjectBudgetStatus,
+} from "./repo.js";

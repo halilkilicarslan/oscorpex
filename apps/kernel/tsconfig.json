@@ -1,8 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
     "paths": {
       "@oscorpex/control-plane": ["../../packages/control-plane/src/index.ts"]
     }
