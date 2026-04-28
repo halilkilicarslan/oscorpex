@@ -29,22 +29,20 @@ function isPublicRoute(path: string): boolean {
  *
  * Behavior:
  *   1. Public routes → skip auth
- *   2. SSE streams → skip auth (handled at connection level)
- *   3. Otherwise → delegate to authMiddleware
+ *   2. Otherwise → delegate to authMiddleware
  *
  * When auth is not configured and NODE_ENV !== production,
  * authMiddleware sets authType="none" and allows the request.
+ *
+ * SSE streams are NOT exempt — they follow the same rules as
+ * any other HTTP request. If a route needs public SSE access,
+ * add its path to PUBLIC_ROUTES explicitly.
  */
 export async function accessGuard(c: Context, next: Next): Promise<void | Response> {
 	const path = c.req.path;
 
 	// Public routes
 	if (isPublicRoute(path)) {
-		return next();
-	}
-
-	// SSE streams bypass here; WS/SSE auth handled in upgrade handshake
-	if (c.req.header("accept")?.includes("text/event-stream")) {
 		return next();
 	}
 
