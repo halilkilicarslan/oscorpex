@@ -7,6 +7,8 @@
 export type {
 	ApprovalRequest,
 	ApprovalEvent,
+	ApprovalWithSla,
+	ApprovalSla,
 	AuditEvent,
 	SecurityEvent,
 	Incident,

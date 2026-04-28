@@ -18,6 +18,8 @@ export interface ApprovalRow {
 	created_at: string;
 	resolved_at: string | null;
 	expires_at: string;
+	escalated: boolean;
+	escalation_target: string | null;
 }
 
 export interface ApprovalEventRow {

@@ -1824,6 +1824,9 @@ CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
 CREATE INDEX IF NOT EXISTS idx_approvals_project ON approvals(project_id);
 CREATE INDEX IF NOT EXISTS idx_approvals_expires ON approvals(expires_at);
 
+ALTER TABLE approvals ADD COLUMN IF NOT EXISTS escalated BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE approvals ADD COLUMN IF NOT EXISTS escalation_target TEXT;
+
 CREATE TABLE IF NOT EXISTS approval_events (
   id            TEXT PRIMARY KEY,
   approval_id   TEXT NOT NULL REFERENCES approvals(id) ON DELETE CASCADE,
