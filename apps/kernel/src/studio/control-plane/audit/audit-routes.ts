@@ -1,16 +1,15 @@
 // ---------------------------------------------------------------------------
-// Control Plane — Audit Routes
+// Control Plane — Audit Routes (thin host)
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { listAuditEvents, listSecurityEvents, appendAuditEvent, appendSecurityEvent } from "./audit-repo.js";
+import { listAuditEvents, listSecurityEvents, appendAuditEvent, appendSecurityEvent } from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-audit-routes");
 
 export const cpAuditRoutes = new Hono();
 
-// GET /control-plane/audit
 cpAuditRoutes.get("/audit", async (c) => {
 	try {
 		const events = await listAuditEvents({
@@ -27,7 +26,6 @@ cpAuditRoutes.get("/audit", async (c) => {
 	}
 });
 
-// GET /control-plane/security-events
 cpAuditRoutes.get("/security-events", async (c) => {
 	try {
 		const events = await listSecurityEvents({
@@ -43,7 +41,6 @@ cpAuditRoutes.get("/security-events", async (c) => {
 	}
 });
 
-// POST /control-plane/audit (internal — services emit via this)
 cpAuditRoutes.post("/audit", async (c) => {
 	try {
 		const body = (await c.req.json()) as {

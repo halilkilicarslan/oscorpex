@@ -1,16 +1,15 @@
 // ---------------------------------------------------------------------------
-// Control Plane — Dashboard Projection Routes
+// Control Plane — Dashboard Projection Routes (thin host)
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { getControlPlaneSummary, getApprovalSummary, getRuntimeHealthSummary } from "./projection-service.js";
+import { getControlPlaneSummary, getApprovalSummary, getRuntimeHealthSummary } from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-projection-routes");
 
 export const cpProjectionRoutes = new Hono();
 
-// GET /control-plane/summary
 cpProjectionRoutes.get("/summary", async (c) => {
 	try {
 		const [summary, approvals, runtime] = await Promise.all([

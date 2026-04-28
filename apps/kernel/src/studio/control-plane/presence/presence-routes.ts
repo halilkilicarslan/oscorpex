@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Control Plane — Presence Routes
+// Control Plane — Presence Routes (thin host)
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
@@ -10,14 +10,13 @@ import {
 	getProviderHeartbeats,
 	recordHeartbeat,
 	 type PresenceState,
-} from "./presence-service.js";
+} from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-presence-routes");
 
 export const cpPresenceRoutes = new Hono();
 
-// GET /control-plane/presence
 cpPresenceRoutes.get("/presence", async (c) => {
 	try {
 		const presence = await listPresence();
@@ -28,7 +27,6 @@ cpPresenceRoutes.get("/presence", async (c) => {
 	}
 });
 
-// GET /control-plane/presence/:agentId
 cpPresenceRoutes.get("/presence/:agentId", async (c) => {
 	try {
 		const agentId = c.req.param("agentId");
@@ -41,7 +39,6 @@ cpPresenceRoutes.get("/presence/:agentId", async (c) => {
 	}
 });
 
-// POST /control-plane/presence/heartbeat (internal use)
 cpPresenceRoutes.post("/presence/heartbeat", async (c) => {
 	try {
 		const body = (await c.req.json()) as {

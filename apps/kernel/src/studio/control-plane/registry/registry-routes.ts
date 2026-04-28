@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Control Plane — Registry Routes
+// Control Plane — Registry Routes (thin host)
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
@@ -9,15 +9,13 @@ import {
 	getRegistryProvider,
 	getRegistryState,
 	listProviderCapabilities,
-} from "./registry-service.js";
+} from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-registry-routes");
 
 export const cpRegistryRoutes = new Hono();
 
-// GET /control-plane/registry/agents
-// Supports ?projectId= filter
 cpRegistryRoutes.get("/registry/agents", async (c) => {
 	try {
 		const projectId = c.req.query("projectId") ?? undefined;
@@ -29,7 +27,6 @@ cpRegistryRoutes.get("/registry/agents", async (c) => {
 	}
 });
 
-// GET /control-plane/registry/providers
 cpRegistryRoutes.get("/registry/providers", async (c) => {
 	try {
 		const providers = await listRegistryProviders();
@@ -40,7 +37,6 @@ cpRegistryRoutes.get("/registry/providers", async (c) => {
 	}
 });
 
-// GET /control-plane/registry/providers/:id
 cpRegistryRoutes.get("/registry/providers/:id", async (c) => {
 	try {
 		const provider = await getRegistryProvider(c.req.param("id"));
@@ -53,7 +49,6 @@ cpRegistryRoutes.get("/registry/providers/:id", async (c) => {
 	}
 });
 
-// GET /control-plane/registry/state
 cpRegistryRoutes.get("/registry/state", async (c) => {
 	try {
 		const state = await getRegistryState();

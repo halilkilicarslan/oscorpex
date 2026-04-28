@@ -2,7 +2,7 @@
 // Control Plane — Usage/Cost Repository
 // ---------------------------------------------------------------------------
 
-import { query } from "../../pg.js";
+import { query } from "../pg.js";
 
 export interface UsageRollupRow {
 	project_id: string;

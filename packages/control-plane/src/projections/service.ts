@@ -2,7 +2,7 @@
 // Control Plane — Dashboard Projections Service
 // ---------------------------------------------------------------------------
 
-import { query } from "../../pg.js";
+import { query } from "../pg.js";
 
 export interface ControlPlaneSummary {
 	pendingApprovals: number;

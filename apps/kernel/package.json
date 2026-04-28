@@ -24,6 +24,7 @@
     "@ai-sdk/provider-utils": "^4.0.22",
     "@hono/node-server": "^2.0.0",
     "@octokit/rest": "^22.0.1",
+    "@oscorpex/control-plane": "workspace:*",
     "@oscorpex/core": "workspace:*",
     "@oscorpex/event-schema": "workspace:*",
     "@oscorpex/memory-kit": "workspace:*",

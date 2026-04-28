@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Control Plane — Approval Routes
+// Control Plane — Approval Routes (thin host)
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
@@ -9,17 +9,15 @@ import {
 	reject,
 	expireStaleApprovals,
 	getApprovalWithEvents,
-	listPendingApprovals,
 	listApprovals,
 	 type ApprovalKind,
-} from "./approval-service.js";
+} from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-approval-routes");
 
 export const cpApprovalRoutes = new Hono();
 
-// GET /control-plane/approvals
 cpApprovalRoutes.get("/approvals", async (c) => {
 	try {
 		const status = c.req.query("status") ?? undefined;
@@ -31,7 +29,6 @@ cpApprovalRoutes.get("/approvals", async (c) => {
 	}
 });
 
-// GET /control-plane/approvals/:id
 cpApprovalRoutes.get("/approvals/:id", async (c) => {
 	try {
 		const result = await getApprovalWithEvents(c.req.param("id"));
@@ -43,7 +40,6 @@ cpApprovalRoutes.get("/approvals/:id", async (c) => {
 	}
 });
 
-// POST /control-plane/approvals/:id/approve
 cpApprovalRoutes.post("/approvals/:id/approve", async (c) => {
 	try {
 		const body = (await c.req.json().catch(() => ({}))) as { actor?: string };
@@ -56,7 +52,6 @@ cpApprovalRoutes.post("/approvals/:id/approve", async (c) => {
 	}
 });
 
-// POST /control-plane/approvals/:id/reject
 cpApprovalRoutes.post("/approvals/:id/reject", async (c) => {
 	try {
 		const body = (await c.req.json().catch(() => ({}))) as { actor?: string };
@@ -69,7 +64,6 @@ cpApprovalRoutes.post("/approvals/:id/reject", async (c) => {
 	}
 });
 
-// POST /control-plane/approvals (create)
 cpApprovalRoutes.post("/approvals", async (c) => {
 	try {
 		const body = (await c.req.json()) as {
@@ -87,7 +81,6 @@ cpApprovalRoutes.post("/approvals", async (c) => {
 	}
 });
 
-// POST /control-plane/approvals/expire-stale (internal / cron helper)
 cpApprovalRoutes.post("/approvals/expire-stale", async (c) => {
 	try {
 		const count = await expireStaleApprovals();

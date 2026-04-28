@@ -1,16 +1,15 @@
 // ---------------------------------------------------------------------------
-// Control Plane — Usage/Cost Routes
+// Control Plane — Usage/Cost Routes (thin host)
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { getProjectUsageRollup, getProviderCostRollup, getProjectBudgetStatus } from "./usage-cost-repo.js";
+import { getProjectUsageRollup, getProviderCostRollup, getProjectBudgetStatus } from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-usage-cost-routes");
 
 export const cpUsageCostRoutes = new Hono();
 
-// GET /control-plane/usage/projects/:id
 cpUsageCostRoutes.get("/usage/projects/:id", async (c) => {
 	try {
 		const days = Math.min(Number.parseInt(c.req.query("days") ?? "30", 10), 365);
@@ -22,7 +21,6 @@ cpUsageCostRoutes.get("/usage/projects/:id", async (c) => {
 	}
 });
 
-// GET /control-plane/cost/projects/:id
 cpUsageCostRoutes.get("/cost/projects/:id", async (c) => {
 	try {
 		const days = Math.min(Number.parseInt(c.req.query("days") ?? "30", 10), 365);
@@ -37,7 +35,6 @@ cpUsageCostRoutes.get("/cost/projects/:id", async (c) => {
 	}
 });
 
-// GET /control-plane/cost/providers
 cpUsageCostRoutes.get("/cost/providers", async (c) => {
 	try {
 		const days = Math.min(Number.parseInt(c.req.query("days") ?? "30", 10), 365);
