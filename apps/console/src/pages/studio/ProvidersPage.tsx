@@ -34,9 +34,6 @@ import {
 } from '../../lib/studio-api';
 import {
   PROVIDER_META,
-  PROVIDER_TYPE_ORDER,
-  providerStatusColor,
-  providerStatusDot,
 } from './settings/provider-meta.js';
 
 // ---------------------------------------------------------------------------

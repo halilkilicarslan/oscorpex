@@ -11,7 +11,7 @@ import type {
   OrgNode,
   PipelineAgent,
 } from './types.js';
-import { API, json, httpDelete, httpPost, httpPut } from './base.js';
+import { API, json, httpDelete } from './base.js';
 
 export async function fetchAgentConfigs(): Promise<AgentConfig[]> {
   return json(`${API}/agents`);

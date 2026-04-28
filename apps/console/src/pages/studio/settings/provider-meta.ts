@@ -2,8 +2,8 @@
 // ProvidersPage Types & Metadata
 // ---------------------------------------------------------------------------
 
-import { MODEL_OPTIONS } from '../../lib/model-options';
-import type { AIProviderType } from '../../lib/studio-api';
+import { MODEL_OPTIONS } from '../../../lib/model-options';
+import type { AIProviderType } from '../../../lib/studio-api';
 
 export interface ProviderMeta {
 	label: string;
@@ -42,13 +42,20 @@ export const PROVIDER_META: Record<AIProviderType, ProviderMeta> = {
 		models: MODEL_OPTIONS.ollama,
 		color: 'text-[#a855f7]',
 	},
-	custom: {
-		label: 'Custom',
-		defaultBaseUrl: '',
-		defaultModel: '',
-		models: [],
-		color: 'text-[#a3a3a3]',
-	},
+  custom: {
+    label: 'Custom',
+    defaultBaseUrl: '',
+    defaultModel: '',
+    models: [],
+    color: 'text-[#a3a3a3]',
+  },
+  cli: {
+    label: 'CLI',
+    defaultBaseUrl: '',
+    defaultModel: '',
+    models: [],
+    color: 'text-[#a3a3a3]',
+  },
 };
 
 export const PROVIDER_TYPE_ORDER: AIProviderType[] = ['openai', 'anthropic', 'google', 'ollama', 'custom'];

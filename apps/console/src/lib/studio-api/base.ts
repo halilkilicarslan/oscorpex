@@ -100,7 +100,6 @@ export interface PaginatedResult<T> {
 export async function fetchPaginated<T>(url: string, limit = 50, offset = 0): Promise<PaginatedResult<T>> {
 	const sep = url.includes('?') ? '&' : '?';
 	const fullUrl = `${url}${sep}limit=${limit}&offset=${offset}`;
-	const res = await studioFetch<T[]>(fullUrl, { method: 'GET' });
 	// X-Total-Count header is not available through studioFetch; keep manual for paginated
 	const headers = { ...authHeaders() };
 	const raw = await fetch(fullUrl, { headers });

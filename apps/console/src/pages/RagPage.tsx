@@ -23,7 +23,6 @@ import {
   type RagDocument,
   type RagQuery,
   type Stats,
-  KB_TYPE_CONFIG,
 } from './studio/settings/rag-types.js';
 
 // ---------------------------------------------------------------------------
