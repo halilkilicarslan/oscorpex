@@ -32,6 +32,11 @@ Oscorpex is a full-stack development studio that orchestrates a team of 12 speci
 - **Risk Classification** — auto-classify task risk level, high-risk tasks require approval before execution
 - **Role Normalization** — canonical hyphen-case format with underscore/legacy variant acceptance
 - **Approval Timeout** — 24h auto-escalation for stalled approvals
+- **Control Plane** — operator governance layer with registry, presence, approvals, audit, incidents, and policy surface
+- **Operator Actions** — 7 controlled actions: provider disable/enable, task retry/cancel, queue pause/resume, cooldown reset with mandatory audit logging
+- **Incident Management** — full workflow: acknowledge, assign, resolve, reopen, add notes, severity updates with event timeline
+- **Approval SLA** — real-time age tracking, expiration warnings, escalation support
+- **Policy Explainability** — active policy profiles, budget status, recent decision visibility
 - **RLS Tenant Guard** — row-level security on 14+ tables with request-scoped tenant context
 
 ### Performance & Scheduling (v9.0)
@@ -110,11 +115,8 @@ cp .env.example .env
 ### Development
 
 ```bash
-# Start backend (port 3141, studio API at /api/studio)
-pnpm dev
-
-# Start frontend (port 5173)
-cd console && pnpm dev
+# Start frontend (port 5161)
+cd apps/console && pnpm dev
 ```
 
 ### Testing
@@ -168,7 +170,17 @@ src/
     agentic-metrics.ts        # 11 observability aggregation queries
     event-bus.ts              # Event sourcing for state transitions
     routes/                   # 32+ Hono sub-routers (modular)
+    control-plane/            # Operator governance routes (thin hosts)
     db/                       # 39+ repository modules (modular)
+  control-plane/              # @oscorpex/control-plane — governance package
+    registry/                 # Agent & provider registry
+    presence/                 # Heartbeat & presence tracking
+    approvals/                # Approval center with SLA
+    audit/                    # Security audit layer
+    incidents/                # Incident management workflow
+    projections/              # Dashboard aggregations
+    policy/                   # Policy explainability surface
+    operator-actions/         # Controlled operator interventions
 
 console/
   src/
@@ -180,7 +192,7 @@ console/
 
 ## Database
 
-PostgreSQL with 85+ tables including: `projects`, `project_plans`, `phases`, `tasks`, `project_agents`, `events`, `work_items`, `sprints`, `token_usage`, `agent_capabilities`, `agent_sessions`, `agent_episodes`, `agent_strategy_patterns`, `task_proposals`, `graph_mutations`, `replan_events`, `execution_goals`, `learning_patterns`, `provider_state`, `pipeline_runs`, `capability_grants`, `sandbox_sessions`, `sandbox_violations`, `provider_telemetry`, `cli_usage_snapshots`, `replan_patches`
+PostgreSQL with 85+ tables including: `projects`, `project_plans`, `phases`, `tasks`, `project_agents`, `events`, `work_items`, `sprints`, `token_usage`, `agent_capabilities`, `agent_sessions`, `agent_episodes`, `agent_strategy_patterns`, `task_proposals`, `graph_mutations`, `replan_events`, `execution_goals`, `learning_patterns`, `provider_state`, `pipeline_runs`, `capability_grants`, `sandbox_sessions`, `sandbox_violations`, `provider_telemetry`, `cli_usage_snapshots`, `replan_patches`, `agent_instances`, `provider_runtime_registry`, `runtime_heartbeats`, `approvals`, `approval_events`, `audit_events`, `security_events`, `incidents`, `incident_events`, `operator_actions`, `operator_flags`
 
 All migrations use `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` for idempotency. Schema applied at startup via `db-bootstrap.ts`.
 
@@ -203,6 +215,7 @@ oscorpex/
 │   └── kernel-src/          # Legacy source (migration artifact — do not edit)
 ├── packages/
 │   ├── core/                # Shared types + utilities
+│   ├── control-plane/       # Operator governance layer (registry, presence, approvals, audit, incidents, policy)
 │   ├── event-schema/        # Event type definitions
 │   ├── memory-kit/          # Agent memory utilities
 │   ├── observability-sdk/   # Observability SDK
@@ -210,16 +223,37 @@ oscorpex/
 │   ├── provider-sdk/        # CLI adapter contracts
 │   ├── task-graph/          # DAG data structures
 │   └── verification-kit/    # Output verification
-├── adapters/
-│   ├── provider-claude/     # Claude CLI adapter (stub)
-│   ├── provider-codex/      # Codex CLI adapter (stub)
-│   ├── provider-cursor/     # Cursor adapter (stub)
-│   ├── provider-gemini/     # Google Gemini adapter (EPIC 1)
-│   └── provider-ollama/     # Ollama local LLM adapter (EPIC 2)
-└── docs/
-    ├── operator-runbooks.md # Operator runbooks for incident response
-    └── NEXT_PHASE_HANDOFF.md # Production readiness handoff
 ```
+
+## Operator Governance (Control Plane)
+
+Oscorpex includes a dedicated **Control Plane** for operators to monitor and manage the system:
+
+### Dashboard (/studio/control-plane)
+- **Summary Cards** — pending approvals, active agents, cooldown providers, open incidents, over-budget projects
+- **Provider Health** — online/degraded/cooldown/offline counts with cooldown remaining
+- **Approval Queue** — real-time SLA tracking (age, expires soon, escalated)
+- **Incident Feed** — acknowledge, assign, resolve, reopen, add notes
+
+### Operator Actions
+All operator actions require `actor` and `reason` and are permanently audit-logged:
+
+| Action | Endpoint | Description |
+|--------|----------|-------------|
+| Pause Queue | `POST /actions/pause-queue` | Stop task dispatching |
+| Resume Queue | `POST /actions/resume-queue` | Resume task dispatching |
+| Reset Cooldown | `POST /actions/reset-cooldown` | Clear provider cooldown |
+| Disable Provider | `POST /actions/provider-disable` | Mark provider unavailable |
+| Enable Provider | `POST /actions/provider-enable` | Mark provider available |
+| Retry Task | `POST /actions/retry-task` | Re-queue a failed task |
+| Cancel Task | `POST /actions/cancel-task` | Cancel a queued/running task |
+
+### Governance Endpoints
+- `GET /api/studio/summary` — Dashboard aggregations
+- `GET /api/studio/provider-ops` — Provider operational status
+- `GET /api/studio/queue-health` — Queue paused state and metrics
+- `GET /api/studio/policy/summary` — Global policy overview
+- `GET /api/studio/policy/projects/:id` — Project-level policy details
 
 ## License
 
