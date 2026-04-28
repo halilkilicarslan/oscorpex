@@ -130,6 +130,9 @@ importers:
 
   apps/console:
     dependencies:
+      '@oscorpex/control-plane':
+        specifier: workspace:*
+        version: link:../../packages/control-plane
       '@tailwindcss/vite':
         specifier: ^4.2.2
         version: 4.2.4(vite@8.0.5(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))

@@ -14,6 +14,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        '@oscorpex/control-plane': '/Users/iamhk/development/personal/oscorpex/packages/control-plane/src/index.ts',
+      },
+    },
     server: {
       port: 5173,
       proxy: {

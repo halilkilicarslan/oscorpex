@@ -33,6 +33,12 @@ export * from "./incidents/repo.ts";
 // Projections
 export * from "./projections/index.ts";
 export * from "./projections/service.ts";
+export type {
+	ControlPlaneSummary,
+	ApprovalSummary,
+	RuntimeHealthSummary,
+	CostSummary,
+} from "./projections/index.ts";
 
 // Shared
 export * from "./shared/index.ts";

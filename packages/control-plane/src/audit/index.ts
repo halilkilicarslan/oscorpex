@@ -12,22 +12,6 @@ export type AuditCategory =
 	| "security"
 	| "operator";
 
-export interface AuditEvent {
-	id: string;
-	projectId: string | null;
-	category: AuditCategory;
-	severity: AuditSeverity;
-	actor: string;
-	action: string;
-	details: Record<string, unknown>;
-	createdAt: string;
-}
-
-export interface SecurityEvent {
-	id: string;
-	projectId: string | null;
-	eventType: string;
-	severity: AuditSeverity;
-	payload: Record<string, unknown>;
-	createdAt: string;
-}
+// Canonical contract types — aliased from row types
+export type { AuditEventRow as AuditEvent } from "./repo.ts";
+export type { SecurityEventRow as SecurityEvent } from "./repo.ts";

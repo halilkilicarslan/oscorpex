@@ -737,8 +737,8 @@ function StudioTraceDetailPanel({ traceId }: { traceId: string }) {
 // ---------------------------------------------------------------------------
 
 export default function TracesPage() {
-  const [source, setSource] = useState<TraceSource>('studio');
-  const [stats, setStats] = useState<TraceStats | null>(null);
+  const [source] = useState<TraceSource>('studio');
+  const [stats] = useState<TraceStats | null>(null);
   const [traces, setTraces] = useState<ApiTrace[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -784,13 +784,6 @@ export default function TracesPage() {
   // ---------------------------------------------------------------------------
   // VoltAgent Stats yükleme
   // ---------------------------------------------------------------------------
-
-  const loadStats = useCallback(() => {
-    fetch(`${API_BASE}/traces/stats`)
-      .then((r) => r.json())
-      .then((data) => setStats(data as TraceStats))
-      .catch(console.error);
-  }, []);
 
   // ---------------------------------------------------------------------------
   // VoltAgent Trace listesi yükleme

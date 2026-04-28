@@ -11,8 +11,6 @@ import {
   DollarSign,
   FileText,
   RefreshCw,
-  ChevronDown,
-  ChevronRight,
   Zap,
 } from 'lucide-react';
 import {

@@ -30,7 +30,18 @@ cpRegistryRoutes.get("/registry/agents", async (c) => {
 cpRegistryRoutes.get("/registry/providers", async (c) => {
 	try {
 		const providers = await listRegistryProviders();
-		return c.json({ providers });
+		return c.json({
+			providers: providers.map((p) => ({
+				...p,
+				capabilities: (() => {
+					try {
+						return JSON.parse(p.capabilities) as string[];
+					} catch {
+						return [];
+					}
+				})(),
+			})),
+		});
 	} catch (err) {
 		log.error("[registry] list providers failed: " + String(err));
 		return c.json({ error: String(err) }, 500);
