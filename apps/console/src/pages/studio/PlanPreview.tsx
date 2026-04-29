@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { ProjectPlan, PlanCostEstimate } from '../../lib/studio-api';
 import { fetchPlanCostEstimate } from '../../lib/studio-api';
-import PhaseSection from './phase-section.js';
-import CostEstimatePanel from './cost-estimate-panel.js';
-import PlanActions from './plan-actions.js';
+import PhaseSection from './plan-preview/phase-section.js';
+import CostEstimatePanel from './plan-preview/cost-estimate-panel.js';
+import PlanActions from './plan-preview/plan-actions.js';
 
 export default function PlanPreview({
 	plan,

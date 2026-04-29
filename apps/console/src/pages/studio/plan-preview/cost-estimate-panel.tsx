@@ -129,18 +129,43 @@ export default function CostEstimatePanel({ plan, estimate }: { plan: ProjectPla
 										>
 											${(row.cost ?? 0).toFixed(4)}
 										</span>
-							</div>
-							</div>
-						))}
+									</div>
+								</div>
+							))}
+						</div>
+					)}
+
+					{/* Agent breakdown table */}
+					{activeTab === 'agent' && (
+						<div className="p-3 flex flex-col gap-1.5">
+							{agentRows.map((row, i) => (
+								<div
+									key={i}
+									className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#141414] border border-[#1f1f1f]"
+								>
+									<Cpu size={11} className="text-[#525252] shrink-0" />
+									<span className="text-[11px] text-[#a3a3a3] flex-1 truncate capitalize">{row.agent}</span>
+									<div className="flex items-center gap-3 shrink-0">
+										<span className="text-[10px] text-[#525252]">{row.taskCount}t</span>
+										<span className="text-[10px] text-[#525252]">{formatTokens(row.tokens)} tok</span>
+										<span
+											className="text-[10px] font-semibold"
+											style={{ color: getCostColor(row.cost) }}
+										>
+											${(row.cost ?? 0).toFixed(4)}
+										</span>
+									</div>
+								</div>
+							))}
 						</div>
 					)}
 
 					<div className="px-4 pb-3">
-								<p className="text-[10px] text-[#404040]">
-									Estimates based on ~{formatTokens(estimate.avgTokensPerTask)} avg tokens/task using{' '}
-									{estimate.model}. Actual costs may vary.
-								</p>
-							</div>
+						<p className="text-[10px] text-[#404040]">
+							Estimates based on ~{formatTokens(estimate.avgTokensPerTask)} avg tokens/task using{' '}
+							{estimate.model}. Actual costs may vary.
+						</p>
+					</div>
 				</div>
 			)}
 		</div>
