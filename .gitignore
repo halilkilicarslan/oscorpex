@@ -153,6 +153,12 @@ dist
 
 # Oscorpex runtime data
 .oscorpex/
+apps/kernel/.tmp/
+apps/kernel/.tmp/**
+**/studio-git-test-*/
+**/studio-git-test-*/**
+**/integration-temp/**
+**/*.scratch.tmp
 
 # cursor
 .cursor
