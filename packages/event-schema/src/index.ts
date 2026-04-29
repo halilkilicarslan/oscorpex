@@ -112,6 +112,12 @@ export type {
 	ReleaseOverrideAppliedPayload,
 	ReleaseRollbackTriggeredPayload,
 	ReleaseRollbackRequiredPayload,
+	ArtifactRegisteredPayload,
+	ArtifactVerifiedPayload,
+	ArtifactRejectedPayload,
+	ArtifactSupersededPayload,
+	ArtifactCompletenessSatisfiedPayload,
+	ArtifactBlockedPayload,
 	LifecycleTransitionPayload,
 	GoalEvaluatedPayload,
 	MessageCreatedPayload,
@@ -219,6 +225,12 @@ import type {
 	ReleaseOverrideAppliedPayload,
 	ReleaseRollbackTriggeredPayload,
 	ReleaseRollbackRequiredPayload,
+	ArtifactRegisteredPayload,
+	ArtifactVerifiedPayload,
+	ArtifactRejectedPayload,
+	ArtifactSupersededPayload,
+	ArtifactCompletenessSatisfiedPayload,
+	ArtifactBlockedPayload,
 	LifecycleTransitionPayload,
 	GoalEvaluatedPayload,
 	MessageCreatedPayload,
@@ -320,6 +332,12 @@ export interface EventPayloadMap {
 	"release.override_applied": ReleaseOverrideAppliedPayload;
 	"release.rollback_triggered": ReleaseRollbackTriggeredPayload;
 	"release.rollback_required": ReleaseRollbackRequiredPayload;
+	"artifact.registered": ArtifactRegisteredPayload;
+	"artifact.verified": ArtifactVerifiedPayload;
+	"artifact.rejected": ArtifactRejectedPayload;
+	"artifact.superseded": ArtifactSupersededPayload;
+	"artifact.completeness_satisfied": ArtifactCompletenessSatisfiedPayload;
+	"artifact.blocked": ArtifactBlockedPayload;
 	// Lifecycle
 	"lifecycle:transition": LifecycleTransitionPayload;
 	// Goal

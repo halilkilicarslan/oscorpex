@@ -100,6 +100,12 @@ export type EventType =
 	| "release.override_applied"
 	| "release.rollback_triggered"
 	| "release.rollback_required"
+	| "artifact.registered"
+	| "artifact.verified"
+	| "artifact.rejected"
+	| "artifact.superseded"
+	| "artifact.completeness_satisfied"
+	| "artifact.blocked"
 	// Lifecycle
 	| "lifecycle:transition"
 	// Goal

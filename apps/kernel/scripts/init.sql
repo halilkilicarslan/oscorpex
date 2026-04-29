@@ -2305,6 +2305,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_rollback_trigger_idempotency
   ON rollback_triggers(tenant_id, release_candidate_id, trigger_type, correlation_id)
   WHERE tenant_id IS NOT NULL;
 
+-- vH2-F: Artifact linkage + title metadata (idempotent)
+ALTER TABLE artifact_references
+  ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT '';
+ALTER TABLE artifact_references
+  ADD COLUMN IF NOT EXISTS approval_request_id TEXT REFERENCES approval_requests(id) ON DELETE SET NULL;
+ALTER TABLE artifact_references
+  ADD COLUMN IF NOT EXISTS release_decision_id TEXT REFERENCES release_decisions(id) ON DELETE SET NULL;
+ALTER TABLE artifact_references
+  ADD COLUMN IF NOT EXISTS rollback_trigger_id TEXT REFERENCES rollback_triggers(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_artifact_refs_approval_request ON artifact_references(approval_request_id);
+CREATE INDEX IF NOT EXISTS idx_artifact_refs_release_decision ON artifact_references(release_decision_id);
+CREATE INDEX IF NOT EXISTS idx_artifact_refs_rollback_trigger ON artifact_references(rollback_trigger_id);
+
 -- ---------------------------------------------------------------------------
 -- Phase 2: Operator Actions & Governance Flags
 -- ---------------------------------------------------------------------------

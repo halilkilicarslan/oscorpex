@@ -57,6 +57,7 @@ export * from "./protocol-repo.js";
 export * from "./approval-repo.js";
 export * from "./quality-gate-repo.js";
 export * from "./release-decision-repo.js";
+export * from "./artifact-reference-repo.js";
 
 // v7.0 Phase 3: Dynamic Agentic Platform
 export * from "./graph-mutation-repo.js";

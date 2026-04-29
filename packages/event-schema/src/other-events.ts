@@ -190,6 +190,52 @@ export interface ReleaseRollbackRequiredPayload {
 	reason?: string;
 }
 
+export interface ArtifactRegisteredPayload {
+	goalId?: string;
+	artifactId?: string;
+	artifactType?: string;
+	releaseCandidateId?: string;
+}
+
+export interface ArtifactVerifiedPayload {
+	goalId?: string;
+	artifactId?: string;
+	artifactType?: string;
+	verifiedBy?: string;
+}
+
+export interface ArtifactRejectedPayload {
+	goalId?: string;
+	artifactId?: string;
+	artifactType?: string;
+	reason?: string;
+}
+
+export interface ArtifactSupersededPayload {
+	goalId?: string;
+	artifactId?: string;
+	artifactType?: string;
+	supersededBy?: string;
+	reason?: string;
+}
+
+export interface ArtifactCompletenessSatisfiedPayload {
+	goalId?: string;
+	environment?: string;
+	missingArtifacts?: string[];
+	staleCount?: number;
+	rejectedCount?: number;
+}
+
+export interface ArtifactBlockedPayload {
+	goalId?: string;
+	reason?: string;
+	environment?: string;
+	missingArtifacts?: string[];
+	staleCount?: number;
+	rejectedCount?: number;
+}
+
 export interface LifecycleTransitionPayload {
 	entityType?: string;
 	entityId?: string;
