@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, Send, MessageSquare } from 'lucide-react';
-
-const BASE = import.meta.env.VITE_API_BASE ?? '';
+import { httpGet, httpPost } from '../../lib/studio-api/base.js';
 
 interface ChatMessage {
   id: string;
@@ -25,8 +24,7 @@ export default function AgentChat({ projectId, agentId, agentName }: Props) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(() => {
-    fetch(`${BASE}/api/studio/projects/${projectId}/agents/${agentId}/chat`)
-      .then((r) => r.json())
+    httpGet<{ messages?: ChatMessage[] } | ChatMessage[]>(`/api/studio/projects/${projectId}/agents/${agentId}/chat`)
       .then((data) => setMessages(Array.isArray(data) ? data : (data.messages ?? [])))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -56,12 +54,12 @@ export default function AgentChat({ projectId, agentId, agentName }: Props) {
     setSending(true);
 
     try {
-      const res = await fetch(`${BASE}/api/studio/projects/${projectId}/agents/${agentId}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
-      });
-      const data = await res.json();
+      const data = await httpPost<{
+        messages?: ChatMessage[];
+        userMessageId?: string;
+        reply?: string;
+        replyId?: string;
+      }>(`/api/studio/projects/${projectId}/agents/${agentId}/chat`, { message: text });
       // Replace optimistic + add reply
       setMessages((prev) => {
         const without = prev.filter((m) => m.id !== optimistic.id);

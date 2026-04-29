@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 export type { PaginatedResult } from './base.js';
+export * from './base.js';
 export * from './types.js';
 export * from './projects.js';
 export * from './plans.js';

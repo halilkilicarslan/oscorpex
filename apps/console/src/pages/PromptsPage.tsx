@@ -18,6 +18,7 @@ import {
   AlertCircle,
   RotateCcw,
 } from 'lucide-react';
+import { httpPost } from '../lib/studio-api/base.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -119,14 +120,7 @@ function previewLines(content: string, maxLines = 3): string {
   return full > maxLines ? joined + '\n...' : joined;
 }
 
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, options);
-  if (!res.ok) {
-    const msg = await res.text().catch(() => `HTTP ${res.status}`);
-    throw new Error(msg || `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
+
 
 // ---------------------------------------------------------------------------
 // StatCard
@@ -927,7 +921,7 @@ export default function PromptsPage() {
 
   const handleCopyUsage = async (t: PromptTemplate) => {
     try {
-      await apiFetch(`/${t.id}/use`, { method: 'POST' });
+      await httpPost(`${API_BASE}/${t.id}/use`);
       // Silently update usage count in local state
       setTemplates((prev) =>
         prev.map((x) => (x.id === t.id ? { ...x, usage_count: x.usage_count + 1 } : x)),

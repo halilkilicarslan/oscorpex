@@ -24,6 +24,7 @@ import {
   Filter,
   Search,
 } from 'lucide-react';
+import { httpGet, httpPost, httpPut, httpDelete } from '../lib/studio-api/base.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -330,15 +331,14 @@ function TriggerFormModal({
     setError(null);
     try {
       const url = editing ? `${API_BASE}/triggers/${editing.id}` : `${API_BASE}/triggers`;
-      const method = editing ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formToPayload(form)),
-      });
-      if (!res.ok) {
-        const err = await res.json() as { error?: string };
-        setError(err.error ?? 'Operation failed.');
+      try {
+        if (editing) {
+          await httpPut(url, formToPayload(form));
+        } else {
+          await httpPost(url, formToPayload(form));
+        }
+      } catch (err: any) {
+        setError(err?.message ?? 'Operation failed.');
         return;
       }
       onSaved();
@@ -614,8 +614,7 @@ export default function TriggersPage() {
   const loadTriggers = useCallback(async () => {
     try {
       setTriggersLoading(true);
-      const res = await fetch(`${API_BASE}/triggers`);
-      const data = await res.json() as { triggers: Trigger[] };
+      const data = await httpGet<{ triggers: Trigger[] }>(`${API_BASE}/triggers`);
       setTriggers(data.triggers ?? []);
     } catch {
       // silent
@@ -626,8 +625,7 @@ export default function TriggersPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/triggers/stats`);
-      const data = await res.json() as TriggerStats;
+      const data = await httpGet<TriggerStats>(`${API_BASE}/triggers/stats`);
       setStats(data);
     } catch {
       // silent
@@ -648,8 +646,7 @@ export default function TriggersPage() {
       const promises = targetTriggers.map(async (t) => {
         const params = new URLSearchParams({ limit: '100', offset: '0' });
         if (logsStatusFilter !== 'ALL') params.set('status', logsStatusFilter);
-        const res = await fetch(`${API_BASE}/triggers/${t.id}/logs?${params}`);
-        const data = await res.json() as { logs: TriggerLog[]; total: number };
+        const data = await httpGet<{ logs: TriggerLog[]; total: number }>(`${API_BASE}/triggers/${t.id}/logs?${params}`);
         return (data.logs ?? []).map((l) => ({ ...l, trigger_name: t.name }));
       });
 
@@ -690,21 +687,21 @@ export default function TriggersPage() {
   async function deleteTrigger(id: string) {
     if (!confirm('Delete this trigger and all its logs?')) return;
     try {
-      await fetch(`${API_BASE}/triggers/${id}`, { method: 'DELETE' });
+      await httpDelete(`${API_BASE}/triggers/${id}`);
       void loadAll();
     } catch { /* silent */ }
   }
 
   async function toggleTrigger(id: string) {
     try {
-      await fetch(`${API_BASE}/triggers/${id}/toggle`, { method: 'PUT' });
+      await httpPut(`${API_BASE}/triggers/${id}/toggle`);
       void loadAll();
     } catch { /* silent */ }
   }
 
   async function testFire(id: string) {
     try {
-      await fetch(`${API_BASE}/triggers/${id}/test`, { method: 'POST' });
+      await httpPost(`${API_BASE}/triggers/${id}/test`);
       void loadAll();
       if (activeTab === 'logs') void loadLogs();
     } catch { /* silent */ }

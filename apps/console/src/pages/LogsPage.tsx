@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink, RefreshCw, X, ChevronDown } from 'lucide-react';
+import { httpGet } from '../lib/studio-api/base.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -316,9 +317,7 @@ export default function LogsPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/logs/stats`);
-      if (!res.ok) return;
-      const data = await res.json() as LogStats;
+      const data = await httpGet<LogStats>(`${API_BASE}/logs/stats`);
       setStats(data);
     } catch {
       // silent
@@ -335,9 +334,7 @@ export default function LogsPage() {
       if (fromDate) params.set('from', fromDate);
       if (toDate) params.set('to', toDate);
 
-      const res = await fetch(`${API_BASE}/logs?${params.toString()}`);
-      if (!res.ok) return;
-      const data = await res.json() as { logs: ObservabilityLog[]; total: number };
+      const data = await httpGet<{ logs: ObservabilityLog[]; total: number }>(`${API_BASE}/logs?${params.toString()}`);
       setLogsTotal(data.total);
       setLogs((prev) => append ? [...prev, ...data.logs] : data.logs);
       setLogsOffset(offset + data.logs.length);
@@ -354,9 +351,7 @@ export default function LogsPage() {
       const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
       if (eventTypeFilter) params.set('type', eventTypeFilter);
 
-      const res = await fetch(`${API_BASE}/events?${params.toString()}`);
-      if (!res.ok) return;
-      const data = await res.json() as { events: StudioEvent[]; total: number };
+      const data = await httpGet<{ events: StudioEvent[]; total: number }>(`${API_BASE}/events?${params.toString()}`);
       setEventsTotal(data.total);
       setEvents((prev) => append ? [...prev, ...data.events] : data.events);
       setEventsOffset(offset + data.events.length);

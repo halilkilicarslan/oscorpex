@@ -19,6 +19,7 @@ import {
   getGitStatus,
   type GitStatusResult,
 } from '../../lib/studio-api';
+import { httpGet } from '../../lib/studio-api/base.js';
 import {
   NewFileModal,
   DeleteConfirmModal,
@@ -53,14 +54,8 @@ export default function FileExplorer({ projectId }: { projectId: string }) {
   const load = useCallback(async () => {
     try {
       const [treeRes, branchRes] = await Promise.allSettled([
-        fetch(`/api/studio/projects/${projectId}/files`).then((r) => {
-          if (!r.ok) throw new Error();
-          return r.json();
-        }),
-        fetch(`/api/studio/projects/${projectId}/git/branches`).then((r) => {
-          if (!r.ok) throw new Error();
-          return r.json();
-        }),
+        httpGet<FileNode[]>(`/api/studio/projects/${projectId}/files`),
+        httpGet<{ branches: string[]; current: string }>(`/api/studio/projects/${projectId}/git/branches`),
       ]);
 
       if (treeRes.status === 'fulfilled') {
