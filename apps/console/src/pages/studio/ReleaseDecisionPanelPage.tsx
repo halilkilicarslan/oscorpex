@@ -24,12 +24,52 @@ interface PanelData {
 	readiness: Awaited<ReturnType<typeof getQualityGateReadiness>>;
 }
 
+interface OverrideCandidateOption {
+	gateEvaluationId: string;
+	gateType: string;
+	outcome: string;
+	reason: string;
+	overrideAllowed: boolean;
+	hardFail: boolean;
+	hardFailReason?: string;
+}
+
 function isFuture(value: string): boolean {
 	return new Date(value).getTime() > Date.now();
 }
 
-function getOverrideCandidates(data: PanelData) {
-	return data.blockers.filter((b) => b.overrideAllowed);
+function isHardFailGate(gateType: string, reason: string): boolean {
+	const hardTypes = new Set([
+		'tenant_compliance',
+		'audit_trail_completeness',
+		'review_acceptance',
+		'human_approval',
+		'rollback_safety_check',
+		'provider_policy_compliance',
+	]);
+	if (hardTypes.has(gateType)) return true;
+	const lowerReason = reason.toLowerCase();
+	return lowerReason.includes('hard') || lowerReason.includes('critical') || lowerReason.includes('unknown severity');
+}
+
+function deriveOverrideCandidates(data: PanelData): OverrideCandidateOption[] {
+	const options: OverrideCandidateOption[] = [];
+	for (const blocker of data.blockers) {
+		const evaluationId = blocker.evaluation?.id;
+		if (!evaluationId) continue;
+		const reason = blocker.reason || blocker.evaluation?.reason || 'n/a';
+		const hardFail = !blocker.overrideAllowed || isHardFailGate(blocker.gateType, reason);
+		options.push({
+			gateEvaluationId: evaluationId,
+			gateType: blocker.gateType,
+			outcome: blocker.evaluation?.outcome ?? 'blocked',
+			reason,
+			overrideAllowed: blocker.overrideAllowed,
+			hardFail,
+			hardFailReason: hardFail ? 'hard-fail gate' : undefined,
+		});
+	}
+	return options;
 }
 
 export default function ReleaseDecisionPanelPage() {
@@ -42,8 +82,8 @@ export default function ReleaseDecisionPanelPage() {
 	const [decisionResult, setDecisionResult] = useState<ReleaseDecisionResult | null>(null);
 	const [overrideReason, setOverrideReason] = useState('');
 	const [overrideExpiresAt, setOverrideExpiresAt] = useState('');
-	const [overrideGateEvaluationId, setOverrideGateEvaluationId] = useState('');
-	const [overrideCandidateId, setOverrideCandidateId] = useState('');
+	const [overrideGateEvaluationId, setOverrideGateEvaluationId] = useState<string | null>(null);
+	const [overrideCandidateId, setOverrideCandidateId] = useState<string | null>(null);
 	const [overrideConfirm, setOverrideConfirm] = useState(false);
 	const [rollbackReason, setRollbackReason] = useState('');
 	const [rollbackConfirm, setRollbackConfirm] = useState(false);
@@ -61,6 +101,16 @@ export default function ReleaseDecisionPanelPage() {
 				getQualityGateReadiness(goalId),
 			]);
 			setData({ releaseState, blockers, approvalState, artifactCompleteness, readiness });
+			setOverrideCandidateId(releaseState.latestDecision?.releaseCandidateId ?? null);
+			const candidates = deriveOverrideCandidates({
+				releaseState,
+				blockers,
+				approvalState,
+				artifactCompleteness,
+				readiness,
+			});
+			const firstSoft = candidates.find((x) => !x.hardFail && x.overrideAllowed);
+			setOverrideGateEvaluationId(firstSoft?.gateEvaluationId ?? null);
 			setDecisionResult(null);
 		} catch (err) {
 			setError(err as Error);
@@ -79,8 +129,12 @@ export default function ReleaseDecisionPanelPage() {
 		return data.releaseState.blockingReasons.filter((x) => x.overrideAllowed === false);
 	}, [data]);
 
-	const overrideCandidates = useMemo(() => (data ? getOverrideCandidates(data) : []), [data]);
+	const overrideCandidates = useMemo(() => (data ? deriveOverrideCandidates(data) : []), [data]);
 	const canOverride = Boolean(data?.releaseState.requiresOverride && overrideCandidates.length > 0 && hardFailReasons.length === 0);
+	const selectedCandidate = useMemo(
+		() => overrideCandidates.find((x) => x.gateEvaluationId === overrideGateEvaluationId) ?? null,
+		[overrideCandidates, overrideGateEvaluationId],
+	);
 
 	const guidance = useMemo(() => {
 		if (!data) return [];
@@ -115,8 +169,8 @@ export default function ReleaseDecisionPanelPage() {
 		setMutationError(null);
 		try {
 			const result = await applyManualOverride(goalId, {
-				releaseCandidateId: overrideCandidateId,
-				gateEvaluationId: overrideGateEvaluationId,
+				releaseCandidateId: overrideCandidateId!,
+				gateEvaluationId: overrideGateEvaluationId!,
 				reason: overrideReason.trim(),
 				expiresAt: overrideExpiresAt,
 				metadata: { source: 'release-decision-panel-ui' },
@@ -183,6 +237,8 @@ export default function ReleaseDecisionPanelPage() {
 		!isFuture(overrideExpiresAt) ||
 		!overrideGateEvaluationId ||
 		!overrideCandidateId ||
+		!selectedCandidate ||
+		selectedCandidate.hardFail ||
 		mutating;
 
 	const rollbackDisabled =
@@ -266,19 +322,44 @@ export default function ReleaseDecisionPanelPage() {
 
 			<section className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4 space-y-3" data-testid="override-action">
 				<h2 className="text-sm font-medium text-zinc-200">Manual Override Action</h2>
-				<p className="text-xs text-zinc-500">One-click override yok: reason + future expiry + explicit confirm zorunlu.</p>
-				<input
-					placeholder="releaseCandidateId"
-					value={overrideCandidateId}
-					onChange={(e) => setOverrideCandidateId(e.target.value)}
-					className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-zinc-100"
-				/>
-				<input
-					placeholder="gateEvaluationId"
-					value={overrideGateEvaluationId}
-					onChange={(e) => setOverrideGateEvaluationId(e.target.value)}
-					className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-zinc-100"
-				/>
+				<p className="text-xs text-zinc-500">One-click override yok: picker + reason + future expiry + explicit confirm zorunlu.</p>
+				<div className="space-y-1">
+					<label className="text-xs text-zinc-400">Release Candidate</label>
+					{overrideCandidateId ? (
+						<div className="text-sm text-zinc-200 border border-zinc-700 rounded px-2 py-1.5" data-testid="selected-release-candidate">
+							{overrideCandidateId}
+						</div>
+					) : (
+						<div className="text-sm text-amber-300 border border-amber-700/40 rounded px-2 py-1.5" data-testid="no-release-candidate">
+							No release candidate available
+						</div>
+					)}
+				</div>
+				<div className="space-y-1">
+					<label className="text-xs text-zinc-400">Override Target Gate Evaluation</label>
+					<select
+						value={overrideGateEvaluationId ?? ''}
+						onChange={(e) => setOverrideGateEvaluationId(e.target.value || null)}
+						className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-zinc-100"
+						data-testid="override-gate-picker"
+					>
+						<option value="">Select override candidate</option>
+						{overrideCandidates.map((candidate) => (
+							<option
+								key={candidate.gateEvaluationId}
+								value={candidate.gateEvaluationId}
+								disabled={candidate.hardFail || !candidate.overrideAllowed}
+							>
+								{candidate.gateType} | {candidate.outcome} | {candidate.hardFail ? 'forbidden' : 'eligible'} | {candidate.reason}
+							</option>
+						))}
+					</select>
+					{selectedCandidate?.hardFail ? (
+						<p className="text-xs text-red-300" data-testid="selected-hard-fail">
+							Override forbidden. Reason: {selectedCandidate.hardFailReason}
+						</p>
+					) : null}
+				</div>
 				<textarea
 					placeholder="Override reason (mandatory)"
 					value={overrideReason}
@@ -294,6 +375,13 @@ export default function ReleaseDecisionPanelPage() {
 				/>
 				{overrideExpiresAt && !isFuture(overrideExpiresAt) ? (
 					<p className="text-xs text-red-300" data-testid="override-expiry-error">expiresAt gelecekte olmalı.</p>
+				) : null}
+				{selectedCandidate ? (
+					<div className="rounded border border-zinc-700 p-2 text-xs text-zinc-300" data-testid="override-preview">
+						You are overriding: Gate: {selectedCandidate.gateType} | Evaluation: {selectedCandidate.outcome} | Reason:{' '}
+						{selectedCandidate.reason} | Release Candidate: {(overrideCandidateId ?? '').slice(0, 12)} | Expires:{' '}
+						{overrideExpiresAt || 'n/a'}
+					</div>
 				) : null}
 				<label className="flex items-center gap-2 text-xs text-zinc-300">
 					<input type="checkbox" checked={overrideConfirm} onChange={(e) => setOverrideConfirm(e.target.checked)} />

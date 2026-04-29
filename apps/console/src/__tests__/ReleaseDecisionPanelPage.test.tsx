@@ -42,7 +42,18 @@ describe('ReleaseDecisionPanelPage', () => {
 		vi.clearAllMocks();
 		vi.mocked(releasesApi.getReleaseState).mockResolvedValue(releaseStateBase as any);
 		vi.mocked(releasesApi.getBlockingGates).mockResolvedValue([
-			{ gateType: 'coverage', reason: 'coverage low', overrideAllowed: true },
+			{
+				gateType: 'test_coverage',
+				reason: 'coverage low',
+				overrideAllowed: true,
+				evaluation: { id: 'ge-soft-1', outcome: 'warning', gateType: 'test_coverage', required: true, blocking: true },
+			},
+			{
+				gateType: 'tenant_compliance',
+				reason: 'critical hard fail',
+				overrideAllowed: false,
+				evaluation: { id: 'ge-hard-1', outcome: 'failed', gateType: 'tenant_compliance', required: true, blocking: true },
+			},
 		] as any);
 		vi.mocked(releasesApi.getApprovalState).mockResolvedValue({ satisfied: true, blocked: false, pending: [], expired: [], rejected: [], states: [], goalId: 'goal-1', missingApprovals: 0 } as any);
 		vi.mocked(releasesApi.getArtifactCompleteness).mockResolvedValue({ satisfied: true, missingArtifacts: [], staleArtifacts: [], rejectedArtifacts: [], latestArtifacts: [], requiredArtifacts: [], environment: 'production' } as any);
@@ -83,10 +94,7 @@ describe('ReleaseDecisionPanelPage', () => {
 	it('mandatory reason enforced', async () => {
 		renderPage();
 		await waitFor(() => expect(screen.getByTestId('override-action')).toBeInTheDocument());
-		const section = screen.getByTestId('override-action');
 		const btn = screen.getByText('Apply Manual Override');
-		fireEvent.change(within(section).getByPlaceholderText('releaseCandidateId'), { target: { value: 'rc-1' } });
-		fireEvent.change(within(section).getByPlaceholderText('gateEvaluationId'), { target: { value: 'ge-1' } });
 		fireEvent.click(screen.getByLabelText(/Override riskini ve release etkisini anladım/i));
 		expect(btn).toBeDisabled();
 	});
@@ -98,6 +106,47 @@ describe('ReleaseDecisionPanelPage', () => {
 		fireEvent.change(within(section).getByPlaceholderText('Override reason (mandatory)'), { target: { value: 'reason text' } });
 		fireEvent.change(within(section).getByTestId('override-expires-at'), { target: { value: '2000-01-01T10:00' } });
 		expect(screen.getByTestId('override-expiry-error')).toBeInTheDocument();
+	});
+
+	it('manual id inputs are not rendered', async () => {
+		renderPage();
+		await waitFor(() => expect(screen.getByTestId('override-action')).toBeInTheDocument());
+		expect(screen.queryByPlaceholderText('releaseCandidateId')).not.toBeInTheDocument();
+		expect(screen.queryByPlaceholderText('gateEvaluationId')).not.toBeInTheDocument();
+	});
+
+	it('latest release candidate is preselected', async () => {
+		renderPage();
+		await waitFor(() => expect(screen.getByTestId('selected-release-candidate')).toBeInTheDocument());
+		expect(screen.getByTestId('selected-release-candidate')).toHaveTextContent('rc-1');
+	});
+
+	it('hard-fail override candidate is disabled', async () => {
+		renderPage();
+		await waitFor(() => expect(screen.getByTestId('override-gate-picker')).toBeInTheDocument());
+		const picker = screen.getByTestId('override-gate-picker') as HTMLSelectElement;
+		const hardOption = Array.from(picker.options).find((x) => x.value === 'ge-hard-1');
+		expect(hardOption?.disabled).toBe(true);
+	});
+
+	it('soft-fail candidate can be selected and enables submit with valid form', async () => {
+		renderPage();
+		await waitFor(() => expect(screen.getByTestId('override-gate-picker')).toBeInTheDocument());
+		const section = screen.getByTestId('override-action');
+		const btn = screen.getByText('Apply Manual Override');
+		fireEvent.change(within(section).getByTestId('override-gate-picker'), { target: { value: 'ge-soft-1' } });
+		fireEvent.change(within(section).getByPlaceholderText('Override reason (mandatory)'), { target: { value: 'risk accepted' } });
+		fireEvent.change(within(section).getByTestId('override-expires-at'), { target: { value: '2099-01-01T10:00' } });
+		fireEvent.click(screen.getByLabelText(/Override riskini ve release etkisini anladım/i));
+		expect(btn).not.toBeDisabled();
+		expect(screen.getByTestId('override-preview')).toBeInTheDocument();
+		fireEvent.click(btn);
+		await waitFor(() =>
+			expect(releasesApi.applyManualOverride).toHaveBeenCalledWith(
+				'goal-1',
+				expect.objectContaining({ releaseCandidateId: 'rc-1', gateEvaluationId: 'ge-soft-1' }),
+			),
+		);
 	});
 
 	it('evaluate action refreshes state', async () => {
