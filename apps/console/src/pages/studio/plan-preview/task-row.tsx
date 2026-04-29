@@ -1,5 +1,5 @@
 import { ListChecks } from 'lucide-react';
-import type { Task } from '../../lib/studio-api';
+import type { Task } from "../../../lib/studio-api";
 
 const complexityColor: Record<string, string> = {
 	S: 'text-[#22c55e] bg-[#22c55e]/10',

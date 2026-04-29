@@ -1,5 +1,5 @@
 import { STATUS_STYLE } from './helpers';
-import type { CLIUsageSnapshot, CLIUsageTrendPoint, CLIProbeEvent } from '../../lib/studio-api';
+import type { CLIUsageSnapshot, CLIUsageTrendPoint, CLIProbeEvent } from "../../../lib/studio-api";
 
 interface HistoryTabProps {
 	selected: CLIUsageSnapshot;

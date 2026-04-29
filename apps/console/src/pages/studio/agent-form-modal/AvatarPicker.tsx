@@ -1,6 +1,5 @@
 import { X } from 'lucide-react';
-import AgentAvatar from '../../components/AgentAvatar';
-import type { AvatarOption, Gender } from '../../lib/studio-api';
+import type { AvatarOption, Gender } from "../../../lib/studio-api";
 
 interface AvatarPickerProps {
 	avatar: string;
@@ -14,7 +13,6 @@ interface AvatarPickerProps {
 
 export default function AvatarPicker({
 	avatar,
-	name,
 	gender,
 	avatarOptions,
 	showAvatarPicker,

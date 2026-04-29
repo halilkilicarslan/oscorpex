@@ -1,5 +1,5 @@
 import { fmtTokens, fmtMoney } from './helpers';
-import type { CLIUsageSnapshot } from '../../lib/studio-api';
+import type { CLIUsageSnapshot } from "../../../lib/studio-api";
 
 interface OscorpexTabProps {
 	selected: CLIUsageSnapshot;

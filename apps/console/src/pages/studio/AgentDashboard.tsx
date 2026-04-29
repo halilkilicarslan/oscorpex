@@ -47,10 +47,8 @@ import {
 	MetricCards,
 	CostTrendPanel,
 	AgentTimelinePanel,
-	scoreColor,
 } from './agent-dashboard/index.js';
 import type { BarChartItem } from './agent-dashboard/index.js';
-import { formatDuration } from './agent-dashboard/index.js';
 
 interface Props {
 	projectId: string;

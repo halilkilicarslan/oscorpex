@@ -1,14 +1,14 @@
 import { ShieldAlert } from 'lucide-react';
 import TaskCard from '../TaskCard';
-import type { Task, ProjectAgent } from '../../lib/studio-api';
+import type { Task, ProjectAgent } from "../../../lib/studio-api";
 
 interface KanbanColumnProps {
 	col: { key: Task['status']; label: string; color: string };
 	tasks: Task[];
 	agents: ProjectAgent[];
 	subTaskMap: Map<string, Task[]>;
-	onRetry?: (taskId: string) => void;
-	onApprove?: (taskId: string) => void;
+	onRetry?: (taskId: string) => Promise<void>;
+	onApprove?: (taskId: string) => Promise<void>;
 	onReject?: (task: Task) => void;
 	onTerminal: (task: Task) => void;
 	onDetail: (task: Task) => void;

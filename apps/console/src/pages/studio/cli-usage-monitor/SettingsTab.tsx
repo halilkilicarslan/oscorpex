@@ -1,5 +1,5 @@
 import { Settings2 } from 'lucide-react';
-import type { CLIUsageSnapshot, CLIProviderId } from '../../lib/studio-api';
+import type { CLIUsageSnapshot, CLIProviderId } from "../../../lib/studio-api";
 
 interface SettingsTabProps {
 	selected: CLIUsageSnapshot;

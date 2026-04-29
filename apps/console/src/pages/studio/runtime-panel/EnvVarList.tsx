@@ -1,6 +1,6 @@
 import { Eye, EyeOff, Loader2, Settings2 } from 'lucide-react';
 import { CATEGORY_LABELS } from './helpers';
-import type { EnvVarRequirement } from '../../lib/studio-api';
+import type { EnvVarRequirement } from "../../../lib/studio-api";
 
 interface EnvVarListProps {
 	envVars: EnvVarRequirement[];

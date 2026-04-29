@@ -1,4 +1,4 @@
-import type { HttpMethod } from '../../lib/studio-api';
+import type { HttpMethod } from "../../../lib/studio-api";
 
 export const METHOD_COLORS: Record<HttpMethod, string> = {
 	GET: 'text-[#22c55e] bg-[#22c55e]/10',

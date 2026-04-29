@@ -1,6 +1,4 @@
-import type { StandupResult, RetroResult } from './types.js';
-
-const BASE = import.meta.env.VITE_API_BASE ?? '';
+import type { StandupResult, RetroResult, StandupAgent, RetroAgentStat } from './types.js';
 
 export function parseStandup(raw: unknown): StandupResult | null {
 	if (!raw || typeof raw !== 'object') return null;

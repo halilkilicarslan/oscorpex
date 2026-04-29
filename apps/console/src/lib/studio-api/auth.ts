@@ -2,7 +2,7 @@
 // Oscorpex — Auth API client
 // ---------------------------------------------------------------------------
 
-import { httpPost, StudioApiError } from './base.js';
+import { httpGet, httpPost, httpDelete, StudioApiError } from './base.js';
 
 const AUTH_BASE = '/api/auth';
 
@@ -69,47 +69,64 @@ export async function fetchCurrentUser(token: string): Promise<AuthUser> {
 	if (token) {
 		headers.Authorization = `Bearer ${token}`;
 	}
-	const res = await fetch(`${AUTH_BASE}/me`, { headers });
-	if (!res.ok) throw new Error('Not authenticated');
-	return res.json() as Promise<AuthUser>;
+	try {
+		return await httpGet<AuthUser>(`${AUTH_BASE}/me`, { headers });
+	} catch (err) {
+		if (err instanceof StudioApiError) {
+			throw new Error(err.message ?? 'Not authenticated');
+		}
+		throw err;
+	}
 }
 
 export async function fetchAuthUsers(token: string): Promise<AuthUser[]> {
-	const res = await fetch(`${AUTH_BASE}/users`, {
-		headers: { Authorization: `Bearer ${token}` },
-	});
-	if (!res.ok) throw new Error('Failed to fetch users');
-	return res.json() as Promise<AuthUser[]>;
+	try {
+		return await httpGet<AuthUser[]>(`${AUTH_BASE}/users`, {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+	} catch (err) {
+		if (err instanceof StudioApiError) {
+			throw new Error(err.message ?? 'Failed to fetch users');
+		}
+		throw err;
+	}
 }
 
 export async function createApiKey(token: string, name: string): Promise<CreateApiKeyResponse> {
-	const res = await fetch(`${AUTH_BASE}/api-keys`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${token}`,
-		},
-		body: JSON.stringify({ name }),
-	});
-	if (!res.ok) {
-		const err = await res.json().catch(() => ({})) as { error?: string };
-		throw new Error(err.error ?? `Failed to create API key (${res.status})`);
+	try {
+		return await httpPost<CreateApiKeyResponse>(`${AUTH_BASE}/api-keys`, { name }, {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+	} catch (err) {
+		if (err instanceof StudioApiError) {
+			throw new Error(err.message ?? `Failed to create API key (${err.status})`);
+		}
+		throw err;
 	}
-	return res.json() as Promise<CreateApiKeyResponse>;
 }
 
 export async function listApiKeys(token: string): Promise<ApiKey[]> {
-	const res = await fetch(`${AUTH_BASE}/api-keys`, {
-		headers: { Authorization: `Bearer ${token}` },
-	});
-	if (!res.ok) throw new Error('Failed to fetch API keys');
-	return res.json() as Promise<ApiKey[]>;
+	try {
+		return await httpGet<ApiKey[]>(`${AUTH_BASE}/api-keys`, {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+	} catch (err) {
+		if (err instanceof StudioApiError) {
+			throw new Error(err.message ?? 'Failed to fetch API keys');
+		}
+		throw err;
+	}
 }
 
 export async function revokeApiKey(token: string, id: string): Promise<void> {
-	const res = await fetch(`${AUTH_BASE}/api-keys/${id}`, {
-		method: 'DELETE',
-		headers: { Authorization: `Bearer ${token}` },
-	});
-	if (!res.ok) throw new Error('Failed to revoke API key');
+	try {
+		await httpDelete(`${AUTH_BASE}/api-keys/${id}`, {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+	} catch (err) {
+		if (err instanceof StudioApiError) {
+			throw new Error(err.message ?? 'Failed to revoke API key');
+		}
+		throw err;
+	}
 }

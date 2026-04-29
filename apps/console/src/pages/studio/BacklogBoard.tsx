@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Filter, Loader2, ChevronDown } from 'lucide-react';
 import { fetchWorkItemsPaginated } from '../../lib/studio-api';
+import { httpGet, httpPost, httpPatch, httpDelete } from '../../lib/studio-api/base.js';
 import {
 	NewItemModal,
 	FilterBar,
@@ -33,9 +34,7 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
 	const load = useCallback(() => {
 		Promise.all([
 			fetchWorkItemsPaginated(projectId, PAGE_SIZE, 0),
-			fetch(`${BASE}/api/studio/projects/${projectId}/sprints`)
-				.then((r) => r.json())
-				.catch(() => []),
+			httpGet<{ sprints: SprintOption[] } | SprintOption[]>(`${BASE}/api/studio/projects/${projectId}/sprints`).catch(() => ({ sprints: [] })),
 		])
 			.then(([result, sp]) => {
 				setItems(result.data as WorkItem[]);
@@ -71,58 +70,37 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
 	const handleCreate = async (form: NewItemForm) => {
 		setShowModal(false);
 		try {
-			await fetch(`${BASE}/api/studio/projects/${projectId}/work-items`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(form),
-			});
+			await httpPost(`${BASE}/api/studio/projects/${projectId}/work-items`, form);
 			load();
 		} catch {}
 	};
 
 	const handleConvert = async (itemId: string) => {
 		try {
-			const res = await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}/plan`, {
-				method: 'POST',
-			});
-			if (!res.ok) {
-				const body = await res.json().catch(() => ({}));
-				alert(body.error ?? 'Convert failed');
-				return;
-			}
+			await httpPost(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}/plan`);
 			load();
-		} catch (e) {
-			alert(e instanceof Error ? e.message : 'Convert failed');
+		} catch (e: any) {
+			alert(e?.message ?? 'Convert failed');
 		}
 	};
 
 	const handleAssignSprint = async (itemId: string, sprintId: string | null) => {
 		try {
-			await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ sprintId }),
-			});
+			await httpPatch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`, { sprintId });
 			load();
 		} catch {}
 	};
 
 	const handleStatusChange = async (itemId: string, status: WorkItemStatus) => {
 		try {
-			await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ status }),
-			});
+			await httpPatch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`, { status });
 			load();
 		} catch {}
 	};
 
 	const handleDelete = async (itemId: string) => {
 		try {
-			await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`, {
-				method: 'DELETE',
-			});
+			await httpDelete(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`);
 			load();
 		} catch {}
 	};

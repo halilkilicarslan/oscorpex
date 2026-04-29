@@ -1,4 +1,4 @@
-import type { IntakeQuestionCategory } from '../../lib/studio-api';
+import type { IntakeQuestionCategory } from "../../../lib/studio-api";
 
 export type PipelineToastState =
 	| { type: 'success'; message: string }

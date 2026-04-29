@@ -1,5 +1,5 @@
 import { ShieldAlert } from 'lucide-react';
-import type { Task } from '../../lib/studio-api';
+import type { Task } from "../../../lib/studio-api";
 
 interface ApprovalBannerProps {
 	tasks: Task[];

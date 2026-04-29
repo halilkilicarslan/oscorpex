@@ -20,6 +20,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
+import { httpGet, httpPost, httpPut, httpDelete } from '../lib/studio-api/base.js';
 
 // ---------------------------------------------------------------------------
 // Tipler
@@ -210,8 +211,7 @@ export default function AlertsPage() {
   const loadRules = useCallback(async () => {
     try {
       setRulesLoading(true);
-      const res = await fetch(`${API_BASE}/alerts`);
-      const data = await res.json() as { rules: AlertRule[] };
+      const data = await httpGet<{ rules: AlertRule[] }>(`${API_BASE}/alerts`);
       setRules(data.rules ?? []);
     } catch {
       // sessizce devam et
@@ -222,8 +222,7 @@ export default function AlertsPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/alerts/stats`);
-      const data = await res.json() as AlertStats;
+      const data = await httpGet<AlertStats>(`${API_BASE}/alerts/stats`);
       setStats(data);
     } catch {
       // sessizce devam et
@@ -239,8 +238,7 @@ export default function AlertsPage() {
       });
       if (historyStatusFilter !== 'ALL') params.set('status', historyStatusFilter);
 
-      const res = await fetch(`${API_BASE}/alerts/history?${params}`);
-      const data = await res.json() as { history: AlertHistoryItem[]; total: number };
+      const data = await httpGet<{ history: AlertHistoryItem[]; total: number }>(`${API_BASE}/alerts/history?${params}`);
       setHistory(data.history ?? []);
       setHistoryTotal(data.total ?? 0);
     } catch {
@@ -331,22 +329,16 @@ export default function AlertsPage() {
       const url = editingRule
         ? `${API_BASE}/alerts/${editingRule.id}`
         : `${API_BASE}/alerts`;
-      const method = editingRule ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const err = await res.json() as { error?: string };
-        setFormError(err.error ?? 'Operation failed.');
-        return;
+      if (editingRule) {
+        await httpPut(url, payload);
+      } else {
+        await httpPost(url, payload);
       }
       closeForm();
       void loadRules();
       void loadStats();
-    } catch {
-      setFormError('Could not connect to server.');
+    } catch (err: any) {
+      setFormError(err?.message ?? 'Could not connect to server.');
     } finally {
       setFormLoading(false);
     }
@@ -355,7 +347,7 @@ export default function AlertsPage() {
   async function deleteRule(id: string) {
     if (!confirm('Are you sure you want to delete this rule?')) return;
     try {
-      await fetch(`${API_BASE}/alerts/${id}`, { method: 'DELETE' });
+      await httpDelete(`${API_BASE}/alerts/${id}`);
       void loadRules();
       void loadStats();
       void loadHistory();
@@ -366,7 +358,7 @@ export default function AlertsPage() {
 
   async function toggleRule(id: string) {
     try {
-      await fetch(`${API_BASE}/alerts/${id}/toggle`, { method: 'PUT' });
+      await httpPut(`${API_BASE}/alerts/${id}/toggle`);
       void loadRules();
       void loadStats();
     } catch {
@@ -376,11 +368,7 @@ export default function AlertsPage() {
 
   async function acknowledgeAlert(id: string) {
     try {
-      await fetch(`${API_BASE}/alerts/history/${id}/acknowledge`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acknowledged_by: 'console-user' }),
-      });
+      await httpPut(`${API_BASE}/alerts/history/${id}/acknowledge`, { acknowledged_by: 'console-user' });
       void loadHistory();
       void loadStats();
     } catch {

@@ -1,5 +1,5 @@
 import { X, FileText } from 'lucide-react';
-import type { ProjectAgent } from '../../lib/studio-api';
+import type { ProjectAgent } from "../../../lib/studio-api";
 
 interface SkillsFieldProps {
 	skills: string[];

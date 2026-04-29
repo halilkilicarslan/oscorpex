@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DollarSign, ChevronUp, ChevronDown, GitBranch, Users, Cpu } from 'lucide-react';
-import type { ProjectPlan, PlanCostEstimate } from '../../lib/studio-api';
+import type { ProjectPlan, PlanCostEstimate } from "../../../lib/studio-api";
 import {
 	getCostColor,
 	getCostBgColor,

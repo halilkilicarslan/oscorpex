@@ -1,4 +1,4 @@
-import type { ProjectPlan, PlanCostEstimate } from '../../lib/studio-api';
+import type { ProjectPlan, PlanCostEstimate } from "../../../lib/studio-api";
 
 export function getCostColor(cost: number): string {
 	if (cost < 0.5) return '#22c55e';

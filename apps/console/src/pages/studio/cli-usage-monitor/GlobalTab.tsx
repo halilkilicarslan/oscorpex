@@ -1,6 +1,5 @@
-import { QuotaBar } from './QuotaBar';
-import { STATUS_STYLE } from './helpers';
-import type { CLIUsageSnapshot } from '../../lib/studio-api';
+import QuotaBar from './QuotaBar';
+import type { CLIUsageSnapshot } from "../../../lib/studio-api";
 
 interface GlobalTabProps {
 	selected: CLIUsageSnapshot;

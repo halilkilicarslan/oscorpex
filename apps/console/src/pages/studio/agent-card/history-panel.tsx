@@ -1,5 +1,5 @@
 import { Loader2, ChevronDown } from 'lucide-react';
-import type { AgentRunHistory } from '../../lib/studio-api';
+import type { AgentRunHistory } from "../../../lib/studio-api";
 import RunStatusBadge from './run-status-badge.js';
 import { relativeTime } from './helpers.js';
 

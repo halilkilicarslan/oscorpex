@@ -1,4 +1,4 @@
-import type { Task } from '../../lib/studio-api';
+import type { Task } from "../../../lib/studio-api";
 
 export const PAGE_SIZE = 50;
 

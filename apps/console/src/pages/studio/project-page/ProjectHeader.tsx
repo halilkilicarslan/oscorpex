@@ -1,5 +1,5 @@
 import { ArrowLeft, Loader2, Play, Square, FileText, CheckCircle2, Brain, Bell, BellOff } from 'lucide-react';
-import type { Project, AppStatus } from '../../lib/studio-api';
+import type { Project, AppStatus } from "../../../lib/studio-api";
 
 interface ProjectHeaderProps {
 	project: Project;

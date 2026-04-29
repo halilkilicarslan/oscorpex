@@ -7,7 +7,7 @@ import {
 	Users,
 	Clock,
 } from 'lucide-react';
-import type { PlatformAnalytics } from '../../lib/studio-api';
+import type { PlatformAnalytics } from "../../../lib/studio-api";
 
 export const COLORS = [
 	'#3b82f6',

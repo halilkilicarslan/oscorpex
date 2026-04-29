@@ -1,5 +1,5 @@
 import { Cpu, ShieldAlert } from 'lucide-react';
-import type { CLIUsageSnapshot } from '../../lib/studio-api';
+import type { CLIUsageSnapshot } from "../../../lib/studio-api";
 
 interface AttributionTabProps {
 	selected: CLIUsageSnapshot;

@@ -1,5 +1,5 @@
 import { Zap } from 'lucide-react';
-import type { AutoStartStatus } from '../../lib/studio-api';
+import type { AutoStartStatus } from "../../../lib/studio-api";
 import { PIPELINE_STATUS_COLORS, PIPELINE_STATUS_LABELS } from './helpers';
 
 export default function PipelineAutoStartBadge({ status }: { status: AutoStartStatus }) {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, GitBranch } from 'lucide-react';
-import type { Phase } from '../../lib/studio-api';
+import type { Phase } from "../../../lib/studio-api";
 import TaskRow from './task-row.js';
 
 export default function PhaseSection({ phase, index }: { phase: Phase; index: number }) {

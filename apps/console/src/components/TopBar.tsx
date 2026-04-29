@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Wifi, WifiOff, MessageSquare, ExternalLink } from 'lucide-react';
 import NotificationBell from './NotificationBell';
+import { studioFetch } from '../lib/studio-api/base.js';
 
 interface TopBarProps {
   onOpenChat: () => void;
@@ -14,8 +15,8 @@ export default function TopBar({ onOpenChat, chatOpen }: TopBarProps) {
   const checkConnection = useCallback(async () => {
     setChecking(true);
     try {
-      const res = await fetch('/api/studio/agents', { signal: AbortSignal.timeout(3000) });
-      setConnected(res.ok);
+      await studioFetch<unknown>('/api/studio/agents', { signal: AbortSignal.timeout(3000) });
+      setConnected(true);
     } catch {
       setConnected(false);
     } finally {

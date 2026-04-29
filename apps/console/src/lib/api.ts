@@ -1,13 +1,13 @@
 import type { AgentInfo, WorkflowInfo } from '../types';
+import { httpGet, httpPost } from './studio-api/base.js';
 
 const BASE = '/api/studio';
 
 export async function fetchAgents(): Promise<AgentInfo[]> {
-  const res = await fetch(`${BASE}/agents`);
-  const json = await res.json();
+  const json = await httpGet<unknown[] | { data?: unknown[] }>(`${BASE}/agents`);
   const items = Array.isArray(json) ? json : (json.data ?? []);
   // Map Oscorpex AgentConfig → Dashboard AgentInfo
-  return items.map((a: any) => ({
+  return (items as any[]).map((a) => ({
     id: a.id,
     name: a.name,
     description: a.personality || a.systemPrompt?.slice(0, 120) || a.role,
@@ -24,12 +24,7 @@ export async function fetchWorkflows(): Promise<WorkflowInfo[]> {
 }
 
 export async function sendText(agentId: string, input: string): Promise<string> {
-  const res = await fetch(`${BASE}/agents/${agentId}/text`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input }),
-  });
-  const json = await res.json();
+  const json = await httpPost<{ data?: { text?: string } }>(`${BASE}/agents/${agentId}/text`, { input });
   return json.data?.text ?? '';
 }
 
@@ -94,13 +89,8 @@ export async function executeWorkflow(
   workflowId: string,
   input: Record<string, unknown>,
 ): Promise<{ executionId: string }> {
-  const res = await fetch(`${BASE}/workflows/${workflowId}/execute`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input }),
-  });
-  const json = await res.json();
-  return json.data;
+  const json = await httpPost<{ data?: { executionId: string } }>(`${BASE}/workflows/${workflowId}/execute`, { input });
+  return json.data ?? { executionId: '' };
 }
 
 export async function resumeWorkflow(
@@ -108,10 +98,5 @@ export async function resumeWorkflow(
   executionId: string,
   input: Record<string, unknown>,
 ): Promise<unknown> {
-  const res = await fetch(`${BASE}/workflows/${workflowId}/executions/${executionId}/resume`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input }),
-  });
-  return res.json();
+  return httpPost<unknown>(`${BASE}/workflows/${workflowId}/executions/${executionId}/resume`, { input });
 }

@@ -1,6 +1,6 @@
 import { CheckCircle2, Container, HardDrive, Globe, Loader2, Play, Square } from 'lucide-react';
 import { DB_META } from './helpers';
-import type { RuntimeAnalysis, DatabaseType, DbProvisionMethod } from '../../lib/studio-api';
+import type { RuntimeAnalysis, DatabaseType, DbProvisionMethod } from "../../../lib/studio-api";
 
 interface DatabaseListProps {
 	analysis: RuntimeAnalysis;

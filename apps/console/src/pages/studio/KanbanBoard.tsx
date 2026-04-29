@@ -11,7 +11,6 @@ import {
 	type AutoStartStatus,
 	type ProjectAgent,
 } from '../../lib/studio-api';
-import TaskCard from './TaskCard';
 import TaskDetailModal from './TaskDetailModal';
 import TerminalSheet from './TerminalSheet';
 import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';

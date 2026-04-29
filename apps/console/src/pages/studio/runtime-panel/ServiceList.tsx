@@ -1,6 +1,6 @@
 import { CheckCircle2, Loader2, Package, Play } from 'lucide-react';
 import { FRAMEWORK_META } from './helpers';
-import type { RuntimeAnalysis } from '../../lib/studio-api';
+import type { RuntimeAnalysis } from "../../../lib/studio-api";
 
 interface ServiceListProps {
 	analysis: RuntimeAnalysis;

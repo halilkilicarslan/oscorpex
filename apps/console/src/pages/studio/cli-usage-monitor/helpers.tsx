@@ -1,5 +1,5 @@
 import { Activity, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
-import type { QuotaStatus, CLIUsageSnapshot } from '../../lib/studio-api';
+import type { QuotaStatus, CLIUsageSnapshot } from "../../../lib/studio-api";
 
 export const STATUS_STYLE: Record<QuotaStatus, string> = {
 	healthy: 'text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/20',

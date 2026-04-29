@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { HelpCircle, Check, SkipForward, Loader2 } from 'lucide-react';
-import type { IntakeQuestion } from '../../lib/studio-api';
+import type { IntakeQuestion } from "../../../lib/studio-api";
 import { CATEGORY_LABELS, CATEGORY_COLORS } from './helpers';
 
 interface IntakeQuestionCardProps {

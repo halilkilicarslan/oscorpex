@@ -1,5 +1,5 @@
 import { Bot, User, AlertCircle } from 'lucide-react';
-import type { ChatMessage } from '../../lib/studio-api';
+import type { ChatMessage } from "../../../lib/studio-api";
 
 interface MessageBubbleProps {
 	message: ChatMessage;

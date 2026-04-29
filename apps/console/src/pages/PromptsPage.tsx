@@ -18,7 +18,7 @@ import {
   AlertCircle,
   RotateCcw,
 } from 'lucide-react';
-import { httpPost } from '../lib/studio-api/base.js';
+import { httpGet, httpPost, httpPut, httpDelete } from '../lib/studio-api/base.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -635,7 +635,7 @@ function VersionHistoryPanel({ templateId, onClose }: VersionHistoryPanelProps) 
 
   useEffect(() => {
     setLoading(true);
-    apiFetch<TemplateDetail>(`/${templateId}`)
+    httpGet<TemplateDetail>(`${API_BASE}/${templateId}`)
       .then(setData)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to load'))
       .finally(() => setLoading(false));
@@ -837,7 +837,7 @@ export default function PromptsPage() {
 
   const loadStats = useCallback(() => {
     setStatsLoading(true);
-    apiFetch<PromptStats>('/stats')
+    httpGet<PromptStats>(`${API_BASE}/stats`)
       .then(setStats)
       .catch(console.error)
       .finally(() => setStatsLoading(false));
@@ -852,7 +852,7 @@ export default function PromptsPage() {
     if (search) params.set('search', search);
     if (tagFilter) params.set('tag', tagFilter);
 
-    apiFetch<TemplateListResponse>(`?${params.toString()}`)
+    httpGet<TemplateListResponse>(`${API_BASE}?${params.toString()}`)
       .then((data) => {
         setTemplates(data.templates);
         setTotal(data.total);
@@ -876,11 +876,7 @@ export default function PromptsPage() {
   }, []);
 
   const handleCreate = async (data: EditorFormState) => {
-    await apiFetch<{ template: PromptTemplate }>('', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    await httpPost<{ template: PromptTemplate }>(API_BASE, data);
     setEditorOpen(false);
     loadTemplates();
     loadStats();
@@ -888,18 +884,14 @@ export default function PromptsPage() {
 
   const handleEdit = async (data: EditorFormState) => {
     if (!editingTemplate) return;
-    await apiFetch<{ template: PromptTemplate }>(`/${editingTemplate.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    await httpPut<{ template: PromptTemplate }>(`${API_BASE}/${editingTemplate.id}`, data);
     setEditingTemplate(null);
     loadTemplates();
     loadStats();
   };
 
   const handleDuplicate = async (t: PromptTemplate) => {
-    await apiFetch<{ template: PromptTemplate }>(`/${t.id}/duplicate`, { method: 'POST' });
+    await httpPost<{ template: PromptTemplate }>(`${API_BASE}/${t.id}/duplicate`);
     loadTemplates();
     loadStats();
   };
@@ -908,7 +900,7 @@ export default function PromptsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await apiFetch<{ success: boolean }>(`/${deleteTarget.id}`, { method: 'DELETE' });
+      await httpDelete<{ success: boolean }>(`${API_BASE}/${deleteTarget.id}`);
       setDeleteTarget(null);
       loadTemplates();
       loadStats();

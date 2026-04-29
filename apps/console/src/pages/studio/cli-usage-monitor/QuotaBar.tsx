@@ -1,5 +1,5 @@
 import { STATUS_STYLE, statusIcon } from './helpers';
-import type { CLIUsageSnapshot } from '../../lib/studio-api';
+import type { CLIUsageSnapshot } from "../../../lib/studio-api";
 
 interface QuotaBarProps {
 	quota: NonNullable<CLIUsageSnapshot['global']>['quotas'][number];

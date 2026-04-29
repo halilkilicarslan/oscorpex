@@ -20,6 +20,7 @@ import BurndownChart from './sprint-board/BurndownChart.js';
 import CreateSprintModal from './sprint-board/CreateSprintModal.js';
 import AddWorkItemPicker from './sprint-board/AddWorkItemPicker.js';
 import { STATUS_BADGE, ITEM_STATUS_COLORS, formatDate } from './sprint-board/helpers.js';
+import { httpGet, httpPost, httpPatch } from '../../lib/studio-api/base.js';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
@@ -61,8 +62,7 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
 
 	const loadSprints = useCallback(async () => {
 		try {
-			const res = await fetch(`${BASE}/api/studio/projects/${projectId}/sprints`);
-			const data = await res.json();
+			const data = await httpGet<{ sprints?: Sprint[] } | Sprint[]>(`${BASE}/api/studio/projects/${projectId}/sprints`);
 			const list: Sprint[] = Array.isArray(data) ? data : (data.sprints ?? []);
 			setSprints(list);
 			setSelectedId((current) => {
@@ -78,8 +78,7 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
 
 	const loadAllItems = useCallback(async () => {
 		try {
-			const res = await fetch(`${BASE}/api/studio/projects/${projectId}/work-items`);
-			const data = await res.json();
+			const data = await httpGet<{ items?: SprintWorkItem[]; workItems?: SprintWorkItem[] } | SprintWorkItem[]>(`${BASE}/api/studio/projects/${projectId}/work-items`);
 			const list: SprintWorkItem[] = Array.isArray(data) ? data : (data.items ?? data.workItems ?? []);
 			setAllItems(list);
 		} catch {
@@ -89,9 +88,7 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
 
 	const loadTeamVelocity = useCallback(async () => {
 		try {
-			const res = await fetch(`${BASE}/api/studio/projects/${projectId}/velocity`);
-			if (!res.ok) return;
-			const body = await res.json();
+			const body = await httpGet<{ velocity?: number }>(`${BASE}/api/studio/projects/${projectId}/velocity`);
 			setTeamVelocity(typeof body.velocity === 'number' ? body.velocity : null);
 		} catch {
 			setTeamVelocity(null);
@@ -109,43 +106,28 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
 			setBurndown([]);
 			return;
 		}
-		fetch(`${BASE}/api/studio/sprints/${selectedId}/burndown`)
-			.then((r) => (r.ok ? r.json() : { data: [] }))
+		httpGet<{ data?: BurndownPoint[] }>(`${BASE}/api/studio/sprints/${selectedId}/burndown`)
 			.then((body) => setBurndown(Array.isArray(body?.data) ? body.data : []))
 			.catch(() => setBurndown([]));
 	}, [selectedId]);
 
 	const handleLifecycleAction = async (sprintId: string, action: 'start' | 'complete' | 'cancel') => {
 		try {
-			const res = await fetch(`${BASE}/api/studio/sprints/${sprintId}/${action}`, { method: 'POST' });
-			if (!res.ok) {
-				const err = await res.json().catch(() => ({}));
-				alert(err.error ?? `Sprint ${action} failed`);
-				return;
-			}
+			await httpPost(`${BASE}/api/studio/sprints/${sprintId}/${action}`);
 			await loadSprints();
 			await loadTeamVelocity();
-		} catch (e) {
-			alert(e instanceof Error ? e.message : String(e));
+		} catch (e: any) {
+			alert(e?.message ?? `Sprint ${action} failed`);
 		}
 	};
 
 	const handleAssignToSprint = async (itemId: string, sprintId: string | null) => {
 		try {
-			const res = await fetch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ sprintId }),
-			});
-			if (!res.ok) {
-				const err = await res.json().catch(() => ({}));
-				alert(err.error ?? 'Assign failed');
-				return;
-			}
+			await httpPatch(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}`, { sprintId });
 			await loadSprints();
 			await loadAllItems();
-		} catch (e) {
-			alert(e instanceof Error ? e.message : String(e));
+		} catch (e: any) {
+			alert(e?.message ?? 'Assign failed');
 		}
 	};
 
