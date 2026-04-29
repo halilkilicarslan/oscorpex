@@ -1896,6 +1896,317 @@ CREATE TABLE IF NOT EXISTS incident_events (
 CREATE INDEX IF NOT EXISTS idx_incident_events_incident ON incident_events(incident_id, created_at DESC);
 
 -- ---------------------------------------------------------------------------
+-- H2-A: Quality Gates Center schema
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS quality_gates (
+  id                TEXT PRIMARY KEY,
+  tenant_id         TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  project_id        TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  gate_type         TEXT NOT NULL,
+  environment       TEXT NOT NULL DEFAULT 'production',
+  required          BOOLEAN NOT NULL DEFAULT false,
+  blocking          BOOLEAN NOT NULL DEFAULT false,
+  auto_evaluated    BOOLEAN NOT NULL DEFAULT true,
+  human_reviewed    BOOLEAN NOT NULL DEFAULT false,
+  override_allowed  BOOLEAN NOT NULL DEFAULT false,
+  override_roles    JSONB NOT NULL DEFAULT '[]',
+  owner_role        TEXT NOT NULL,
+  thresholds        JSONB NOT NULL DEFAULT '{}',
+  status            TEXT NOT NULL DEFAULT 'active',
+  policy_version    TEXT NOT NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  superseded_at     TIMESTAMPTZ,
+  metadata          JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_quality_gates_lookup ON quality_gates(tenant_id, project_id, environment, gate_type, status);
+CREATE INDEX IF NOT EXISTS idx_quality_gates_policy ON quality_gates(policy_version, status);
+CREATE INDEX IF NOT EXISTS idx_quality_gates_type ON quality_gates(gate_type);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_quality_gates_active_scope
+  ON quality_gates(COALESCE(tenant_id, ''), COALESCE(project_id, ''), environment, gate_type, policy_version)
+  WHERE status <> 'retired';
+
+CREATE TABLE IF NOT EXISTS release_candidates (
+  id                      TEXT PRIMARY KEY,
+  tenant_id               TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  project_id              TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  goal_ids                JSONB NOT NULL DEFAULT '[]',
+  target_environment      TEXT NOT NULL,
+  state                   TEXT NOT NULL DEFAULT 'candidate',
+  requested_by            TEXT NOT NULL DEFAULT '',
+  artifact_ids            JSONB NOT NULL DEFAULT '[]',
+  policy_version          TEXT NOT NULL,
+  correlation_id          TEXT NOT NULL,
+  deploy_window_starts_at TIMESTAMPTZ,
+  deploy_window_ends_at   TIMESTAMPTZ,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  closed_at               TIMESTAMPTZ,
+  metadata                JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_release_candidates_state ON release_candidates(tenant_id, state, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_release_candidates_project ON release_candidates(project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_release_candidates_env ON release_candidates(target_environment, state);
+CREATE INDEX IF NOT EXISTS idx_release_candidates_goal_ids ON release_candidates USING GIN(goal_ids);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_release_candidates_idempotency
+  ON release_candidates(tenant_id, correlation_id)
+  WHERE tenant_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS artifact_references (
+  id                    TEXT PRIMARY KEY,
+  tenant_id             TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  project_id            TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  goal_id               TEXT REFERENCES execution_goals(id) ON DELETE CASCADE,
+  release_candidate_id  TEXT REFERENCES release_candidates(id) ON DELETE CASCADE,
+  artifact_type         TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'available',
+  location              TEXT NOT NULL,
+  digest                TEXT NOT NULL,
+  produced_by           TEXT NOT NULL DEFAULT '',
+  content_type          TEXT,
+  size_bytes            BIGINT,
+  policy_version        TEXT NOT NULL,
+  correlation_id        TEXT NOT NULL,
+  produced_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  verified_at           TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  superseded_at         TIMESTAMPTZ,
+  metadata              JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_artifact_refs_goal ON artifact_references(tenant_id, goal_id, artifact_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_artifact_refs_release ON artifact_references(tenant_id, release_candidate_id, artifact_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_artifact_refs_status ON artifact_references(status, artifact_type);
+CREATE INDEX IF NOT EXISTS idx_artifact_refs_digest ON artifact_references(digest);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_artifact_ref_digest_scope
+  ON artifact_references(tenant_id, artifact_type, digest)
+  WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_artifact_ref_idempotency
+  ON artifact_references(tenant_id, correlation_id, artifact_type)
+  WHERE tenant_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS quality_signals (
+  id                    TEXT PRIMARY KEY,
+  tenant_id             TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  project_id            TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  goal_id               TEXT REFERENCES execution_goals(id) ON DELETE CASCADE,
+  release_candidate_id  TEXT REFERENCES release_candidates(id) ON DELETE CASCADE,
+  signal_type           TEXT NOT NULL,
+  severity              TEXT NOT NULL DEFAULT 'info',
+  status                TEXT NOT NULL DEFAULT 'observed',
+  source                TEXT NOT NULL,
+  payload               JSONB NOT NULL DEFAULT '{}',
+  artifact_id           TEXT REFERENCES artifact_references(id) ON DELETE SET NULL,
+  observed_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at            TIMESTAMPTZ,
+  correlation_id        TEXT NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  metadata              JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_quality_signals_scope ON quality_signals(tenant_id, release_candidate_id, signal_type, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_quality_signals_goal ON quality_signals(tenant_id, goal_id, signal_type, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_quality_signals_status ON quality_signals(status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_quality_signals_severity ON quality_signals(severity, observed_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_quality_signals_idempotency
+  ON quality_signals(source, correlation_id, signal_type);
+
+CREATE TABLE IF NOT EXISTS quality_gate_evaluations (
+  id                    TEXT PRIMARY KEY,
+  tenant_id             TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  project_id            TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  goal_id               TEXT REFERENCES execution_goals(id) ON DELETE CASCADE,
+  release_candidate_id  TEXT REFERENCES release_candidates(id) ON DELETE CASCADE,
+  gate_id               TEXT NOT NULL REFERENCES quality_gates(id) ON DELETE RESTRICT,
+  gate_type             TEXT NOT NULL,
+  scope                 TEXT NOT NULL,
+  outcome               TEXT NOT NULL,
+  blocking              BOOLEAN NOT NULL DEFAULT false,
+  required              BOOLEAN NOT NULL DEFAULT false,
+  reason                TEXT NOT NULL DEFAULT '',
+  details               JSONB NOT NULL DEFAULT '{}',
+  quality_signal_ids    JSONB NOT NULL DEFAULT '[]',
+  artifact_ids          JSONB NOT NULL DEFAULT '[]',
+  evaluated_by          TEXT NOT NULL DEFAULT 'system',
+  policy_version        TEXT NOT NULL,
+  correlation_id        TEXT NOT NULL,
+  idempotency_key       TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  superseded_at         TIMESTAMPTZ,
+  metadata              JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_qge_goal_latest ON quality_gate_evaluations(tenant_id, goal_id, gate_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_qge_release_latest ON quality_gate_evaluations(tenant_id, release_candidate_id, gate_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_qge_outcome ON quality_gate_evaluations(outcome, blocking, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_qge_policy ON quality_gate_evaluations(policy_version, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_qge_idempotency
+  ON quality_gate_evaluations(tenant_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL AND tenant_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS approval_requests (
+  id                    TEXT PRIMARY KEY,
+  tenant_id             TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  project_id            TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  goal_id               TEXT REFERENCES execution_goals(id) ON DELETE CASCADE,
+  release_candidate_id  TEXT REFERENCES release_candidates(id) ON DELETE CASCADE,
+  approval_class        TEXT NOT NULL,
+  state                 TEXT NOT NULL DEFAULT 'pending',
+  required_roles        JSONB NOT NULL DEFAULT '[]',
+  required_quorum       INTEGER NOT NULL DEFAULT 1,
+  rejection_policy      TEXT NOT NULL DEFAULT 'any_rejection_blocks',
+  requested_by          TEXT NOT NULL DEFAULT 'system',
+  reason                TEXT NOT NULL DEFAULT '',
+  artifact_ids          JSONB NOT NULL DEFAULT '[]',
+  policy_version        TEXT NOT NULL,
+  correlation_id        TEXT NOT NULL,
+  expires_at            TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '24 hours'),
+  resolved_at           TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  superseded_at         TIMESTAMPTZ,
+  metadata              JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_pending ON approval_requests(tenant_id, state, expires_at);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_goal ON approval_requests(tenant_id, goal_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_release ON approval_requests(tenant_id, release_candidate_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_class ON approval_requests(approval_class, state);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_approval_request_active_scope
+  ON approval_requests(tenant_id, approval_class, COALESCE(goal_id, ''), COALESCE(release_candidate_id, ''), policy_version)
+  WHERE state IN ('pending', 'in-review', 'approved') AND tenant_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS approval_decisions (
+  id                    TEXT PRIMARY KEY,
+  tenant_id             TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  approval_request_id   TEXT NOT NULL REFERENCES approval_requests(id) ON DELETE CASCADE,
+  decision              TEXT NOT NULL,
+  actor_id              TEXT NOT NULL,
+  actor_roles           JSONB NOT NULL DEFAULT '[]',
+  decision_reason       TEXT NOT NULL DEFAULT '',
+  artifact_ids          JSONB NOT NULL DEFAULT '[]',
+  policy_version        TEXT NOT NULL,
+  correlation_id        TEXT NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  superseded_at         TIMESTAMPTZ,
+  metadata              JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_approval_decisions_request ON approval_decisions(approval_request_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approval_decisions_actor ON approval_decisions(tenant_id, actor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approval_decisions_decision ON approval_decisions(decision, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_approval_decision_actor_request
+  ON approval_decisions(approval_request_id, actor_id, decision)
+  WHERE decision IN ('approved', 'rejected');
+
+CREATE TABLE IF NOT EXISTS review_results (
+  id                    TEXT PRIMARY KEY,
+  tenant_id             TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  project_id            TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  goal_id               TEXT NOT NULL REFERENCES execution_goals(id) ON DELETE CASCADE,
+  release_candidate_id  TEXT REFERENCES release_candidates(id) ON DELETE CASCADE,
+  review_type           TEXT NOT NULL,
+  state                 TEXT NOT NULL DEFAULT 'pending',
+  reviewer_id           TEXT NOT NULL DEFAULT 'system',
+  summary               TEXT NOT NULL DEFAULT '',
+  findings              JSONB NOT NULL DEFAULT '[]',
+  artifact_ids          JSONB NOT NULL DEFAULT '[]',
+  policy_version        TEXT NOT NULL,
+  correlation_id        TEXT NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  superseded_at         TIMESTAMPTZ,
+  metadata              JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_review_results_goal_latest ON review_results(tenant_id, goal_id, review_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_review_results_release ON review_results(tenant_id, release_candidate_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_review_results_state ON review_results(state, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS release_decisions (
+  id                    TEXT PRIMARY KEY,
+  tenant_id             TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  release_candidate_id  TEXT NOT NULL REFERENCES release_candidates(id) ON DELETE CASCADE,
+  decision              TEXT NOT NULL,
+  allowed               BOOLEAN NOT NULL DEFAULT false,
+  blocked_reasons       JSONB NOT NULL DEFAULT '[]',
+  required_approvals    JSONB NOT NULL DEFAULT '[]',
+  required_artifacts    JSONB NOT NULL DEFAULT '[]',
+  gate_evaluation_ids   JSONB NOT NULL DEFAULT '[]',
+  approval_request_ids  JSONB NOT NULL DEFAULT '[]',
+  approval_decision_ids JSONB NOT NULL DEFAULT '[]',
+  override_action_ids   JSONB NOT NULL DEFAULT '[]',
+  rollback_trigger_ids  JSONB NOT NULL DEFAULT '[]',
+  rollback_action       TEXT NOT NULL DEFAULT 'none',
+  evaluated_by          TEXT NOT NULL DEFAULT 'system',
+  policy_version        TEXT NOT NULL,
+  correlation_id        TEXT NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  superseded_at         TIMESTAMPTZ,
+  metadata              JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_release_decisions_candidate_latest ON release_decisions(tenant_id, release_candidate_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_release_decisions_decision ON release_decisions(decision, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_release_decisions_policy ON release_decisions(policy_version, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_release_decision_idempotency
+  ON release_decisions(tenant_id, release_candidate_id, correlation_id)
+  WHERE tenant_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS override_actions (
+  id                    TEXT PRIMARY KEY,
+  tenant_id             TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  release_candidate_id  TEXT NOT NULL REFERENCES release_candidates(id) ON DELETE CASCADE,
+  gate_evaluation_id    TEXT REFERENCES quality_gate_evaluations(id) ON DELETE RESTRICT,
+  approval_request_id   TEXT REFERENCES approval_requests(id) ON DELETE SET NULL,
+  override_class        TEXT NOT NULL,
+  state                 TEXT NOT NULL DEFAULT 'requested',
+  requested_by          TEXT NOT NULL,
+  approved_by           TEXT,
+  reason                TEXT NOT NULL,
+  scope                 JSONB NOT NULL DEFAULT '{}',
+  expires_at            TIMESTAMPTZ NOT NULL,
+  revoked_at            TIMESTAMPTZ,
+  policy_version        TEXT NOT NULL,
+  correlation_id        TEXT NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  superseded_at         TIMESTAMPTZ,
+  metadata              JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_override_actions_active ON override_actions(tenant_id, release_candidate_id, state, expires_at);
+CREATE INDEX IF NOT EXISTS idx_override_actions_gate ON override_actions(gate_evaluation_id, state);
+CREATE INDEX IF NOT EXISTS idx_override_actions_class ON override_actions(override_class, state);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_override_active_gate
+  ON override_actions(tenant_id, release_candidate_id, gate_evaluation_id)
+  WHERE state IN ('requested', 'approved', 'active') AND tenant_id IS NOT NULL AND gate_evaluation_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS rollback_triggers (
+  id                    TEXT PRIMARY KEY,
+  tenant_id             TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  release_candidate_id  TEXT NOT NULL REFERENCES release_candidates(id) ON DELETE CASCADE,
+  trigger_type          TEXT NOT NULL,
+  severity              TEXT NOT NULL,
+  state                 TEXT NOT NULL DEFAULT 'detected',
+  automatic             BOOLEAN NOT NULL DEFAULT false,
+  source                TEXT NOT NULL,
+  reason                TEXT NOT NULL,
+  quality_signal_ids    JSONB NOT NULL DEFAULT '[]',
+  artifact_ids          JSONB NOT NULL DEFAULT '[]',
+  incident_id           TEXT REFERENCES incidents(id) ON DELETE SET NULL,
+  resolved_by           TEXT,
+  resolved_at           TIMESTAMPTZ,
+  policy_version        TEXT NOT NULL,
+  correlation_id        TEXT NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  superseded_at         TIMESTAMPTZ,
+  metadata              JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_rollback_triggers_active ON rollback_triggers(tenant_id, release_candidate_id, state, severity, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rollback_triggers_type ON rollback_triggers(trigger_type, severity, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rollback_triggers_incident ON rollback_triggers(incident_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_rollback_trigger_idempotency
+  ON rollback_triggers(tenant_id, release_candidate_id, trigger_type, correlation_id)
+  WHERE tenant_id IS NOT NULL;
+
+-- ---------------------------------------------------------------------------
 -- Phase 2: Operator Actions & Governance Flags
 -- ---------------------------------------------------------------------------
 
