@@ -13,8 +13,16 @@ vi.mock('../lib/studio-api/approvals', () => ({
 	approveApproval: vi.fn(),
 	rejectApproval: vi.fn(),
 }));
+vi.mock('../lib/studio-api/artifacts', () => ({
+	getArtifacts: vi.fn(),
+	registerArtifact: vi.fn(),
+	verifyArtifact: vi.fn(),
+	rejectArtifact: vi.fn(),
+	supersedeArtifact: vi.fn(),
+}));
 
 import * as approvalsApi from '../lib/studio-api/approvals';
+import * as artifactApi from '../lib/studio-api/artifacts';
 
 function renderPage() {
 	return render(
@@ -79,6 +87,13 @@ describe('ApprovalQueuePage', () => {
 		vi.mocked(approvalsApi.getApprovalArtifactCompleteness).mockResolvedValue(artifactState as any);
 		vi.mocked(approvalsApi.approveApproval).mockResolvedValue({ state: 'approved', request: { id: 'ap-1' } } as any);
 		vi.mocked(approvalsApi.rejectApproval).mockResolvedValue({ state: 'rejected', request: { id: 'ap-1' } } as any);
+		vi.mocked(artifactApi.getArtifacts).mockResolvedValue([
+			{ id: 'art-1', goalId: 'goal-1', artifactType: 'rollback_plan', title: 'Rollback Plan', environment: 'production', status: 'rejected' },
+		] as any);
+		vi.mocked(artifactApi.registerArtifact).mockResolvedValue({ id: 'art-2' } as any);
+		vi.mocked(artifactApi.verifyArtifact).mockResolvedValue({ id: 'art-1' } as any);
+		vi.mocked(artifactApi.rejectArtifact).mockResolvedValue({ id: 'art-1' } as any);
+		vi.mocked(artifactApi.supersedeArtifact).mockResolvedValue({ artifactId: 'art-1', superseded: true });
 	});
 
 	it('queue renders loading state', () => {
@@ -149,5 +164,20 @@ describe('ApprovalQueuePage', () => {
 		fireEvent.click(await screen.findByLabelText(/Release impact bilgisini okudum/i));
 		fireEvent.click(screen.getByText('Confirm Approve'));
 		await waitFor(() => expect(approvalsApi.getPendingApprovals).toHaveBeenCalledTimes(3));
+	});
+
+	it('approval detail opens artifact drawer and verify action calls api', async () => {
+		vi.mocked(approvalsApi.getApprovalArtifactCompleteness).mockResolvedValue({
+			...artifactState,
+			rejectedArtifacts: [{ id: 'art-1', artifactType: 'rollback_plan', title: 'Rollback Plan' }],
+		} as any);
+		renderPage();
+		await waitFor(() => expect(screen.getByText('Review')).toBeInTheDocument());
+		fireEvent.click(screen.getByText('Review'));
+		await waitFor(() => expect(screen.getByText('Verify')).toBeInTheDocument());
+		fireEvent.click(screen.getByText('Verify'));
+		expect(await screen.findByTestId('artifact-drawer-verify')).toBeInTheDocument();
+		fireEvent.click(screen.getByText('Apply verify'));
+		await waitFor(() => expect(artifactApi.verifyArtifact).toHaveBeenCalledWith('art-1', expect.any(Object)));
 	});
 });

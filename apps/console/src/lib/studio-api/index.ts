@@ -31,6 +31,13 @@ export * from './telemetry.js';
 export * from './agentic.js';
 export * from './quality-gates.js';
 export {
+	registerArtifact,
+	verifyArtifact,
+	rejectArtifact,
+	supersedeArtifact,
+	getArtifacts,
+} from './artifacts.js';
+export {
 	getPendingApprovals,
 	approveApproval,
 	rejectApproval,

@@ -278,7 +278,8 @@ describe('ProtectedRoute', () => {
 
 	it('renders children when auth is not enabled (backward compat)', async () => {
 		vi.stubEnv('VITE_AUTH_ENABLED', 'false');
-		vi.mocked(authApi.fetchCurrentUser).mockResolvedValueOnce({ authDisabled: true } as any);
+		localStorageMock.setItem('oscorpex_token', 'stored-token');
+		vi.mocked(authApi.fetchCurrentUser).mockResolvedValueOnce(MOCK_USER);
 
 		render(
 			<MemoryRouter initialEntries={['/studio']}>
@@ -351,8 +352,7 @@ describe('AuthContext', () => {
 	});
 
 	it('logout removes token from localStorage', async () => {
-		localStorageMock.setItem('oscorpex_token', 'existing-token');
-		vi.mocked(authApi.fetchCurrentUser).mockResolvedValue(MOCK_USER);
+		vi.mocked(authApi.login).mockResolvedValue(MOCK_LOGIN_RESPONSE);
 
 		render(
 			<MemoryRouter>
@@ -364,9 +364,8 @@ describe('AuthContext', () => {
 
 		const user = userEvent.setup();
 
-		await waitFor(() => {
-			expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
-		});
+		await user.click(screen.getByRole('button', { name: 'login' }));
+		await waitFor(() => expect(screen.getByTestId('authenticated')).toHaveTextContent('true'));
 
 		await user.click(screen.getByRole('button', { name: 'logout' }));
 

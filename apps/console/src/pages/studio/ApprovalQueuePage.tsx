@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Loader2, ShieldAlert } from 'lucide-react';
 import ApiErrorAlert from '../../components/ApiErrorAlert';
+import ArtifactActionDrawer, { type ArtifactActionMode } from '../../components/ArtifactActionDrawer';
+import { getArtifacts, type ArtifactRecord } from '../../lib/studio-api/artifacts';
 import ModalOverlay from './ModalOverlay';
 import {
 	approveApproval,
@@ -24,6 +26,7 @@ interface DetailBundle {
 	releaseState: Awaited<ReturnType<typeof getReleaseState>>;
 	blockers: Awaited<ReturnType<typeof getBlockingGates>>;
 	artifactCompleteness: Awaited<ReturnType<typeof getApprovalArtifactCompleteness>>;
+	artifacts: ArtifactRecord[];
 }
 
 function getRequestAgeMinutes(createdAt: string): number {
@@ -53,6 +56,9 @@ export default function ApprovalQueuePage() {
 	const [confirmApprove, setConfirmApprove] = useState(false);
 	const [confirmReject, setConfirmReject] = useState(false);
 	const [mutationError, setMutationError] = useState<Error | null>(null);
+	const [drawerMode, setDrawerMode] = useState<ArtifactActionMode | null>(null);
+	const [selectedArtifact, setSelectedArtifact] = useState<ArtifactRecord | null>(null);
+	const [drawerInitialType, setDrawerInitialType] = useState<string>('');
 
 	const activeGoalId = searchParams.get('goalId') ?? '';
 
@@ -122,13 +128,14 @@ export default function ApprovalQueuePage() {
 		setError(null);
 		setMutationError(null);
 		try {
-			const [approvalState, releaseState, blockers, artifactCompleteness] = await Promise.all([
+			const [approvalState, releaseState, blockers, artifactCompleteness, artifacts] = await Promise.all([
 				getApprovalState(approval.goalId),
 				getReleaseState(approval.goalId),
 				getBlockingGates(approval.goalId),
 				getApprovalArtifactCompleteness(approval.goalId),
+				getArtifacts(approval.goalId),
 			]);
-			setDetail({ approval, approvalState, releaseState, blockers, artifactCompleteness });
+			setDetail({ approval, approvalState, releaseState, blockers, artifactCompleteness, artifacts });
 			setConfirmApprove(false);
 			setConfirmReject(false);
 			setDecisionNote('');
@@ -365,6 +372,61 @@ export default function ApprovalQueuePage() {
 								</p>
 								<p className="text-sm text-zinc-400">rejected: {detail.artifactCompleteness.rejectedArtifacts.length}</p>
 								<p className="text-sm text-zinc-400">stale: {detail.artifactCompleteness.staleArtifacts.length}</p>
+								<div className="pt-2 flex flex-wrap gap-2">
+									{detail.artifactCompleteness.missingArtifacts.map((artifactType) => (
+										<button
+											key={`missing-${artifactType}`}
+											className="text-xs px-2 py-1 rounded border border-cyan-700/40 text-cyan-200 hover:bg-cyan-900/20"
+											onClick={() => {
+												setDrawerInitialType(artifactType);
+												setSelectedArtifact(null);
+												setDrawerMode('register');
+											}}
+										>
+											Register `{artifactType}`
+										</button>
+									))}
+									{detail.artifactCompleteness.rejectedArtifacts.map((x) => {
+										const artifact = detail.artifacts.find((a) => a.id === x.id) ?? null;
+										return (
+											<div key={`rejected-${x.id}`} className="flex gap-1">
+												<button
+													className="text-xs px-2 py-1 rounded border border-emerald-700/40 text-emerald-200 hover:bg-emerald-900/20"
+													onClick={() => {
+														setSelectedArtifact(artifact);
+														setDrawerMode('verify');
+													}}
+												>
+													Verify
+												</button>
+												<button
+													className="text-xs px-2 py-1 rounded border border-red-700/40 text-red-200 hover:bg-red-900/20"
+													onClick={() => {
+														setSelectedArtifact(artifact);
+														setDrawerMode('reject');
+													}}
+												>
+													Reject
+												</button>
+											</div>
+										);
+									})}
+									{detail.artifactCompleteness.staleArtifacts.map((x) => {
+										const artifact = detail.artifacts.find((a) => a.id === x.id) ?? null;
+										return (
+											<button
+												key={`stale-${x.id}`}
+												className="text-xs px-2 py-1 rounded border border-amber-700/40 text-amber-200 hover:bg-amber-900/20"
+												onClick={() => {
+													setSelectedArtifact(artifact);
+													setDrawerMode('supersede');
+												}}
+											>
+												Supersede
+											</button>
+										);
+									})}
+								</div>
 							</section>
 						</div>
 
@@ -440,6 +502,24 @@ export default function ApprovalQueuePage() {
 						</section>
 					</div>
 				</ModalOverlay>
+			) : null}
+			{detail ? (
+				<ArtifactActionDrawer
+					open={Boolean(drawerMode)}
+					mode={drawerMode ?? 'register'}
+					goalId={detail.approval.goalId}
+					artifact={selectedArtifact}
+					initialArtifactType={drawerInitialType}
+					onClose={() => {
+						setDrawerMode(null);
+						setSelectedArtifact(null);
+						setDrawerInitialType('');
+					}}
+					onSuccess={async () => {
+						await openDetail(detail.approval);
+						await loadQueue();
+					}}
+				/>
 			) : null}
 		</div>
 	);

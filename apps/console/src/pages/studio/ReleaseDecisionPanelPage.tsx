@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, Loader2, ShieldAlert } from 'lucide-react';
 import ApiErrorAlert from '../../components/ApiErrorAlert';
+import ArtifactActionDrawer, { type ArtifactActionMode } from '../../components/ArtifactActionDrawer';
 import ModalOverlay from './ModalOverlay';
+import { getArtifacts, type ArtifactRecord } from '../../lib/studio-api/artifacts';
 import {
 	applyManualOverride,
 	evaluateRelease,
@@ -22,6 +24,7 @@ interface PanelData {
 	approvalState: Awaited<ReturnType<typeof getApprovalState>>;
 	artifactCompleteness: Awaited<ReturnType<typeof getArtifactCompleteness>>;
 	readiness: Awaited<ReturnType<typeof getQualityGateReadiness>>;
+	artifacts: ArtifactRecord[];
 }
 
 interface OverrideCandidateOption {
@@ -87,20 +90,24 @@ export default function ReleaseDecisionPanelPage() {
 	const [overrideConfirm, setOverrideConfirm] = useState(false);
 	const [rollbackReason, setRollbackReason] = useState('');
 	const [rollbackConfirm, setRollbackConfirm] = useState(false);
+	const [drawerMode, setDrawerMode] = useState<ArtifactActionMode | null>(null);
+	const [selectedArtifact, setSelectedArtifact] = useState<ArtifactRecord | null>(null);
+	const [drawerInitialType, setDrawerInitialType] = useState<string>('');
 
 	const load = useCallback(async () => {
 		if (!goalId) return;
 		setLoading(true);
 		setError(null);
 		try {
-			const [releaseState, blockers, approvalState, artifactCompleteness, readiness] = await Promise.all([
+			const [releaseState, blockers, approvalState, artifactCompleteness, readiness, artifacts] = await Promise.all([
 				getReleaseState(goalId),
 				getBlockingGates(goalId),
 				getApprovalState(goalId),
 				getArtifactCompleteness(goalId),
 				getQualityGateReadiness(goalId),
+				getArtifacts(goalId),
 			]);
-			setData({ releaseState, blockers, approvalState, artifactCompleteness, readiness });
+			setData({ releaseState, blockers, approvalState, artifactCompleteness, readiness, artifacts });
 			setOverrideCandidateId(releaseState.latestDecision?.releaseCandidateId ?? null);
 			const candidates = deriveOverrideCandidates({
 				releaseState,
@@ -108,6 +115,7 @@ export default function ReleaseDecisionPanelPage() {
 				approvalState,
 				artifactCompleteness,
 				readiness,
+				artifacts,
 			});
 			const firstSoft = candidates.find((x) => !x.hardFail && x.overrideAllowed);
 			setOverrideGateEvaluationId(firstSoft?.gateEvaluationId ?? null);
@@ -320,6 +328,69 @@ export default function ReleaseDecisionPanelPage() {
 				) : null}
 			</section>
 
+			<section className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4 space-y-2" data-testid="artifact-actions">
+				<h2 className="text-sm font-medium text-zinc-200">Artifact Actions</h2>
+				<p className="text-sm text-zinc-300">
+					satisfied: {String(data.artifactCompleteness.satisfied)} | missing: {data.artifactCompleteness.missingArtifacts.length} | rejected:{' '}
+					{data.artifactCompleteness.rejectedArtifacts.length} | stale: {data.artifactCompleteness.staleArtifacts.length}
+				</p>
+				<div className="flex flex-wrap gap-2">
+					{data.artifactCompleteness.missingArtifacts.map((artifactType) => (
+						<button
+							key={`reg-${artifactType}`}
+							className="text-xs px-2 py-1 rounded border border-cyan-700/40 text-cyan-200 hover:bg-cyan-900/20"
+							onClick={() => {
+								setDrawerInitialType(artifactType);
+								setSelectedArtifact(null);
+								setDrawerMode('register');
+							}}
+						>
+							Register `{artifactType}`
+						</button>
+					))}
+					{data.artifactCompleteness.rejectedArtifacts.map((x) => {
+						const artifact = data.artifacts.find((a) => a.id === x.id) ?? null;
+						return (
+							<div key={`rej-${x.id}`} className="flex gap-1">
+								<button
+									className="text-xs px-2 py-1 rounded border border-emerald-700/40 text-emerald-200 hover:bg-emerald-900/20"
+									onClick={() => {
+										setSelectedArtifact(artifact);
+										setDrawerMode('verify');
+									}}
+								>
+									Verify `{x.artifactType}`
+								</button>
+								<button
+									className="text-xs px-2 py-1 rounded border border-red-700/40 text-red-200 hover:bg-red-900/20"
+									onClick={() => {
+										setSelectedArtifact(artifact);
+										setDrawerMode('reject');
+									}}
+								>
+									Reject
+								</button>
+							</div>
+						);
+					})}
+					{data.artifactCompleteness.staleArtifacts.map((x) => {
+						const artifact = data.artifacts.find((a) => a.id === x.id) ?? null;
+						return (
+							<button
+								key={`st-${x.id}`}
+								className="text-xs px-2 py-1 rounded border border-amber-700/40 text-amber-200 hover:bg-amber-900/20"
+								onClick={() => {
+									setSelectedArtifact(artifact);
+									setDrawerMode('supersede');
+								}}
+							>
+								Supersede `{x.artifactType}`
+							</button>
+						);
+					})}
+				</div>
+			</section>
+
 			<section className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4 space-y-3" data-testid="override-action">
 				<h2 className="text-sm font-medium text-zinc-200">Manual Override Action</h2>
 				<p className="text-xs text-zinc-500">One-click override yok: picker + reason + future expiry + explicit confirm zorunlu.</p>
@@ -454,6 +525,21 @@ export default function ReleaseDecisionPanelPage() {
 					</div>
 				</ModalOverlay>
 			) : null}
+			<ArtifactActionDrawer
+				open={Boolean(drawerMode)}
+				mode={drawerMode ?? 'register'}
+				goalId={goalId}
+				artifact={selectedArtifact}
+				initialArtifactType={drawerInitialType}
+				onClose={() => {
+					setDrawerMode(null);
+					setSelectedArtifact(null);
+					setDrawerInitialType('');
+				}}
+				onSuccess={async () => {
+					await load();
+				}}
+			/>
 		</div>
 	);
 }

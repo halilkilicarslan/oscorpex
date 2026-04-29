@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Loader2, ShieldAlert } from 'lucide-react';
 import ApiErrorAlert from '../../components/ApiErrorAlert';
+import ArtifactActionDrawer, { type ArtifactActionMode } from '../../components/ArtifactActionDrawer';
+import { getArtifacts, type ArtifactRecord } from '../../lib/studio-api/artifacts';
 import {
 	getApprovalState,
 	getArtifactCompleteness,
@@ -25,6 +27,7 @@ interface DashboardData {
 	approvalState: ApprovalState;
 	releaseState: ReleaseState;
 	artifactCompleteness: ArtifactCompleteness;
+	artifacts: ArtifactRecord[];
 }
 
 function badgeClass(state: string): string {
@@ -50,13 +53,16 @@ export default function QualityGatesDashboardPage() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<Error | null>(null);
 	const [data, setData] = useState<DashboardData | null>(null);
+	const [drawerMode, setDrawerMode] = useState<ArtifactActionMode | null>(null);
+	const [selectedArtifact, setSelectedArtifact] = useState<ArtifactRecord | null>(null);
+	const [drawerInitialType, setDrawerInitialType] = useState<string>('');
 
 	const load = useCallback(async () => {
 		if (!goalId) return;
 		setLoading(true);
 		setError(null);
 		try {
-			const [readiness, evaluations, blockers, approvalState, releaseState, artifactCompleteness] =
+			const [readiness, evaluations, blockers, approvalState, releaseState, artifactCompleteness, artifacts] =
 				await Promise.all([
 					getQualityGateReadiness(goalId),
 					getQualityGateEvaluations(goalId),
@@ -64,8 +70,9 @@ export default function QualityGatesDashboardPage() {
 					getApprovalState(goalId),
 					getReleaseState(goalId),
 					getArtifactCompleteness(goalId),
+					getArtifacts(goalId),
 				]);
-			setData({ readiness, evaluations, blockers, approvalState, releaseState, artifactCompleteness });
+			setData({ readiness, evaluations, blockers, approvalState, releaseState, artifactCompleteness, artifacts });
 		} catch (err) {
 			setError(err as Error);
 			setData(null);
@@ -258,6 +265,61 @@ export default function QualityGatesDashboardPage() {
 					<p className="text-xs text-zinc-400">rejected artifacts: {data.artifactCompleteness.rejectedArtifacts.length}</p>
 					<p className="text-xs text-zinc-400">latest artifacts: {data.artifactCompleteness.latestArtifacts.length}</p>
 					<p className="text-xs text-zinc-400">required artifacts: {data.artifactCompleteness.requiredArtifacts.join(', ')}</p>
+					<div className="pt-2 flex flex-wrap gap-2">
+						{data.artifactCompleteness.missingArtifacts.map((artifactType) => (
+							<button
+								key={`register-${artifactType}`}
+								className="text-xs px-2 py-1 rounded border border-cyan-700/40 text-cyan-200 hover:bg-cyan-900/20"
+								onClick={() => {
+									setDrawerInitialType(artifactType);
+									setSelectedArtifact(null);
+									setDrawerMode('register');
+								}}
+							>
+								Register `{artifactType}`
+							</button>
+						))}
+						{data.artifactCompleteness.rejectedArtifacts.map((x) => {
+							const match = data.artifacts.find((a) => a.id === x.id);
+							return (
+								<div key={`rejected-${x.id}`} className="flex gap-1">
+									<button
+										className="text-xs px-2 py-1 rounded border border-emerald-700/40 text-emerald-200 hover:bg-emerald-900/20"
+										onClick={() => {
+											setSelectedArtifact(match ?? null);
+											setDrawerMode('verify');
+										}}
+									>
+										Verify `{x.artifactType}`
+									</button>
+									<button
+										className="text-xs px-2 py-1 rounded border border-red-700/40 text-red-200 hover:bg-red-900/20"
+										onClick={() => {
+											setSelectedArtifact(match ?? null);
+											setDrawerMode('reject');
+										}}
+									>
+										Reject
+									</button>
+								</div>
+							);
+						})}
+						{data.artifactCompleteness.staleArtifacts.map((x) => {
+							const match = data.artifacts.find((a) => a.id === x.id);
+							return (
+								<button
+									key={`stale-${x.id}`}
+									className="text-xs px-2 py-1 rounded border border-amber-700/40 text-amber-200 hover:bg-amber-900/20"
+									onClick={() => {
+										setSelectedArtifact(match ?? null);
+										setDrawerMode('supersede');
+									}}
+								>
+									Supersede `{x.artifactType}`
+								</button>
+							);
+						})}
+					</div>
 				</section>
 			</div>
 
@@ -295,6 +357,21 @@ export default function QualityGatesDashboardPage() {
 					</Link>
 				</div>
 			</section>
+			<ArtifactActionDrawer
+				open={Boolean(drawerMode)}
+				mode={drawerMode ?? 'register'}
+				goalId={goalId}
+				artifact={selectedArtifact}
+				initialArtifactType={drawerInitialType}
+				onClose={() => {
+					setDrawerMode(null);
+					setSelectedArtifact(null);
+					setDrawerInitialType('');
+				}}
+				onSuccess={async () => {
+					await load();
+				}}
+			/>
 		</div>
 	);
 }

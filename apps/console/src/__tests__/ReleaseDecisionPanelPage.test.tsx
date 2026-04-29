@@ -14,8 +14,16 @@ vi.mock('../lib/studio-api/releases', () => ({
 	applyManualOverride: vi.fn(),
 	triggerRollback: vi.fn(),
 }));
+vi.mock('../lib/studio-api/artifacts', () => ({
+	getArtifacts: vi.fn(),
+	registerArtifact: vi.fn(),
+	verifyArtifact: vi.fn(),
+	rejectArtifact: vi.fn(),
+	supersedeArtifact: vi.fn(),
+}));
 
 import * as releasesApi from '../lib/studio-api/releases';
+import * as artifactApi from '../lib/studio-api/artifacts';
 
 function renderPage() {
 	return render(
@@ -61,6 +69,13 @@ describe('ReleaseDecisionPanelPage', () => {
 		vi.mocked(releasesApi.evaluateRelease).mockResolvedValue({ releaseCandidateId: 'rc-1', decision: 'blocked' });
 		vi.mocked(releasesApi.applyManualOverride).mockResolvedValue({ releaseCandidateId: 'rc-1', decision: 'overridden' });
 		vi.mocked(releasesApi.triggerRollback).mockResolvedValue({ id: 'rb-1' });
+		vi.mocked(artifactApi.getArtifacts).mockResolvedValue([
+			{ id: 'art-1', goalId: 'goal-1', artifactType: 'rollback_plan', title: 'Rollback Plan', environment: 'production', status: 'rejected' },
+		] as any);
+		vi.mocked(artifactApi.registerArtifact).mockResolvedValue({ id: 'art-2' } as any);
+		vi.mocked(artifactApi.verifyArtifact).mockResolvedValue({ id: 'art-1' } as any);
+		vi.mocked(artifactApi.rejectArtifact).mockResolvedValue({ id: 'art-1' } as any);
+		vi.mocked(artifactApi.supersedeArtifact).mockResolvedValue({ artifactId: 'art-1', superseded: true });
 	});
 
 	it('release summary renders', async () => {
@@ -171,5 +186,25 @@ describe('ReleaseDecisionPanelPage', () => {
 		vi.mocked(releasesApi.getReleaseState).mockRejectedValue(new StudioApiError('Forbidden', 403, { error: 'forbidden' }));
 		renderPage();
 		await waitFor(() => expect(screen.getByTestId('release-panel-error-403')).toBeInTheDocument());
+	});
+
+	it('release panel integration opens register artifact drawer', async () => {
+		vi.mocked(releasesApi.getArtifactCompleteness).mockResolvedValue({
+			satisfied: false,
+			missingArtifacts: ['rollback_plan'],
+			staleArtifacts: [],
+			rejectedArtifacts: [],
+			latestArtifacts: [],
+			requiredArtifacts: [],
+			environment: 'production',
+		} as any);
+		renderPage();
+		await waitFor(() => expect(screen.getByText('Register `rollback_plan`')).toBeInTheDocument());
+		fireEvent.click(screen.getByText('Register `rollback_plan`'));
+		expect(await screen.findByTestId('artifact-drawer-register')).toBeInTheDocument();
+		fireEvent.change(screen.getByLabelText(/Artifact Type \(required\)/i), { target: { value: 'rollback_plan' } });
+		fireEvent.change(screen.getByLabelText(/Title \(required\)/i), { target: { value: 'Rollback Plan' } });
+		fireEvent.click(screen.getByText('Apply register'));
+		await waitFor(() => expect(artifactApi.registerArtifact).toHaveBeenCalled());
 	});
 });
