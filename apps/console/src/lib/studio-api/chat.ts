@@ -61,7 +61,7 @@ export function streamPMChat(
 ): () => void {
   const controller = new AbortController();
 
-  fetch(`${API}/projects/${projectId}/chat`, {
+  fetch(`${API}/projects/${projectId}/chat`, { // DIRECT_FETCH_INTENTIONAL: planner chat streams SSE chunks through ReadableStream.
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, provider, model, effort }),
@@ -131,7 +131,7 @@ export function streamTeamArchitectChat(
 ): () => void {
   const controller = new AbortController();
 
-  fetch(`${API}/team-architect/chat`, {
+  fetch(`${API}/team-architect/chat`, { // DIRECT_FETCH_INTENTIONAL: team architect chat streams SSE chunks through ReadableStream.
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ intake, messages }),

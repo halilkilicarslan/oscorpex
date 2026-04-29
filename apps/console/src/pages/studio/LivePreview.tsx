@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Loader2, ExternalLink, RotateCcw, Maximize2, Minimize2, Smartphone, Monitor, Tablet, Settings2, Braces, Globe, Server } from 'lucide-react';
-import { stopApp, fetchAppStatus, switchPreviewService, type AppStatus } from '../../lib/studio-api';
+import { stopApp, fetchAppStatus, switchPreviewService, detectApiOnlyPreview, type AppStatus } from '../../lib/studio-api';
 import RuntimePanel from './RuntimePanel';
 import ApiExplorer from './ApiExplorer';
 
@@ -41,34 +41,20 @@ export default function LivePreview({
   // Direct URL for iframe — proxy can't handle ES module imports in inline scripts
   const previewUrl = directUrl || null;
   // Proxy URL for API-only detection (avoids CORS on cross-origin fetch)
-  const proxyUrl = directUrl ? `/api/studio/projects/${projectId}/app/proxy/` : null;
+  const canProbeProxy = Boolean(directUrl);
 
   // API-only detection: proxy root'u kontrol et (sadece ilk seferde viewMode ayarla)
   useEffect(() => {
-    if (!proxyUrl || !appStatus.running) return;
-    fetch(proxyUrl).then(res => {
-      if (res.headers.get('content-type')?.includes('text/html')) {
-        res.text().then(body => {
-          if (body.includes('API-Only Application')) {
-            setIsApiOnly(true);
-            if (!apiDetectedOnce.current) {
-              apiDetectedOnce.current = true;
-              setViewMode('api');
-            }
-          } else {
-            setIsApiOnly(false);
-          }
-        });
-      } else {
-        // JSON response = API endpoint, not a web app
+    if (!canProbeProxy || !appStatus.running) return;
+    detectApiOnlyPreview(projectId).then((apiOnly) => {
+      setIsApiOnly(apiOnly);
+      if (apiOnly && !apiDetectedOnce.current) {
         setIsApiOnly(true);
-        if (!apiDetectedOnce.current) {
-          apiDetectedOnce.current = true;
-          setViewMode('api');
-        }
+        apiDetectedOnce.current = true;
+        setViewMode('api');
       }
     }).catch(() => {});
-  }, [proxyUrl, appStatus.running]);
+  }, [canProbeProxy, appStatus.running, projectId]);
 
   const handleSwitchService = async (serviceName: string) => {
     setSelectedService(serviceName);
@@ -80,17 +66,9 @@ export default function LivePreview({
     setViewMode('preview');
     setIframeKey(k => k + 1);
     // Kısa gecikme sonrası yeni hedefi kontrol et
-    const detectUrl = `/api/studio/projects/${projectId}/app/proxy/`;
     setTimeout(() => {
-      fetch(detectUrl).then(res => {
-        if (res.headers.get('content-type')?.includes('text/html')) {
-          res.text().then(body => {
-            if (body.includes('API-Only Application')) {
-              setIsApiOnly(true);
-              setViewMode('api');
-            }
-          });
-        } else {
+      detectApiOnlyPreview(projectId).then((apiOnly) => {
+        if (apiOnly) {
           setIsApiOnly(true);
           setViewMode('api');
         }

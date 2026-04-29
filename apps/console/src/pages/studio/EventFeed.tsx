@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2, AlertCircle, Zap } from 'lucide-react';
 import { useStudioWebSocket } from '../../hooks/useStudioWebSocket';
+import { httpGet } from '../../lib/studio-api/base.js';
 import type { StudioEvent } from './event-feed/types.js';
 import { ConnectionBadge, EventRow } from './event-feed/index.js';
 
@@ -72,11 +73,7 @@ export default function EventFeed({ projectId }: { projectId: string }) {
 	useEffect(() => {
 		let cancelled = false;
 
-		fetch(`/api/studio/projects/${projectId}/events/recent?limit=30`)
-			.then(async (res) => {
-				if (!res.ok) throw new Error(`HTTP ${res.status}`);
-				return res.json() as Promise<StudioEvent[]>;
-			})
+		httpGet<StudioEvent[]>(`/api/studio/projects/${projectId}/events/recent?limit=30`)
 			.then((data) => {
 				if (cancelled) return;
 				appendEvents(data, false);

@@ -47,7 +47,7 @@ export async function studioFetch<T>(url: string, init?: RequestInit): Promise<T
 		delete (headers as Record<string, string>)['Content-Type'];
 	}
 
-	const res = await fetch(url, { ...init, headers });
+	const res = await fetch(url, { ...init, headers }); // DIRECT_FETCH_INTENTIONAL: central low-level Studio API transport boundary.
 
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({})) as { error?: string };
@@ -116,7 +116,7 @@ export async function fetchPaginated<T>(url: string, limit = 50, offset = 0): Pr
 	const fullUrl = `${url}${sep}limit=${limit}&offset=${offset}`;
 	// X-Total-Count header is not available through studioFetch; keep manual for paginated
 	const headers = { ...authHeaders() };
-	const raw = await fetch(fullUrl, { headers });
+	const raw = await fetch(fullUrl, { headers }); // DIRECT_FETCH_INTENTIONAL: pagination helper must read X-Total-Count response header.
 	if (!raw.ok) {
 		const body = await raw.json().catch(() => ({}));
 		throw new StudioApiError(body.error ?? `HTTP ${raw.status}`, raw.status, body);

@@ -254,10 +254,7 @@ export function streamAgentOutput(
   // SSE akışını asenkron olarak başlat
   const connect = async () => {
     try {
-      const res = await fetch(
-        `${API}/projects/${projectId}/agents/${agentId}/stream`,
-        { signal: controller.signal },
-      );
+      const res = await fetch(`${API}/projects/${projectId}/agents/${agentId}/stream`, { signal: controller.signal }); // DIRECT_FETCH_INTENTIONAL: agent output SSE requires raw ReadableStream access.
 
       if (!res.ok) {
         throw new Error(`SSE bağlantısı başarısız: HTTP ${res.status}`);

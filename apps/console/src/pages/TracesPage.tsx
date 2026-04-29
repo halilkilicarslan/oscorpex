@@ -17,12 +17,7 @@ import {
   Bot,
   AlertCircle,
 } from 'lucide-react';
-
-// ---------------------------------------------------------------------------
-// API taban URL
-// ---------------------------------------------------------------------------
-
-const API_BASE = '/api/observability';
+import { observabilityGet } from '../lib/observability-api.js';
 
 // ---------------------------------------------------------------------------
 // Tipler
@@ -429,8 +424,7 @@ function TraceDetailPanel({ traceId }: { traceId: string }) {
     setDetail(null);
     setSelectedSpanId(null);
 
-    fetch(`${API_BASE}/traces/${traceId}`)
-      .then((r) => r.json())
+    observabilityGet<TraceDetail>(`/traces/${traceId}`)
       .then((data) => setDetail(data as TraceDetail))
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -645,8 +639,7 @@ function StudioTraceDetailPanel({ traceId }: { traceId: string }) {
     setDetail(null);
     setSelectedSpanId(null);
 
-    fetch(`${API_BASE}/studio/traces/${traceId}`)
-      .then((r) => r.json())
+    observabilityGet<{ trace: ApiTrace & { title?: string }; spans: ApiSpan[] }>(`/studio/traces/${traceId}`)
       .then((data) => setDetail(data as { trace: ApiTrace & { title?: string }; spans: ApiSpan[] }))
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -800,8 +793,7 @@ export default function TracesPage() {
     if (entityFilter) params.set('entity_id', entityFilter);
     if (statusFilter) params.set('status', statusFilter);
 
-    fetch(`${API_BASE}/traces?${params.toString()}`)
-      .then((r) => r.json())
+    observabilityGet<{ traces: ApiTrace[]; total: number }>(`/traces?${params.toString()}`)
       .then((data) => {
         const resp = data as { traces: ApiTrace[]; total: number };
         setTraces(resp.traces);
@@ -816,8 +808,7 @@ export default function TracesPage() {
   // ---------------------------------------------------------------------------
 
   const loadStudioStats = useCallback(() => {
-    fetch(`${API_BASE}/studio/traces/stats`)
-      .then((r) => r.json())
+    observabilityGet<TraceStats>('/studio/traces/stats')
       .then((data) => setStudioStats(data as TraceStats))
       .catch(console.error);
   }, []);
@@ -837,8 +828,7 @@ export default function TracesPage() {
     if (entityFilter) params.set('agent', entityFilter);
     if (statusFilter) params.set('status', statusFilter);
 
-    fetch(`${API_BASE}/studio/traces?${params.toString()}`)
-      .then((r) => r.json())
+    observabilityGet<StudioTracesResponse>(`/studio/traces?${params.toString()}`)
       .then((data) => {
         const resp = data as StudioTracesResponse;
         setStudioTraces(resp.traces);

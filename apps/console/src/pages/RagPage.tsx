@@ -18,12 +18,12 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import {
-  API_BASE,
   type KnowledgeBase,
   type RagDocument,
   type RagQuery,
   type Stats,
 } from './studio/settings/rag-types.js';
+import { observabilityDelete, observabilityGet, observabilityPost, observabilityPut } from '../lib/observability-api.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -480,29 +480,19 @@ function KBTab({
   const [viewDocs, setViewDocs] = useState<KnowledgeBase | null>(null);
 
   async function handleCreate(data: KBFormData) {
-    const res = await fetch(`${API_BASE}/rag/knowledge-bases`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed');
+    await observabilityPost('/rag/knowledge-bases', data);
     onRefresh();
   }
 
   async function handleUpdate(data: KBFormData) {
     if (!editTarget) return;
-    const res = await fetch(`${API_BASE}/rag/knowledge-bases/${editTarget.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error((await res.json()).error ?? 'Update failed');
+    await observabilityPut(`/rag/knowledge-bases/${editTarget.id}`, data);
     onRefresh();
   }
 
   async function handleDelete(kb: KnowledgeBase) {
     if (!confirm(`Delete "${kb.name}"? This will also delete all documents.`)) return;
-    await fetch(`${API_BASE}/rag/knowledge-bases/${kb.id}`, { method: 'DELETE' });
+    await observabilityDelete(`/rag/knowledge-bases/${kb.id}`);
     onRefresh();
   }
 
@@ -630,8 +620,7 @@ function KBDocsModal({ kb, onClose }: { kb: KnowledgeBase; onClose: () => void }
   const loadDocs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/rag/knowledge-bases/${kb.id}`);
-      const data = await res.json();
+      const data = await observabilityGet<{ documents?: RagDocument[] }>(`/rag/knowledge-bases/${kb.id}`);
       setDocs(data.documents ?? []);
     } finally {
       setLoading(false);
@@ -642,7 +631,7 @@ function KBDocsModal({ kb, onClose }: { kb: KnowledgeBase; onClose: () => void }
 
   async function handleDelete(docId: string) {
     if (!confirm('Delete this document?')) return;
-    await fetch(`${API_BASE}/rag/knowledge-bases/${kb.id}/documents/${docId}`, { method: 'DELETE' });
+    await observabilityDelete(`/rag/knowledge-bases/${kb.id}/documents/${docId}`);
     loadDocs();
   }
 
@@ -728,14 +717,12 @@ function DocumentsTab({ knowledgeBases, onRefresh }: { knowledgeBases: Knowledge
       if (selectedKbId === 'all') {
         const all: RagDocument[] = [];
         for (const kb of knowledgeBases) {
-          const res = await fetch(`${API_BASE}/rag/knowledge-bases/${kb.id}`);
-          const data = await res.json();
+          const data = await observabilityGet<{ documents?: RagDocument[] }>(`/rag/knowledge-bases/${kb.id}`);
           if (data.documents) all.push(...data.documents);
         }
         setDocs(all.sort((a, b) => b.created_at.localeCompare(a.created_at)));
       } else {
-        const res = await fetch(`${API_BASE}/rag/knowledge-bases/${selectedKbId}`);
-        const data = await res.json();
+        const data = await observabilityGet<{ documents?: RagDocument[] }>(`/rag/knowledge-bases/${selectedKbId}`);
         setDocs(data.documents ?? []);
       }
     } finally {
@@ -747,18 +734,13 @@ function DocumentsTab({ knowledgeBases, onRefresh }: { knowledgeBases: Knowledge
 
   async function handleDelete(doc: RagDocument) {
     if (!confirm('Delete this document?')) return;
-    await fetch(`${API_BASE}/rag/knowledge-bases/${doc.kb_id}/documents/${doc.id}`, { method: 'DELETE' });
+    await observabilityDelete(`/rag/knowledge-bases/${doc.kb_id}/documents/${doc.id}`);
     loadDocs();
     onRefresh();
   }
 
   async function handleAddDoc(kbId: string, data: { name: string; source: string; content: string; chunk_count: number }) {
-    const res = await fetch(`${API_BASE}/rag/knowledge-bases/${kbId}/documents`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error((await res.json()).error ?? 'Add failed');
+    await observabilityPost(`/rag/knowledge-bases/${kbId}/documents`, data);
     onRefresh();
     loadDocs();
   }
@@ -886,8 +868,7 @@ function QueryLogTab({ knowledgeBases }: { knowledgeBases: KnowledgeBase[] }) {
         offset: String(page * PAGE_SIZE),
       });
       if (filterKb) params.set('kb_id', filterKb);
-      const res = await fetch(`${API_BASE}/rag/queries?${params}`);
-      const data = await res.json();
+      const data = await observabilityGet<{ queries?: RagQuery[]; total?: number }>(`/rag/queries?${params}`);
       setQueries(data.queries ?? []);
       setTotal(data.total ?? 0);
     } finally {
@@ -1035,11 +1016,10 @@ export default function RagPage() {
   const loadData = useCallback(async () => {
     setStatsLoading(true);
     try {
-      const [statsRes, kbsRes] = await Promise.all([
-        fetch(`${API_BASE}/rag/knowledge-bases/stats`),
-        fetch(`${API_BASE}/rag/knowledge-bases`),
+      const [statsData, kbsData] = await Promise.all([
+        observabilityGet<Stats>('/rag/knowledge-bases/stats'),
+        observabilityGet<{ knowledgeBases?: KnowledgeBase[] }>('/rag/knowledge-bases'),
       ]);
-      const [statsData, kbsData] = await Promise.all([statsRes.json(), kbsRes.json()]);
       setStats(statsData);
       setKbs(kbsData.knowledgeBases ?? []);
     } finally {

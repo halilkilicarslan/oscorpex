@@ -434,6 +434,7 @@ describe('EventFeed — recent events URL', () => {
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/studio/projects/proj-99/events/recent'),
+        expect.objectContaining({ method: 'GET' }),
       );
     });
   });

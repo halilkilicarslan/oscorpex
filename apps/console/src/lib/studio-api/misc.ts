@@ -86,7 +86,7 @@ export async function sendProxyRequest(
 ): Promise<{ status: number; headers: Record<string, string>; body: string; duration: number }> {
   const proxyPath = `/api/studio/projects/${projectId}/app/proxy${path.startsWith('/') ? path : '/' + path}`;
   const start = performance.now();
-  const res = await fetch(proxyPath, {
+  const res = await fetch(proxyPath, { // DIRECT_FETCH_INTENTIONAL: API explorer must expose raw proxied status, headers, and text body.
     method,
     headers: { 'Content-Type': 'application/json', ...headers },
     body: method !== 'GET' && method !== 'DELETE' ? body : undefined,

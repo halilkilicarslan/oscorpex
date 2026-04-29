@@ -32,7 +32,7 @@ vi.mock('../lib/studio-api', async (importOriginal) => {
 	};
 });
 
-// global.fetch'i mockla — bileşen raw fetch() kullanıyor, studio-api değil
+// global.fetch'i mockla — studio API transport katmanı HTTP çağrılarını buradan geçirir
 const mockFetch = vi.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
@@ -557,6 +557,7 @@ describe('ProjectReport — Refresh butonu', () => {
 		await waitFor(() => {
 			expect(mockFetch).toHaveBeenCalledWith(
 				expect.stringContaining('/api/studio/projects/proj-test-42/report'),
+				expect.objectContaining({ method: 'GET' }),
 			);
 		});
 	});

@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Pencil, Copy, Check, Save, X, GitCommit } from 'lucide-react';
 import type { GitStatusResult } from '../../../lib/studio-api';
+import { httpGet, httpPut } from '../../../lib/studio-api/base.js';
 
 interface FileViewerProps {
   path: string;
@@ -32,8 +33,7 @@ export default function FileViewer({ path, projectId, gitStatus, onClose, onComm
     setLoading(true);
     setEditing(false);
     setSaveStatus('idle');
-    fetch(`/api/studio/projects/${projectId}/files/${path}`)
-      .then((r) => r.json())
+    httpGet<{ content?: string }>(`/api/studio/projects/${projectId}/files/${path}`)
       .then((data) => {
         const c = data.content ?? 'Unable to read file';
         setContent(c);
@@ -68,12 +68,7 @@ export default function FileViewer({ path, projectId, gitStatus, onClose, onComm
     setSaving(true);
     setSaveStatus('idle');
     try {
-      const res = await fetch(`/api/studio/projects/${projectId}/files/${path}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: editContent }),
-      });
-      if (!res.ok) throw new Error();
+      await httpPut(`/api/studio/projects/${projectId}/files/${path}`, { content: editContent });
       setContent(editContent);
       setEditing(false);
       setSaveStatus('saved');

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Loader2, RefreshCw, CheckCircle2, XCircle, DollarSign, Activity, TrendingUp, FileText, Clock, Database, Code2, FileSearch } from 'lucide-react';
 import { fetchContextMetrics, type ContextMetricsResponse } from '../../lib/studio-api/analytics.js';
+import { httpGet } from '../../lib/studio-api/base.js';
 import { SearchObservability } from './SearchObservability';
 
 const ComplexityPieChart = lazy(() => import('./charts/ComplexityPieChart'));
@@ -21,6 +22,10 @@ interface ReportData {
     firstPassRate: number;
   };
   topChangedFiles: { path: string; changeCount: number }[];
+}
+
+interface TaskWithComplexity {
+  complexity?: string;
 }
 
 function formatDuration(ms?: number): string {
@@ -91,21 +96,15 @@ export default function ProjectReport({ projectId }: { projectId: string }) {
     setError(null);
     try {
       const [reportRes, ctxRes, tasksRes] = await Promise.all([
-        fetch(`${BASE}/api/studio/projects/${projectId}/report`).then(async (r) => {
-          const d = await r.json();
-          if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
-          return d as ReportData;
-        }),
+        httpGet<ReportData>(`${BASE}/api/studio/projects/${projectId}/report`),
         fetchContextMetrics(projectId).then((r) => r?.metrics ? r : null).catch(() => null),
-        fetch(`${BASE}/api/studio/projects/${projectId}/tasks`)
-          .then((r) => r.ok ? r.json() : { tasks: [] })
-          .catch(() => ({ tasks: [] })),
+        httpGet<{ tasks: TaskWithComplexity[] } | TaskWithComplexity[]>(`${BASE}/api/studio/projects/${projectId}/tasks`).catch(() => ({ tasks: [] })),
       ]);
       setReport(reportRes);
       setCtxMetrics(ctxRes);
 
       // Compute complexity distribution from tasks
-      const tasks: Array<{ complexity?: string }> = Array.isArray(tasksRes)
+      const tasks: TaskWithComplexity[] = Array.isArray(tasksRes)
         ? tasksRes
         : (tasksRes.tasks ?? []);
       const dist: Record<string, number> = {};

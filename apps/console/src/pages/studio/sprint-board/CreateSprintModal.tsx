@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Loader2, Plus, X } from 'lucide-react';
 import ModalOverlay from '../ModalOverlay';
 import { defaultSprintDates } from './helpers.js';
+import { httpPost } from '../../../lib/studio-api/base.js';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
@@ -38,20 +39,12 @@ export default function CreateSprintModal({ projectId, defaultName, onClose, onC
 		setSaving(true);
 		setError(null);
 		try {
-			const res = await fetch(`${BASE}/api/studio/projects/${projectId}/sprints`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					name: trimmed,
-					goal: goal.trim() || undefined,
-					startDate,
-					endDate,
-				}),
+			await httpPost(`${BASE}/api/studio/projects/${projectId}/sprints`, {
+				name: trimmed,
+				goal: goal.trim() || undefined,
+				startDate,
+				endDate,
 			});
-			if (!res.ok) {
-				const body = await res.json().catch(() => ({}));
-				throw new Error(body.error ?? 'Failed to create sprint');
-			}
 			onCreated();
 			onClose();
 		} catch (e) {

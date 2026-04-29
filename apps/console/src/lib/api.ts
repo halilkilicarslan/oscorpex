@@ -41,7 +41,7 @@ export function streamChat(
   const body: Record<string, unknown> = { input };
   if (conversationId) body.conversationId = conversationId;
 
-  fetch(`${BASE}/agents/${agentId}/stream`, {
+  fetch(`${BASE}/agents/${agentId}/stream`, { // DIRECT_FETCH_INTENTIONAL: legacy chat stream needs raw ReadableStream parsing and abort control.
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

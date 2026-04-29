@@ -15,6 +15,7 @@ import {
   AlertCircle,
   GitBranch,
 } from 'lucide-react';
+import { observabilityDelete, observabilityGet } from '../lib/observability-api.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,17 +99,12 @@ interface Workflow {
 // API helpers
 // ---------------------------------------------------------------------------
 
-const BASE = '/api/observability/memory';
-
 async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json() as Promise<T>;
+  return observabilityGet<T>(`/memory${path}`);
 }
 
 async function apiDelete(path: string): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`Delete error: ${res.status}`);
+  await observabilityDelete(`/memory${path}`);
 }
 
 // ---------------------------------------------------------------------------

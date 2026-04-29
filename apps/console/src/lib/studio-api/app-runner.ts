@@ -28,6 +28,15 @@ export async function switchPreviewService(projectId: string, service: string): 
   });
 }
 
+export async function detectApiOnlyPreview(projectId: string): Promise<boolean> {
+  const res = await fetch(`${API}/projects/${projectId}/app/proxy/`); // DIRECT_FETCH_INTENTIONAL: preview detection must inspect raw proxied content-type and text body.
+  if (res.headers.get('content-type')?.includes('text/html')) {
+    const body = await res.text();
+    return body.includes('API-Only Application');
+  }
+  return true;
+}
+
 export async function fetchAppConfig(projectId: string): Promise<AppConfig> {
   return json(`${API}/projects/${projectId}/app/config`);
 }

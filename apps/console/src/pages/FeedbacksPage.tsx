@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Hash,
 } from 'lucide-react';
+import { observabilityDelete, observabilityGet, observabilityPost } from '../lib/observability-api.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,7 +50,6 @@ type Tab = 'all' | 'byAgent' | 'analytics';
 // Constants
 // ---------------------------------------------------------------------------
 
-const API_BASE = '/api/observability';
 const PAGE_SIZE = 50;
 
 const AVAILABLE_TAGS = [
@@ -527,11 +527,8 @@ export default function FeedbacksPage() {
   const fetchStats = useCallback(async () => {
     setStatsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/feedbacks/stats`);
-      if (res.ok) {
-        const data = await res.json() as FeedbackStats;
-        setStats(data);
-      }
+      const data = await observabilityGet<FeedbackStats>('/feedbacks/stats');
+      setStats(data);
     } finally {
       setStatsLoading(false);
     }
@@ -539,14 +536,11 @@ export default function FeedbacksPage() {
 
   const fetchAgents = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/traces?limit=200`);
-      if (res.ok) {
-        const data = await res.json() as { traces: Array<{ entity_id: string | null }> };
-        const unique = Array.from(
-          new Set(data.traces.map((t) => t.entity_id).filter(Boolean)),
-        ) as string[];
-        setAgents(unique);
-      }
+      const data = await observabilityGet<{ traces: Array<{ entity_id: string | null }> }>('/traces?limit=200');
+      const unique = Array.from(
+        new Set(data.traces.map((t) => t.entity_id).filter(Boolean)),
+      ) as string[];
+      setAgents(unique);
     } catch {
       // ignore
     }
@@ -562,23 +556,20 @@ export default function FeedbacksPage() {
         if (filterMinRating) params.set('min_rating', filterMinRating);
         if (filterTag) params.set('tag', filterTag);
 
-        const res = await fetch(`${API_BASE}/feedbacks?${params}`);
-        if (res.ok) {
-          const data = await res.json() as { feedbacks: Feedback[]; total: number };
-          let items = data.feedbacks;
-          if (filterSearch) {
-            const q = filterSearch.toLowerCase();
-            items = items.filter(
-              (f) =>
-                f.comment.toLowerCase().includes(q) ||
-                (f.agent_id ?? '').toLowerCase().includes(q) ||
-                (f.user_id ?? '').toLowerCase().includes(q),
-            );
-          }
-          setFeedbacks(items);
-          setTotal(data.total);
-          setOffset(newOffset);
+        const data = await observabilityGet<{ feedbacks: Feedback[]; total: number }>(`/feedbacks?${params}`);
+        let items = data.feedbacks;
+        if (filterSearch) {
+          const q = filterSearch.toLowerCase();
+          items = items.filter(
+            (f) =>
+              f.comment.toLowerCase().includes(q) ||
+              (f.agent_id ?? '').toLowerCase().includes(q) ||
+              (f.user_id ?? '').toLowerCase().includes(q),
+          );
         }
+        setFeedbacks(items);
+        setTotal(data.total);
+        setOffset(newOffset);
       } finally {
         setLoading(false);
       }
@@ -600,24 +591,16 @@ export default function FeedbacksPage() {
   // ---------------------------------------------------------------------------
 
   const handleAddFeedback = async (data: Parameters<AddFeedbackFormProps['onSubmit']>[0]) => {
-    const res = await fetch(`${API_BASE}/feedbacks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (res.ok) {
-      setShowForm(false);
-      await Promise.all([fetchFeedbacks(0), fetchStats()]);
-    }
+    await observabilityPost('/feedbacks', data);
+    setShowForm(false);
+    await Promise.all([fetchFeedbacks(0), fetchStats()]);
   };
 
   const handleDelete = async (id: string) => {
-    const res = await fetch(`${API_BASE}/feedbacks/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      setFeedbacks((prev) => prev.filter((f) => f.id !== id));
-      setTotal((prev) => prev - 1);
-      void fetchStats();
-    }
+    await observabilityDelete(`/feedbacks/${id}`);
+    setFeedbacks((prev) => prev.filter((f) => f.id !== id));
+    setTotal((prev) => prev - 1);
+    void fetchStats();
   };
 
   const handleRefresh = () => {

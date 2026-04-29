@@ -1,4 +1,5 @@
 import type { StandupResult, RetroResult, StandupAgent, RetroAgentStat } from './types.js';
+import { httpGet, httpPost } from '../../../lib/studio-api/base.js';
 
 export function parseStandup(raw: unknown): StandupResult | null {
 	if (!raw || typeof raw !== 'object') return null;
@@ -34,9 +35,9 @@ export async function fetchCeremony<T>(
 	method: 'GET' | 'POST' = 'GET',
 ): Promise<T | null> {
 	try {
-		const res = await fetch(url, { method });
-		if (!res.ok) return null;
-		const body = await res.json();
+		const body = method === 'POST'
+			? await httpPost<unknown>(url)
+			: await httpGet<unknown>(url);
 		return parse(body);
 	} catch {
 		return null;
