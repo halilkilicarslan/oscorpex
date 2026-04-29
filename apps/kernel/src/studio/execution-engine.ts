@@ -10,7 +10,6 @@ import { startApp, stopApp } from "./app-runner.js";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { enforceBudgetGuard } from "./budget-guard.js";
 import { resolveAllowedTools } from "./capability-resolver.js";
-import { getAdapter, getAdapterChain } from "./cli-adapter.js";
 import { executeWithCLI, isClaudeCliAvailable, resolveFilePaths } from "./cli-runtime.js";
 import { buildPolicyPromptSection, getDefaultPolicy } from "./command-policy.js";
 import { buildRAGContext, formatRAGContext } from "./context-builder.js";
@@ -65,13 +64,7 @@ import { resolveWorkspace, type ExecutionWorkspace } from "./execution-workspace
 import { queryOne as pgQueryOne } from "./pg.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { providerState } from "./provider-state.js";
-import { providerRuntimeCache } from "./provider-runtime-cache.js";
-import {
-	shouldSkipProvider,
-	sortAdapterChain,
-	markProviderUnavailable,
-	getFallbackSeverity,
-} from "./fallback-decision.js";
+import { createProviderResolver } from "./provider-resolver.js";
 import { resolveTaskTimeoutMs, TIMEOUT_WARNING_THRESHOLD } from "./timeout-policy.js";
 import {
 	AdaptiveSemaphore,
@@ -94,7 +87,7 @@ import {
 } from "./provider-telemetry.js";
 import { taskEngine } from "./task-engine.js";
 import { runIntegrationTest } from "./task-runners.js";
-import type { AgentConfig, Project, Task, TaskOutput } from "./types.js";
+import type { AgentConfig, AgentCliTool, Project, Task, TaskOutput } from "./types.js";
 import { canonicalizeAgentRole, roleMatches } from "./roles.js";
 import { createLogger } from "./logger.js";
 
@@ -723,7 +716,7 @@ class ExecutionEngine {
 			}
 
 			// v3.4 + M4: Model routing — complexity + prior failures + review rejections + provider-native models.
-			const primaryCliTool = agent.cliTool ?? "claude-code";
+			const primaryCliTool: AgentCliTool = agent.cliTool ?? "claude-code";
 			let routedModel: string = agent.model ?? "sonnet";
 			try {
 				const resolved = await resolveModel(task, {
@@ -771,21 +764,10 @@ class ExecutionEngine {
 				}
 			}
 
-			// M4: Adapter fallback chain — primary + fallback providers
-			let adapterChain = await getAdapterChain(primaryCliTool, ["claude-code", "cursor"]);
+			// M4: Adapter fallback chain — resolved via ProviderResolver
+			const resolver = await createProviderResolver(primaryCliTool, ["claude-code", "cursor"], this.telemetry);
 
-			// TASK 5: Sort chain by telemetry-based priority
-			adapterChain = sortAdapterChain(adapterChain, (providerId) => {
-				const snap = this.telemetry.getLatencySnapshot(providerId);
-				if (!snap) return undefined;
-				const total = snap.successfulExecutions + snap.failedExecutions;
-				return {
-					successRate: total > 0 ? snap.successfulExecutions / total : 0.5,
-					avgLatencyMs: snap.averageLatencyMs,
-				};
-			});
-
-			let cliResult: Awaited<ReturnType<(typeof adapterChain)[0]["execute"]>> | null = null;
+			let cliResult: Awaited<ReturnType<import("./cli-adapter.js").CLIAdapter["execute"]>> | null = null;
 			let lastAdapterError: Error | null = null;
 			let lastFailureProvider: string | undefined;
 
@@ -810,38 +792,9 @@ class ExecutionEngine {
 				recordProviderCancel(this.telemetry, telemetryRecord, CANCEL_REASONS.pipeline_pause);
 			}
 
-			for (let i = 0; i < adapterChain.length; i++) {
-				const adapter = adapterChain[i]!;
-				const adapterName = adapter.name as import("./types.js").AgentCliTool;
-
-				// TASK 5: Smart provider skipping
-				const skipCheck = await shouldSkipProvider(adapter, {
-					allowedTools,
-					lastFailureProvider,
-					lastFailureClassification,
-				});
-				if (skipCheck.shouldSkip) {
-					log.info(`[execution] Adapter "${adapter.name}" skipped: ${skipCheck.reason}`);
-					continue;
-				}
-
-				if (!providerState.isAvailable(adapterName)) {
-					log.info(`[execution] Adapter "${adapter.name}" is in cooldown, skipping.`);
-					continue;
-				}
-
-			const adapterReady = await providerRuntimeCache.resolveAvailability(
-				adapter.name,
-				() => adapter.isAvailable(),
-				"health_check",
-			);
-			log.info(`[execution] CLI adapter: ${adapter.name}, ready=${adapterReady}`);
-
-				if (!adapterReady) {
-					log.info(`[execution] Adapter "${adapter.name}" is not installed, skipping.`);
-					markProviderUnavailable(adapter.name);
-					continue;
-				}
+			let adapter = await resolver.next({ allowedTools, lastFailureProvider, lastFailureClassification });
+			while (adapter) {
+				const adapterName = adapter.name as AgentCliTool;
 
 				// Session step: CLI execution started
 				if (sessionId) {
@@ -894,9 +847,10 @@ class ExecutionEngine {
 						providerState.markFailure(adapterName, classification);
 					}
 					log.warn(`[execution] Adapter "${adapter.name}" failed (${classification}, reason=${reason}): ${errMsg.slice(0, 200)}`);
-					// Telemetry lifecycle: FALLBACK (if next provider exists)
-					if (telemetryRecord && i < adapterChain.length - 1) {
-						const nextAdapter = adapterChain[i + 1]!;
+
+					// Advance to next candidate and record fallback telemetry
+					const nextAdapter = await resolver.next({ allowedTools, lastFailureProvider: adapter.name, lastFailureClassification: classification });
+					if (nextAdapter && telemetryRecord) {
 						recordProviderFallback(
 							this.telemetry,
 							telemetryRecord,
@@ -907,6 +861,7 @@ class ExecutionEngine {
 							adapterErr,
 						);
 					}
+					adapter = nextAdapter;
 				}
 			}
 
