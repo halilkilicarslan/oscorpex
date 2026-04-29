@@ -276,9 +276,8 @@ class WebSocketManager {
 					this._send(ws, { type: "subscribed", projectId });
 				})
 				.catch(() => {
-					// DB hatası — backward compat için subscribe et
-					this._doSubscribe(record, projectId);
-					this._send(ws, { type: "subscribed", projectId });
+					// DB hatası — fail-closed, subscribe etme
+					this._send(ws, { type: "error", payload: { message: "Tenant validation failed" } });
 				});
 			return; // Async yol — _handleClientMessage içindeki "subscribed" yanıtını engelle
 		}
