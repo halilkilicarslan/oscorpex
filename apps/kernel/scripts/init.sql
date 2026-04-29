@@ -1901,6 +1901,8 @@ CREATE INDEX IF NOT EXISTS idx_incident_events_incident ON incident_events(incid
 
 CREATE TABLE IF NOT EXISTS quality_gates (
   id                TEXT PRIMARY KEY,
+  name              TEXT NOT NULL DEFAULT '',
+  description       TEXT NOT NULL DEFAULT '',
   tenant_id         TEXT REFERENCES tenants(id) ON DELETE CASCADE,
   project_id        TEXT REFERENCES projects(id) ON DELETE CASCADE,
   gate_type         TEXT NOT NULL,
@@ -1926,6 +1928,103 @@ CREATE INDEX IF NOT EXISTS idx_quality_gates_type ON quality_gates(gate_type);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_quality_gates_active_scope
   ON quality_gates(COALESCE(tenant_id, ''), COALESCE(project_id, ''), environment, gate_type, policy_version)
   WHERE status <> 'retired';
+
+ALTER TABLE quality_gates ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT '';
+ALTER TABLE quality_gates ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
+
+INSERT INTO quality_gates (
+  id,
+  name,
+  description,
+  tenant_id,
+  project_id,
+  gate_type,
+  environment,
+  required,
+  blocking,
+  auto_evaluated,
+  human_reviewed,
+  override_allowed,
+  override_roles,
+  owner_role,
+  thresholds,
+  status,
+  policy_version,
+  metadata
+)
+VALUES
+  ('qg-default-v1-dev-typecheck', 'typecheck', 'TypeScript type checking must complete for development quality feedback.', NULL, NULL, 'typecheck', 'dev', true, true, true, false, true, '["engineering-lead","release-manager"]'::jsonb, 'engineering-lead', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-typecheck', 'typecheck', 'TypeScript type checking must pass before staging promotion.', NULL, NULL, 'typecheck', 'staging', true, true, true, false, true, '["engineering-lead","release-manager"]'::jsonb, 'engineering-lead', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-typecheck', 'typecheck', 'TypeScript type checking must pass before production release.', NULL, NULL, 'typecheck', 'production', true, true, true, false, true, '["engineering-lead","release-manager"]'::jsonb, 'engineering-lead', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-test-coverage', 'test_coverage', 'Coverage is collected in development but does not block local iteration.', NULL, NULL, 'test_coverage', 'dev', false, false, true, false, true, '["engineering-lead","release-manager"]'::jsonb, 'engineering-lead', '{"minimum_percent":0,"soft_minimum_percent":0}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-test-coverage', 'test_coverage', 'Coverage is required in staging and warns before production hard blocking.', NULL, NULL, 'test_coverage', 'staging', true, false, true, false, true, '["engineering-lead","release-manager"]'::jsonb, 'engineering-lead', '{"minimum_percent":70,"soft_minimum_percent":75}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-test-coverage', 'test_coverage', 'Coverage must meet production threshold before release.', NULL, NULL, 'test_coverage', 'production', true, true, true, false, true, '["engineering-lead","release-manager"]'::jsonb, 'engineering-lead', '{"minimum_percent":80,"soft_minimum_percent":85}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-lint', 'lint', 'Lint must pass to keep development changes reviewable.', NULL, NULL, 'lint', 'dev', true, true, true, false, true, '["engineering-lead","release-manager"]'::jsonb, 'engineering-lead', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-lint', 'lint', 'Lint must pass before staging promotion.', NULL, NULL, 'lint', 'staging', true, true, true, false, true, '["engineering-lead","release-manager"]'::jsonb, 'engineering-lead', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-lint', 'lint', 'Lint must pass before production release.', NULL, NULL, 'lint', 'production', true, true, true, false, true, '["engineering-lead","release-manager"]'::jsonb, 'engineering-lead', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-security-scan', 'security_scan', 'Security scan findings are visible in development and never fail open.', NULL, NULL, 'security_scan', 'dev', true, false, true, true, false, '[]'::jsonb, 'security-admin', '{"block_on":["critical"],"review_on":["high","critical"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-security-scan', 'security_scan', 'High and critical security findings block staging promotion.', NULL, NULL, 'security_scan', 'staging', true, true, true, true, false, '[]'::jsonb, 'security-admin', '{"block_on":["high","critical"],"review_on":["high","critical"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-security-scan', 'security_scan', 'High and critical security findings block production release.', NULL, NULL, 'security_scan', 'production', true, true, true, true, false, '[]'::jsonb, 'security-admin', '{"block_on":["high","critical"],"review_on":["high","critical"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-provider-policy-compliance', 'provider_policy_compliance', 'Provider policy violations are evaluated in development.', NULL, NULL, 'provider_policy_compliance', 'dev', true, false, true, true, false, '[]'::jsonb, 'platform-admin', '{"deny_blocks":true,"restricted_requires_review":true}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-provider-policy-compliance', 'provider_policy_compliance', 'Provider deny policy blocks staging promotion.', NULL, NULL, 'provider_policy_compliance', 'staging', true, true, true, true, false, '[]'::jsonb, 'platform-admin', '{"deny_blocks":true,"restricted_requires_review":true}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-provider-policy-compliance', 'provider_policy_compliance', 'Provider deny policy blocks production release.', NULL, NULL, 'provider_policy_compliance', 'production', true, true, true, true, false, '[]'::jsonb, 'platform-admin', '{"deny_blocks":true,"restricted_requires_review":true}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-review-acceptance', 'review_acceptance', 'Review acceptance is optional for development iteration.', NULL, NULL, 'review_acceptance', 'dev', false, false, false, true, false, '[]'::jsonb, 'release-manager', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-review-acceptance', 'review_acceptance', 'Accepted review is required before staging promotion.', NULL, NULL, 'review_acceptance', 'staging', true, true, false, true, false, '[]'::jsonb, 'release-manager', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-review-acceptance', 'review_acceptance', 'Accepted review is required before production release.', NULL, NULL, 'review_acceptance', 'production', true, true, false, true, false, '[]'::jsonb, 'release-manager', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-human-approval', 'human_approval', 'Human approval is not required for default development flow.', NULL, NULL, 'human_approval', 'dev', false, false, false, true, false, '[]'::jsonb, 'release-manager', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-human-approval', 'human_approval', 'Human approval is available but not blocking by default in staging.', NULL, NULL, 'human_approval', 'staging', false, false, false, true, false, '[]'::jsonb, 'release-manager', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-human-approval', 'human_approval', 'Human approval is required before production release.', NULL, NULL, 'human_approval', 'production', true, true, false, true, false, '[]'::jsonb, 'release-manager', '{}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-artifact-completeness', 'artifact_completeness', 'Development artifact completeness is evaluated as non-blocking evidence.', NULL, NULL, 'artifact_completeness', 'dev', true, false, true, false, true, '["release-manager","operator"]'::jsonb, 'release-manager', '{"required_artifacts":["test_report","diff_report"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-artifact-completeness', 'artifact_completeness', 'Staging requires core release artifacts.', NULL, NULL, 'artifact_completeness', 'staging', true, true, true, false, true, '["release-manager","operator"]'::jsonb, 'release-manager', '{"required_artifacts":["test_report","diff_report","review_summary"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-artifact-completeness', 'artifact_completeness', 'Production requires complete release evidence artifacts.', NULL, NULL, 'artifact_completeness', 'production', true, true, true, false, true, '["release-manager","operator"]'::jsonb, 'release-manager', '{"required_artifacts":["test_report","diff_report","review_summary","security_result","deployment_plan","rollback_plan","approval_evidence"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-cost-threshold', 'cost_threshold', 'Development cost threshold is visible but non-blocking.', NULL, NULL, 'cost_threshold', 'dev', false, false, true, false, true, '["finance-ops","operator"]'::jsonb, 'finance-ops', '{"soft_cap_usd":25,"hard_cap_usd":100}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-cost-threshold', 'cost_threshold', 'Staging cost threshold warns before production release.', NULL, NULL, 'cost_threshold', 'staging', true, false, true, false, true, '["finance-ops","operator"]'::jsonb, 'finance-ops', '{"soft_cap_usd":100,"hard_cap_usd":500}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-cost-threshold', 'cost_threshold', 'Production hard cost cap blocks release.', NULL, NULL, 'cost_threshold', 'production', true, true, true, false, true, '["finance-ops","operator"]'::jsonb, 'finance-ops', '{"soft_cap_usd":250,"hard_cap_usd":1000}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-rollback-safety-check', 'rollback_safety_check', 'Rollback plan is optional for development flow.', NULL, NULL, 'rollback_safety_check', 'dev', false, false, true, false, false, '[]'::jsonb, 'operator', '{"rollback_plan_required":false}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-rollback-safety-check', 'rollback_safety_check', 'Rollback safety is required for staging validation.', NULL, NULL, 'rollback_safety_check', 'staging', true, false, true, false, false, '[]'::jsonb, 'operator', '{"rollback_plan_required":true}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-rollback-safety-check', 'rollback_safety_check', 'Rollback safety is required and blocking for production release.', NULL, NULL, 'rollback_safety_check', 'production', true, true, true, false, false, '[]'::jsonb, 'operator', '{"rollback_plan_required":true}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-deployment-health-check', 'deployment_health_check', 'Development deployment health is recorded as non-blocking signal.', NULL, NULL, 'deployment_health_check', 'dev', true, false, true, false, true, '["operator","platform-admin"]'::jsonb, 'operator', '{"post_release_window_minutes":0}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-deployment-health-check', 'deployment_health_check', 'Staging deployment health must pass before promotion.', NULL, NULL, 'deployment_health_check', 'staging', true, true, true, false, true, '["operator","platform-admin"]'::jsonb, 'operator', '{"post_release_window_minutes":30}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-deployment-health-check', 'deployment_health_check', 'Production deployment health blocks release and rollback decisions.', NULL, NULL, 'deployment_health_check', 'production', true, true, true, false, true, '["operator","platform-admin"]'::jsonb, 'operator', '{"post_release_window_minutes":60}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-incident-freeze-window', 'incident_freeze_window', 'Development is not blocked by incident freeze by default.', NULL, NULL, 'incident_freeze_window', 'dev', false, false, true, true, true, '["operator","platform-admin"]'::jsonb, 'operator', '{"block_severities":[]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-incident-freeze-window', 'incident_freeze_window', 'Staging checks active incident freeze windows.', NULL, NULL, 'incident_freeze_window', 'staging', true, false, true, true, true, '["operator","platform-admin"]'::jsonb, 'operator', '{"block_severities":["critical"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-incident-freeze-window', 'incident_freeze_window', 'Production release is blocked during P0/P1 incident freeze unless overridden.', NULL, NULL, 'incident_freeze_window', 'production', true, true, true, true, true, '["operator","platform-admin"]'::jsonb, 'operator', '{"block_severities":["high","critical"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-tenant-compliance', 'tenant_compliance', 'Tenant compliance is enforced in development to prevent isolation regressions.', NULL, NULL, 'tenant_compliance', 'dev', true, true, true, true, false, '[]'::jsonb, 'tenant-admin', '{"tenant_id_required":true}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-tenant-compliance', 'tenant_compliance', 'Tenant compliance blocks staging promotion.', NULL, NULL, 'tenant_compliance', 'staging', true, true, true, true, false, '[]'::jsonb, 'tenant-admin', '{"tenant_id_required":true}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-tenant-compliance', 'tenant_compliance', 'Tenant compliance blocks production release and cannot be overridden.', NULL, NULL, 'tenant_compliance', 'production', true, true, true, true, false, '[]'::jsonb, 'tenant-admin', '{"tenant_id_required":true}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb),
+
+  ('qg-default-v1-dev-audit-trail-completeness', 'audit_trail_completeness', 'Audit trail completeness is required in every environment.', NULL, NULL, 'audit_trail_completeness', 'dev', true, true, true, false, false, '[]'::jsonb, 'compliance-owner', '{"required_fields":["actor","correlation_id","policy_version","artifact_digest"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"dev","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-staging-audit-trail-completeness', 'audit_trail_completeness', 'Audit trail completeness is required in every environment.', NULL, NULL, 'audit_trail_completeness', 'staging', true, true, true, false, false, '[]'::jsonb, 'compliance-owner', '{"required_fields":["actor","correlation_id","policy_version","artifact_digest"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"staging","override_reason_required":true}'::jsonb),
+  ('qg-default-v1-production-audit-trail-completeness', 'audit_trail_completeness', 'Audit trail completeness blocks production release and cannot be overridden.', NULL, NULL, 'audit_trail_completeness', 'production', true, true, true, false, false, '[]'::jsonb, 'compliance-owner', '{"required_fields":["actor","correlation_id","policy_version","artifact_digest"]}'::jsonb, 'active', '1', '{"source":"system-default","category":"release-gate","introduced_by":"H2-B","environment_policy":"production","override_reason_required":true}'::jsonb)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  gate_type = EXCLUDED.gate_type,
+  environment = EXCLUDED.environment,
+  required = EXCLUDED.required,
+  blocking = EXCLUDED.blocking,
+  auto_evaluated = EXCLUDED.auto_evaluated,
+  human_reviewed = EXCLUDED.human_reviewed,
+  override_allowed = EXCLUDED.override_allowed,
+  override_roles = EXCLUDED.override_roles,
+  owner_role = EXCLUDED.owner_role,
+  thresholds = EXCLUDED.thresholds,
+  status = EXCLUDED.status,
+  policy_version = EXCLUDED.policy_version,
+  updated_at = now(),
+  metadata = EXCLUDED.metadata;
 
 CREATE TABLE IF NOT EXISTS release_candidates (
   id                      TEXT PRIMARY KEY,

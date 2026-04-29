@@ -49,6 +49,35 @@ export interface VerificationFailedPayload {
 	failedChecks?: string[];
 }
 
+export interface QualityGateEvaluatedPayload {
+	goalId?: string;
+	gateType?: string;
+	evaluationId?: string;
+	outcome?: string;
+	environment?: string;
+	blocking?: boolean;
+	required?: boolean;
+	reason?: string;
+}
+
+export interface QualityGateBlockedPayload {
+	goalId?: string;
+	gateType?: string;
+	evaluationId?: string;
+	environment?: string;
+	reason?: string;
+	overrideAllowed?: boolean;
+}
+
+export interface QualityGateReleaseReadyPayload {
+	goalId?: string;
+	environment?: string;
+	ready?: boolean;
+	blockingCount?: number;
+	warningCount?: number;
+	missingEvaluationCount?: number;
+}
+
 export interface LifecycleTransitionPayload {
 	entityType?: string;
 	entityId?: string;

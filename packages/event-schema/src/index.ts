@@ -96,6 +96,9 @@ export type {
 	PolicyViolationPayload,
 	VerificationPassedPayload,
 	VerificationFailedPayload,
+	QualityGateEvaluatedPayload,
+	QualityGateBlockedPayload,
+	QualityGateReleaseReadyPayload,
 	LifecycleTransitionPayload,
 	GoalEvaluatedPayload,
 	MessageCreatedPayload,
@@ -187,6 +190,9 @@ import type {
 	PolicyViolationPayload,
 	VerificationPassedPayload,
 	VerificationFailedPayload,
+	QualityGateEvaluatedPayload,
+	QualityGateBlockedPayload,
+	QualityGateReleaseReadyPayload,
 	LifecycleTransitionPayload,
 	GoalEvaluatedPayload,
 	MessageCreatedPayload,
@@ -271,6 +277,9 @@ export interface EventPayloadMap {
 	"policy:violation": PolicyViolationPayload;
 	"verification:passed": VerificationPassedPayload;
 	"verification:failed": VerificationFailedPayload;
+	"quality_gate.evaluated": QualityGateEvaluatedPayload;
+	"quality_gate.blocked": QualityGateBlockedPayload;
+	"quality_gate.release_ready": QualityGateReleaseReadyPayload;
 	// Lifecycle
 	"lifecycle:transition": LifecycleTransitionPayload;
 	// Goal

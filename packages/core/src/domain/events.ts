@@ -83,6 +83,9 @@ export type EventType =
 	| "policy:violation"
 	| "verification:passed"
 	| "verification:failed"
+	| "quality_gate.evaluated"
+	| "quality_gate.blocked"
+	| "quality_gate.release_ready"
 	// Lifecycle
 	| "lifecycle:transition"
 	// Goal
