@@ -421,6 +421,12 @@ export class ReleaseDecisionService {
 		};
 	}
 
+	async getReleaseCandidate(id: string): Promise<ReleaseCandidate> {
+		const candidate = await getReleaseCandidateById(id);
+		if (!candidate) throw new Error(`release candidate not found: ${id}`);
+		return candidate;
+	}
+
 	async applyManualOverride(_input: ManualOverrideInput): Promise<void> {
 		const input = _input;
 		if (!input.releaseCandidateId) throw new InvalidOverrideInputError("releaseCandidateId is required");

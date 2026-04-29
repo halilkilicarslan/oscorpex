@@ -50,6 +50,10 @@ import { cpIncidentRoutes } from "../control-plane/incidents/incident-routes.js"
 import { cpProjectionRoutes } from "../control-plane/projections/projection-routes.js";
 import { cpOperatorActionRoutes } from "../control-plane/operator-actions/operator-action-routes.js";
 import { cpPolicyRoutes } from "../control-plane/policy/policy-routes.js";
+import { qualityGateRoutes } from "./quality-gates.js";
+import { approvalRoutes } from "./approvals.js";
+import { releaseRoutes } from "./releases.js";
+import { artifactRoutes } from "./artifacts.js";
 
 const studio = new Hono();
 
@@ -146,6 +150,12 @@ studio.route("/", cpIncidentRoutes);
 studio.route("/", cpProjectionRoutes);
 studio.route("/", cpOperatorActionRoutes);
 studio.route("/", cpPolicyRoutes);
+
+// Quality Gates Center — H2-G APIs
+studio.route("/", qualityGateRoutes);
+studio.route("/", approvalRoutes);
+studio.route("/", releaseRoutes);
+studio.route("/", artifactRoutes);
 
 // YAGNI-deferred: marketplace, cluster, collaboration
 // Re-enable when needed.

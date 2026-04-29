@@ -177,6 +177,34 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: "/platform/analytics", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/avatars", permission: "projects:read", methods: ["GET"] },
 
+	// Quality Gates Center — H2-G
+	{ pattern: /^\/quality-gates\/[^/]+$/, permission: "quality-gates:read", methods: ["GET"] },
+	{ pattern: "/quality-gates/evaluate", permission: "quality-gates:evaluate", methods: ["POST"] },
+	{ pattern: /^\/quality-gates\/[^/]+\/evaluations$/, permission: "quality-gates:read", methods: ["GET"] },
+	{ pattern: /^\/quality-gates\/[^/]+\/blockers$/, permission: "quality-gates:read", methods: ["GET"] },
+	{ pattern: /^\/quality-gates\/[^/]+\/readiness$/, permission: "quality-gates:read", methods: ["GET"] },
+
+	{ pattern: "/approvals/request", permission: "approvals:request", methods: ["POST"] },
+	{ pattern: /^\/approvals\/[^/]+\/approve$/, permission: "approvals:decide", methods: ["POST"] },
+	{ pattern: /^\/approvals\/[^/]+\/reject$/, permission: "approvals:decide", methods: ["POST"] },
+	{ pattern: "/approvals/pending", permission: "approvals:read", methods: ["GET"] },
+	{ pattern: /^\/approvals\/[^/]+\/state$/, permission: "approvals:read", methods: ["GET"] },
+	{ pattern: /^\/approvals\/[^/]+\/satisfied$/, permission: "approvals:read", methods: ["GET"] },
+
+	{ pattern: "/release-candidates/create", permission: "release:create", methods: ["POST"] },
+	{ pattern: /^\/release-candidates\/[^/]+$/, permission: "release:read", methods: ["GET"] },
+	{ pattern: /^\/release\/[^/]+\/evaluate$/, permission: "release:decide", methods: ["POST"] },
+	{ pattern: /^\/release\/[^/]+\/state$/, permission: "release:read", methods: ["GET"] },
+	{ pattern: /^\/release\/[^/]+\/override$/, permission: "release:override", methods: ["POST"] },
+	{ pattern: /^\/release\/[^/]+\/rollback$/, permission: "release:rollback", methods: ["POST"] },
+
+	{ pattern: "/artifacts/register", permission: "artifacts:write", methods: ["POST"] },
+	{ pattern: /^\/artifacts\/[^/]+\/verify$/, permission: "artifacts:write", methods: ["POST"] },
+	{ pattern: /^\/artifacts\/[^/]+\/reject$/, permission: "artifacts:write", methods: ["POST"] },
+	{ pattern: /^\/artifacts\/[^/]+\/supersede$/, permission: "artifacts:write", methods: ["POST"] },
+	{ pattern: /^\/artifacts\/[^/]+$/, permission: "artifacts:read", methods: ["GET"] },
+	{ pattern: /^\/artifacts\/[^/]+\/completeness$/, permission: "artifacts:read", methods: ["GET"] },
+
 	// Control Plane
 	{ pattern: "/registry", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/registry", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
