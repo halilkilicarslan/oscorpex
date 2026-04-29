@@ -78,6 +78,56 @@ export interface QualityGateReleaseReadyPayload {
 	missingEvaluationCount?: number;
 }
 
+export interface ApprovalRequestedPayload {
+	approvalRequestId?: string;
+	goalId?: string;
+	approvalClass?: string;
+	environment?: string;
+	requiredRoles?: string[];
+	requiredQuorum?: number;
+	expiresAt?: string;
+}
+
+export interface ApprovalDecisionPayload {
+	approvalRequestId?: string;
+	approvalDecisionId?: string;
+	goalId?: string;
+	approvalClass?: string;
+	actorId?: string;
+	decision?: string;
+	reason?: string;
+}
+
+export interface ApprovalExpiredPayload {
+	approvalRequestId?: string;
+	goalId?: string;
+	approvalClass?: string;
+	expiredAt?: string;
+}
+
+export interface ApprovalSupersededPayload {
+	approvalRequestId?: string;
+	goalId?: string;
+	approvalClass?: string;
+	supersededAt?: string;
+	reason?: string;
+}
+
+export interface ApprovalQuorumSatisfiedPayload {
+	approvalRequestId?: string;
+	goalId?: string;
+	approvalClass?: string;
+	approvedCount?: number;
+	requiredQuorum?: number;
+}
+
+export interface ApprovalBlockedPayload {
+	approvalRequestId?: string;
+	goalId?: string;
+	approvalClass?: string;
+	reason?: string;
+}
+
 export interface LifecycleTransitionPayload {
 	entityType?: string;
 	entityId?: string;

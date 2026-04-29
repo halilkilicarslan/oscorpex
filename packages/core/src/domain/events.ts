@@ -86,6 +86,13 @@ export type EventType =
 	| "quality_gate.evaluated"
 	| "quality_gate.blocked"
 	| "quality_gate.release_ready"
+	| "approval.requested"
+	| "approval.approved"
+	| "approval.rejected"
+	| "approval.expired"
+	| "approval.superseded"
+	| "approval.quorum_satisfied"
+	| "approval.blocked"
 	// Lifecycle
 	| "lifecycle:transition"
 	// Goal

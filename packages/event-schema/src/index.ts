@@ -99,6 +99,12 @@ export type {
 	QualityGateEvaluatedPayload,
 	QualityGateBlockedPayload,
 	QualityGateReleaseReadyPayload,
+	ApprovalRequestedPayload,
+	ApprovalDecisionPayload,
+	ApprovalExpiredPayload,
+	ApprovalSupersededPayload,
+	ApprovalQuorumSatisfiedPayload,
+	ApprovalBlockedPayload,
 	LifecycleTransitionPayload,
 	GoalEvaluatedPayload,
 	MessageCreatedPayload,
@@ -193,6 +199,12 @@ import type {
 	QualityGateEvaluatedPayload,
 	QualityGateBlockedPayload,
 	QualityGateReleaseReadyPayload,
+	ApprovalRequestedPayload,
+	ApprovalDecisionPayload,
+	ApprovalExpiredPayload,
+	ApprovalSupersededPayload,
+	ApprovalQuorumSatisfiedPayload,
+	ApprovalBlockedPayload,
 	LifecycleTransitionPayload,
 	GoalEvaluatedPayload,
 	MessageCreatedPayload,
@@ -280,6 +292,13 @@ export interface EventPayloadMap {
 	"quality_gate.evaluated": QualityGateEvaluatedPayload;
 	"quality_gate.blocked": QualityGateBlockedPayload;
 	"quality_gate.release_ready": QualityGateReleaseReadyPayload;
+	"approval.requested": ApprovalRequestedPayload;
+	"approval.approved": ApprovalDecisionPayload;
+	"approval.rejected": ApprovalDecisionPayload;
+	"approval.expired": ApprovalExpiredPayload;
+	"approval.superseded": ApprovalSupersededPayload;
+	"approval.quorum_satisfied": ApprovalQuorumSatisfiedPayload;
+	"approval.blocked": ApprovalBlockedPayload;
 	// Lifecycle
 	"lifecycle:transition": LifecycleTransitionPayload;
 	// Goal
