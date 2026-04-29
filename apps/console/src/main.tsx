@@ -29,6 +29,7 @@ const TriggersPage = lazy(() => import('./pages/TriggersPage'));
 const RagPage = lazy(() => import('./pages/RagPage'));
 const ControlPlanePage = lazy(() => import('./pages/studio/ControlPlanePage'));
 const QualityGatesDashboardPage = lazy(() => import('./pages/studio/QualityGatesDashboardPage'));
+const ApprovalQueuePage = lazy(() => import('./pages/studio/ApprovalQueuePage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 
@@ -147,6 +148,14 @@ createRoot(document.getElementById('root')!).render(
                   element={
                     <ProtectedRoute>
                       <ControlPlanePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/studio/approvals"
+                  element={
+                    <ProtectedRoute>
+                      <ApprovalQueuePage />
                     </ProtectedRoute>
                   }
                 />

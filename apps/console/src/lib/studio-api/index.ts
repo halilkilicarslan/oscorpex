@@ -30,3 +30,10 @@ export * from './telemetry.js';
 // v7.0: Agentic Platform API
 export * from './agentic.js';
 export * from './quality-gates.js';
+export {
+	getPendingApprovals,
+	approveApproval,
+	rejectApproval,
+	getBlockingGates,
+	getApprovalArtifactCompleteness,
+} from './approvals.js';
