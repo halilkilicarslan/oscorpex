@@ -1,17 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Shield,
-  CheckCircle2,
-  XCircle,
-  Clock,
   AlertTriangle,
   Activity,
-  Users,
   Server,
-  DollarSign,
   FileText,
   RefreshCw,
-  Zap,
 } from 'lucide-react';
 import {
   fetchControlPlaneSummary,
@@ -35,49 +29,14 @@ import type {
   ProviderRuntime,
   AuditEvent,
 } from '../../types/control-plane';
-
-type Tab = 'summary' | 'approvals' | 'incidents' | 'registry' | 'audit';
-
-function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes}m`;
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}h`;
-  return `${Math.floor(minutes / 1440)}d`;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    pending: 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30',
-    approved: 'bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/30',
-    rejected: 'bg-[#ef4444]/10 text-[#ef4444] border-[#ef4444]/30',
-    expired: 'bg-[#525252]/10 text-[#525252] border-[#525252]/30',
-    open: 'bg-[#ef4444]/10 text-[#ef4444] border-[#ef4444]/30',
-    acknowledged: 'bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/30',
-    resolved: 'bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/30',
-    online: 'bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/30',
-    offline: 'bg-[#525252]/10 text-[#525252] border-[#525252]/30',
-    degraded: 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30',
-    cooldown: 'bg-[#a855f7]/10 text-[#a855f7] border-[#a855f7]/30',
-    active: 'bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/30',
-  };
-  const cls = styles[status] ?? 'bg-[#525252]/10 text-[#525252] border-[#525252]/30';
-  return (
-    <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${cls}`}>
-      {status}
-    </span>
-  );
-}
-
-function StatCard({ label, value, icon, color = '#22c55e' }: { label: string; value: string | number; icon: React.ReactNode; color?: string }) {
-  return (
-    <div className="bg-[#111111] border border-[#262626] rounded-xl p-4 flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <span style={{ color }}>{icon}</span>
-        <span className="text-[11px] text-[#525252] uppercase tracking-wider">{label}</span>
-      </div>
-      <span className="text-[22px] font-bold text-[#fafafa]">{value}</span>
-    </div>
-  );
-}
+import {
+  type Tab,
+  SummaryTab,
+  ApprovalsTab,
+  IncidentsTab,
+  RegistryTab,
+  AuditTab,
+} from './control-plane/index.js';
 
 export default function ControlPlanePage() {
   const [tab, setTab] = useState<Tab>('summary');
@@ -241,169 +200,42 @@ export default function ControlPlanePage() {
       ) : (
         <div className="flex-1 overflow-y-auto">
           {tab === 'summary' && summary && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                <StatCard label="Pending Approvals" value={summary.summary.pendingApprovals} icon={<Shield size={16} />} color="#f59e0b" />
-                <StatCard label="Active Agents" value={summary.summary.activeAgents} icon={<Users size={16} />} color="#22c55e" />
-                <StatCard label="Cooldown Providers" value={summary.summary.cooldownProviders} icon={<Zap size={16} />} color="#a855f7" />
-                <StatCard label="Open Incidents" value={summary.summary.openIncidents} icon={<AlertTriangle size={16} />} color="#ef4444" />
-                <StatCard label="Over Budget" value={summary.summary.projectsOverBudget} icon={<DollarSign size={16} />} color="#f97316" />
-              </div>
-
-              {summary.approvals.pendingCount > 0 && (
-                <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
-                  <h3 className="text-[12px] font-semibold text-[#fafafa] mb-3">Approval Queue</h3>
-                  <div className="space-y-2">
-                    {approvals.filter(a => a.status === 'pending').slice(0, 5).map(a => (
-                      <div key={a.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#0d0d0d] border border-[#1a1a1a]">
-                        <StatusBadge status={a.status} />
-                        <span className="text-[12px] text-[#a3a3a3] flex-1">{a.title}</span>
-                        <span className="text-[10px] text-[#525252]">{a.kind}</span>
-                        <button onClick={() => handleApprove(a.id)} className="p-1 rounded hover:bg-[#22c55e]/10 text-[#22c55e]"><CheckCircle2 size={14} /></button>
-                        <button onClick={() => handleReject(a.id)} className="p-1 rounded hover:bg-[#ef4444]/10 text-[#ef4444]"><XCircle size={14} /></button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {summary.runtime.providerDetails.length > 0 && (
-                <div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
-                  <h3 className="text-[12px] font-semibold text-[#fafafa] mb-3">Provider Health</h3>
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <StatCard label="Online" value={summary.runtime.onlineCount} icon={<Activity size={14} />} color="#22c55e" />
-                    <StatCard label="Degraded" value={summary.runtime.degradedCount} icon={<AlertTriangle size={14} />} color="#f59e0b" />
-                    <StatCard label="Cooldown" value={summary.runtime.cooldownCount} icon={<Clock size={14} />} color="#a855f7" />
-                    <StatCard label="Offline" value={summary.runtime.offlineCount} icon={<XCircle size={14} />} color="#ef4444" />
-                  </div>
-                </div>
-              )}
-            </div>
+            <SummaryTab
+              summary={summary}
+              approvals={approvals}
+              onApprove={handleApprove}
+              onReject={handleReject}
+            />
           )}
 
           {tab === 'approvals' && (
-            <div className="space-y-2">
-              {approvals.length === 0 ? (
-                <div className="text-center py-12 text-[12px] text-[#525252]">No approval requests.</div>
-              ) : (
-                approvals.map(a => (
-                  <div key={a.id} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#111111] border border-[#262626]">
-                    <StatusBadge status={a.status} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-medium text-[#fafafa]">{a.title}</p>
-                      <p className="text-[10px] text-[#525252]">
-                        {a.kind} · by {a.requested_by} · {new Date(a.created_at).toLocaleString()}
-                        {'sla' in a && a.sla && (
-                          <span className="ml-2">
-                            {a.sla.isExpiringSoon && <span className="text-[#f59e0b]">expires in {formatDuration(a.sla.expiresInMinutes)}</span>}
-                            {a.sla.escalated && <span className="text-[#ef4444] ml-1">escalated{a.sla.escalationTarget ? ` → ${a.sla.escalationTarget}` : ''}</span>}
-                            {a.status === 'pending' && !a.sla.isExpiringSoon && <span>age {formatDuration(a.sla.pendingAgeMinutes)}</span>}
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    {a.status === 'pending' && (
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => handleApprove(a.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20">Approve</button>
-                        <button onClick={() => handleReject(a.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20">Reject</button>
-                        <button onClick={() => handleEscalateApproval(a.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20">Escalate</button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
+            <ApprovalsTab
+              approvals={approvals}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              onEscalate={handleEscalateApproval}
+            />
           )}
 
           {tab === 'incidents' && (
-            <div className="space-y-2">
-              {incidents.length === 0 ? (
-                <div className="text-center py-12 text-[12px] text-[#525252]">No incidents recorded.</div>
-              ) : (
-                incidents.map(i => (
-                  <div key={i.id} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#111111] border border-[#262626]">
-                    <StatusBadge status={i.status} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-medium text-[#fafafa]">{i.title}</p>
-                      <p className="text-[10px] text-[#525252]">{i.type} · {i.severity} · {new Date(i.created_at).toLocaleString()}</p>
-                    </div>
-                    {i.status === 'open' && (
-                      <button onClick={() => handleAckIncident(i.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#3b82f6]/10 text-[#3b82f6] hover:bg-[#3b82f6]/20">Ack</button>
-                    )}
-                    {(i.status === 'open' || i.status === 'acknowledged') && (
-                      <button onClick={() => handleResolveIncident(i.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20">Resolve</button>
-                    )}
-                    {i.status === 'resolved' && (
-                      <button onClick={() => handleReopenIncident(i.id)} className="px-2 py-1 rounded text-[10px] font-medium bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20">Reopen</button>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
+            <IncidentsTab
+              incidents={incidents}
+              onAck={handleAckIncident}
+              onResolve={handleResolveIncident}
+              onReopen={handleReopenIncident}
+            />
           )}
 
           {tab === 'registry' && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-[12px] font-semibold text-[#fafafa] mb-2">Agents</h3>
-                {agents.length === 0 ? (
-                  <p className="text-[12px] text-[#525252]">No registered agents.</p>
-                ) : (
-                  <div className="space-y-1">
-                    {agents.map(a => (
-                      <div key={a.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#111111] border border-[#262626]">
-                        <StatusBadge status={a.status} />
-                        <span className="text-[12px] text-[#a3a3a3] flex-1">{a.name}</span>
-                        <span className="text-[10px] text-[#525252]">{a.role}</span>
-                        {a.last_seen_at && (
-                          <span className="text-[10px] text-[#525252]">{new Date(a.last_seen_at).toLocaleTimeString()}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div>
-                <h3 className="text-[12px] font-semibold text-[#fafafa] mb-2">Providers</h3>
-                {providers.length === 0 ? (
-                  <p className="text-[12px] text-[#525252]">No registered providers.</p>
-                ) : (
-                  <div className="space-y-1">
-                    {providers.map(p => (
-                      <div key={p.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#111111] border border-[#262626]">
-                        <StatusBadge status={p.status} />
-                        <span className="text-[12px] text-[#a3a3a3] flex-1">{p.name}</span>
-                        <span className="text-[10px] text-[#525252]">{p.type}</span>
-                        {p.capabilities.length > 0 && (
-                          <span className="text-[10px] text-[#525252]">{p.capabilities.length} caps</span>
-                        )}
-                        {p.status === 'cooldown' && (
-                          <button onClick={() => handleResetCooldown(p.id)} className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#a855f7]/10 text-[#a855f7] hover:bg-[#a855f7]/20">Reset</button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+            <RegistryTab
+              agents={agents}
+              providers={providers}
+              onResetCooldown={handleResetCooldown}
+            />
           )}
 
           {tab === 'audit' && (
-            <div className="space-y-2">
-              {auditEvents.length === 0 ? (
-                <div className="text-center py-12 text-[12px] text-[#525252]">No audit events.</div>
-              ) : (
-                auditEvents.map(e => (
-                  <div key={e.id} className="flex items-center gap-3 px-4 py-2 rounded-xl bg-[#111111] border border-[#262626]">
-                    <StatusBadge status={e.severity} />
-                    <span className="text-[10px] text-[#525252] uppercase w-20">{e.category}</span>
-                    <span className="text-[12px] text-[#a3a3a3] flex-1">{e.action}</span>
-                    <span className="text-[10px] text-[#525252]">{e.actor}</span>
-                    <span className="text-[10px] text-[#525252]">{new Date(e.created_at).toLocaleString()}</span>
-                  </div>
-                ))
-              )}
-            </div>
+            <AuditTab auditEvents={auditEvents} />
           )}
         </div>
       )}
