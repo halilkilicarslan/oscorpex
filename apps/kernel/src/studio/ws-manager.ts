@@ -277,6 +277,7 @@ class WebSocketManager {
 				})
 				.catch(() => {
 					// DB hatası — fail-closed, subscribe etme
+					log.warn("[ws-manager] Tenant validation failed; subscription denied");
 					this._send(ws, { type: "error", payload: { message: "Tenant validation failed" } });
 				});
 			return; // Async yol — _handleClientMessage içindeki "subscribed" yanıtını engelle

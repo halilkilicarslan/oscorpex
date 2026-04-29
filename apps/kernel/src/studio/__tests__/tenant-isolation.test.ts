@@ -443,3 +443,73 @@ describe("hasPermission — scope baseline", () => {
 		expect(hasPermission("superuser", "projects:read")).toBe(false);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// WS Manager — tenant isolation fail-closed
+// ---------------------------------------------------------------------------
+
+describe("WS manager — tenant isolation", () => {
+	it("rejects subscribe when tenant validation DB query fails (fail-closed)", async () => {
+		mockDbQueryOne.mockRejectedValueOnce(new Error("DB down"));
+
+		const { wsManager } = await import("../ws-manager.js");
+		const ws = { readyState: 1, send: vi.fn(), close: vi.fn(), terminate: vi.fn() } as any;
+		const record = { ws, subscriptions: new Set<string>(), lastPong: Date.now(), tenantId: "t1" };
+
+		(wsManager as any)._subscribe(ws, record, "p-1");
+		await new Promise((r) => setTimeout(r, 50));
+
+		expect(record.subscriptions.has("p-1")).toBe(false);
+		const sent = ws.send.mock.calls.map((c: any) => {
+			try { return JSON.parse(c[0]); } catch { return null; }
+		}).filter(Boolean);
+		const errorMsg = sent.find((m: any) => m.type === "error" && m.payload?.message === "Tenant validation failed");
+		expect(errorMsg).toBeDefined();
+	});
+
+	it("rejects subscribe on tenant mismatch", async () => {
+		mockDbQueryOne.mockResolvedValueOnce({ tenant_id: "t2" });
+
+		const { wsManager } = await import("../ws-manager.js");
+		const ws = { readyState: 1, send: vi.fn(), close: vi.fn(), terminate: vi.fn() } as any;
+		const record = { ws, subscriptions: new Set<string>(), lastPong: Date.now(), tenantId: "t1" };
+
+		(wsManager as any)._subscribe(ws, record, "p-1");
+		await new Promise((r) => setTimeout(r, 50));
+
+		expect(record.subscriptions.has("p-1")).toBe(false);
+		const sent = ws.send.mock.calls.map((c: any) => {
+			try { return JSON.parse(c[0]); } catch { return null; }
+		}).filter(Boolean);
+		const errorMsg = sent.find((m: any) => m.type === "error" && m.payload?.message === "Access denied: tenant mismatch");
+		expect(errorMsg).toBeDefined();
+	});
+
+	it("allows subscribe for matching tenant", async () => {
+		mockDbQueryOne.mockResolvedValueOnce({ tenant_id: "t1" });
+
+		const { wsManager } = await import("../ws-manager.js");
+		const ws = { readyState: 1, send: vi.fn(), close: vi.fn(), terminate: vi.fn() } as any;
+		const record = { ws, subscriptions: new Set<string>(), lastPong: Date.now(), tenantId: "t1" };
+
+		(wsManager as any)._subscribe(ws, record, "p-1");
+		await new Promise((r) => setTimeout(r, 50));
+
+		expect(record.subscriptions.has("p-1")).toBe(true);
+		const sent = ws.send.mock.calls.map((c: any) => {
+			try { return JSON.parse(c[0]); } catch { return null; }
+		}).filter(Boolean);
+		const okMsg = sent.find((m: any) => m.type === "subscribed" && m.projectId === "p-1");
+		expect(okMsg).toBeDefined();
+	});
+
+	it("allows legacy subscribe when auth disabled (backward compat)", async () => {
+		const { wsManager } = await import("../ws-manager.js");
+		const ws = { readyState: 1, send: vi.fn(), close: vi.fn(), terminate: vi.fn() } as any;
+		const record = { ws, subscriptions: new Set<string>(), lastPong: Date.now(), tenantId: null };
+
+		(wsManager as any)._subscribe(ws, record, "p-1");
+
+		expect(record.subscriptions.has("p-1")).toBe(true);
+	});
+});
