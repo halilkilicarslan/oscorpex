@@ -6,89 +6,25 @@ const AGENT_GRID_WS_EVENTS = ['task:assigned', 'task:completed', 'task:started',
 import {
   fetchProjectAgents,
   deleteProjectAgent,
-  fetchTeamTemplates,
-  copyTeamFromTemplate,
   getAgentRuntimes,
   startAgentProcess,
   stopAgentProcess,
   type ProjectAgent,
-  type TeamTemplate,
 } from '../../lib/studio-api';
 import AgentCard from './AgentCard';
-import AgentChat from './AgentChat';
 import AgentDetailModal from './AgentDetailModal';
 import AgentFormModal from './AgentFormModal';
-import { X } from 'lucide-react';
+import {
+  type RuntimeStatus,
+  GraphLoader,
+  EmptyTeamState,
+  ChatModal,
+} from './agent-grid/index.js';
 
 // @xyflow/react is a heavy dependency (~400KB) — lazy load so the graph chunks
 // are only downloaded when the user switches to Org Chart, Pipeline, or Templates view.
 const OrgChart = lazy(() => import('./OrgChart'));
 const TeamTemplatePreview = lazy(() => import('./TeamTemplatePreview'));
-
-function GraphLoader() {
-	return (
-		<div className="flex items-center justify-center h-64">
-			<div className="w-6 h-6 rounded-full border-2 border-[#262626] border-t-[#22c55e] animate-spin" />
-		</div>
-	);
-}
-
-type RuntimeStatus = 'idle' | 'starting' | 'running' | 'stopping' | 'error';
-
-function EmptyTeamState({ projectId, onTeamCreated, onAddAgent }: { projectId: string; onTeamCreated: () => void; onAddAgent: () => void }) {
-  const [templates, setTemplates] = useState<TeamTemplate[]>([]);
-  const [applying, setApplying] = useState(false);
-
-  useEffect(() => {
-    fetchTeamTemplates().then(setTemplates).catch(() => {});
-  }, []);
-
-  const applyTemplate = async (templateId: string) => {
-    setApplying(true);
-    try {
-      await copyTeamFromTemplate(projectId, templateId);
-      onTeamCreated();
-    } catch (err) {
-      console.error('Failed to apply template:', err);
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <Users size={32} className="text-[#333] mb-3" />
-      <h3 className="text-[14px] font-medium text-[#a3a3a3] mb-1">No Team Members</h3>
-      <p className="text-[12px] text-[#525252] mb-5 max-w-md">
-        This project has no agents yet. Pick a team template to get started or add agents manually.
-      </p>
-
-      {templates.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4 justify-center">
-          {templates.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => applyTemplate(t.id)}
-              disabled={applying}
-              className="flex flex-col items-start px-4 py-3 rounded-lg border border-[#262626] bg-[#111111] hover:border-[#22c55e]/40 transition-colors text-left disabled:opacity-50 max-w-[200px]"
-            >
-              <span className="text-[12px] font-semibold text-[#fafafa]">{t.name}</span>
-              <span className="text-[10px] text-[#525252] mt-0.5">{t.roles.length} agents — {t.roles.join(', ')}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      <button
-        onClick={onAddAgent}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 transition-colors"
-      >
-        <Plus size={13} />
-        Add Agent Manually
-      </button>
-    </div>
-  );
-}
 
 export default function AgentGrid({ projectId }: { projectId: string }) {
   const [agents, setAgents] = useState<ProjectAgent[]>([]);
@@ -372,31 +308,11 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
       )}
 
       {/* Chat Modal */}
-      {chatAgent && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setChatAgent(null)}
-        >
-          <div
-            className="bg-[#0a0a0a] border border-[#262626] rounded-xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => setChatAgent(null)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] transition-colors z-10"
-              aria-label="Close"
-            >
-              <X size={14} />
-            </button>
-            <AgentChat
-              projectId={projectId}
-              agentId={chatAgent.id}
-              agentName={chatAgent.name}
-            />
-          </div>
-        </div>
-      )}
+      <ChatModal
+        projectId={projectId}
+        chatAgent={chatAgent}
+        onClose={() => setChatAgent(null)}
+      />
     </div>
   );
 }
