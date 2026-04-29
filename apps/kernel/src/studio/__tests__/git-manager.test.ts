@@ -1,14 +1,16 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { gitManager } from "../git-manager.js";
 
 let testDir: string;
+let rootTmp: string;
 
 describe("Git Manager", () => {
 	beforeAll(async () => {
-		testDir = await mkdtemp(join(tmpdir(), "studio-git-test-"));
+		rootTmp = join(process.cwd(), ".tmp");
+		await mkdir(rootTmp, { recursive: true });
+		testDir = await mkdtemp(join(rootTmp, "studio-git-test-"));
 	});
 
 	afterAll(async () => {
@@ -24,7 +26,7 @@ describe("Git Manager", () => {
 		});
 
 		it("should detect non-repo directories", async () => {
-			const nonRepo = await mkdtemp(join(tmpdir(), "non-repo-"));
+			const nonRepo = await mkdtemp(join(rootTmp, "non-repo-"));
 			expect(await gitManager.isRepo(nonRepo)).toBe(false);
 			await rm(nonRepo, { recursive: true, force: true });
 		});

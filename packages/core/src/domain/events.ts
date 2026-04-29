@@ -93,6 +93,13 @@ export type EventType =
 	| "approval.superseded"
 	| "approval.quorum_satisfied"
 	| "approval.blocked"
+	| "release.candidate_created"
+	| "release.decision_recorded"
+	| "release.blocked"
+	| "release.allowed"
+	| "release.override_applied"
+	| "release.rollback_triggered"
+	| "release.rollback_required"
 	// Lifecycle
 	| "lifecycle:transition"
 	// Goal

@@ -368,6 +368,11 @@ export async function getLatestQualityGateEvaluation(input: {
 	return row ? rowToEvaluation(row) : undefined;
 }
 
+export async function getQualityGateEvaluationById(id: string): Promise<QualityGateEvaluation | undefined> {
+	const row = await queryOne<QualityGateEvaluationRow>("SELECT * FROM quality_gate_evaluations WHERE id = $1", [id]);
+	return row ? rowToEvaluation(row) : undefined;
+}
+
 export async function hasActiveQualityGateOverride(input: {
 	tenantId: string | null;
 	evaluationId: string;

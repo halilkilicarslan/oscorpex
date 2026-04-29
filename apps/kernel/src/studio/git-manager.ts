@@ -3,7 +3,7 @@
 // Branch management, commits, merges, file tree, diffs
 // ---------------------------------------------------------------------------
 
-import { readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, normalize, relative } from "node:path";
 import { type SimpleGit, simpleGit } from "simple-git";
 import type { FileTreeNode, GitLogEntry, GitStatus, MergeResult } from "./types.js";
@@ -21,12 +21,17 @@ class GitManager {
 
 	async initRepo(projectPath: string): Promise<void> {
 		const git = this.getGit(projectPath);
-		await git.init();
+
+		// Sandbox/CI friendly: avoid copying system templates (hooks) which may
+		// try to write into restricted locations or fail on permission bits.
+		const emptyTemplateDir = join(projectPath, ".git-template-empty");
+		await mkdir(emptyTemplateDir, { recursive: true });
+		await git.raw(["init", "--template", emptyTemplateDir]);
+
 		await git.addConfig("user.name", "Oscorpex");
 		await git.addConfig("user.email", "studio@ai-dev.local");
 
 		// Create initial commit so branches work
-		const { writeFile } = await import("node:fs/promises");
 		await writeFile(join(projectPath, ".gitkeep"), "");
 		await git.add(".gitkeep");
 		await git.commit("Initial commit");
@@ -34,8 +39,10 @@ class GitManager {
 
 	async isRepo(projectPath: string): Promise<boolean> {
 		try {
-			const git = this.getGit(projectPath);
-			return await git.checkIsRepo();
+			// We intentionally check for a .git directory *in the provided path*
+			// to avoid treating nested folders inside a parent repo as repos.
+			await stat(join(projectPath, ".git"));
+			return true;
 		} catch {
 			return false;
 		}

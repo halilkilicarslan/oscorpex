@@ -128,6 +128,68 @@ export interface ApprovalBlockedPayload {
 	reason?: string;
 }
 
+export interface ReleaseCandidateCreatedPayload {
+	goalId?: string;
+	releaseCandidateId?: string;
+	environment?: string;
+	actorId?: string;
+	correlationId?: string;
+}
+
+export interface ReleaseDecisionRecordedPayload {
+	goalId?: string;
+	releaseCandidateId?: string;
+	releaseDecisionId?: string;
+	decision?: string;
+	allowed?: boolean;
+	blocked?: boolean;
+	rollbackRequired?: boolean;
+	blockingReasonCount?: number;
+}
+
+export interface ReleaseBlockedPayload {
+	goalId?: string;
+	releaseCandidateId?: string;
+	releaseDecisionId?: string;
+	reasonSummary?: string;
+	blockingReasonCount?: number;
+	requiresOverride?: boolean;
+}
+
+export interface ReleaseAllowedPayload {
+	goalId?: string;
+	releaseCandidateId?: string;
+	releaseDecisionId?: string;
+}
+
+export interface ReleaseOverrideAppliedPayload {
+	goalId?: string;
+	releaseCandidateId?: string;
+	gateEvaluationId?: string;
+	gateType?: string;
+	actorId?: string;
+	reason?: string;
+	expiresAt?: string;
+}
+
+export interface ReleaseRollbackTriggeredPayload {
+	goalId?: string;
+	releaseCandidateId?: string;
+	triggerType?: string;
+	severity?: string;
+	state?: string;
+	source?: string;
+	reason?: string;
+}
+
+export interface ReleaseRollbackRequiredPayload {
+	goalId?: string;
+	releaseCandidateId?: string;
+	triggerType?: string;
+	severity?: string;
+	reason?: string;
+}
+
 export interface LifecycleTransitionPayload {
 	entityType?: string;
 	entityId?: string;

@@ -105,6 +105,13 @@ export type {
 	ApprovalSupersededPayload,
 	ApprovalQuorumSatisfiedPayload,
 	ApprovalBlockedPayload,
+	ReleaseCandidateCreatedPayload,
+	ReleaseDecisionRecordedPayload,
+	ReleaseBlockedPayload,
+	ReleaseAllowedPayload,
+	ReleaseOverrideAppliedPayload,
+	ReleaseRollbackTriggeredPayload,
+	ReleaseRollbackRequiredPayload,
 	LifecycleTransitionPayload,
 	GoalEvaluatedPayload,
 	MessageCreatedPayload,
@@ -205,6 +212,13 @@ import type {
 	ApprovalSupersededPayload,
 	ApprovalQuorumSatisfiedPayload,
 	ApprovalBlockedPayload,
+	ReleaseCandidateCreatedPayload,
+	ReleaseDecisionRecordedPayload,
+	ReleaseBlockedPayload,
+	ReleaseAllowedPayload,
+	ReleaseOverrideAppliedPayload,
+	ReleaseRollbackTriggeredPayload,
+	ReleaseRollbackRequiredPayload,
 	LifecycleTransitionPayload,
 	GoalEvaluatedPayload,
 	MessageCreatedPayload,
@@ -299,6 +313,13 @@ export interface EventPayloadMap {
 	"approval.superseded": ApprovalSupersededPayload;
 	"approval.quorum_satisfied": ApprovalQuorumSatisfiedPayload;
 	"approval.blocked": ApprovalBlockedPayload;
+	"release.candidate_created": ReleaseCandidateCreatedPayload;
+	"release.decision_recorded": ReleaseDecisionRecordedPayload;
+	"release.blocked": ReleaseBlockedPayload;
+	"release.allowed": ReleaseAllowedPayload;
+	"release.override_applied": ReleaseOverrideAppliedPayload;
+	"release.rollback_triggered": ReleaseRollbackTriggeredPayload;
+	"release.rollback_required": ReleaseRollbackRequiredPayload;
 	// Lifecycle
 	"lifecycle:transition": LifecycleTransitionPayload;
 	// Goal
