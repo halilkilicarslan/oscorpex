@@ -30,6 +30,7 @@ const RagPage = lazy(() => import('./pages/RagPage'));
 const ControlPlanePage = lazy(() => import('./pages/studio/ControlPlanePage'));
 const QualityGatesDashboardPage = lazy(() => import('./pages/studio/QualityGatesDashboardPage'));
 const ApprovalQueuePage = lazy(() => import('./pages/studio/ApprovalQueuePage'));
+const ReleaseDecisionPanelPage = lazy(() => import('./pages/studio/ReleaseDecisionPanelPage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 
@@ -156,6 +157,14 @@ createRoot(document.getElementById('root')!).render(
                   element={
                     <ProtectedRoute>
                       <ApprovalQueuePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/studio/releases/:goalId"
+                  element={
+                    <ProtectedRoute>
+                      <ReleaseDecisionPanelPage />
                     </ProtectedRoute>
                   }
                 />

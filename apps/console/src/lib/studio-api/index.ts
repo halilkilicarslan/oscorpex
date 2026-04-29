@@ -37,3 +37,8 @@ export {
 	getBlockingGates,
 	getApprovalArtifactCompleteness,
 } from './approvals.js';
+export {
+	evaluateRelease,
+	applyManualOverride,
+	triggerRollback,
+} from './releases.js';
