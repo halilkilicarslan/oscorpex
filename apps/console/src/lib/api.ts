@@ -1,5 +1,5 @@
 import type { AgentInfo, WorkflowInfo } from '../types';
-import { httpGet, httpPost } from './studio-api/base.js';
+import { httpGet, httpPost, authHeaders } from './studio-api/base.js';
 
 const BASE = '/api/studio';
 
@@ -43,7 +43,10 @@ export function streamChat(
 
   fetch(`${BASE}/agents/${agentId}/stream`, { // DIRECT_FETCH_INTENTIONAL: legacy chat stream needs raw ReadableStream parsing and abort control.
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      ...authHeaders(),
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(body),
     signal: controller.signal,
   })
