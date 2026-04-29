@@ -28,7 +28,10 @@ const log = createLogger("access-guard");
  * add its path to PUBLIC_ROUTES explicitly.
  */
 export async function accessGuard(c: Context, next: Next): Promise<void | Response> {
-	const path = c.req.path;
+	const originalPath = c.req.path;
+	const path = originalPath.startsWith("/api/studio")
+		? originalPath.slice("/api/studio".length) || "/"
+		: originalPath;
 	const method = c.req.method;
 
 	// 1. Public routes — no auth required
@@ -38,8 +41,8 @@ export async function accessGuard(c: Context, next: Next): Promise<void | Respon
 
 	// 2. Default deny — unknown routes are rejected
 	if (!isKnownRoute(path, method)) {
-		log.warn(`[access-guard] Denied unknown route: ${method} ${path}`);
-		return c.json({ error: "Forbidden — unknown route", route: path, method }, 403);
+		log.warn(`[access-guard] Denied unknown route: ${method} ${originalPath}`);
+		return c.json({ error: "Forbidden — unknown route", route: originalPath, method }, 403);
 	}
 
 	// 3. Authenticate
@@ -58,7 +61,7 @@ export async function accessGuard(c: Context, next: Next): Promise<void | Respon
 		const rbacResult = await rbacRequire(routePermission)(c, async () => {});
 		if (rbacResult) {
 			log.warn(
-				`[access-guard] Permission denied: ${method} ${path} requires ${routePermission} ` +
+				`[access-guard] Permission denied: ${method} ${originalPath} requires ${routePermission} ` +
 				`(user=${c.get("userId") ?? "unknown"}, tenant=${c.get("tenantId") ?? "none"})`,
 			);
 			return rbacResult;
@@ -68,7 +71,7 @@ export async function accessGuard(c: Context, next: Next): Promise<void | Respon
 	// 6. Audit log for sensitive operations
 	if (method !== "GET" && method !== "HEAD") {
 		log.info(
-			`[access-guard] Allowed: ${method} ${path} ` +
+			`[access-guard] Allowed: ${method} ${originalPath} ` +
 			`(user=${c.get("userId") ?? "unknown"}, tenant=${c.get("tenantId") ?? "none"}, ` +
 			`permission=${routePermission ?? "auth-only"})`,
 		);

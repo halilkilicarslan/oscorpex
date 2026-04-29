@@ -115,6 +115,7 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: /^\/providers\/[^/]+$/, permission: "providers:read", methods: ["GET"] },
 	{ pattern: /^\/providers\/[^/]+$/, permission: "providers:operate", methods: ["PATCH", "PUT", "DELETE"] },
 	{ pattern: "/providers/test", permission: "providers:operate", methods: ["POST"] },
+	{ pattern: "/providers/status", permission: "providers:read", methods: ["GET"] },
 	{ pattern: "/providers/fallback-chain", permission: "providers:read", methods: ["GET"] },
 	{ pattern: "/providers/fallback-chain", permission: "providers:operate", methods: ["PUT"] },
 	{ pattern: "/providers/default", permission: "providers:operate", methods: ["POST"] },
@@ -206,6 +207,7 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: /^\/artifacts\/[^/]+\/completeness$/, permission: "artifacts:read", methods: ["GET"] },
 
 	// Control Plane
+	{ pattern: "/summary", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/registry", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/registry", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/presence", permission: "control-plane:read", methods: ["GET"] },

@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import type { AuthVariables } from "../auth/auth-middleware.js";
 import { signJwt } from "../auth/jwt.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
+import { authMiddleware } from "../auth/auth-middleware.js";
 import { requirePermission } from "../auth/rbac.js";
 import { logTenantActivity } from "../auth/tenant-context.js";
 import { createApiKey, listApiKeys, revokeApiKey } from "../db/tenant-repo.js";
@@ -18,6 +19,13 @@ import { createLogger } from "../logger.js";
 const log = createLogger("auth-routes");
 
 const router = new Hono<{ Variables: AuthVariables }>();
+
+// Protected auth endpoints require resolved auth context (JWT/API key).
+router.use("/me", authMiddleware);
+router.use("/users", authMiddleware);
+router.use("/users/*", authMiddleware);
+router.use("/api-keys", authMiddleware);
+router.use("/api-keys/*", authMiddleware);
 
 // ---------------------------------------------------------------------------
 // POST /auth/register

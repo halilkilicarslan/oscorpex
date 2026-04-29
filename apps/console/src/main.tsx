@@ -61,7 +61,13 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/register" element={<RegisterPage />} />
 
               {/* Main app — with layout */}
-              <Route element={<Layout />}>
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <Layout />
+                  </ProtectedRoute>
+                }
+              >
                 <Route index element={<DashboardWrapper />} />
                 <Route path="/dashboard" element={<ObservabilityPage />} />
                 <Route path="/traces" element={<TracesPage />} />
@@ -75,113 +81,85 @@ createRoot(document.getElementById('root')!).render(
                 <Route
                   path="/studio"
                   element={
-                    <ProtectedRoute>
-                      <StudioHomePage />
-                    </ProtectedRoute>
+                    <StudioHomePage />
                   }
                 />
                 <Route
                   path="/studio/dashboard"
                   element={
-                    <ProtectedRoute>
-                      <PlatformDashboard />
-                    </ProtectedRoute>
+                    <PlatformDashboard />
                   }
                 />
                 <Route
                   path="/studio/insights"
                   element={
-                    <ProtectedRoute>
-                      <InsightDashboard />
-                    </ProtectedRoute>
+                    <InsightDashboard />
                   }
                 />
                 <Route
                   path="/studio/teams"
                   element={
-                    <ProtectedRoute>
-                      <TeamBuilderPage />
-                    </ProtectedRoute>
+                    <TeamBuilderPage />
                   }
                 />
                 <Route
                   path="/studio/providers"
                   element={
-                    <ProtectedRoute>
-                      <ProvidersPage />
-                    </ProtectedRoute>
+                    <ProvidersPage />
                   }
                 />
                 <Route
                   path="/studio/cli-monitor"
                   element={
-                    <ProtectedRoute>
-                      <CLIUsageMonitorPage />
-                    </ProtectedRoute>
+                    <CLIUsageMonitorPage />
                   }
                 />
                 <Route
                   path="/studio/telemetry"
                   element={
-                    <ProtectedRoute>
-                      <ProviderTelemetryPage />
-                    </ProtectedRoute>
+                    <ProviderTelemetryPage />
                   }
                 />
                 <Route
                   path="/studio/providers/compare"
                   element={
-                    <ProtectedRoute>
-                      <ProviderComparisonPage />
-                    </ProtectedRoute>
+                    <ProviderComparisonPage />
                   }
                 />
                 <Route
                   path="/studio/admin"
                   element={
-                    <ProtectedRoute>
-                      <AdminSettingsPage />
-                    </ProtectedRoute>
+                    <AdminSettingsPage />
                   }
                 />
                 <Route
                   path="/studio/control-plane"
                   element={
-                    <ProtectedRoute>
-                      <ControlPlanePage />
-                    </ProtectedRoute>
+                    <ControlPlanePage />
                   }
                 />
                 <Route
                   path="/studio/approvals"
                   element={
-                    <ProtectedRoute>
-                      <ApprovalQueuePage />
-                    </ProtectedRoute>
+                    <ApprovalQueuePage />
                   }
                 />
                 <Route
                   path="/studio/releases/:goalId"
                   element={
-                    <ProtectedRoute>
-                      <ReleaseDecisionPanelPage />
-                    </ProtectedRoute>
+                    <ReleaseDecisionPanelPage />
                   }
                 />
                 <Route
                   path="/studio/quality-gates/:goalId"
                   element={
-                    <ProtectedRoute>
-                      <QualityGatesDashboardPage />
-                    </ProtectedRoute>
+                    <QualityGatesDashboardPage />
                   }
                 />
                 <Route
                   path="/studio/:projectId"
                   element={
-                    <ProtectedRoute>
-                      <ProjectPage />
-                    </ProtectedRoute>
+                    <ProjectPage />
                   }
                 />
               </Route>

@@ -96,6 +96,9 @@ const ROLE_PERMISSIONS: Record<Role, string[]> = {
  * Supports wildcard notation: "projects:*" grants any "projects:<action>".
  */
 export function hasPermission(role: Role | string, permission: string): boolean {
+	// Owner is the highest-privilege tenant role and can access all scoped actions.
+	if (role === "owner") return true;
+
 	const perms = ROLE_PERMISSIONS[role as Role];
 	if (!perms) return false;
 

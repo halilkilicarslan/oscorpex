@@ -41,12 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		if (token) {
 			fetchCurrentUser(token)
 				.then((data) => {
-					// Backend running in auth-disabled mode
-					if ((data as any).authDisabled) {
-						setUser({ id: 'anonymous', email: '', displayName: 'Anonymous', tenantId: '', role: 'viewer' } as AuthUser);
-					} else {
-						setUser(data);
-					}
+					if ((data as any).authDisabled) return;
+					setUser(data);
 				})
 				.catch(() => {
 					try {
@@ -58,17 +54,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				})
 				.finally(() => setIsLoading(false));
 		} else {
-			// Even without a token, try /me to detect auth-disabled mode
-			fetchCurrentUser('')
-				.then((data) => {
-					if ((data as any).authDisabled) {
-						setUser({ id: 'anonymous', email: '', displayName: 'Anonymous', tenantId: '', role: 'viewer' } as AuthUser);
-					}
-				})
-				.catch(() => {
-					// Auth enabled and no valid token — remain logged out
-				})
-				.finally(() => setIsLoading(false));
+			// No token: remain logged out and require explicit login.
+			setIsLoading(false);
 		}
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
