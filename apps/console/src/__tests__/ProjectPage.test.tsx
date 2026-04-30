@@ -217,7 +217,7 @@ describe('ProjectPage — sekme navigasyonu', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(studioApi.fetchProject).mockResolvedValue(ORNEK_PROJE);
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
+    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
     vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
     vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
   });
@@ -324,7 +324,7 @@ describe('ProjectPage — Board sekmesi kanban/pipeline secimi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(studioApi.fetchProject).mockResolvedValue(ORNEK_PROJE);
-    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue([]);
+    vi.mocked(studioApi.fetchProjectAgents).mockResolvedValue(ORNEK_AJANLAR);
     vi.mocked(studioApi.fetchUnreadCount).mockResolvedValue({ agentId: 'agent-1', unreadCount: 0 });
     vi.mocked(studioApi.fetchAllUnreadCounts).mockResolvedValue({});
   });

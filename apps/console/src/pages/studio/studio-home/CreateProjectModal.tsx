@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import {
+	applyProjectTeam,
+	approveProjectScope,
 	createProject,
 	createCustomTeam,
 	fetchTeamTemplates,
 	fetchCustomTeams,
 	fetchPresetAgents,
+	recommendProjectTeam,
 	roleLabel,
+	saveProjectScopeDraft,
 	streamTeamArchitectChat,
 	type AgentConfig,
 	type ArchitectMessage,
@@ -411,9 +415,29 @@ export function CreateProjectModal({
 				description: description.trim(),
 				projectType,
 				techPreference,
-				teamTemplateId,
 				plannerAgentId: selectedPlanner || undefined,
 				previewEnabled,
+			});
+			await saveProjectScopeDraft(project.id, {
+				problemStatement: description.trim(),
+				goals: [],
+				nonGoals: [],
+				constraints: [],
+				risks: [],
+				acceptanceCriteria: [],
+				validationPlan: [],
+				requiredCapabilities: techPreference,
+				recommendedTeamRoles: selectedTeam?.roles ?? [],
+				status: 'ready_for_review',
+			});
+			await approveProjectScope(project.id);
+			const teamRecommendation = await recommendProjectTeam(project.id);
+			const recommendedTemplateId =
+				teamRecommendation.decision === 'recommend-existing' ? teamRecommendation.teamTemplateId : undefined;
+			await applyProjectTeam(project.id, {
+				teamTemplateId: teamTemplateId || recommendedTemplateId,
+				customTeam: !teamTemplateId && architectCustomTeam ? architectCustomTeam : undefined,
+				plannerAgentId: selectedPlanner || undefined,
 			});
 			onCreate(project);
 		} catch (err) {

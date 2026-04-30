@@ -5,6 +5,7 @@
 import { resolve } from "node:path";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { hasPermission } from "../auth/rbac.js";
 import {
 	createAgentFiles,
 	deleteAgentFiles,
@@ -290,6 +291,75 @@ teamRoutes.post("/projects/:id/team", async (c) => {
 		model: agent.model,
 	}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
 	return c.json(agent, 201);
+});
+
+teamRoutes.post("/projects/:id/team/apply", async (c) => {
+	const projectId = c.req.param("id");
+	const project = await getProject(projectId);
+	if (!project) return c.json({ error: "Project not found" }, 404);
+	const role = (c as any).get("userRole") as string | undefined;
+	if (role && !hasPermission(role, "team:write") && !hasPermission(role, "projects:update")) {
+		return c.json({ error: "Forbidden", requiredAnyOf: ["team:write", "projects:update"], role }, 403);
+	}
+
+	const body = (await c.req.json().catch(() => ({}))) as {
+		teamTemplateId?: string;
+		customTeam?: {
+			name?: string;
+			description?: string;
+			roles?: string[];
+		};
+		plannerAgentId?: string;
+	};
+
+	const hasTemplate = typeof body.teamTemplateId === "string" && body.teamTemplateId.trim().length > 0;
+	const hasCustom = Boolean(body.customTeam);
+	if ((hasTemplate && hasCustom) || (!hasTemplate && !hasCustom)) {
+		return c.json({ error: "exactly one of teamTemplateId or customTeam is required" }, 422);
+	}
+
+	const existingAgents = await listProjectAgents(projectId);
+	if (existingAgents.length > 0) {
+		return c.json({ error: "project team already initialized" }, 409);
+	}
+
+	let roles: string[] = [];
+	if (hasTemplate) {
+		const templateId = body.teamTemplateId!.trim();
+		const presetTemplate = await getTeamTemplate(templateId);
+		const customTemplate = !presetTemplate ? await getCustomTeamTemplate(templateId) : null;
+		const selected = presetTemplate ?? customTemplate;
+		if (!selected) return c.json({ error: "Template not found" }, 404);
+		roles = selected.roles;
+	} else {
+		const custom = body.customTeam!;
+		const normalizedRoles = Array.isArray(custom.roles)
+			? custom.roles.map((role) => String(role).trim()).filter(Boolean)
+			: [];
+		if (!custom.name?.trim() || normalizedRoles.length === 0) {
+			return c.json({ error: "customTeam.name and customTeam.roles are required" }, 422);
+		}
+		roles = normalizedRoles;
+	}
+
+	if (roles.length === 0) {
+		return c.json({ error: "team roles cannot be empty" }, 422);
+	}
+
+	const agents = await copyAgentsToProject(projectId, roles, {
+		plannerSourceAgentId: body.plannerAgentId?.trim() || undefined,
+	});
+	for (const agent of agents) {
+		createAgentFiles(projectId, agent.name, {
+			skills: agent.skills,
+			systemPrompt: agent.systemPrompt,
+			personality: agent.personality,
+			role: agent.role,
+			model: agent.model,
+		}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
+	}
+
+	return c.json({ ok: true, data: agents }, 201);
 });
 
 // Get org structure for a project

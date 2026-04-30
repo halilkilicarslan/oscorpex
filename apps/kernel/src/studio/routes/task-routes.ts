@@ -19,6 +19,7 @@ import {
 import { eventBus } from "../event-bus.js";
 import { kernel } from "../kernel/index.js";
 import { withCorrelation } from "../correlation-context.js";
+import { ensureProjectTeamInitialized } from "./team-init-guard.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("task-routes");
 
@@ -70,6 +71,8 @@ taskRoutes.get("/projects/:id/tasks/:taskId", async (c) => {
 
 taskRoutes.patch("/projects/:id/tasks/:taskId", async (c) => {
 	try {
+		const teamGuard = await ensureProjectTeamInitialized(c, c.req.param("id"));
+		if (teamGuard) return teamGuard;
 		const body = await c.req.json();
 		if (body.status === "running" && !body.startedAt) {
 			body.startedAt = new Date().toISOString();
@@ -89,6 +92,8 @@ taskRoutes.patch("/projects/:id/tasks/:taskId", async (c) => {
 taskRoutes.post("/projects/:id/tasks/:taskId/retry", async (c) => {
 	return withCorrelation(async () => {
 		try {
+			const teamGuard = await ensureProjectTeamInitialized(c, c.req.param("id"));
+			if (teamGuard) return teamGuard;
 			const updated = await kernel.retryTask(c.req.param("taskId"));
 			kernel.executeTask(c.req.param("id"), updated as any);
 			return c.json({ success: true, task: updated });
@@ -103,6 +108,8 @@ taskRoutes.post("/projects/:id/tasks/:taskId/retry", async (c) => {
 taskRoutes.post("/projects/:id/tasks/:taskId/review", async (c) => {
 	return withCorrelation(async () => {
 		try {
+			const teamGuard = await ensureProjectTeamInitialized(c, c.req.param("id"));
+			if (teamGuard) return teamGuard;
 			const body = await c.req.json<{ approved: boolean; feedback?: string }>();
 			const updated = await kernel.submitReview(c.req.param("taskId"), body.approved, body.feedback);
 			return c.json({ success: true, task: updated });
@@ -117,6 +124,8 @@ taskRoutes.post("/projects/:id/tasks/:taskId/review", async (c) => {
 taskRoutes.post("/projects/:id/tasks/:taskId/restart-revision", async (c) => {
 	return withCorrelation(async () => {
 		try {
+			const teamGuard = await ensureProjectTeamInitialized(c, c.req.param("id"));
+			if (teamGuard) return teamGuard;
 			const updated = await kernel.restartRevision(c.req.param("taskId"));
 			return c.json({ success: true, task: updated });
 		} catch (error) {
@@ -131,6 +140,8 @@ taskRoutes.post("/projects/:id/tasks/:taskId/approve", async (c) => {
 	return withCorrelation(async () => {
 		try {
 			const projectId = c.req.param("id");
+			const teamGuard = await ensureProjectTeamInitialized(c, projectId);
+			if (teamGuard) return teamGuard;
 			const taskId = c.req.param("taskId");
 			const updated = await kernel.approveTask(taskId);
 			kernel.executeTask(projectId, updated as any);
@@ -146,6 +157,8 @@ taskRoutes.post("/projects/:id/tasks/:taskId/approve", async (c) => {
 taskRoutes.post("/projects/:id/tasks/:taskId/reject", async (c) => {
 	return withCorrelation(async () => {
 		try {
+			const teamGuard = await ensureProjectTeamInitialized(c, c.req.param("id"));
+			if (teamGuard) return teamGuard;
 			const taskId = c.req.param("taskId");
 			const body = await c.req.json<{ reason?: string }>().catch(() => ({}) as { reason?: string });
 			const updated = await kernel.rejectTask(taskId, body.reason);

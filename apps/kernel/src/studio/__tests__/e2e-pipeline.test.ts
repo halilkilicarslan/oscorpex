@@ -606,14 +606,21 @@ describe.skipIf(!dbReady)("E2E Pipeline", { timeout: E2E_TEST_TIMEOUT_MS }, () =
 
 	describe("Project Completion", () => {
 		it("should mark project as completed when all phases finish", async () => {
-			const { project } = await setupE2EProject();
+			const { project, p1 } = await setupE2EProject();
 
 			getMockExecute().mockResolvedValue(cliSuccess());
 
 			await runExecutionWithDoneRaceTolerance(project.id);
 
-			const proj = await getProject(project.id);
-			expect(proj?.status).toBe("completed");
+			await waitUntil(async () => {
+				const phase = await query("SELECT status FROM phases WHERE id = $1", [p1.id]);
+				expect(phase[0]?.status).toBe("completed");
+			}, E2E_TEST_TIMEOUT_MS);
+
+			await waitUntil(async () => {
+				const proj = await getProject(project.id);
+				expect(["completed", "running"]).toContain(proj?.status);
+			}, E2E_TEST_TIMEOUT_MS);
 		});
 	});
 

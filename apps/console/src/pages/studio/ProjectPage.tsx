@@ -33,6 +33,7 @@ import {
 	ProjectHeader,
 	TabBar,
 	BoardViewSwitcher,
+	TeamNotInitializedState,
 	TabLoader,
 	STATIC_TABS,
 	APP_STATUS_WS_EVENTS,
@@ -253,6 +254,9 @@ export default function ProjectPage() {
 		() => projectAgents.find((agent) => agent.role === 'product-owner' || agent.role === 'pm') ?? null,
 		[projectAgents],
 	);
+	const teamInitialized = projectAgents.length > 0;
+	const TEAM_REQUIRED_TABS = new Set<Tab>(['chat', 'board', 'preview', 'dashboard', 'logs', 'backlog', 'sprint', 'ceremonies', 'report', 'agentic']);
+	const requiresTeamSetup = TEAM_REQUIRED_TABS.has(activeTab) && !teamInitialized;
 	const visibleTabs = useMemo(
 		() => (previewEnabled ? STATIC_TABS : STATIC_TABS.filter((tab) => tab.id !== 'preview')),
 		[previewEnabled],
@@ -296,7 +300,10 @@ export default function ProjectPage() {
 				className="flex-1 overflow-y-auto flex flex-col min-h-0"
 				style={{ maxHeight: 'calc(100vh - 140px)' }}
 			>
-				{activeTab === 'chat' && (
+				{requiresTeamSetup ? (
+					<TeamNotInitializedState onSetupTeam={() => setActiveTab('team')} />
+				) : null}
+				{activeTab === 'chat' && !requiresTeamSetup && (
 					<PMChat
 						projectId={projectId!}
 						plannerAvailable={plannerAvailable}
@@ -306,7 +313,7 @@ export default function ProjectPage() {
 					/>
 				)}
 				{activeTab === 'team' && <AgentGrid projectId={projectId!} />}
-				{activeTab === 'board' && (
+				{activeTab === 'board' && !requiresTeamSetup && (
 					<div className="flex flex-col h-full">
 						<BoardViewSwitcher boardView={boardView} onChange={setBoardView} />
 						<div className="flex-1 overflow-auto">
@@ -315,7 +322,7 @@ export default function ProjectPage() {
 						</div>
 					</div>
 				)}
-				{activeTab === 'preview' && (
+				{activeTab === 'preview' && !requiresTeamSetup && (
 					<Suspense fallback={<TabLoader />}>
 						<LivePreview projectId={projectId!} appStatus={appStatus} onStatusChange={setAppStatus} />
 					</Suspense>
@@ -335,12 +342,12 @@ export default function ProjectPage() {
 						<MessageCenter projectId={projectId!} />
 					</Suspense>
 				)}
-				{activeTab === 'dashboard' && (
+				{activeTab === 'dashboard' && !requiresTeamSetup && (
 					<Suspense fallback={<TabLoader />}>
 						<AgentDashboard projectId={projectId!} />
 					</Suspense>
 				)}
-				{activeTab === 'logs' && (
+				{activeTab === 'logs' && !requiresTeamSetup && (
 					<Suspense fallback={<TabLoader />}>
 						<AgentLogViewer projectId={projectId!} />
 					</Suspense>
@@ -355,27 +362,27 @@ export default function ProjectPage() {
 						<ProjectSettings projectId={projectId!} />
 					</Suspense>
 				)}
-				{activeTab === 'backlog' && (
+				{activeTab === 'backlog' && !requiresTeamSetup && (
 					<Suspense fallback={<TabLoader />}>
 						<BacklogBoard projectId={project.id} />
 					</Suspense>
 				)}
-				{activeTab === 'sprint' && (
+				{activeTab === 'sprint' && !requiresTeamSetup && (
 					<Suspense fallback={<TabLoader />}>
 						<SprintBoard projectId={project.id} />
 					</Suspense>
 				)}
-				{activeTab === 'ceremonies' && (
+				{activeTab === 'ceremonies' && !requiresTeamSetup && (
 					<Suspense fallback={<TabLoader />}>
 						<CeremonyPanel projectId={project.id} />
 					</Suspense>
 				)}
-				{activeTab === 'report' && (
+				{activeTab === 'report' && !requiresTeamSetup && (
 					<Suspense fallback={<TabLoader />}>
 						<ProjectReport projectId={project.id} />
 					</Suspense>
 				)}
-				{activeTab === 'agentic' && (
+				{activeTab === 'agentic' && !requiresTeamSetup && (
 					<Suspense fallback={<TabLoader />}>
 						<AgenticPanel projectId={project.id} />
 					</Suspense>

@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { requirePermission } from "../auth/rbac.js";
 import { getLatestPlan, getProject, getTask, listPhases, listProjectAgents, listTasks } from "../db.js";
 import { kernel } from "../kernel/index.js";
+import { ensureProjectTeamInitialized } from "./team-init-guard.js";
 import type { Task } from "../types.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("pipeline-routes");
@@ -17,6 +18,8 @@ pipelineRoutes.post("/projects/:id/pipeline/start", requirePermission("pipeline:
 	const projectId = c.req.param("id") ?? "";
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
+	const teamGuard = await ensureProjectTeamInitialized(c, projectId);
+	if (teamGuard) return teamGuard;
 
 	try {
 		const state = await kernel.startPipeline(projectId);
@@ -145,6 +148,8 @@ pipelineRoutes.post("/projects/:id/pipeline/pause", requirePermission("pipeline:
 	const projectId = c.req.param("id") ?? "";
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
+	const teamGuard = await ensureProjectTeamInitialized(c, projectId);
+	if (teamGuard) return teamGuard;
 
 	try {
 		await kernel.pausePipeline(projectId);
@@ -160,6 +165,8 @@ pipelineRoutes.post("/projects/:id/pipeline/resume", requirePermission("pipeline
 	const projectId = c.req.param("id") ?? "";
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
+	const teamGuard = await ensureProjectTeamInitialized(c, projectId);
+	if (teamGuard) return teamGuard;
 
 	try {
 		await kernel.resumePipeline(projectId);
@@ -175,6 +182,8 @@ pipelineRoutes.post("/projects/:id/pipeline/retry", async (c) => {
 	const projectId = c.req.param("id");
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
+	const teamGuard = await ensureProjectTeamInitialized(c, projectId);
+	if (teamGuard) return teamGuard;
 
 	try {
 		await kernel.retryPipeline(projectId);
@@ -193,6 +202,8 @@ pipelineRoutes.post("/projects/:id/pipeline/advance", async (c) => {
 	const projectId = c.req.param("id");
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
+	const teamGuard = await ensureProjectTeamInitialized(c, projectId);
+	if (teamGuard) return teamGuard;
 
 	try {
 		const state = await kernel.advancePipeline(projectId);

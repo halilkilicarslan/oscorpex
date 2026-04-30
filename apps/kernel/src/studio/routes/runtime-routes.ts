@@ -13,6 +13,7 @@ import { getProject } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { analyzeProject, writeEnvFile } from "../runtime-analyzer.js";
 import type { DatabaseType } from "../runtime-analyzer.js";
+import { ensureProjectTeamInitialized } from "./team-init-guard.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("runtime-routes");
 
@@ -31,6 +32,8 @@ runtimeRoutes.post("/projects/:id/app/start", async (c) => {
 	const projectId = c.req.param("id");
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
+	const teamGuard = await ensureProjectTeamInitialized(c, projectId);
+	if (teamGuard) return teamGuard;
 
 	try {
 		const result = await startApp(projectId, project.repoPath, (msg) => {

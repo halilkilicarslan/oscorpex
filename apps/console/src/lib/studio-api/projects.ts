@@ -75,11 +75,79 @@ export async function createProject(data: {
   techStack?: string[];
   techPreference?: string[];
   projectType?: string;
-  teamTemplateId?: string;
   plannerAgentId?: string;
   previewEnabled?: boolean;
 }): Promise<Project> {
   return httpPost<Project>(`${API}/projects`, data);
+}
+
+export interface ProjectScopeContract {
+	problemStatement: string;
+	goals: string[];
+	nonGoals: string[];
+	constraints: string[];
+	risks: string[];
+	acceptanceCriteria: string[];
+	validationPlan: string[];
+	requiredCapabilities: string[];
+	recommendedTeamRoles: string[];
+	status: 'draft' | 'ready_for_review' | 'approved' | 'superseded';
+	approvedAt?: string;
+	approvedBy?: string;
+}
+
+export interface TeamRecommendationResponse {
+	decision: 'recommend-existing' | 'recommend-custom' | 'need-more-info';
+	teamTemplateId?: string;
+	templateSource?: 'preset' | 'custom';
+	templateName?: string;
+	reasoning?: string;
+	matchedRoles?: string[];
+	requiredCapabilities?: string[];
+	recommendedTeamRoles?: string[];
+}
+
+export async function getProjectScope(projectId: string): Promise<ProjectScopeContract | null> {
+	const res = await json<{ ok: boolean; data: ProjectScopeContract | null }>(`${API}/projects/${projectId}/scope`);
+	return res.data;
+}
+
+export async function saveProjectScopeDraft(
+	projectId: string,
+	payload: Partial<ProjectScopeContract>,
+): Promise<ProjectScopeContract | null> {
+	const res = await httpPost<{ ok: boolean; data: ProjectScopeContract | null }>(
+		`${API}/projects/${projectId}/scope/draft`,
+		payload,
+	);
+	return res.data;
+}
+
+export async function approveProjectScope(projectId: string): Promise<ProjectScopeContract | null> {
+	const res = await httpPost<{ ok: boolean; data: ProjectScopeContract | null }>(
+		`${API}/projects/${projectId}/scope/approve`,
+		{},
+	);
+	return res.data;
+}
+
+export async function recommendProjectTeam(projectId: string): Promise<TeamRecommendationResponse> {
+	const res = await httpPost<{ ok: boolean; data: TeamRecommendationResponse }>(
+		`${API}/projects/${projectId}/team/recommend`,
+		{},
+	);
+	return res.data;
+}
+
+export async function applyProjectTeam(
+	projectId: string,
+	payload: {
+		teamTemplateId?: string;
+		customTeam?: { name: string; description: string; roles: string[] };
+		plannerAgentId?: string;
+	},
+): Promise<{ ok: boolean; data: unknown[] }> {
+	return httpPost<{ ok: boolean; data: unknown[] }>(`${API}/projects/${projectId}/team/apply`, payload);
 }
 
 export async function updateProject(id: string, data: Partial<Project>): Promise<Project> {
