@@ -42,27 +42,36 @@ export function buildPhaseBreakdown(plan: ProjectPlan, estimate: PlanCostEstimat
 
 export interface AgentCostRow {
 	agent: string;
+	agentKey: string;
 	taskCount: number;
 	tokens: number;
 	cost: number;
 }
 
-export function buildAgentBreakdown(plan: ProjectPlan, estimate: PlanCostEstimate): AgentCostRow[] {
+export function buildAgentBreakdown(
+	plan: ProjectPlan,
+	estimate: PlanCostEstimate,
+	resolveAgentName?: (task: { assignedAgent: string; assignedAgentId?: string }) => string,
+): AgentCostRow[] {
 	const tokensPerTask = estimate.avgTokensPerTask;
 	const costPerTask = estimate.taskCount > 0 ? estimate.estimatedCost / estimate.taskCount : 0;
 
-	const agentMap = new Map<string, { taskCount: number }>();
+	const agentMap = new Map<string, { label: string; taskCount: number }>();
 	for (const phase of plan.phases) {
 		for (const task of phase.tasks) {
-			const key = task.assignedAgent || 'unassigned';
-			const existing = agentMap.get(key) ?? { taskCount: 0 };
-			agentMap.set(key, { taskCount: existing.taskCount + 1 });
+			const key = task.assignedAgentId || task.assignedAgent || 'unassigned';
+			const label = resolveAgentName
+				? resolveAgentName({ assignedAgent: task.assignedAgent, assignedAgentId: task.assignedAgentId })
+				: task.assignedAgent || 'unassigned';
+			const existing = agentMap.get(key) ?? { label, taskCount: 0 };
+			agentMap.set(key, { label, taskCount: existing.taskCount + 1 });
 		}
 	}
 
 	return Array.from(agentMap.entries())
-		.map(([agent, { taskCount }]) => ({
-			agent,
+		.map(([agentKey, { label, taskCount }]) => ({
+			agent: label,
+			agentKey,
 			taskCount,
 			tokens: taskCount * tokensPerTask,
 			cost: taskCount * costPerTask,

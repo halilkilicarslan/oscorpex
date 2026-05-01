@@ -10,6 +10,7 @@ import {
 	type AuthUser,
 	type RegisterData,
 } from '../lib/studio-api/auth';
+import { StudioApiError } from '../lib/studio-api/base';
 
 const TOKEN_KEY = 'oscorpex_token';
 
@@ -44,13 +45,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 					if ((data as any).authDisabled) return;
 					setUser(data);
 				})
-				.catch(() => {
-					try {
-						localStorage.removeItem(TOKEN_KEY);
-					} catch {
-						// ignore
+				.catch((err: unknown) => {
+					// Keep session on transient/server/network errors.
+					// Only clear token when backend explicitly says unauthorized/forbidden.
+					if (err instanceof StudioApiError && (err.status === 401 || err.status === 403)) {
+						try {
+							localStorage.removeItem(TOKEN_KEY);
+						} catch {
+							// ignore
+						}
+						setToken(null);
 					}
-					setToken(null);
 				})
 				.finally(() => setIsLoading(false));
 		} else {
@@ -101,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			value={{
 				user,
 				token,
-				isAuthenticated: !!user,
+				isAuthenticated: !!token,
 				isLoading,
 				login: loginFn,
 				register: registerFn,

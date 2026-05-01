@@ -1,5 +1,5 @@
 import type { PipelineState, AgentProcessInfo, AgentRunHistory } from './types.js';
-import { API, json, httpPost } from './base.js';
+import { API, json, httpPost, authHeaders } from './base.js';
 
 // Pipeline'ı başlat
 export async function startPipeline(projectId: string): Promise<PipelineState> {
@@ -103,11 +103,13 @@ export async function getAgentOutput(
   projectId: string,
   agentId: string,
   since?: number,
+  taskId?: string,
 ): Promise<{ agentId: string; lines: string[]; total: number }> {
-  const url =
-    since !== undefined
-      ? `${API}/projects/${projectId}/agents/${agentId}/output?since=${since}`
-      : `${API}/projects/${projectId}/agents/${agentId}/output`;
+  const params = new URLSearchParams();
+  if (since !== undefined) params.set('since', String(since));
+  if (taskId) params.set('taskId', taskId);
+  const qs = params.toString();
+  const url = `${API}/projects/${projectId}/agents/${agentId}/output${qs ? `?${qs}` : ''}`;
   return json(url);
 }
 
@@ -146,6 +148,18 @@ export async function getAgentRunHistory(
 //   stop();
 
 const STUDIO_WS_URL = `ws://localhost:${import.meta.env.VITE_STUDIO_WS_PORT ?? 3142}/api/studio/ws`;
+
+function buildStudioWsUrl(): string {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('oscorpex_token') : null;
+  const url = new URL(STUDIO_WS_URL);
+  if (token) {
+    url.searchParams.set('token', token);
+    return url.toString();
+  }
+  const apiKey = import.meta.env.VITE_API_KEY as string | undefined;
+  if (apiKey) url.searchParams.set('apiKey', apiKey);
+  return url.toString();
+}
 const WS_RECONNECT_BASE_MS = 1_000;
 const WS_RECONNECT_MAX_MS  = 15_000;
 
@@ -166,7 +180,7 @@ export function streamAgentOutputWS(
     if (stopped) return;
 
     try {
-      ws = new WebSocket(STUDIO_WS_URL);
+      ws = new WebSocket(buildStudioWsUrl());
     } catch (err) {
       onError?.(err instanceof Error ? err : new Error(String(err)));
       return;
@@ -248,13 +262,21 @@ export function streamAgentOutput(
   agentId: string,
   onLine: (line: string, index: number) => void,
   onError?: (err: Error) => void,
+  taskId?: string,
 ): () => void {
   const controller = new AbortController();
 
   // SSE akışını asenkron olarak başlat
   const connect = async () => {
     try {
-      const res = await fetch(`${API}/projects/${projectId}/agents/${agentId}/stream`, { signal: controller.signal }); // DIRECT_FETCH_INTENTIONAL: agent output SSE requires raw ReadableStream access.
+      const params = new URLSearchParams();
+      if (taskId) params.set('taskId', taskId);
+      const qs = params.toString();
+      const streamUrl = `${API}/projects/${projectId}/agents/${agentId}/stream${qs ? `?${qs}` : ''}`;
+      const res = await fetch(streamUrl, {
+        signal: controller.signal,
+        headers: { ...authHeaders() },
+      }); // DIRECT_FETCH_INTENTIONAL: agent output SSE requires raw ReadableStream access.
 
       if (!res.ok) {
         throw new Error(`SSE bağlantısı başarısız: HTTP ${res.status}`);

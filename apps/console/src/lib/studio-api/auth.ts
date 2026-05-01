@@ -69,14 +69,7 @@ export async function fetchCurrentUser(token: string): Promise<AuthUser> {
 	if (token) {
 		headers.Authorization = `Bearer ${token}`;
 	}
-	try {
-		return await httpGet<AuthUser>(`${AUTH_BASE}/me`, { headers });
-	} catch (err) {
-		if (err instanceof StudioApiError) {
-			throw new Error(err.message ?? 'Not authenticated');
-		}
-		throw err;
-	}
+	return httpGet<AuthUser>(`${AUTH_BASE}/me`, { headers });
 }
 
 export async function fetchAuthUsers(token: string): Promise<AuthUser[]> {

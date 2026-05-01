@@ -59,11 +59,13 @@ const RECONNECT_DELAY_MS = 2000;
 export default function AgentTerminal({
   projectId,
   agentId,
+  taskId,
   agentName,
   agentAvatar,
 }: {
   projectId: string;
   agentId: string;
+  taskId?: string;
   agentName?: string;
   agentAvatar?: string;
 }) {
@@ -118,11 +120,12 @@ export default function AgentTerminal({
           if (!unmountedRef.current) connectStream();
         }, RECONNECT_DELAY_MS);
       },
+      taskId,
     );
 
     abortStreamRef.current = abort;
     setConnected(true);
-  }, [projectId, agentId]);
+  }, [projectId, agentId, taskId]);
 
   // Bileşen mount olduğunda terminali başlat
   useEffect(() => {
@@ -152,7 +155,7 @@ export default function AgentTerminal({
 
     // Karşılama mesajı
     term.writeln('\x1b[32m● Agent terminal ready\x1b[0m');
-    term.writeln(`\x1b[90mProje: ${projectId} | Ajan: ${agentId}\x1b[0m`);
+    term.writeln(`\x1b[90mProje: ${projectId} | Ajan: ${agentId}${taskId ? ` | Task: ${taskId}` : ''}\x1b[0m`);
     term.writeln('');
 
     // Ajan durumunu sorgula ve süreç bilgisini ayarla
@@ -161,7 +164,7 @@ export default function AgentTerminal({
       .catch(() => { /* Durum sorgusu sessizce atlanır */ });
 
     // Mevcut çıktı tamponunu yükle, ardından SSE akışına bağlan
-    getAgentOutput(projectId, agentId)
+    getAgentOutput(projectId, agentId, undefined, taskId)
       .then(({ lines, total }) => {
         if (unmountedRef.current) return;
         // Tampondaki mevcut satırları terminale yaz
@@ -206,7 +209,7 @@ export default function AgentTerminal({
       fitAddonRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, agentId]);
+  }, [projectId, agentId, taskId]);
 
   // Ajan durum bilgisini yenile
   const refreshAgentStatus = useCallback(() => {

@@ -61,7 +61,30 @@ export interface UseStudioWebSocketResult {
 // ---------------------------------------------------------------------------
 
 const STUDIO_WS_PORT: number = Number(import.meta.env.VITE_STUDIO_WS_PORT ?? 3142);
-const WS_URL = `ws://localhost:${STUDIO_WS_PORT}/api/studio/ws`;
+
+function resolveWsBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const host = window.location.hostname || 'localhost';
+    return `${protocol}://${host}:${STUDIO_WS_PORT}/api/studio/ws`;
+  }
+  return `ws://localhost:${STUDIO_WS_PORT}/api/studio/ws`;
+}
+
+function buildWsUrl(): string {
+  const wsBaseUrl = resolveWsBaseUrl();
+  const token = typeof window !== 'undefined' ? localStorage.getItem('oscorpex_token') : null;
+  if (!token) {
+    const apiKey = import.meta.env.VITE_API_KEY as string | undefined;
+    if (!apiKey) return wsBaseUrl;
+    const url = new URL(wsBaseUrl);
+    url.searchParams.set('apiKey', apiKey);
+    return url.toString();
+  }
+  const url = new URL(wsBaseUrl);
+  url.searchParams.set('token', token);
+  return url.toString();
+}
 
 const RECONNECT_BASE_MS   = 1_000;   // İlk retry gecikmesi
 const RECONNECT_MAX_MS    = 30_000;  // Maksimum retry gecikmesi
@@ -157,7 +180,7 @@ export function useStudioWebSocket(
 
     let ws: WebSocket;
     try {
-      ws = new WebSocket(WS_URL);
+      ws = new WebSocket(buildWsUrl());
     } catch (err) {
       console.error('[useStudioWebSocket] WebSocket oluşturulamadı:', err);
       setConnectionState('error');

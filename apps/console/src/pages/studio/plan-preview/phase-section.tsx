@@ -3,7 +3,15 @@ import { ChevronDown, ChevronRight, GitBranch } from 'lucide-react';
 import type { Phase } from "../../../lib/studio-api";
 import TaskRow from './task-row.js';
 
-export default function PhaseSection({ phase, index }: { phase: Phase; index: number }) {
+export default function PhaseSection({
+	phase,
+	index,
+	agentMetaById,
+}: {
+	phase: Phase;
+	index: number;
+	agentMetaById: Map<string, { name: string; avatar: string; role: string }>;
+}) {
 	const [expanded, setExpanded] = useState(true);
 
 	return (
@@ -25,7 +33,7 @@ export default function PhaseSection({ phase, index }: { phase: Phase; index: nu
 			{expanded && (
 				<div className="p-3 flex flex-col gap-2 bg-[#0d0d0d]">
 					{phase.tasks.map((task) => (
-						<TaskRow key={task.id} task={task} />
+						<TaskRow key={task.id} task={task} agentMetaById={agentMetaById} />
 					))}
 					{phase.dependsOn.length > 0 && (
 						<div className="flex items-center gap-1.5 px-3 pt-1">

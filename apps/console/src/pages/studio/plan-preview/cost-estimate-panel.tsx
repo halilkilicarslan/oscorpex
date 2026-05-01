@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DollarSign, ChevronUp, ChevronDown, GitBranch, Users, Cpu } from 'lucide-react';
-import type { ProjectPlan, PlanCostEstimate } from "../../../lib/studio-api";
+import { roleLabel, type ProjectPlan, type PlanCostEstimate } from "../../../lib/studio-api";
+import AgentAvatarImg from '../../../components/AgentAvatar';
 import {
 	getCostColor,
 	getCostBgColor,
@@ -9,7 +10,15 @@ import {
 	buildAgentBreakdown,
 } from './cost-helpers.js';
 
-export default function CostEstimatePanel({ plan, estimate }: { plan: ProjectPlan; estimate: PlanCostEstimate }) {
+export default function CostEstimatePanel({
+	plan,
+	estimate,
+	agentMetaById,
+}: {
+	plan: ProjectPlan;
+	estimate: PlanCostEstimate;
+	agentMetaById: Map<string, { name: string; avatar: string; role: string }>;
+}) {
 	const [showBreakdown, setShowBreakdown] = useState(false);
 	const [activeTab, setActiveTab] = useState<'phase' | 'agent'>('phase');
 
@@ -20,7 +29,10 @@ export default function CostEstimatePanel({ plan, estimate }: { plan: ProjectPla
 	const isHighCost = estimate.estimatedCost >= 1.0;
 
 	const phaseRows = buildPhaseBreakdown(plan, estimate);
-	const agentRows = buildAgentBreakdown(plan, estimate);
+	const agentRows = buildAgentBreakdown(plan, estimate, (task) => {
+		const meta = (task.assignedAgentId ? agentMetaById.get(task.assignedAgentId) : undefined) ?? agentMetaById.get(task.assignedAgent);
+		return meta?.name ?? task.assignedAgent;
+	});
 
 	return (
 		<div className={`border rounded-xl overflow-hidden ${costBg}`}>
@@ -144,7 +156,21 @@ export default function CostEstimatePanel({ plan, estimate }: { plan: ProjectPla
 									className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#141414] border border-[#1f1f1f]"
 								>
 									<Cpu size={11} className="text-[#525252] shrink-0" />
-									<span className="text-[11px] text-[#a3a3a3] flex-1 truncate capitalize">{row.agent}</span>
+									<div className="flex items-center gap-1.5 flex-1 min-w-0">
+										<AgentAvatarImg
+											avatar={agentMetaById.get(row.agentKey)?.avatar ?? row.agent.charAt(0).toUpperCase()}
+											name={row.agent}
+											size="xs"
+										/>
+										<div className="min-w-0 leading-tight">
+											<div className="text-[11px] text-[#a3a3a3] truncate">{row.agent}</div>
+											{agentMetaById.get(row.agentKey)?.role && (
+												<div className="text-[9px] text-[#525252] truncate">
+													{roleLabel(agentMetaById.get(row.agentKey)!.role)}
+												</div>
+											)}
+										</div>
+									</div>
 									<div className="flex items-center gap-3 shrink-0">
 										<span className="text-[10px] text-[#525252]">{row.taskCount}t</span>
 										<span className="text-[10px] text-[#525252]">{formatTokens(row.tokens)} tok</span>

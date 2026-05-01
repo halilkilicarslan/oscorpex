@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import type { ProjectPlan, PlanCostEstimate } from '../../lib/studio-api';
-import { fetchPlanCostEstimate } from '../../lib/studio-api';
+import type { ProjectPlan, PlanCostEstimate, ProjectAgent } from '../../lib/studio-api';
+import { fetchPlanCostEstimate, fetchProjectAgents } from '../../lib/studio-api';
 import PhaseSection from './plan-preview/phase-section.js';
 import CostEstimatePanel from './plan-preview/cost-estimate-panel.js';
 import PlanActions from './plan-preview/plan-actions.js';
@@ -19,6 +19,7 @@ export default function PlanPreview({
 }) {
 	const [costEstimate, setCostEstimate] = useState<PlanCostEstimate | null>(null);
 	const [costLoading, setCostLoading] = useState(false);
+	const [projectAgents, setProjectAgents] = useState<ProjectAgent[]>([]);
 
 	const totalTasks = plan.phases.reduce((sum, p) => sum + p.tasks.length, 0);
 	const isDraft = plan.status === 'draft';
@@ -48,6 +49,29 @@ export default function PlanPreview({
 		};
 	}, [projectId, plan.id, isDraft]);
 
+	useEffect(() => {
+		let cancelled = false;
+		fetchProjectAgents(projectId)
+			.then((agents) => {
+				if (!cancelled) setProjectAgents(agents);
+			})
+			.catch(() => {
+				if (!cancelled) setProjectAgents([]);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [projectId]);
+
+	const agentMetaById = new Map<string, { name: string; avatar: string; role: string }>();
+	for (const agent of projectAgents) {
+		const meta = { name: agent.name, avatar: agent.avatar, role: agent.role };
+		agentMetaById.set(agent.id, meta);
+		if (agent.sourceAgentId) {
+			agentMetaById.set(agent.sourceAgentId, meta);
+		}
+	}
+
 	return (
 		<div className="border border-[#262626] rounded-2xl bg-[#111111] overflow-hidden">
 			{/* Header */}
@@ -76,7 +100,7 @@ export default function PlanPreview({
 				{plan.phases
 					.sort((a, b) => a.order - b.order)
 					.map((phase, i) => (
-						<PhaseSection key={phase.id} phase={phase} index={i} />
+						<PhaseSection key={phase.id} phase={phase} index={i} agentMetaById={agentMetaById} />
 					))}
 			</div>
 
@@ -90,7 +114,7 @@ export default function PlanPreview({
 						</div>
 					)}
 					{!costLoading && costEstimate && (
-						<CostEstimatePanel plan={plan} estimate={costEstimate} />
+						<CostEstimatePanel plan={plan} estimate={costEstimate} agentMetaById={agentMetaById} />
 					)}
 				</div>
 			)}

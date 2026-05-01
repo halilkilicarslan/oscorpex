@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal, Loader2, Circle, ChevronDown } from 'lucide-react';
 import { fetchProjectAgents, roleLabel, type ProjectAgent } from '../../lib/studio-api';
+import { authHeaders } from '../../lib/studio-api/base.js';
 
 const BASE = `/api/studio`;
 
@@ -16,7 +17,7 @@ const BASE = `/api/studio`;
 function useAgentStream(projectId: string, agentId: string | null) {
   const [lines, setLines] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
-  const esRef = useRef<EventSource | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!agentId) {
@@ -26,40 +27,71 @@ function useAgentStream(projectId: string, agentId: string | null) {
     }
 
     setLines([]);
-    const url = `${BASE}/projects/${projectId}/agents/${agentId}/stream`;
-    const es = new EventSource(url);
-    esRef.current = es;
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
 
-    es.onopen = () => setConnected(true);
-
-    es.onmessage = (e) => {
+    (async () => {
       try {
-        const data = JSON.parse(e.data);
-        const line = data.line ?? data.output ?? e.data;
-        if (typeof line === 'string' && line.trim()) {
-          setLines((prev) => {
-            const next = [...prev, line];
-            // Keep last 500 lines
-            return next.length > 500 ? next.slice(-500) : next;
-          });
+        const response = await fetch(`${BASE}/projects/${projectId}/agents/${agentId}/stream`, {
+          signal: controller.signal,
+          headers: { ...authHeaders() },
+        });
+
+        if (!response.ok || !response.body) {
+          setConnected(false);
+          return;
+        }
+
+        setConnected(true);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const events = buffer.split('\n\n');
+          buffer = events.pop() ?? '';
+
+          for (const eventChunk of events) {
+            const dataLine = eventChunk
+              .split('\n')
+              .map((line) => line.trim())
+              .find((line) => line.startsWith('data: '));
+
+            if (!dataLine) continue;
+            const payload = dataLine.slice(6);
+
+            try {
+              const data = JSON.parse(payload);
+              const line = data.line ?? data.output ?? payload;
+              if (typeof line === 'string' && line.trim()) {
+                setLines((prev) => {
+                  const next = [...prev, line];
+                  return next.length > 500 ? next.slice(-500) : next;
+                });
+              }
+            } catch {
+              if (payload.trim()) {
+                setLines((prev) => {
+                  const next = [...prev, payload];
+                  return next.length > 500 ? next.slice(-500) : next;
+                });
+              }
+            }
+          }
         }
       } catch {
-        if (e.data?.trim()) {
-          setLines((prev) => {
-            const next = [...prev, e.data];
-            return next.length > 500 ? next.slice(-500) : next;
-          });
-        }
+        setConnected(false);
       }
-    };
-
-    es.onerror = () => {
-      setConnected(false);
-    };
+    })();
 
     return () => {
-      es.close();
-      esRef.current = null;
+      controller.abort();
+      streamAbortRef.current = null;
       setConnected(false);
     };
   }, [projectId, agentId]);

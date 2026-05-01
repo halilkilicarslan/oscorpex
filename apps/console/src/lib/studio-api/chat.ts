@@ -8,7 +8,7 @@ import type {
   ArchitectMessage,
   TeamArchitectIntake,
 } from './types.js';
-import { API, json } from './base.js';
+import { API, authHeaders, json } from './base.js';
 
 export async function fetchChatHistory(projectId: string): Promise<ChatMessage[]> {
   return json(`${API}/projects/${projectId}/chat/history`);
@@ -63,7 +63,7 @@ export function streamPMChat(
 
   fetch(`${API}/projects/${projectId}/chat`, { // DIRECT_FETCH_INTENTIONAL: planner chat streams SSE chunks through ReadableStream.
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, provider, model, effort }),
     signal: controller.signal,
   })
@@ -133,7 +133,7 @@ export function streamTeamArchitectChat(
 
   fetch(`${API}/team-architect/chat`, { // DIRECT_FETCH_INTENTIONAL: team architect chat streams SSE chunks through ReadableStream.
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ intake, messages }),
     signal: controller.signal,
   })
