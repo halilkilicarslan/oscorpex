@@ -310,7 +310,7 @@ class RegistryBackedCLIAdapter implements CLIAdapter {
 	async execute(opts: CLIAdapterOptions): Promise<CLIExecutionResult> {
 		const result = await this.provider.execute({
 			runId: opts.projectId,
-			taskId: opts.agentId,
+			taskId: opts.taskId,
 			provider: this.name,
 			repoPath: opts.repoPath,
 			prompt: opts.prompt,
@@ -319,6 +319,7 @@ class RegistryBackedCLIAdapter implements CLIAdapter {
 			allowedTools: opts.allowedTools,
 			model: opts.model,
 			signal: opts.signal,
+			onLog: opts.onLog,
 		});
 
 		return {

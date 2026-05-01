@@ -73,6 +73,7 @@ export type ApprovalStatus = "pending" | "approved" | "rejected";
 export type TaskComplexity = "S" | "M" | "L" | "XL";
 
 export type TaskType = "ai" | "integration-test" | "run-app";
+export type TestExpectation = "none" | "optional" | "required";
 
 export interface TaskOutput {
 	filesCreated: string[];
@@ -92,6 +93,7 @@ export interface Task {
 	dependsOn: string[]; // Task IDs
 	branch: string;
 	taskType?: TaskType;
+	testExpectation?: TestExpectation;
 	output?: TaskOutput;
 	retryCount: number;
 	error?: string | null;

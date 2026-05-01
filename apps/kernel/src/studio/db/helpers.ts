@@ -91,6 +91,7 @@ export function rowToTask(row: any): Task {
 		dependsOn: JSON.parse(row.depends_on),
 		branch: row.branch,
 		taskType: row.task_type !== "ai" ? row.task_type : undefined,
+		testExpectation: row.test_expectation ?? undefined,
 		output: row.output ? JSON.parse(row.output) : undefined,
 		retryCount: row.retry_count,
 		error: row.error ?? undefined,

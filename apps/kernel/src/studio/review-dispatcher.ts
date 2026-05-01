@@ -177,6 +177,7 @@ export async function executeReviewTask(
 
 		const cliResult = await reviewAdapter.execute({
 			projectId,
+			taskId: reviewTask.id,
 			agentId: reviewer.id,
 			agentName: reviewer.name,
 			repoPath: reviewWorkspace.repoPath,

@@ -29,6 +29,7 @@ import {
 	listProjectTasks,
 	listProjects,
 	recordTokenUsage,
+	reclaimStaleQueuedClaimsForProject,
 	releaseTaskClaim,
 	updatePhaseStatus,
 	updateProject,
@@ -222,6 +223,8 @@ class ExecutionEngine {
 
 	/** Unique worker ID for distributed task claiming (PID-based) */
 	private _workerId = `worker-${process.pid}-${Date.now()}`;
+	private _dispatchWatchdogRunning = false;
+	private _lastWatchdogKickByProject = new Map<string, number>();
 
 	constructor() {
 		// Ready-task dispatch is handled explicitly at the end of task execution.
@@ -246,6 +249,62 @@ class ExecutionEngine {
 			() => this._semaphore.pendingCount,
 		);
 		this._concurrencyController.start();
+
+		// Self-healing watchdog:
+		// If pipeline is running but no active execution is visible while ready tasks exist,
+		// trigger a dispatch kick to recover from missed event/race windows.
+		setInterval(() => {
+			this.runDispatchWatchdog().catch((err) => {
+				log.warn("[execution-engine] Dispatch watchdog failed (non-blocking):" + " " + String(err));
+			});
+		}, 15_000);
+	}
+
+	private async runDispatchWatchdog(): Promise<void> {
+		if (this._dispatchWatchdogRunning) return;
+		this._dispatchWatchdogRunning = true;
+		try {
+			// If engine is actively working, watchdog should stay passive.
+			if (this._semaphore.activeCount > 0 || this._semaphore.pendingCount > 0) return;
+
+			const projects = await listProjects();
+			const now = Date.now();
+			for (const project of projects) {
+				if (project.status !== "running") continue;
+
+				const run = await getPipelineRun(project.id);
+				if (!run || run.status !== "running") continue;
+
+				const plan = await getLatestPlan(project.id);
+				if (!plan || plan.status !== "approved") continue;
+
+				const phases = await listPhases(plan.id);
+				const runningPhases = phases.filter((phase) => phase.status === "running");
+				if (runningPhases.length === 0) continue;
+
+				let hasReadyTask = false;
+				for (const phase of runningPhases) {
+					const ready = await taskEngine.getReadyTasks(phase.id);
+					if (ready.length > 0) {
+						hasReadyTask = true;
+						break;
+					}
+				}
+				if (!hasReadyTask) continue;
+
+				const lastKick = this._lastWatchdogKickByProject.get(project.id) ?? 0;
+				// Cooldown to avoid dispatch thrash loops when a project keeps flapping.
+				if (now - lastKick < 20_000) continue;
+
+				this._lastWatchdogKickByProject.set(project.id, now);
+				log.warn(`[execution-engine] Watchdog kick: restarting dispatch for project "${project.name}"`);
+				this.startProjectExecution(project.id).catch((err) => {
+					log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err));
+				});
+			}
+		} finally {
+			this._dispatchWatchdogRunning = false;
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -425,6 +484,10 @@ class ExecutionEngine {
 		const project = await getProject(projectId);
 		if (!project) throw new Error(`Project ${projectId} not found`);
 
+		// Safety net: clear stale queued claims before trying to dispatch ready tasks.
+		// This prevents dead workers from pinning the phase head task indefinitely.
+		await reclaimStaleQueuedClaimsForProject(projectId);
+
 		let readyTasks: Task[] = [];
 
 		// First check if there are already running phases with queued tasks
@@ -475,80 +538,93 @@ class ExecutionEngine {
 	async executeTask(projectId: string, task: Task): Promise<void> {
 		// Guard: skip if this task is already being dispatched by another caller
 		if (this._dispatchingTasks.has(task.id)) {
+			// Self-heal: stale in-memory dispatch marker can survive abnormal flows
+			// (e.g. restart/recovery overlap) while no active controller exists.
+			const controllerKey = `${projectId}:${task.id}`;
+			if (!this._activeControllers.has(controllerKey)) {
+				this._dispatchingTasks.delete(task.id);
+				log.warn(`[execution-engine] Cleared stale dispatch marker for task "${task.title}"`);
+			} else {
 			log.info(`[execution-engine] Task "${task.title}" zaten dispatch ediliyor, skip.`);
 			return;
-		}
-
-		// Distributed claim: atomically lock the task row using SELECT FOR UPDATE SKIP LOCKED.
-		// If another worker already claimed this task, claimTask returns null.
-		const freshTask = await claimTask(task.id, this._workerId);
-		if (!freshTask) {
-			log.info(
-				`[execution-engine] Task "${task.title}" could not be claimed (already taken or not queued), skip.`,
-			);
-			return;
-		}
-
-		// v8.0: Agent constraint check — verify governance rules allow this task to execute
-		try {
-			const { classifyRisk, checkConstraints } = await import("./agent-runtime/agent-constraints.js");
-			const riskLevel = classifyRisk({
-				proposalType: freshTask.parentTaskId ? "sub_task" : "fix_task",
-				severity: undefined,
-				title: freshTask.title,
-			});
-			const constraint = await checkConstraints(projectId, "execute_task", riskLevel);
-			if (!constraint.allowed && constraint.requiresApproval) {
-				log.warn(`[execution-engine] Task "${freshTask.title}" blocked by constraints (${riskLevel} risk — requires approval)`);
-				await updateTask(freshTask.id, { status: "waiting_approval", requiresApproval: true });
-				await releaseTaskClaim(freshTask.id);
-				eventBus.emit({
-					projectId,
-					type: "task:approval_required",
-					taskId: freshTask.id,
-					payload: { title: freshTask.title, riskLevel, reason: constraint.reason },
-				});
-				return;
-			}
-		} catch (err) {
-			log.warn("[execution-engine] Constraint check failed (non-blocking):" + " " + String(err));
-		}
-
-		// v3.0: Auto-decompose L/XL tasks into micro-tasks
-		if ((freshTask.complexity === "L" || freshTask.complexity === "XL") && !freshTask.parentTaskId) {
-			try {
-				const { shouldDecompose, decomposeTask } = await import("./task-decomposer.js");
-				if (shouldDecompose(freshTask)) {
-					log.info(`[execution-engine] Auto-decomposing ${freshTask.complexity} task "${freshTask.title}"`);
-					const subTasks = await decomposeTask(freshTask, projectId);
-					if (subTasks.length > 0) {
-						// Parent becomes a container — update status to track sub-tasks
-						await updateTask(freshTask.id, { status: "running" });
-						await releaseTaskClaim(freshTask.id);
-						// Dispatch sub-tasks
-						for (const sub of subTasks) {
-							this.executeTask(projectId, sub).catch((err) =>
-								log.error(`[execution-engine] Sub-task "${sub.title}" dispatch hatası:` + " " + String(err)),
-							);
-						}
-						return;
-					}
-				}
-			} catch (err) {
-				log.warn("[execution-engine] Task decomposition failed, executing as-is:" + " " + String(err));
 			}
 		}
 
 		this._dispatchingTasks.add(task.id);
-
 		await this._semaphore.acquire();
+		let claimedTaskId: string | null = null;
 		try {
+			// IMPORTANT: claim only after acquiring a concurrency slot.
+			// Otherwise tasks can remain queued+claimed while waiting on semaphore.
+			const freshTask = await claimTask(task.id, this._workerId);
+			if (!freshTask) {
+				log.info(
+					`[execution-engine] Task "${task.title}" could not be claimed (already taken or not queued), skip.`,
+				);
+				return;
+			}
+			claimedTaskId = freshTask.id;
+
+			// v8.0: Agent constraint check — verify governance rules allow this task to execute
+			try {
+				const { classifyRisk, checkConstraints } = await import("./agent-runtime/agent-constraints.js");
+				const riskLevel = classifyRisk({
+					proposalType: freshTask.parentTaskId ? "sub_task" : "fix_task",
+					severity: undefined,
+					title: freshTask.title,
+				});
+				const constraint = await checkConstraints(projectId, "execute_task", riskLevel);
+				if (!constraint.allowed && constraint.requiresApproval) {
+					log.warn(`[execution-engine] Task "${freshTask.title}" blocked by constraints (${riskLevel} risk — requires approval)`);
+					await updateTask(freshTask.id, { status: "waiting_approval", requiresApproval: true });
+					await releaseTaskClaim(freshTask.id);
+					claimedTaskId = null;
+					eventBus.emit({
+						projectId,
+						type: "task:approval_required",
+						taskId: freshTask.id,
+						payload: { title: freshTask.title, riskLevel, reason: constraint.reason },
+					});
+					return;
+				}
+			} catch (err) {
+				log.warn("[execution-engine] Constraint check failed (non-blocking):" + " " + String(err));
+			}
+
+			// v3.0: Auto-decompose L/XL tasks into micro-tasks
+			if ((freshTask.complexity === "L" || freshTask.complexity === "XL") && !freshTask.parentTaskId) {
+				try {
+					const { shouldDecompose, decomposeTask } = await import("./task-decomposer.js");
+					if (shouldDecompose(freshTask)) {
+						log.info(`[execution-engine] Auto-decomposing ${freshTask.complexity} task "${freshTask.title}"`);
+						const subTasks = await decomposeTask(freshTask, projectId);
+						if (subTasks.length > 0) {
+							// Parent becomes a container — update status to track sub-tasks
+							await updateTask(freshTask.id, { status: "running" });
+							await releaseTaskClaim(freshTask.id);
+							claimedTaskId = null;
+							// Dispatch sub-tasks
+							for (const sub of subTasks) {
+								this.executeTask(projectId, sub).catch((err) =>
+									log.error(`[execution-engine] Sub-task "${sub.title}" dispatch hatası:` + " " + String(err)),
+								);
+							}
+							return;
+						}
+					}
+				} catch (err) {
+					log.warn("[execution-engine] Task decomposition failed, executing as-is:" + " " + String(err));
+				}
+			}
+
 			await this._executeTaskInner(projectId, freshTask);
 		} finally {
 			this._semaphore.release();
 			this._dispatchingTasks.delete(task.id);
 			this._activeControllers.delete(`${projectId}:${task.id}`);
-			await releaseTaskClaim(task.id);
+			if (claimedTaskId) {
+				await releaseTaskClaim(claimedTaskId);
+			}
 		}
 	}
 
@@ -671,6 +747,10 @@ class ExecutionEngine {
 		}
 
 		const prompt = await buildTaskPrompt(task, project, agent.role) + promptSuffix;
+		const formatTaskLog = (line: string): string => {
+			const shortId = task.id.slice(0, 8);
+			return `[task:${shortId}] ${line}`;
+		};
 
 		// --- Sandbox: resolve policy for this task ---
 		let sandboxSessionId: string | undefined;
@@ -800,11 +880,25 @@ class ExecutionEngine {
 				if (sessionId) {
 					recordStep(sessionId, { step: 1, type: "action_executed", summary: `CLI execution started: ${adapter.name}` }).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
 				}
+				eventBus.emitTransient({
+					projectId,
+					type: "agent:output",
+					agentId: agent.id,
+					taskId: task.id,
+					payload: { output: `[execution] CLI started: ${adapter.name}` },
+				});
+				agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
+				agentRuntime.appendVirtualOutput(
+					projectId,
+					agent.id,
+					formatTaskLog(`[execution] CLI started: ${adapter.name}`),
+				);
 
 				const adapterStartMs = Date.now();
 				try {
 					cliResult = await adapter.execute({
 						projectId,
+						taskId: task.id,
 						agentId: agent.id,
 						agentName: agent.name,
 						repoPath: runtimeRepoPath,
@@ -816,6 +910,17 @@ class ExecutionEngine {
 						model: routedModel,
 						signal: taskController.signal,
 						allowedTools,
+						onLog: (line: string) => {
+							agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
+							agentRuntime.appendVirtualOutput(projectId, agent.id, formatTaskLog(line));
+							eventBus.emitTransient({
+								projectId,
+								type: "agent:output",
+								agentId: agent.id,
+								taskId: task.id,
+								payload: { output: line },
+							});
+						},
 					});
 					providerState.markSuccess(adapterName);
 					// Telemetry lifecycle: SUCCESS
@@ -963,6 +1068,8 @@ class ExecutionEngine {
 				taskId: task.id,
 				payload: { output: `[execution] Mode: cli` },
 			});
+			agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
+			agentRuntime.appendVirtualOutput(projectId, agent.id, formatTaskLog("[execution] Mode: cli"));
 
 			// --- ESLint/Prettier enforcement: auto-fix generated files ---
 			const allFiles = [...(output.filesCreated ?? []), ...(output.filesModified ?? [])];
@@ -970,7 +1077,7 @@ class ExecutionEngine {
 				try {
 					const termLog = (msg: string) => {
 						agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
-						agentRuntime.appendVirtualOutput(projectId, agent.id, msg);
+						agentRuntime.appendVirtualOutput(projectId, agent.id, formatTaskLog(msg));
 					};
 					const lintResult = await runLintFix(project.repoPath, allFiles, termLog);
 					if (lintResult.eslint.errors.length > 0 || lintResult.prettier.errors.length > 0) {
@@ -994,7 +1101,7 @@ class ExecutionEngine {
 			try {
 				await updateDocsAfterTask(project, { ...task, output }, agent, (msg) => {
 					agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
-					agentRuntime.appendVirtualOutput(projectId, agent.id, msg);
+					agentRuntime.appendVirtualOutput(projectId, agent.id, formatTaskLog(msg));
 				});
 			} catch (docErr) {
 				log.warn({ err: docErr }, "Docs update failed (non-blocking)");
@@ -1396,9 +1503,39 @@ class ExecutionEngine {
 
 export const executionEngine = new ExecutionEngine();
 
+function isDeadlockError(err: unknown): boolean {
+	if (!err) return false;
+	if (typeof err === "object" && "code" in err && (err as { code?: string }).code === "40P01") {
+		return true;
+	}
+	const message = err instanceof Error ? err.message : String(err);
+	return message.toLowerCase().includes("deadlock detected");
+}
+
+async function runStartupRecoveryWithRetry(maxAttempts = 3): Promise<void> {
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		try {
+			await executionEngine.recoverStuckTasks();
+			if (attempt > 1) {
+				log.info(`[execution-engine] Startup recovery succeeded on retry #${attempt}`);
+			}
+			return;
+		} catch (err) {
+			if (!isDeadlockError(err) || attempt === maxAttempts) {
+				throw err;
+			}
+			const backoffMs = attempt * 750;
+			log.warn(
+				`[execution-engine] Startup recovery deadlock (attempt ${attempt}/${maxAttempts}), retrying in ${backoffMs}ms`,
+			);
+			await new Promise((resolve) => setTimeout(resolve, backoffMs));
+		}
+	}
+}
+
 // Uygulama başlangıcında yarıda kalmış görevleri kurtart
 if (process.env.VITEST !== "true") {
-	executionEngine.recoverStuckTasks().catch((err) => {
+	runStartupRecoveryWithRetry().catch((err) => {
 		log.error("[execution-engine] Startup recovery failed:" + " " + String(err));
 	});
 }

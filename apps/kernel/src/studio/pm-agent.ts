@@ -213,6 +213,21 @@ In addition to normal AI coding tasks (taskType: "ai"), you can use these specia
 - **integration-test**: Automated smoke test that starts the backend/frontend, runs HTTP health checks and API tests, then shuts down. Use this as a final verification phase after all coding is done.
 - **run-app**: Starts the application (backend + frontend) and keeps it running so the user can interact with it. Use this as the very last phase.
 
+## Test Expectation Rules (CRITICAL)
+Every task MUST set "testExpectation" explicitly:
+- "none": no test gate expected for this task
+- "optional": test gate is advisory (non-blocking)
+- "required": test gate is mandatory (blocking)
+
+Default mapping you MUST follow:
+- Foundation/bootstrap/setup/config/install/scaffold tasks -> "optional"
+- Regular implementation/refactor/fix tasks -> "required"
+- Documentation-only or purely operational non-code tasks -> "none"
+- "integration-test" tasks -> "required"
+- "run-app" tasks -> "none"
+
+Never leave "testExpectation" ambiguous. Use the value that matches task intent.
+
 **Recommended plan structure (with phase dependencies):**
 1. Foundation phase (setup, config) — dependsOnPhaseOrders: []
 2. Core feature phases (coding tasks) — dependsOnPhaseOrders: [1]
@@ -274,6 +289,7 @@ Example:
           "complexity": "S",
           "branch": "feat/setup",
           "taskType": "ai",
+          "testExpectation": "optional",
           "targetFiles": ["package.json", "tsconfig.json", "src/index.ts"],
           "estimatedLines": 15
         }
@@ -293,7 +309,7 @@ Top-level optional field:
 - techStack: planner'ın önerdiği veya netleştirdiği teknoloji dizisi. Plan yeterince netleştiğinde ekle.
 
 Each phase has: name, order (1-based), tasks array.
-Each task has: title, description, assignedRole (use exact role from team), complexity (S|M|L|XL), branch, taskType (ai|integration-test|run-app).
+Each task has: title, description, assignedRole (use exact role from team), complexity (S|M|L|XL), branch, taskType (ai|integration-test|run-app), testExpectation (none|optional|required).
 Optional: dependsOnTaskTitles (array of task titles this task depends on), targetFiles (array of file paths), estimatedLines (number).
 
 ## Incremental Planning (v3.3)
@@ -344,6 +360,10 @@ const phaseSchema = z.object({
 				.describe(
 					'Task type: "ai" for normal AI coding, "integration-test" for automated smoke tests, "run-app" to start the application',
 				),
+			testExpectation: z
+				.enum(["none", "optional", "required"])
+				.default("required")
+				.describe('Test expectation: "none" (no test gate), "optional" (warn only), "required" (must pass).'),
 			// v3.0: Micro-task decomposition fields
 			targetFiles: z
 				.array(z.string())
@@ -419,6 +439,7 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 	const pmAgent = agents.find((a) => (a.pipelineOrder ?? 99) === minOrder);
 	if (pmAgent && createdPhases.length > 0) {
 		const firstPhase = createdPhases[0].created;
+		const planningCompletedAt = new Date().toISOString();
 		const pmTask = await createTask({
 			phaseId: firstPhase.id,
 			title: "Proje Planlama ve Görev Dağılımı",
@@ -431,7 +452,8 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 		// Mark as done immediately — planning is already complete
 		await updateTask(pmTask.id, {
 			status: "done",
-			completedAt: new Date().toISOString(),
+			startedAt: planningCompletedAt,
+			completedAt: planningCompletedAt,
 			output: {
 				filesCreated: ["docs/PLAN.md"],
 				filesModified: [],
@@ -466,6 +488,7 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 				dependsOn: [],
 				branch: t.branch,
 				taskType: t.taskType as any,
+				testExpectation: t.testExpectation as any,
 				requiresApproval: autoRequiresApproval,
 				targetFiles: t.targetFiles ?? [],
 				estimatedLines: t.estimatedLines,
@@ -903,6 +926,7 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 								complexity: z.enum(["S", "M", "L", "XL"]),
 								branch: z.string(),
 								taskType: z.enum(["ai", "integration-test", "run-app"]).default("ai"),
+								testExpectation: z.enum(["none", "optional", "required"]).default("required"),
 								targetFiles: z.array(z.string()).default([]),
 								estimatedLines: z.number().int().optional(),
 								dependsOnTaskTitles: z.array(z.string()).default([]),
@@ -944,6 +968,7 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 					complexity: t.complexity as TaskComplexity,
 					branch: t.branch,
 					taskType: t.taskType,
+					testExpectation: t.testExpectation,
 					targetFiles: t.targetFiles,
 					estimatedLines: t.estimatedLines,
 					dependsOnTaskIds,
@@ -982,6 +1007,7 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 				complexity: z.enum(["S", "M", "L", "XL"]),
 				branch: z.string(),
 				taskType: z.enum(["ai", "integration-test", "run-app"]).default("ai"),
+				testExpectation: z.enum(["none", "optional", "required"]).default("required"),
 				targetFiles: z.array(z.string()).default([]),
 				estimatedLines: z.number().int().optional(),
 				dependsOnTaskTitles: z.array(z.string()).default([]),
@@ -1008,6 +1034,7 @@ Use this whenever the user asks "who should do X?" or before assigning tasks in 
 				complexity: task.complexity as TaskComplexity,
 				branch: task.branch,
 				taskType: task.taskType,
+				testExpectation: task.testExpectation,
 				targetFiles: task.targetFiles,
 				estimatedLines: task.estimatedLines,
 				dependsOnTaskIds,

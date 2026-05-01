@@ -8,6 +8,7 @@ import type { Task, TaskOutput } from "../types.js";
 import { rowToTask } from "./helpers.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("task-repo");
+const CLAIM_STALE_INTERVAL_SECONDS = 120;
 
 // ---------------------------------------------------------------------------
 // Tasks CRUD
@@ -16,6 +17,7 @@ const log = createLogger("task-repo");
 export async function createTask(
 	data: Pick<Task, "phaseId" | "title" | "description" | "assignedAgent" | "complexity" | "dependsOn" | "branch"> & {
 		taskType?: Task["taskType"];
+		testExpectation?: Task["testExpectation"];
 		requiresApproval?: boolean;
 		parentTaskId?: string;
 		targetFiles?: string[];
@@ -27,6 +29,7 @@ export async function createTask(
 ): Promise<Task> {
 	const id = randomUUID();
 	const taskType = data.taskType ?? "ai";
+	const testExpectation = data.testExpectation ?? null;
 	const requiresApproval = data.requiresApproval ?? false;
 
 	// Resolve projectId: prefer caller-supplied value, fall back to phase lookup.
@@ -43,8 +46,8 @@ export async function createTask(
 
 	await execute(
 		`
-    INSERT INTO tasks (id, phase_id, project_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type, requires_approval, parent_task_id, target_files, estimated_lines, assigned_agent_id)
-    VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9, 0, $10, $11, $12, $13, $14, $15)
+    INSERT INTO tasks (id, phase_id, project_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type, test_expectation, requires_approval, parent_task_id, target_files, estimated_lines, assigned_agent_id)
+    VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9, 0, $10, $11, $12, $13, $14, $15, $16)
   `,
 		[
 			id,
@@ -57,6 +60,7 @@ export async function createTask(
 			JSON.stringify(data.dependsOn),
 			data.branch,
 			taskType,
+			testExpectation,
 			requiresApproval ? 1 : 0,
 			data.parentTaskId ?? null,
 			JSON.stringify(data.targetFiles ?? []),
@@ -77,6 +81,7 @@ export async function createTask(
 		dependsOn: data.dependsOn,
 		branch: data.branch,
 		taskType: taskType !== "ai" ? (taskType as Task["taskType"]) : undefined,
+		testExpectation: testExpectation ?? undefined,
 		retryCount: 0,
 		revisionCount: 0,
 		requiresApproval,
@@ -169,6 +174,7 @@ export async function updateTask(
 			| "dependsOn"
 			| "riskLevel"
 			| "policySnapshot"
+			| "testExpectation"
 		>
 	>,
 ): Promise<Task | undefined> {
@@ -249,6 +255,10 @@ export async function updateTask(
 		fields.push(`policy_snapshot = $${idx++}`);
 		values.push(data.policySnapshot);
 	}
+	if (data.testExpectation !== undefined) {
+		fields.push(`test_expectation = $${idx++}`);
+		values.push(data.testExpectation);
+	}
 
 	if (fields.length === 0) return getTask(id);
 
@@ -269,8 +279,16 @@ export async function claimTask(taskId: string, claimedBy: string): Promise<Task
 	return withTransaction(async (client) => {
 		// Lock the row — SKIP LOCKED means if another worker already holds this row, return nothing
 		const lockResult = await client.query(
-			`SELECT id FROM tasks WHERE id = $1 AND status = 'queued' AND claimed_by IS NULL FOR UPDATE SKIP LOCKED`,
-			[taskId],
+			`SELECT id
+			 FROM tasks
+			 WHERE id = $1
+			   AND status = 'queued'
+			   AND (
+			     claimed_by IS NULL
+			     OR claimed_at < now() - ($2::int * interval '1 second')
+			   )
+			 FOR UPDATE SKIP LOCKED`,
+			[taskId, CLAIM_STALE_INTERVAL_SECONDS],
 		);
 		if (lockResult.rows.length === 0) return null;
 
@@ -292,6 +310,39 @@ export async function releaseTaskClaim(taskId: string): Promise<void> {
 }
 
 /**
+ * Clears stale claims for queued tasks under a specific project.
+ * This is used as a safety net at dispatch entry points after pause/resume or restart.
+ */
+export async function reclaimStaleQueuedClaimsForProject(
+	projectId: string,
+	staleAfterSeconds = CLAIM_STALE_INTERVAL_SECONDS,
+): Promise<number> {
+	const row = await queryOne<{ cnt: string }>(
+		`WITH stale AS (
+			 UPDATE tasks t
+			 SET claimed_by = NULL, claimed_at = NULL
+			 WHERE t.status = 'queued'
+			   AND t.claimed_by IS NOT NULL
+			   AND t.claimed_at < now() - ($2::int * interval '1 second')
+			   AND t.phase_id IN (
+			     SELECT ph.id
+			     FROM phases ph
+			     JOIN project_plans pp ON pp.id = ph.plan_id
+			     WHERE pp.project_id = $1
+			   )
+			 RETURNING t.id
+		 )
+		 SELECT COUNT(*)::text AS cnt FROM stale`,
+		[projectId, staleAfterSeconds],
+	);
+	const cleared = Number(row?.cnt ?? 0);
+	if (cleared > 0) {
+		log.warn(`[task-repo] Cleared ${cleared} stale queued claim(s) for project ${projectId}`);
+	}
+	return cleared;
+}
+
+/**
  * Claim multiple queued tasks at once for batch dispatch.
  * Uses SKIP LOCKED to avoid contention with concurrent workers.
  */
@@ -303,11 +354,16 @@ export async function claimReadyTasks(
 	return withTransaction(async (client) => {
 		const lockResult = await client.query(
 			`SELECT id FROM tasks
-			 WHERE phase_id = $1 AND status = 'queued' AND claimed_by IS NULL
+			 WHERE phase_id = $1
+			   AND status = 'queued'
+			   AND (
+			     claimed_by IS NULL
+			     OR claimed_at < now() - ($3::int * interval '1 second')
+			   )
 			 ORDER BY id
 			 LIMIT $2
 			 FOR UPDATE SKIP LOCKED`,
-			[phaseId, limit],
+			[phaseId, limit, CLAIM_STALE_INTERVAL_SECONDS],
 		);
 		if (lockResult.rows.length === 0) return [];
 

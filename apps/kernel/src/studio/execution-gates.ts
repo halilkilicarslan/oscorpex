@@ -7,6 +7,7 @@
 import { eventBus } from "./event-bus.js";
 import { getGoalForTask, validateCriteriaFromOutput, validateCriteriaWithLLM, evaluateGoal, resolveGoalEnforcement, shouldEnforceGoalFailure } from "./goal-engine.js";
 import { verifyTaskOutput, resolveStrictness } from "./output-verifier.js";
+import { verifyDeclaredDependencies } from "./dependency-verifier.js";
 import { runTestGate } from "./test-gate.js";
 import { recordStep } from "./agent-runtime/index.js";
 import type { Task, TaskOutput } from "./types.js";
@@ -30,6 +31,30 @@ export async function runVerificationGate(
 	agentId: string,
 	sessionId?: string,
 ): Promise<GateResult> {
+	const dependencyCheck = verifyDeclaredDependencies(repoPath, output);
+	if (!dependencyCheck.passed) {
+		const missing = dependencyCheck.missingDependencies.join(", ");
+		const checked = dependencyCheck.checkedFiles.join(", ");
+		const failedChecks = `dependency_declared: missing package.json entries for [${missing}]` +
+			(checked ? ` (checked files: ${checked})` : "");
+
+		log.warn(`[execution-gates] Dependency declaration failed for "${task.title}": ${failedChecks}`);
+		eventBus.emitTransient({
+			projectId,
+			type: "agent:output",
+			agentId,
+			taskId: task.id,
+			payload: { output: `[verify] Dependency declaration failed: ${failedChecks}` },
+		});
+
+		if (sessionId) {
+			recordStep(sessionId, { step: 3, type: "decision_made", summary: "Verification: dependency declaration failed" })
+				.catch((err) => log.warn("[execution-gates] recordStep failed:", err?.message ?? err));
+		}
+
+		return { passed: false, failedChecks };
+	}
+
 	const strictness = await resolveStrictness(projectId);
 	const verification = await verifyTaskOutput(task.id, repoPath, output, { projectId, strictness });
 

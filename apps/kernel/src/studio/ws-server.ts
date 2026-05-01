@@ -49,12 +49,20 @@ export function startWSServer(): void {
 			return;
 		}
 
-		// Extract correlationId from query param for tracing WebSocket events
+		// Extract correlationId/auth query params for tracing/auth in ws-manager.
 		try {
 			const parsed = new URL(url, "http://localhost");
 			const correlationId = parsed.searchParams.get("correlationId");
 			if (correlationId) {
 				(req as any).correlationId = correlationId;
+			}
+			const token = parsed.searchParams.get("token");
+			if (token) {
+				(req as any).token = token;
+			}
+			const apiKey = parsed.searchParams.get("apiKey");
+			if (apiKey) {
+				(req as any).apiKey = apiKey;
 			}
 		} catch {
 			// ignore parse errors

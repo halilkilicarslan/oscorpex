@@ -558,14 +558,19 @@ class PipelineEngine {
 		const stage = state.stages[stageIndex];
 		if (!stage) return [];
 
+		// IMPORTANT:
+		// In DAG mode, a stage can include tasks spanning multiple phaseIds.
+		// If we prioritize stage.phaseId here, we may only inspect a subset and
+		// complete the stage prematurely while queued tasks still exist.
+		// Therefore, prefer explicit stage task IDs whenever available.
+		if (stage.tasks.length > 0) {
+			return stage.tasks.map((t) => t.id);
+		}
+
 		if (stage.phaseId) {
 			const latestTasks = await listTasks(stage.phaseId);
 			stage.tasks = latestTasks;
 			return latestTasks.map((t) => t.id);
-		}
-
-		if (stage.tasks.length > 0) {
-			return stage.tasks.map((t) => t.id);
 		}
 
 		const plan = await getLatestPlan(projectId);

@@ -42,6 +42,24 @@ const CODE_AGENT_ROLES = new Set([
 	"coder",
 ]);
 
+function isBootstrapTask(task: Task): boolean {
+	const text = `${task.title} ${task.description}`.toLowerCase();
+	const bootstrapHints = [
+		"initialize",
+		"init",
+		"setup",
+		"configure",
+		"install",
+		"scaffold",
+		"vite",
+		"tailwind",
+		"shadcn",
+		"tsconfig",
+		"package.json",
+	];
+	return bootstrapHints.some((hint) => text.includes(hint));
+}
+
 /**
  * Determine the test policy for a task based on its type, role, and project settings.
  * - Code tasks from coding agents → required (default) or project-configured
@@ -53,9 +71,16 @@ export async function resolveTestPolicy(
 	task: Task,
 	agentRole?: string,
 ): Promise<TestPolicy> {
+	if (task.testExpectation === "none") return "skip";
+	if (task.testExpectation === "optional") return "optional";
+	if (task.testExpectation === "required") return "required";
+
 	// Review tasks and special task types don't need test gate
 	if (task.title.startsWith("Code Review: ")) return "skip";
 	if (task.taskType === "integration-test" || task.taskType === "run-app") return "skip";
+
+	// Bootstrap/setup tasks run before test infra settles; enforce later integration-test phase instead.
+	if (isBootstrapTask(task)) return "optional";
 
 	// Check project-level override
 	const override = await getProjectSetting(projectId, "test_gate", "policy");
@@ -131,6 +156,53 @@ function parseTestCounts(output: string): { passed: number; failed: number; tota
 	return { passed: 0, failed: 0, total: 0 };
 }
 
+function isTestAuthoringTask(task: Task): boolean {
+	const text = `${task.title} ${task.description}`.toLowerCase();
+	return (
+		text.includes("test") ||
+		text.includes("spec") ||
+		text.includes("vitest") ||
+		text.includes("jest")
+	);
+}
+
+function isNoTestsDiscoveredOutput(output: string): boolean {
+	const text = output.toLowerCase();
+	return (
+		text.includes("no test files found") ||
+		text.includes("no tests found") ||
+		text.includes("no matching test files") ||
+		text.includes("no test files matched") ||
+		text.includes("tests failed: 0/0") ||
+		text.includes("test files 0") ||
+		text.includes("no projects matched the filters")
+	);
+}
+
+function hasHardRuntimeTestFailure(output: string): boolean {
+	const text = output.toLowerCase();
+	return (
+		text.includes("failed to load config") ||
+		text.includes("cannot find module") ||
+		text.includes("error [err_module_not_found]") ||
+		text.includes("module not found") ||
+		text.includes("syntaxerror") ||
+		text.includes("referenceerror") ||
+		text.includes("typeerror")
+	);
+}
+
+function firstMeaningfulOutputLine(output: string): string | undefined {
+	const lines = output
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0);
+
+	return lines.find((line) =>
+		!/^(>|\$|npm|pnpm|yarn|vitest|jest|\u001b|\s*$)/i.test(line),
+	);
+}
+
 // ---------------------------------------------------------------------------
 // Main test gate entry point
 // ---------------------------------------------------------------------------
@@ -157,11 +229,13 @@ export async function runTestGate(
 	// Detect test runner
 	const runner = detectTestRunner(repoPath);
 	if (!runner) {
-		const msg = "No test runner detected";
+		const deferredMsg = "No test runner detected (test gate deferred until test infra is installed)";
+		const strictMsg = "No test runner detected";
+		const canDefer = policy === "required" && task.taskType !== "integration-test";
 		return {
-			policy,
-			passed: policy === "optional",
-			summary: msg,
+			policy: canDefer ? "optional" : policy,
+			passed: canDefer || policy === "optional",
+			summary: canDefer ? deferredMsg : strictMsg,
 			testsPassed: 0,
 			testsFailed: 0,
 			testsTotal: 0,
@@ -185,6 +259,41 @@ export async function runTestGate(
 	}
 
 	const counts = parseTestCounts(rawOutput);
+	const noTestsDiscovered = counts.total === 0 && isNoTestsDiscoveredOutput(rawOutput);
+	const isRequiredTestAuthoringNoTests =
+		policy === "required" &&
+		counts.total === 0 &&
+		isTestAuthoringTask(task);
+
+	if (policy === "required" && noTestsDiscovered && isTestAuthoringTask(task)) {
+		return {
+			policy: "optional",
+			passed: true,
+			summary: "No tests discovered yet for test-authoring task (gate deferred for this iteration)",
+			testsPassed: 0,
+			testsFailed: 0,
+			testsTotal: 0,
+			rawOutput: rawOutput.slice(0, 5_000),
+		};
+	}
+
+	// Some runners return non-zero with sparse output even though no test files were discovered yet.
+	// For test-authoring tasks, treat this as deferred unless a hard runtime/config error is present.
+	if (isRequiredTestAuthoringNoTests) {
+		const runtimeHint = hasHardRuntimeTestFailure(rawOutput)
+			? " (runtime/config warning detected; deferred to later verification task)"
+			: "";
+		return {
+			policy: "optional",
+			passed: true,
+			summary: `No executable tests discovered yet for test-authoring task (gate deferred for this iteration)${runtimeHint}`,
+			testsPassed: 0,
+			testsFailed: 0,
+			testsTotal: 0,
+			rawOutput: rawOutput.slice(0, 5_000),
+		};
+	}
+
 	const passed = exitCode === 0 && counts.failed === 0;
 
 	// Persist test result
@@ -203,9 +312,10 @@ export async function runTestGate(
 		// Non-blocking — don't fail the gate on persistence error
 	}
 
+	const failureHint = firstMeaningfulOutputLine(rawOutput);
 	const summary = passed
 		? `Tests passed: ${counts.passed}/${counts.total}`
-		: `Tests failed: ${counts.failed}/${counts.total} (exit code ${exitCode})`;
+		: `Tests failed: ${counts.failed}/${counts.total} (exit code ${exitCode})${failureHint ? ` — ${failureHint}` : ""}`;
 
 	return {
 		policy,

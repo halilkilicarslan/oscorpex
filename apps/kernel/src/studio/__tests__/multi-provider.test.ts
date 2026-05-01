@@ -162,6 +162,7 @@ describe("CodexAdapter.execute", () => {
 		const adapter = new CodexAdapter();
 		const result = await adapter.execute({
 			projectId: "p1",
+			taskId: "t1",
 			agentId: "a1",
 			agentName: "Backend",
 			repoPath: "/tmp/repo",
@@ -182,6 +183,7 @@ describe("CodexAdapter.execute", () => {
 		const adapter = new CodexAdapter();
 		const result = await adapter.execute({
 			projectId: "p1",
+			taskId: "t1",
 			agentId: "a1",
 			agentName: "Backend",
 			repoPath: "/tmp/repo",
@@ -201,6 +203,7 @@ describe("CodexAdapter.execute", () => {
 		await expect(
 			adapter.execute({
 				projectId: "p1",
+				taskId: "t1",
 				agentId: "a1",
 				agentName: "Backend",
 				repoPath: "/tmp/repo",
@@ -216,6 +219,7 @@ describe("CodexAdapter.execute", () => {
 		await expect(
 			adapter.execute({
 				projectId: "p1",
+				taskId: "t1",
 				agentId: "a1",
 				agentName: "Backend",
 				repoPath: "/tmp/repo",
@@ -303,6 +307,7 @@ describe("Fallback chain execution logic", () => {
 
 		const result = await claudeAdapter!.execute({
 			projectId: "p1",
+			taskId: "t1",
 			agentId: "a1",
 			agentName: "Backend",
 			repoPath: "/tmp/repo",

@@ -4,6 +4,7 @@
 
 export interface CLIAdapterOptions {
 	projectId: string;
+	taskId: string;
 	agentId: string;
 	agentName: string;
 	repoPath: string;
@@ -13,6 +14,7 @@ export interface CLIAdapterOptions {
 	allowedTools?: string[];
 	model?: string;
 	signal?: AbortSignal;
+	onLog?: (line: string) => void;
 }
 
 export interface CLIExecutionResult {

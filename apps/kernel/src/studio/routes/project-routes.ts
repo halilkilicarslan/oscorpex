@@ -527,7 +527,6 @@ projectRoutes.post("/projects/import", async (c) => {
 		repoPath: string;
 		description?: string;
 		techStack?: string[];
-		teamTemplateId?: string;
 		plannerAgentId?: string;
 		previewEnabled?: boolean;
 	};
@@ -578,41 +577,7 @@ projectRoutes.post("/projects/import", async (c) => {
 		previewEnabled: body.previewEnabled,
 	});
 
-	const templateId = body.teamTemplateId;
-	if (templateId) {
-		const template = await getTeamTemplate(templateId);
-		if (template) {
-			const copiedAgents = await copyAgentsToProject(project.id, template.roles, {
-				plannerSourceAgentId: body.plannerAgentId,
-			});
-			for (const agent of copiedAgents) {
-				createAgentFiles(project.id, agent.name, {
-					skills: agent.skills,
-					systemPrompt: agent.systemPrompt,
-					personality: agent.personality,
-					role: agent.role,
-					model: agent.model,
-				}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
-			}
-		}
-	} else {
-		const templates = await listTeamTemplates();
-		const fullStack = templates.find((t) => t.name === "Full Stack Team");
-		if (fullStack) {
-			const copiedAgents = await copyAgentsToProject(project.id, fullStack.roles, {
-				plannerSourceAgentId: body.plannerAgentId,
-			});
-			for (const agent of copiedAgents) {
-				createAgentFiles(project.id, agent.name, {
-					skills: agent.skills,
-					systemPrompt: agent.systemPrompt,
-					personality: agent.personality,
-					role: agent.role,
-					model: agent.model,
-				}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
-			}
-		}
-	}
+	// Team setup is intentionally deferred to explicit /projects/:id/team/apply flow.
 
 	try {
 		await initLintConfig(body.repoPath);
@@ -1158,7 +1123,7 @@ projectRoutes.post("/projects/:id/team/recommend", requirePermission("projects:u
 projectRoutes.get("/projects/:id/plan", async (c) => {
 	try {
 		const plan = await getLatestPlan(c.req.param("id"));
-		if (!plan) return c.json({ error: "No plan found" }, 404);
+		if (!plan) return c.json(null, 200);
 		return c.json(plan);
 	} catch (err) {
 		log.error("[project-routes] get plan failed:" + " " + String(err));

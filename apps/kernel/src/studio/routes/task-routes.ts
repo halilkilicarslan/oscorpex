@@ -5,6 +5,7 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { containerManager } from "../container-manager.js";
+import { agentRuntime } from "../agent-runtime.js";
 import {
 	appendTaskLogs,
 	countProjectTasks,
@@ -195,6 +196,10 @@ taskRoutes.get("/projects/:id/tasks/:taskId/logs", async (c) => {
 		const runtime = containerManager.getRuntime(c.req.param("id"), task.assignedAgent);
 		if (runtime) {
 			liveLogs = runtime.terminalBuffer.slice(storedLogs.length);
+		} else {
+			// AI SDK / virtual runtime path: read in-memory agent output buffer.
+			const agentId = task.assignedAgentId ?? task.assignedAgent;
+			liveLogs = agentRuntime.getAgentOutput(c.req.param("id"), agentId, storedLogs.length);
 		}
 	}
 

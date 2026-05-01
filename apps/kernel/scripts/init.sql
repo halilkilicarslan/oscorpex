@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   approval_rejection_reason TEXT,
   error                     TEXT,
   task_type                 TEXT NOT NULL DEFAULT 'ai',
+  test_expectation          TEXT,
   review_status             TEXT,
   reviewer_agent_id         TEXT,
   review_task_id            TEXT,
@@ -71,6 +72,7 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAU
 
 -- Migration: policy_snapshot for persisted policy truth
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS policy_snapshot TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS test_expectation TEXT;
 
 CREATE TABLE IF NOT EXISTS agent_configs (
   id            TEXT PRIMARY KEY,

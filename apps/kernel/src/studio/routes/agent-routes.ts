@@ -37,6 +37,13 @@ import {
 import { createLogger } from "../logger.js";
 const log = createLogger("agent-routes");
 
+function matchesTaskFilter(line: string, taskId?: string): boolean {
+	if (!taskId) return true;
+	const shortId = taskId.slice(0, 8);
+	const normalized = line.trimStart();
+	return normalized.startsWith(`[task:${shortId}]`) || normalized.includes(taskId);
+}
+
 export const agentRoutes = new Hono();
 
 // ---- Agent Configs --------------------------------------------------------
@@ -373,6 +380,7 @@ agentRoutes.get("/projects/:id/agents/:agentId/output", async (c) => {
 	const projectId = c.req.param("id");
 	const agentId = c.req.param("agentId");
 	const sinceParam = c.req.query("since");
+	const taskId = c.req.query("taskId");
 	const since = sinceParam !== undefined ? Number.parseInt(sinceParam, 10) : undefined;
 
 	let lines = agentRuntime.getAgentOutput(projectId, agentId, since);
@@ -395,12 +403,14 @@ agentRoutes.get("/projects/:id/agents/:agentId/output", async (c) => {
 		}
 	}
 
-	return c.json({ projectId, agentId, lines, total: lines.length });
+	const filteredLines = taskId ? lines.filter((line) => matchesTaskFilter(line, taskId)) : lines;
+	return c.json({ projectId, agentId, taskId: taskId ?? null, lines: filteredLines, total: filteredLines.length });
 });
 
 agentRoutes.get("/projects/:id/agents/:agentId/stream", async (c) => {
 	const projectId = c.req.param("id");
 	const agentId = c.req.param("agentId");
+	const taskId = c.req.query("taskId");
 
 	let readable = agentRuntime.streamAgentOutput(projectId, agentId);
 	if (!readable) {
@@ -415,7 +425,53 @@ agentRoutes.get("/projects/:id/agents/:agentId/stream", async (c) => {
 		return c.json({ error: "Agent bulunamadı" }, 404);
 	}
 
-	return new Response(readable, {
+	if (!taskId) {
+		return new Response(readable, {
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				Connection: "keep-alive",
+				"X-Accel-Buffering": "no",
+				"x-correlation-id": c.req.header("x-correlation-id") ?? "",
+			},
+		});
+	}
+
+	let buffer = "";
+	const filteredReadable = new ReadableStream<string>({
+		async start(controller) {
+			const reader = readable.getReader();
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					buffer += typeof value === "string" ? value : new TextDecoder().decode(value);
+					const chunks = buffer.split("\n");
+					buffer = chunks.pop() ?? "";
+
+					for (const chunk of chunks) {
+						const line = chunk.trim();
+						if (!line.startsWith("data: ")) continue;
+						const payload = line.slice(6);
+						if (!payload || payload === "[DONE]") continue;
+						try {
+							const parsed = JSON.parse(payload) as { line?: string; index?: number };
+							if (typeof parsed.line !== "string" || typeof parsed.index !== "number") continue;
+							if (!matchesTaskFilter(parsed.line, taskId)) continue;
+							controller.enqueue(`data: ${JSON.stringify(parsed)}\n\n`);
+						} catch {
+							// Ignore malformed stream rows
+						}
+					}
+				}
+			} finally {
+				reader.releaseLock();
+				controller.close();
+			}
+		},
+	});
+
+	return new Response(filteredReadable, {
 		headers: {
 			"Content-Type": "text/event-stream",
 			"Cache-Control": "no-cache",

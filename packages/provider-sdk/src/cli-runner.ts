@@ -17,6 +17,8 @@ export interface CLIRunOptions {
 	timeoutMs?: number;
 	signal?: AbortSignal;
 	stdin?: string;
+	onStdoutChunk?: (chunk: string) => void;
+	onStderrChunk?: (chunk: string) => void;
 }
 
 export interface CLIRunResult {
@@ -90,10 +92,14 @@ export function runCLI(opts: CLIRunOptions): Promise<CLIRunResult> {
 		}
 
 		proc.stdout?.on("data", (d) => {
-			stdout += d.toString();
+			const chunk = d.toString();
+			stdout += chunk;
+			opts.onStdoutChunk?.(chunk);
 		});
 		proc.stderr?.on("data", (d) => {
-			stderr += d.toString();
+			const chunk = d.toString();
+			stderr += chunk;
+			opts.onStderrChunk?.(chunk);
 		});
 
 		// Send stdin if provided

@@ -170,6 +170,8 @@ interface ProjectStateSnapshot {
 	failedTasks: number;
 	reviewRejections: number;
 	queuedTasks: number;
+	staleQueuedTasks: number;
+	oldestQueuedMinutes: number;
 	blockedTasks: number;
 	queueRatio: number;
 	blockRatio: number;
@@ -185,6 +187,16 @@ async function snapshotProjectState(projectId: string): Promise<ProjectStateSnap
 	const failedTasks = tasks.filter((t) => t.status === "failed").length;
 	const reviewRejections = tasks.filter((t) => t.reviewStatus === "rejected").length;
 	const queuedTasks = tasks.filter((t) => t.status === "queued").length;
+	const queuedWithAge = tasks
+		.filter((t) => t.status === "queued")
+		.map((t) => {
+			const createdAtMs = t.createdAt ? Date.parse(t.createdAt) : Number.NaN;
+			const ageMs = Number.isFinite(createdAtMs) ? Math.max(0, Date.now() - createdAtMs) : 0;
+			return { task: t, ageMs };
+		});
+	const staleQueuedTasks = queuedWithAge.filter((x) => x.ageMs >= 15 * 60 * 1000).length;
+	const oldestQueuedMinutes =
+		queuedWithAge.length > 0 ? Math.floor(Math.max(...queuedWithAge.map((x) => x.ageMs)) / (60 * 1000)) : 0;
 	const blockedTasks = tasks.filter((t) => t.status === "blocked" || t.status === "waiting_approval").length;
 
 	const phaseSnapshots = phases.map((p) => {
@@ -205,6 +217,8 @@ async function snapshotProjectState(projectId: string): Promise<ProjectStateSnap
 		failedTasks,
 		reviewRejections,
 		queuedTasks,
+		staleQueuedTasks,
+		oldestQueuedMinutes,
 		blockedTasks,
 		queueRatio: queuedTasks / total,
 		blockRatio: blockedTasks / total,
@@ -212,11 +226,58 @@ async function snapshotProjectState(projectId: string): Promise<ProjectStateSnap
 	};
 }
 
+async function hasOpenQueueTriageTask(projectId: string, phaseId: string): Promise<boolean> {
+	const row = await queryOne<{ id: string }>(
+		`SELECT t.id
+		 FROM tasks t
+		 JOIN phases ph ON ph.id = t.phase_id
+		 JOIN project_plans pp ON pp.id = ph.plan_id
+		 WHERE pp.project_id = $1
+		   AND t.phase_id = $2
+		   AND t.title = 'Triage queued task bottleneck'
+		   AND t.status IN ('queued', 'assigned', 'running', 'review', 'revision', 'waiting_approval', 'blocked')
+		 LIMIT 1`,
+		[projectId, phaseId],
+	);
+	return !!row;
+}
+
+async function autoCloseResolvedQueueTriageTasks(projectId: string): Promise<number> {
+	const rows = await query<{ id: string }>(
+		`SELECT t.id
+		 FROM tasks t
+		 JOIN phases ph ON ph.id = t.phase_id
+		 JOIN project_plans pp ON pp.id = ph.plan_id
+		 WHERE pp.project_id = $1
+		   AND t.title = 'Triage queued task bottleneck'
+		   AND t.status IN ('queued', 'assigned', 'running', 'review', 'revision', 'waiting_approval', 'blocked')`,
+		[projectId],
+	);
+	let closed = 0;
+	for (const row of rows) {
+		await updateTask(row.id, {
+			status: "done",
+			completedAt: new Date().toISOString(),
+			output: {
+				filesCreated: [],
+				filesModified: [],
+				logs: ["Queue pressure normalized; triage task auto-closed."],
+			},
+		});
+		closed++;
+	}
+	return closed;
+}
+
 // ---------------------------------------------------------------------------
 // Patch generation — propose plan changes
 // ---------------------------------------------------------------------------
 
-function generatePatches(snapshot: ProjectStateSnapshot, trigger: ReplanTrigger): PlanPatchEntry[] {
+function generatePatches(
+	snapshot: ProjectStateSnapshot,
+	trigger: ReplanTrigger,
+	options?: { canAddQueueTriage?: boolean },
+): PlanPatchEntry[] {
 	const patches: PlanPatchEntry[] = [];
 	const futurePhase = snapshot.phases.find((phase) => phase.status === "running" || phase.status === "pending");
 
@@ -267,17 +328,25 @@ function generatePatches(snapshot: ProjectStateSnapshot, trigger: ReplanTrigger)
 	}
 
 	// Queue bottleneck: too many tasks stuck in queued state
-	if (trigger === "phase_end" && futurePhase && snapshot.queueRatio > 0.4) {
+	const canAddQueueTriage = options?.canAddQueueTriage ?? true;
+	if (
+		trigger === "phase_end" &&
+		futurePhase &&
+		canAddQueueTriage &&
+		snapshot.queueRatio > 0.4 &&
+		snapshot.oldestQueuedMinutes >= 15
+	) {
 		patches.push({
 			action: "add_task",
 			payload: {
 				phaseId: futurePhase.id,
 				title: "Triage queued task bottleneck",
-				description: `Queue ratio is ${Math.round(snapshot.queueRatio * 100)}%. Review blocked dependencies and reassign stalled tasks.`,
+				description: `Queue ratio is ${Math.round(snapshot.queueRatio * 100)}% and oldest queued task is ${snapshot.oldestQueuedMinutes}m old. Review blocked dependencies and reassign stalled tasks.`,
 				assignedAgent: "tech-lead",
+				testExpectation: "none",
 			},
 			riskLevel: "low",
-			reason: `Queue bottleneck detected (${snapshot.queuedTasks}/${snapshot.totalTasks} queued) — add triage task.`,
+			reason: `Queue bottleneck detected (${snapshot.queuedTasks}/${snapshot.totalTasks} queued, oldest=${snapshot.oldestQueuedMinutes}m) — add triage task.`,
 		});
 	}
 
@@ -349,7 +418,13 @@ async function applyPatch(projectId: string, patch: PlanPatchEntry): Promise<boo
 			return true;
 		}
 		case "add_task": {
-			const p = patch.payload as { phaseId: string; title: string; description: string; assignedAgent: string };
+			const p = patch.payload as {
+				phaseId: string;
+				title: string;
+				description: string;
+				assignedAgent: string;
+				testExpectation?: Task["testExpectation"];
+			};
 			if (p.phaseId && p.title) {
 				await createTask({
 					phaseId: p.phaseId,
@@ -359,6 +434,7 @@ async function applyPatch(projectId: string, patch: PlanPatchEntry): Promise<boo
 					complexity: "S",
 					dependsOn: [],
 					branch: "main",
+					testExpectation: p.testExpectation ?? "optional",
 					projectId,
 				});
 			}
@@ -397,7 +473,17 @@ export async function evaluateReplan(ctx: ReplanContext): Promise<ReplanResult |
 	if (!canReplan) return null;
 
 	const snapshot = await snapshotProjectState(ctx.projectId);
-	const patches = generatePatches(snapshot, ctx.trigger);
+	const futurePhase = snapshot.phases.find((phase) => phase.status === "running" || phase.status === "pending");
+	const queuePressureNormalized = snapshot.queueRatio < 0.25 || snapshot.queuedTasks === 0;
+	if (ctx.trigger === "phase_end" && queuePressureNormalized) {
+		const closed = await autoCloseResolvedQueueTriageTasks(ctx.projectId);
+		if (closed > 0) {
+			log.info(`[adaptive-replanner] Queue normalized — auto-closed ${closed} triage task(s)`);
+		}
+	}
+	const canAddQueueTriage =
+		!futurePhase ? false : !(await hasOpenQueueTriageTask(ctx.projectId, futurePhase.id));
+	const patches = generatePatches(snapshot, ctx.trigger, { canAddQueueTriage });
 
 	if (patches.length === 0) return null;
 

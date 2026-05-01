@@ -20,6 +20,7 @@ import {
 	listAgentDependencies,
 	listProjectAgents,
 	listTasks,
+	releaseTaskClaim,
 	updatePhaseStatus,
 	updateProject,
 	updateTask,
@@ -252,6 +253,7 @@ class TaskEngine {
 					status: "failed",
 					error: `Policy violation: ${message}`,
 				}))!;
+				await releaseTaskClaim(taskId);
 				eventBus.emit({
 					projectId,
 					type: "task:failed",
@@ -287,6 +289,7 @@ class TaskEngine {
 				requiresApproval: true,
 				approvalStatus: "pending",
 			}))!;
+			await releaseTaskClaim(taskId);
 
 			eventBus.emit({
 				projectId,
@@ -316,6 +319,7 @@ class TaskEngine {
 				status: "failed",
 				error: budgetStatus.message,
 			}))!;
+			await releaseTaskClaim(taskId);
 
 			eventBus.emit({
 				projectId,
@@ -387,6 +391,10 @@ class TaskEngine {
 		if (task.status !== "waiting_approval") {
 			throw new Error(`Task ${taskId} onay beklemiyor (status: ${task.status})`);
 		}
+
+		// If a previous dispatch left a stale claim behind, clear it before re-queueing.
+		// Otherwise execution-engine claimTask() can skip this task indefinitely.
+		await releaseTaskClaim(taskId);
 
 		const updated = (await updateTask(taskId, {
 			status: "queued",

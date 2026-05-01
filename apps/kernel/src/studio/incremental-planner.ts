@@ -34,6 +34,7 @@ export interface AppendTaskInput {
 	targetFiles?: string[];
 	estimatedLines?: number;
 	taskType?: "ai" | "integration-test" | "run-app";
+	testExpectation?: "none" | "optional" | "required";
 	requiresApproval?: boolean;
 	parentTaskId?: string;
 	goalDefinition?: GoalDefinition;
@@ -108,6 +109,7 @@ export async function appendTaskToPhase(projectId: string, phaseId: string, inpu
 		dependsOn: input.dependsOnTaskIds ?? [],
 		branch: input.branch,
 		taskType: input.taskType ?? "ai",
+		testExpectation: input.testExpectation,
 		targetFiles: input.targetFiles ?? [],
 		estimatedLines: input.estimatedLines,
 		requiresApproval: input.requiresApproval ?? false,

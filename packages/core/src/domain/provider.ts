@@ -13,6 +13,7 @@ export interface ProviderExecutionInput {
 	model?: string;
 	contextRefs?: string[];
 	signal?: AbortSignal;
+	onLog?: (line: string) => void;
 }
 
 export interface ProviderExecutionUsage {

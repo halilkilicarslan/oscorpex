@@ -33,6 +33,8 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	// Projects
 	{ pattern: "/projects", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/projects", permission: "projects:create", methods: ["POST"] },
+	{ pattern: "/projects/import", permission: "projects:create", methods: ["POST"] },
+	{ pattern: "/projects/from-template", permission: "projects:create", methods: ["POST"] },
 	{ pattern: /^\/projects\/[^/]+$/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+$/, permission: "projects:update", methods: ["PATCH", "PUT"] },
 	{ pattern: /^\/projects\/[^/]+$/, permission: "projects:delete", methods: ["DELETE"] },
@@ -41,12 +43,15 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: /^\/projects\/[^/]+\/plan/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/plan/, permission: "projects:update", methods: ["POST", "PATCH", "PUT"] },
 	{ pattern: /^\/projects\/[^/]+\/pipeline/, permission: "pipeline:start", methods: ["POST"] },
+	{ pattern: /^\/projects\/[^/]+\/pipeline\/status$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/pipeline\/auto-start-status$/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/pipeline\/pause/, permission: "pipeline:pause", methods: ["POST"] },
 	{ pattern: /^\/projects\/[^/]+\/pipeline\/resume/, permission: "pipeline:resume", methods: ["POST"] },
 	{ pattern: /^\/projects\/[^/]+\/tasks/, permission: "tasks:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/tasks/, permission: "tasks:update", methods: ["POST", "PATCH", "PUT"] },
-	{ pattern: /^\/projects\/[^/]+\/agents/, permission: "agents:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/agents/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/agents/, permission: "agents:configure", methods: ["POST", "PATCH", "PUT", "DELETE"] },
+	{ pattern: /^\/projects\/[^/]+\/agents\/[^/]+\/stream$/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/team/, permission: "team:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/team/, permission: "team:write", methods: ["POST", "PATCH", "PUT", "DELETE"] },
 	{ pattern: /^\/projects\/[^/]+\/lifecycle/, permission: "projects:update", methods: ["POST", "PUT", "PATCH"] },
@@ -64,12 +69,23 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: /^\/projects\/[^/]+\/report/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/chat$/, permission: "projects:update", methods: ["POST"] },
 	{ pattern: /^\/projects\/[^/]+\/chat\/history$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/messages/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/messages/, permission: "projects:update", methods: ["POST", "PATCH", "PUT", "DELETE"] },
+	{ pattern: /^\/projects\/[^/]+\/events/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/intake-questions$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/intake-questions\/[^/]+\/answer$/, permission: "projects:update", methods: ["POST"] },
+	{ pattern: /^\/projects\/[^/]+\/intake-questions\/[^/]+\/skip$/, permission: "projects:update", methods: ["POST"] },
 	{ pattern: /^\/projects\/[^/]+\/hotfix/, permission: "projects:update", methods: ["POST"] },
 	{ pattern: /^\/projects\/[^/]+\/ceremonies/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/ceremonies/, permission: "projects:update", methods: ["POST"] },
 	{ pattern: /^\/projects\/[^/]+\/api\/collection/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/api\/collection/, permission: "projects:update", methods: ["POST", "DELETE"] },
 	{ pattern: /^\/projects\/[^/]+\/app\/proxy/, permission: "projects:read", methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: /^\/projects\/[^/]+\/app\/status$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/app\/config$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/app\/start$/, permission: "projects:update", methods: ["POST"] },
+	{ pattern: /^\/projects\/[^/]+\/app\/stop$/, permission: "projects:update", methods: ["POST"] },
+	{ pattern: /^\/projects\/[^/]+\/app\/switch-preview$/, permission: "projects:update", methods: ["POST"] },
 	{ pattern: /^\/projects\/[^/]+\/rag/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/rag/, permission: "projects:update", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: /^\/projects\/[^/]+\/prompts/, permission: "projects:read", methods: ["GET"] },
@@ -92,9 +108,39 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: /^\/projects\/[^/]+\/webhooks/, permission: "webhooks:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/webhooks/, permission: "webhooks:write", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: /^\/projects\/[^/]+\/generate-readme/, permission: "projects:update", methods: ["POST"] },
-	{ pattern: /^\/projects\/[^/]+\/from-template/, permission: "projects:create", methods: ["POST"] },
 	{ pattern: /^\/projects\/[^/]+\/import/, permission: "projects:create", methods: ["POST"] },
+	{ pattern: /^\/projects\/[^/]+\/execution\/status$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/progress$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/analytics\/overview$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/analytics\//, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/sonar\//, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/docs\/freshness$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/sessions/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/proposals$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/proposals$/, permission: "projects:update", methods: ["POST"] },
+	{ pattern: /^\/projects\/[^/]+\/capability-grants/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/capability-grants/, permission: "projects:update", methods: ["PUT", "DELETE"] },
+	{ pattern: /^\/projects\/[^/]+\/agentic-metrics$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/goals$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/goals$/, permission: "projects:update", methods: ["POST"] },
+	{ pattern: /^\/projects\/[^/]+\/runtimes$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/runtime\/analyze$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/velocity$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/memory\//, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/memory\//, permission: "projects:update", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: /^\/projects\/[^/]+\/policy-profile/, permission: "projects:update", methods: ["PUT"] },
+	// Safety net for newly added project sub-routes:
+	// keep this after specific mappings so stricter permissions still take precedence.
+	{ pattern: /^\/projects\/[^/]+\/.+$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/.+$/, permission: "projects:update", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+
+	// Agentic global routes
+	{ pattern: /^\/proposals\/[^/]+$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/proposals\/[^/]+\/(approve|reject)$/, permission: "projects:update", methods: ["POST"] },
+	{ pattern: /^\/sessions\/[^/]+$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/goals\/[^/]+$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/goals\/[^/]+\/(activate|evaluate|fail)$/, permission: "projects:update", methods: ["POST"] },
+	{ pattern: /^\/capability-grants\/defaults\/[^/]+$/, permission: "projects:read", methods: ["GET"] },
 
 	// Tasks (global)
 	{ pattern: "/tasks", permission: "tasks:read", methods: ["GET"] },
@@ -112,7 +158,7 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 
 	// Team templates
 	{ pattern: "/team-templates", permission: "team:read", methods: ["GET"] },
-	{ pattern: "/team-architect/chat", permission: "team:write", methods: ["POST"] },
+	{ pattern: "/team-architect/chat", permission: "projects:create", methods: ["POST"] },
 	{ pattern: "/custom-teams", permission: "team:read", methods: ["GET"] },
 	{ pattern: "/custom-teams", permission: "team:write", methods: ["POST"] },
 	{ pattern: /^\/custom-teams\/[^/]+$/, permission: "team:write", methods: ["PATCH", "PUT", "DELETE"] },
@@ -122,6 +168,8 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: "/providers", permission: "providers:operate", methods: ["POST"] },
 	{ pattern: /^\/providers\/[^/]+$/, permission: "providers:read", methods: ["GET"] },
 	{ pattern: /^\/providers\/[^/]+$/, permission: "providers:operate", methods: ["PATCH", "PUT", "DELETE"] },
+	{ pattern: "/config/status", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/planner/providers", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/providers/test", permission: "providers:operate", methods: ["POST"] },
 	{ pattern: "/providers/status", permission: "providers:read", methods: ["GET"] },
 	{ pattern: "/providers/fallback-chain", permission: "providers:read", methods: ["GET"] },
@@ -157,14 +205,20 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: "/cost", permission: "billing:read", methods: ["GET"] },
 	{ pattern: "/notifications", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/notifications", permission: "projects:update", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/notifications/unread-count", permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/notifications\/[^/]+\/read$/, permission: "projects:update", methods: ["PATCH"] },
+	{ pattern: "/notifications/mark-all-read", permission: "projects:update", methods: ["POST"] },
 	{ pattern: "/replay", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/replay", permission: "projects:update", methods: ["POST"] },
 	{ pattern: "/telemetry", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/telemetry/", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/telemetry", permission: "projects:update", methods: ["POST", "PUT", "PATCH"] },
+	{ pattern: "/telemetry/", permission: "projects:update", methods: ["POST", "PUT", "PATCH"] },
 
 	// Runtime
 	{ pattern: "/runtime", permission: "pipeline:start", methods: ["GET", "POST"] },
 	{ pattern: "/runtime/", permission: "pipeline:start", methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/pool/status", permission: "projects:read", methods: ["GET"] },
 
 	// Sandbox
 	{ pattern: "/sandbox", permission: "projects:read", methods: ["GET"] },
@@ -271,7 +325,12 @@ export function getRoutePermission(path: string, method: string): string | null 
 function matchesRoute(entry: RoutePermissionEntry, path: string, method: string): boolean {
 	if (entry.methods && !entry.methods.includes(method)) return false;
 	if (typeof entry.pattern === "string") {
-		return path === entry.pattern || path.startsWith(entry.pattern + "/");
+		// String patterns are exact-match by default.
+		// If a pattern ends with "/", treat it as an explicit prefix pattern.
+		if (entry.pattern.endsWith("/")) {
+			return path === entry.pattern.slice(0, -1) || path.startsWith(entry.pattern);
+		}
+		return path === entry.pattern;
 	}
 	return entry.pattern.test(path);
 }

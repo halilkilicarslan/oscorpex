@@ -140,8 +140,9 @@ class WebSocketManager {
 			const authEnabled = process.env.OSCORPEX_AUTH_ENABLED === "true";
 			if (authEnabled) {
 				try {
-					const url = new URL(req.url ?? "", "http://localhost");
-					const token = url.searchParams.get("token");
+					const token = (req as any).token as string | undefined;
+					const apiKey = (req as any).apiKey as string | undefined;
+					const envApiKey = process.env.OSCORPEX_API_KEY;
 					if (token) {
 						const payload = verifyJwt(token);
 						if (payload) {
@@ -151,6 +152,9 @@ class WebSocketManager {
 							ws.close(1008, "Invalid token");
 							return;
 						}
+					} else if (apiKey && envApiKey && apiKey === envApiKey) {
+						// Legacy env API key auth (same behavior as HTTP auth-middleware).
+						tenantId = null;
 					} else {
 						// Auth enabled but no token — close connection
 						ws.close(1008, "Authentication required");

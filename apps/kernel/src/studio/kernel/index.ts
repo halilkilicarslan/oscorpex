@@ -323,7 +323,20 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 	}
 
 	async startPipeline(projectId: string): Promise<void> {
-		await pipelineEngine.startPipeline(projectId);
+		try {
+			await pipelineEngine.startPipeline(projectId);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			const retryableRunningState =
+				message.includes("duplicate key value violates unique constraint") ||
+				message.includes("already exists");
+			if (!retryableRunningState) {
+				throw err;
+			}
+		}
+
+		// Ensure dispatcher is always kicked, even when pipeline run already exists.
+		await executionEngine.startProjectExecution(projectId);
 	}
 
 	async advancePipeline(projectId: string): Promise<void> {

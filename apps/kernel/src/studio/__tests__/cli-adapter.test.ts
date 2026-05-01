@@ -33,6 +33,7 @@ describe("CLI Adapter (Faz 4.1)", () => {
 		it("should delegate execute to executeWithCLI", async () => {
 			const result = await adapter.execute({
 				projectId: "p1",
+				taskId: "t1",
 				agentId: "a1",
 				agentName: "Test",
 				repoPath: "/tmp",
