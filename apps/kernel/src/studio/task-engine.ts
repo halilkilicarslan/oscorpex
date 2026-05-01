@@ -34,10 +34,24 @@ import { updateWorkingMemory } from "./memory-manager.js";
 import { queryOne } from "./pg.js";
 import { evaluatePolicies } from "./policy-engine.js";
 import { classifyRisk } from "./agent-runtime/agent-constraints.js";
+import { syncDeclaredDependencies } from "./repo-dependency-sync.js";
 import type { Phase, ProjectAgent, Task, TaskOutput } from "./types.js";
 import { createLogger } from "./logger.js";
 
 const log = createLogger("task-engine");
+
+function isStrictFixTask(task: Task): boolean {
+	const text = `${task.title} ${task.description}`.toLowerCase();
+	return (
+		text.includes("[bug fix]") ||
+		text.includes("bug fix") ||
+		text.includes("hotfix") ||
+		text.includes("defect") ||
+		text.includes("security fix") ||
+		text.includes("import hatası") ||
+		text.includes("import error")
+	);
+}
 
 // Default onay keyword'leri — proje bazlı override yoksa bunlar kullanılır
 const DEFAULT_APPROVAL_KEYWORDS = [
@@ -463,7 +477,7 @@ class TaskEngine {
 	 *   2. Varsa → task'ı 'review' durumuna al, reviewer bilgisini set et
 	 *   3. Yoksa → normal 'done' akışı
 	 */
-	async completeTask(taskId: string, output: TaskOutput): Promise<Task> {
+	async completeTask(taskId: string, output: TaskOutput, options?: { executionRepoPath?: string }): Promise<Task> {
 		const task = await this.requireTask(taskId);
 		if (task.status !== "running" && task.status !== "revision") {
 			throw new Error(`Task ${taskId} is not running or in revision (status: ${task.status})`);
@@ -475,6 +489,32 @@ class TaskEngine {
 		const isReviewTask = task.title.startsWith("Code Review: ");
 		const isCodingTask = !task.taskType || task.taskType === "ai";
 		const changedFileCount = (output.filesCreated?.length ?? 0) + (output.filesModified?.length ?? 0);
+
+		if (isCodingTask && !isReviewTask && changedFileCount === 0 && isStrictFixTask(task)) {
+			// Sandbox repos often declare deps in package.json but never ran install —
+			// agent may report zero file changes while the real fix is node_modules sync.
+			const proj = await getProject(projectId);
+			const repoRoot = options?.executionRepoPath ?? proj?.repoPath;
+			let healedByInstall = false;
+			if (repoRoot) {
+				const sync = syncDeclaredDependencies(repoRoot);
+				if (sync.ranInstall && sync.ok && sync.missingBefore.length > 0 && sync.missingAfter.length === 0) {
+					healedByInstall = true;
+					output.logs = [
+						...(output.logs ?? []),
+						`[kernel] node_modules synced (${sync.command}); resolved missing packages: ${sync.missingBefore.join(", ")}`,
+					];
+					log.info(
+						`[task-engine] Fix task "${task.title}" healed by dependency sync (${sync.missingBefore.length} packages).`,
+					);
+				}
+			}
+			if (!healedByInstall) {
+				throw new Error(
+					`Zero-file output is not allowed for fix task "${task.title}" — task must include concrete file changes`,
+				);
+			}
+		}
 
 		if (isCodingTask && !isReviewTask && changedFileCount === 0) {
 			// Fail etme — decision.md yaz ve reviewer'a gönder
@@ -957,14 +997,19 @@ class TaskEngine {
 
 	async retryTask(taskId: string): Promise<Task> {
 		const task = await this.requireTask(taskId);
-		if (task.status !== "failed") {
-			throw new Error(`Task ${taskId} is not failed (status: ${task.status})`);
+		if (task.status !== "failed" && task.status !== "done") {
+			throw new Error(`Task ${taskId} cannot be retried (status: ${task.status})`);
 		}
 
+		await releaseTaskClaim(taskId);
+
+		// Clear timestamps so a rerun gets fresh startedAt / duration; allow null via updateTask branch.
 		const updated = (await updateTask(taskId, {
 			status: "queued",
 			retryCount: task.retryCount + 1,
 			error: null,
+			startedAt: null as unknown as string,
+			completedAt: null as unknown as string,
 		}))!;
 
 		const projectId = await this.getProjectIdForTask(task);

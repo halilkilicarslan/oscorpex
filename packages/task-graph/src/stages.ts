@@ -30,9 +30,18 @@ export interface AgentMatchSet {
 }
 
 /**
- * Build agent ID and role/name sets for task-to-agent matching.
- * Includes reverse category aliases (e.g. "backend-dev" matches "backend").
+ * Match a planned task to a stage's agents using role slug, agent UUID id, or source id.
  */
+export function taskAssignedToStageAgents(task: PlanTask, ids: Set<string>, roles: Set<string>): boolean {
+	const slug = (task.assignedAgent ?? "").trim();
+	const agentId = (task.assignedAgentId ?? "").trim();
+	if (agentId.length > 0 && ids.has(agentId)) return true;
+	if (slug.length > 0 && ids.has(slug)) return true;
+	if (slug.length > 0 && roles.has(slug.toLowerCase())) return true;
+	return false;
+}
+
+/** ID + role/name sets for matching {@link taskAssignedToStageAgents}. */
 export function buildAgentMatchSet(stageAgents: GraphAgent[]): AgentMatchSet {
 	const ids = new Set<string>();
 	const roles = new Set<string>();
@@ -95,8 +104,7 @@ export function buildDAGStages(
 
 		for (const task of allTasks) {
 			if (usedTaskIds.has(task.id)) continue;
-			const assigned = task.assignedAgent ?? "";
-			if (ids.has(assigned) || roles.has(assigned.toLowerCase())) {
+			if (taskAssignedToStageAgents(task, ids, roles)) {
 				stageTasks.push(task);
 				usedTaskIds.add(task.id);
 				if (!firstMatchedPhaseId) firstMatchedPhaseId = task.phaseId;
@@ -157,8 +165,7 @@ export function buildLinearStages(agents: GraphAgent[], phases: PlanPhase[]): St
 		for (const phase of sortedPhases) {
 			for (const task of phase.tasks) {
 				if (usedTaskIds.has(task.id)) continue;
-				const assigned = task.assignedAgent ?? "";
-				if (ids.has(assigned) || roles.has(assigned.toLowerCase())) {
+				if (taskAssignedToStageAgents(task, ids, roles)) {
 					stageTasks.push(task);
 					usedTaskIds.add(task.id);
 					if (!firstMatchedPhaseId) firstMatchedPhaseId = phase.id;

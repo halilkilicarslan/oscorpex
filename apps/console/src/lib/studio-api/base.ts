@@ -31,6 +31,15 @@ export class StudioApiError extends Error {
 	}
 }
 
+function notifyForbidden(message: string, status: number): void {
+	if (typeof window === 'undefined') return;
+	window.dispatchEvent(
+		new CustomEvent('studio:api:error', {
+			detail: { status, message },
+		}),
+	);
+}
+
 /**
  * Central typed fetch for all studio API calls.
  *
@@ -51,7 +60,11 @@ export async function studioFetch<T>(url: string, init?: RequestInit): Promise<T
 
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({})) as { error?: string };
-		throw new StudioApiError(body.error ?? `HTTP ${res.status}`, res.status, body);
+		const message = body.error ?? `HTTP ${res.status}`;
+		if (res.status === 403) {
+			notifyForbidden(message, res.status);
+		}
+		throw new StudioApiError(message, res.status, body);
 	}
 
 	// 204 No Content

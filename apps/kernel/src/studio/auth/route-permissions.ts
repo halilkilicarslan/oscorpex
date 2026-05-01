@@ -148,6 +148,11 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: /^\/tasks\/[^/]+$/, permission: "tasks:update", methods: ["PATCH", "PUT"] },
 	{ pattern: /^\/tasks\/[^/]+$/, permission: "tasks:delete", methods: ["DELETE"] },
 
+	// Sprints (global)
+	{ pattern: /^\/sprints\/[^/]+$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/sprints\/[^/]+\/burndown$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/sprints\/[^/]+\/(start|complete|cancel)$/, permission: "projects:update", methods: ["POST"] },
+
 	// Agents (global)
 	{ pattern: "/agents", permission: "agents:read", methods: ["GET"] },
 	{ pattern: "/agents", permission: "agents:configure", methods: ["POST"] },

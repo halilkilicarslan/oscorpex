@@ -3,6 +3,7 @@ import { Outlet, useOutletContext } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import ChatPanel from './ChatPanel';
+import ApiErrorToast from './ApiErrorToast';
 import type { AgentInfo } from '../types';
 
 interface LayoutContext {
@@ -43,6 +44,7 @@ export default function Layout() {
           />
         </>
       )}
+      <ApiErrorToast />
     </div>
   );
 }

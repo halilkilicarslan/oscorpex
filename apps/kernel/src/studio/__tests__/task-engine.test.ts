@@ -101,6 +101,17 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 			expect(updated.retryCount).toBe(1);
 		});
 
+		it("should retry a completed task back to queued", async () => {
+			const { t1 } = await setupProjectWithPlan();
+			await taskEngine.assignTask(t1.id, "agent-123");
+			await taskEngine.startTask(t1.id);
+			await taskEngine.completeTask(t1.id, { filesCreated: ["src/x.ts"], filesModified: [], logs: [] });
+			const updated = await taskEngine.retryTask(t1.id);
+			expect(updated.status).toBe("queued");
+			expect(updated.retryCount).toBe(1);
+			expect(updated.completedAt).toBeUndefined();
+		});
+
 		it("should throw on invalid state transitions", async () => {
 			const { t1 } = await setupProjectWithPlan();
 			// Can't complete a queued task
@@ -110,7 +121,7 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 			// Can't fail a queued task
 			await expect(taskEngine.failTask(t1.id, "err")).rejects.toThrow("not running");
 			// Can't retry a queued task
-			await expect(taskEngine.retryTask(t1.id)).rejects.toThrow("not failed");
+			await expect(taskEngine.retryTask(t1.id)).rejects.toThrow("cannot be retried");
 		});
 	});
 

@@ -39,6 +39,7 @@ export interface PlanTask {
 	title: string;
 	status: string;
 	assignedAgent?: string;
+	assignedAgentId?: string;
 	complexity: string;
 	description: string;
 	targetFiles?: string[];

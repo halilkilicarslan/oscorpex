@@ -75,6 +75,7 @@ import {
 import { sortTasksByFairness } from "./task-scheduler.js";
 import { evaluateRetry, MAX_AUTO_RETRIES, type RetryTelemetry } from "./retry-policy.js";
 import { markExecutionStarted } from "./preflight-warmup.js";
+import { syncDeclaredDependencies } from "./repo-dependency-sync.js";
 import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import {
 	startProviderTelemetry,
@@ -774,6 +775,26 @@ class ExecutionEngine {
 			log.warn("[execution-engine] Sandbox init failed (non-blocking):" + " " + String(err));
 		}
 
+		// Sync node_modules vs package.json before CLI/test runs (partial clones often lack hoisted deps).
+		if (runtimeRepoPath) {
+			try {
+				const syn = syncDeclaredDependencies(runtimeRepoPath);
+				if (syn.ranInstall && syn.ok) {
+					log.info(
+						`[execution-engine] Pre-run dependency sync ok (${syn.command}); restored: ${syn.missingBefore.join(", ")}`,
+					);
+				} else if (syn.ranInstall && !syn.ok) {
+					log.warn(
+						`[execution-engine] Pre-run dependency sync incomplete` +
+							(syn.error ? `: ${syn.error}` : "") +
+							(syn.missingAfter.length ? ` — still missing: ${syn.missingAfter.join(", ")}` : ""),
+					);
+				}
+			} catch (err) {
+				log.warn("[execution-engine] Pre-run dependency sync threw:" + " " + String(err));
+			}
+		}
+
 		try {
 			// CLI-only execution — no API fallback
 			if (!project.repoPath) {
@@ -1148,7 +1169,7 @@ class ExecutionEngine {
 				}
 			}
 
-			await taskEngine.completeTask(task.id, output);
+			await taskEngine.completeTask(task.id, output, { executionRepoPath: runtimeRepoPath });
 
 			// --- Sandbox: end session ---
 			if (sandboxSessionId) {
@@ -1390,7 +1411,7 @@ class ExecutionEngine {
 				};
 			}
 
-			await taskEngine.completeTask(task.id, output);
+			await taskEngine.completeTask(task.id, output, { executionRepoPath: project.repoPath });
 		} catch (err) {
 			const errorMsg = err instanceof Error ? err.message : String(err);
 			log.error(`[execution-engine] Special task failed: "${task.title}" — ${errorMsg}`);
@@ -1429,7 +1450,9 @@ class ExecutionEngine {
 		const project = await getProject(projectId);
 		if (!project || project.status === "failed") return;
 		const pipelineRun = await getPipelineRun(projectId);
-		if (pipelineRun && ["paused", "failed", "completed"].includes(pipelineRun.status)) return;
+		// Paused / failed: do not auto-dispatch. "completed" is ignored here: a mis-built pipeline
+		// can mark completed while task rows are still queued — we must keep dispatching ready work.
+		if (pipelineRun && (pipelineRun.status === "paused" || pipelineRun.status === "failed")) return;
 
 		const phaseFailed = await taskEngine.isPhaseFailed(phaseId);
 		const ready = await taskEngine.getReadyTasks(phaseId);

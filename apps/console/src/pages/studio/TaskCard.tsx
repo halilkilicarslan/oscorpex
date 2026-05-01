@@ -78,6 +78,8 @@ function TaskCard({
   };
 
   const isFailed = task.status === 'failed';
+  const isDone = task.status === 'done';
+  const canAgentRetry = isFailed || isDone;
   const isAwaitingApproval = task.status === 'waiting_approval';
   const hasError = isFailed && Boolean(task.error);
   const wasRejected = task.reviewStatus === 'rejected' || task.revisionCount > 0;
@@ -204,28 +206,33 @@ function TaskCard({
             </button>
           )}
 
-          {/* Retry butonu */}
-          {isFailed && onRetry && (
+          {/* Retry / Tamamlanan gorevi tekrar agente gonder */}
+          {canAgentRetry && onRetry && (
             <button
               type="button"
               onClick={handleRetry}
               disabled={retrying}
               className={[
                 'flex items-center gap-1 text-[10px] px-2 py-0.5 rounded',
-                'border border-[#f59e0b]/30 bg-[#f59e0b]/5',
-                'text-[#f59e0b] hover:bg-[#f59e0b]/10 hover:border-[#f59e0b]/50',
+                isDone
+                  ? 'border border-[#22c55e]/30 bg-[#22c55e]/5 text-[#22c55e] hover:bg-[#22c55e]/10 hover:border-[#22c55e]/50'
+                  : 'border border-[#f59e0b]/30 bg-[#f59e0b]/5 text-[#f59e0b] hover:bg-[#f59e0b]/10 hover:border-[#f59e0b]/50',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
                 'transition-all',
                 retrying ? 'opacity-70' : 'opacity-0 group-hover:opacity-100',
               ].join(' ')}
-              title="Bu gorevi yeniden calistir"
+              title={
+                isDone
+                  ? 'Tamamlanan gorevi tekrar kuyruga al ve agente calistir'
+                  : 'Bu gorevi yeniden calistir'
+              }
             >
               {retrying ? (
                 <Loader2 size={10} className="animate-spin" />
               ) : (
                 <RefreshCw size={10} />
               )}
-              {retrying ? 'Yeniden...' : 'Retry'}
+              {retrying ? 'Yeniden...' : isDone ? 'Tekrar calistir' : 'Retry'}
             </button>
           )}
         </div>

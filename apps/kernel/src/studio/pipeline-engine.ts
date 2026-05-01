@@ -880,6 +880,7 @@ function toPlanPhases(phases: Phase[]): PlanPhase[] {
 			title: t.title,
 			status: t.status,
 			assignedAgent: t.assignedAgent,
+			assignedAgentId: t.assignedAgentId,
 			complexity: t.complexity,
 			description: t.description,
 			targetFiles: t.targetFiles,

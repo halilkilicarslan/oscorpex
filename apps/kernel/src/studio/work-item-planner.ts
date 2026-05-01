@@ -64,6 +64,13 @@ function complexityForPriority(priority: WorkItemPriority): TaskComplexity {
 	}
 }
 
+function testExpectationForType(type: WorkItemType): "none" | "optional" | "required" {
+	if (type === "bug" || type === "defect" || type === "hotfix" || type === "security") {
+		return "required";
+	}
+	return "optional";
+}
+
 /** Slug-safe branch suffix derived from the work item title. */
 function branchForWorkItem(item: WorkItem): string {
 	const slug =
@@ -139,6 +146,7 @@ export async function planWorkItem(itemId: string): Promise<PlanWorkItemResult> 
 		complexity,
 		dependsOn: [],
 		branch: branchForWorkItem(item),
+		testExpectation: testExpectationForType(item.type),
 	});
 
 	const updatedItem = (await updateWorkItem(item.id, { status: "planned", plannedTaskId: task.id })) ?? item;

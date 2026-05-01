@@ -60,15 +60,19 @@ export default function TaskRow({
           >
             {task.title}
           </span>
-          {task.status === 'failed' && (
+          {(task.status === 'failed' || task.status === 'done') && (
             <button
               onClick={() => onRetryTask(task.id)}
               disabled={retryingTaskId === task.id}
-              className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors shrink-0 disabled:opacity-50"
-              title="Retry task"
+              className={
+                task.status === 'done'
+                  ? 'flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 transition-colors shrink-0 disabled:opacity-50'
+                  : 'flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors shrink-0 disabled:opacity-50'
+              }
+              title={task.status === 'done' ? 'Tekrar agente gonder' : 'Retry task'}
             >
               <RotateCcw size={9} className={retryingTaskId === task.id ? 'animate-spin' : ''} />
-              Retry
+              {task.status === 'done' ? 'Tekrar' : 'Retry'}
             </button>
           )}
           {task.status === 'waiting_approval' && (

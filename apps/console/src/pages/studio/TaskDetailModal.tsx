@@ -396,14 +396,18 @@ export default function TaskDetailModal({
 								</button>
 							</>
 						)}
-						{task.status === 'failed' && (
+						{(task.status === 'failed' || task.status === 'done') && (
 							<button
 								onClick={handleRetry}
 								disabled={actionLoading}
-								className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors disabled:opacity-50"
+								className={
+									task.status === 'done'
+										? 'flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/20 transition-colors disabled:opacity-50'
+										: 'flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors disabled:opacity-50'
+								}
 							>
 								{actionLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-								Yeniden Dene
+								{task.status === 'done' ? 'Tekrar agente gonder' : 'Yeniden Dene'}
 							</button>
 						)}
 						<button

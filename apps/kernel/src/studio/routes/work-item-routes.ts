@@ -13,6 +13,7 @@ import {
 } from "../db.js";
 import type { WorkItemPriority, WorkItemSource, WorkItemStatus, WorkItemType } from "../types.js";
 import { planWorkItem } from "../work-item-planner.js";
+import { kernel } from "../kernel/index.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("work-item-routes");
 
@@ -113,6 +114,11 @@ workItemRoutes.post("/projects/:id/work-items/:itemId/plan", async (c) => {
 	const itemId = c.req.param("itemId");
 	try {
 		const result = await planWorkItem(itemId);
+		// If the project was previously completed/idle, kick execution so newly
+		// planned backlog tasks do not remain queued indefinitely.
+		kernel.startProjectExecution(result.workItem.projectId).catch((err) => {
+			log.error("[kernel] startProjectExecution failed after work-item planning:" + " " + String(err));
+		});
 		return c.json(result, 201);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);

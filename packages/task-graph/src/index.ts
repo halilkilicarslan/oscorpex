@@ -28,5 +28,5 @@ export { buildDAGWaves, findReviewerAgentId, findDevAgentId } from "./dag.js";
 export type { DAGWaveResult } from "./dag.js";
 
 // Stage building
-export { buildDAGStages, buildLinearStages, buildAgentMatchSet } from "./stages.js";
+export { buildDAGStages, buildLinearStages, buildAgentMatchSet, taskAssignedToStageAgents } from "./stages.js";
 export type { AgentMatchSet } from "./stages.js";

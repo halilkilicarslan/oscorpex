@@ -280,7 +280,7 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
 								tasks={grouped.get(col.key) ?? []}
 								agents={agents}
 								subTaskMap={subTaskMap}
-								onRetry={col.key === 'failed' ? handleRetry : undefined}
+								onRetry={col.key === 'failed' || col.key === 'done' ? handleRetry : undefined}
 								onApprove={col.key === 'waiting_approval' ? handleApprove : undefined}
 								onReject={col.key === 'waiting_approval' ? handleOpenReject : undefined}
 								onTerminal={setTerminalTask}
