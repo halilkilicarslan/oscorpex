@@ -141,8 +141,10 @@ export class ProviderExecutionService {
 			isColdStart,
 		} = input;
 
-		// Build the sorted, skip/cooldown-aware adapter chain
-		const resolver = await createProviderResolver(primaryCliTool, ["claude-code", "cursor"], this.telemetry);
+		// Build the sorted, skip/cooldown-aware adapter chain using ALL registered adapters
+		const { providerRegistry } = await import("../kernel/provider-registry.js");
+		const allAdapterIds = providerRegistry.list().map((p) => p.id).filter((id) => id !== primaryCliTool) as AgentCliTool[];
+		const resolver = await createProviderResolver(primaryCliTool, allAdapterIds, this.telemetry);
 
 		// ---------------------------------------------------------------------------
 		// Telemetry: START — must be recorded before any operation that can throw,
