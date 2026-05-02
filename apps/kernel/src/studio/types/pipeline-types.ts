@@ -5,11 +5,10 @@
 import type { ProjectAgent } from "./agent-types.js";
 import type { Task } from "./task-types.js";
 
-// Bir pipeline aşamasının (stage) durumu
-export type PipelineStageStatus = "pending" | "running" | "completed" | "failed";
-
-// Genel pipeline durumu
-export type PipelineStatus = "idle" | "running" | "paused" | "completed" | "failed";
+// Re-export canonical union types from @oscorpex/core
+import type { PipelineStageStatus as _PipelineStageStatus, PipelineStatus as _PipelineStatus } from "@oscorpex/core";
+export type PipelineStageStatus = _PipelineStageStatus;
+export type PipelineStatus = _PipelineStatus;
 
 // Pipeline aşaması: aynı pipeline_order değerine sahip agent'lar ve görevler bir arada
 export interface PipelineStage {

@@ -1,29 +1,24 @@
 // ---------------------------------------------------------------------------
 // Oscorpex — Task Domain Types (foundational — no cross-domain imports)
+// Union types sourced from @oscorpex/core (single source of truth).
+// Interfaces kept here — kernel has extra fields not in core contract.
 // ---------------------------------------------------------------------------
 
-export type TaskStatus =
-	| "queued"
-	| "assigned"
-	| "running"
-	| "review"
-	| "revision"
-	| "waiting_approval"
-	| "blocked"
-	| "deferred"
-	| "cancelled"
-	| "done"
-	| "failed";
+// Import + re-export canonical union types from @oscorpex/core
+import type {
+	TaskStatus as _TaskStatus,
+	ApprovalStatus as _ApprovalStatus,
+	TaskComplexity as _TaskComplexity,
+	TaskType as _TaskType,
+	RiskLevel as _RiskLevel,
+} from "@oscorpex/core";
+export type TaskStatus = _TaskStatus;
+export type ApprovalStatus = _ApprovalStatus;
+export type TaskComplexity = _TaskComplexity;
+export type TaskType = _TaskType;
+export type RiskLevel = _RiskLevel;
 
-// Human-in-the-Loop onay durumu
-export type ApprovalStatus = "pending" | "approved" | "rejected";
-
-export type TaskComplexity = "S" | "M" | "L" | "XL";
-
-export type TaskType = "ai" | "integration-test" | "run-app";
 export type TestExpectation = "none" | "optional" | "required";
-
-export type RiskLevel = "low" | "medium" | "high" | "critical";
 
 export interface TaskOutput {
 	filesCreated: string[];

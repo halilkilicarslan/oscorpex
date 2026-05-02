@@ -2,7 +2,7 @@
 // Oscorpex — Policy & Approval Rule Types
 // ---------------------------------------------------------------------------
 
-import type { RiskLevel } from "./task-types.js";
+import type { RiskLevel } from "@oscorpex/core";
 
 export interface PolicyRule {
 	id: string;

@@ -1,11 +1,12 @@
 // ---------------------------------------------------------------------------
 // Oscorpex — Project, Plan, Phase, Sprint Types
+// Union types sourced from @oscorpex/core where matching.
 // ---------------------------------------------------------------------------
 
 import type { Task } from "./task-types.js";
 
 // ---- Project (Workspace) --------------------------------------------------
-
+// Note: core's ProjectStatus lacks "maintenance"|"archived" — keep local definition
 export type ProjectStatus =
 	| "planning"
 	| "approved"
@@ -42,7 +43,9 @@ export interface ProjectPlan {
 
 // ---- Phase -----------------------------------------------------------------
 
-export type PhaseStatus = "pending" | "running" | "completed" | "failed";
+// Re-export from @oscorpex/core (identical definition)
+import type { PhaseStatus as _PhaseStatus } from "@oscorpex/core";
+export type PhaseStatus = _PhaseStatus;
 
 export interface Phase {
 	id: string;
