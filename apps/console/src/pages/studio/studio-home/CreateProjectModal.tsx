@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { X } from 'lucide-react';
 import {
 	applyProjectTeam,
@@ -19,6 +19,8 @@ import {
 	type CustomTeamTemplate,
 	type TeamArchitectIntake,
 } from '../../../lib/studio-api';
+import { streamPMChat } from '../../../lib/studio-api/chat';
+import { API, json } from '../../../lib/studio-api/base';
 import AgentAvatarImg from '../../../components/AgentAvatar';
 
 // ---------------------------------------------------------------------------
@@ -39,7 +41,7 @@ export type TeamRecommendation = {
 };
 
 export type TeamArchitectRecommendation = {
-	decision: 'recommend-existing' | 'recommend-custom' | 'need-more-info';
+	decision: 'recommend-existing' | 'recommend-custom' | 'need-more-info' | 'scope-ready';
 	teamTemplateId?: string;
 	reasoning?: string[];
 	followUpQuestions?: string[];
@@ -253,6 +255,61 @@ export function TeamRosterPreview({
 }
 
 // ---------------------------------------------------------------------------
+// PlanPreviewEmbed
+// ---------------------------------------------------------------------------
+
+function PlanPreviewEmbed({ projectId, onApproved }: { projectId: string; onApproved: () => void }) {
+	const [plan, setPlan] = useState<any>(null);
+	const [loading, setLoading] = useState(true);
+
+	useEffect(() => {
+		json(`${API}/projects/${projectId}/plan`)
+			.then((data: any) => { setPlan(data); setLoading(false); })
+			.catch(() => setLoading(false));
+	}, [projectId]);
+
+	if (loading) return <div className="text-center py-8 text-[#525252]">Plan yükleniyor...</div>;
+	if (!plan) return <div className="text-center py-8 text-[#737373]">Plan henüz oluşturulmadı. PM ile sohbet ederek plan oluşturun.</div>;
+
+	return (
+		<div className="space-y-4">
+			<div className="text-[12px] text-[#a3a3a3]">
+				{plan.phases?.length ?? 0} faz, {plan.phases?.reduce((sum: number, p: any) => sum + (p.tasks?.length ?? 0), 0) ?? 0} görev
+			</div>
+			{plan.phases?.map((phase: any, i: number) => (
+				<div key={phase.id} className="rounded-xl border border-[#262626] bg-[#090909] px-4 py-3">
+					<div className="text-[13px] font-medium text-[#fafafa]">{i + 1}. {phase.name}</div>
+					<div className="mt-2 space-y-1">
+						{phase.tasks?.map((task: any) => (
+							<div key={task.id} className="flex items-center justify-between text-[11px]">
+								<span className="text-[#a3a3a3]">{task.title}</span>
+								<span className="text-[#525252]">{task.complexity}</span>
+							</div>
+						))}
+					</div>
+				</div>
+			))}
+			<div className="flex gap-2 pt-3">
+				<button
+					type="button"
+					onClick={async () => {
+						try {
+							await json(`${API}/projects/${projectId}/plan/approve`, { method: 'POST' });
+							onApproved();
+						} catch (err) {
+							alert(err instanceof Error ? err.message : 'Plan onayı başarısız');
+						}
+					}}
+					className="px-4 py-2 rounded-xl text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] transition-colors"
+				>
+					Planı Onayla ve Başlat
+				</button>
+			</div>
+		</div>
+	);
+}
+
+// ---------------------------------------------------------------------------
 // CreateProjectModal
 // ---------------------------------------------------------------------------
 
@@ -275,7 +332,7 @@ export function CreateProjectModal({
 	const [plannerAgents, setPlannerAgents] = useState<AgentConfig[]>([]);
 	const [selectedPlanner, setSelectedPlanner] = useState<string>('');
 	const [previewEnabled, setPreviewEnabled] = useState(true);
-	const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+	const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 	const [teamMode, setTeamMode] = useState<'auto' | 'manual'>('auto');
 	const [architectMessages, setArchitectMessages] = useState<ArchitectMessage[]>([]);
 	const [architectInput, setArchitectInput] = useState('');
@@ -360,6 +417,65 @@ export function CreateProjectModal({
 		techPreference,
 	};
 
+	const sendPMMessage = (content: string) => {
+		const text = content.trim();
+		if (!text || architectStreaming || !createdProject) return;
+
+		const nextMessages: ArchitectMessage[] = [...architectMessages, { role: 'user', content: text }];
+		setArchitectMessages(nextMessages);
+		setArchitectStreaming(true);
+		setArchitectStreamText('');
+		setArchitectError(null);
+		setArchitectInput('');
+
+		let accumulated = '';
+		streamPMChat(
+			createdProject.id,
+			text,
+			'claude-code',
+			'',
+			null,
+			(chunk) => {
+				accumulated += chunk;
+				setArchitectStreamText(accumulated);
+			},
+			() => {
+				const fullText = accumulated;
+				const assistantMessage: ArchitectMessage = { role: 'assistant', content: fullText };
+				setArchitectMessages((prev) => [...prev, assistantMessage]);
+				setArchitectStreaming(false);
+				setArchitectStreamText('');
+
+				// Parse scope-json if present
+				const scopeMatch = fullText.match(/```scope-json\s*\n([\s\S]*?)\n```/);
+				if (scopeMatch) {
+					try {
+						const scopeData = JSON.parse(scopeMatch[1]);
+						setArchitectRecommendation({ decision: 'scope-ready', ...scopeData });
+					} catch {}
+				}
+
+				// Also parse team-json if PM outputs it
+				const teamMatch = fullText.match(/```team-json\s*\n([\s\S]*?)\n```/);
+				if (teamMatch) {
+					try {
+						const teamData = JSON.parse(teamMatch[1]) as TeamArchitectRecommendation;
+						setArchitectRecommendation(teamData);
+						if (teamData.decision === 'recommend-existing' && teamData.teamTemplateId) {
+							setSelectedTemplate(teamData.teamTemplateId);
+							setTeamConfirmed(false);
+						}
+					} catch {}
+				}
+			},
+			(err) => {
+				setArchitectStreaming(false);
+				setArchitectStreamText('');
+				setArchitectError(err.message);
+			},
+		);
+	};
+
 	const sendArchitectMessage = (message: string, historyOverride?: ArchitectMessage[]) => {
 		const text = message.trim();
 		if (!text || architectStreaming) return;
@@ -404,13 +520,13 @@ export function CreateProjectModal({
 	};
 
 	useEffect(() => {
-		if (step !== 2 || architectMessages.length > 0 || architectStreaming) return;
+		if (step !== 2 || architectMessages.length > 0 || architectStreaming || !createdProject) return;
 		const desc = description.trim();
 		const hasTech = techPreference.length > 0;
 		const techInfo = hasTech ? `\nKullanıcının teknoloji tercihi: ${techPreference.join(', ')}` : '';
 		const prompt = `Yeni proje intake:\nProje adı: ${name}\nAçıklama: ${desc}${techInfo}\n\nLütfen projeyi anlamak için kullanıcıya sorular sor. İlk mesajda takım önerme — önce projeyi anla.`;
-		sendArchitectMessage(prompt);
-	}, [step]);
+		sendPMMessage(prompt);
+	}, [step, createdProject]);
 
 	const handleCreateShell = async () => {
 		if (!name.trim()) return;
@@ -425,7 +541,7 @@ export function CreateProjectModal({
 				previewEnabled,
 			});
 			setCreatedProject(project);
-			setStep(2);
+			setStep(2 as 1 | 2 | 3 | 4);
 		} catch (err) {
 			console.error('Failed to create project shell:', err);
 		} finally {
@@ -449,7 +565,7 @@ export function CreateProjectModal({
 				recommendedTeamRoles: selectedTeam?.roles ?? [],
 				status: 'ready_for_review',
 			});
-			setStep(3);
+			setStep(3 as 1 | 2 | 3 | 4);
 		} catch (err) {
 			console.error('Failed to save scope draft:', err);
 		} finally {
@@ -457,7 +573,7 @@ export function CreateProjectModal({
 		}
 	};
 
-	const handleApproveScope = async () => {
+	const handleApproveScopeAndTeam = async () => {
 		if (!createdProject) return;
 		setLoading(true);
 		try {
@@ -469,16 +585,31 @@ export function CreateProjectModal({
 				setSelectedTemplate(recommendationResult.teamTemplateId);
 				setTeamConfirmed(false);
 			}
-			setStep(4);
+
+			// Apply team
+			let teamTemplateId = effectiveTeamTemplateId || recommendationResult.teamTemplateId;
+			if (!teamTemplateId && architectCustomTeam) {
+				const customTeam = await createCustomTeam({
+					name: architectCustomTeam.name,
+					description: architectCustomTeam.description,
+					roles: architectCustomTeam.roles,
+					dependencies: [],
+				});
+				teamTemplateId = customTeam.id;
+			}
+			await applyProjectTeam(createdProject.id, {
+				teamTemplateId,
+				customTeam: !teamTemplateId && architectCustomTeam ? architectCustomTeam : undefined,
+				plannerAgentId: selectedPlanner || undefined,
+			});
+			setTeamApplied(true);
+
+			setStep(4 as 1 | 2 | 3 | 4);
 		} catch (err) {
-			console.error('Failed to approve scope or fetch team recommendation:', err);
+			console.error('Failed to approve scope or apply team:', err);
 		} finally {
 			setLoading(false);
 		}
-	};
-
-	const handleContinueToApply = () => {
-		setStep(5);
 	};
 
 	const handleApplyTeam = async () => {
@@ -515,7 +646,7 @@ export function CreateProjectModal({
 				<div className="flex items-center justify-between px-6 pt-6 pb-5 border-b border-[#1f1f1f] shrink-0">
 					<div>
 						<h2 className="text-[18px] font-semibold text-[#fafafa]">New Project</h2>
-						<p className="text-[12px] text-[#6b7280] mt-1">Project shell, scope approval, recommendation ve team apply adımları.</p>
+						<p className="text-[12px] text-[#6b7280] mt-1">Project shell, PM intake, scope & team onayı ve plan adımları.</p>
 					</div>
 					<button onClick={onClose} className="p-1 rounded hover:bg-[#1f1f1f] text-[#525252] hover:text-[#a3a3a3]">
 						<X size={18} />
@@ -525,11 +656,10 @@ export function CreateProjectModal({
 				<div className="overflow-y-auto flex-1 px-6 py-6">
 					<div className="mb-6 flex items-center gap-3">
 						{[
-							{ id: 1, title: 'Project Shell', caption: 'Create base project' },
-							{ id: 2, title: 'Scoping Interview', caption: 'Clarify scope with agent' },
-							{ id: 3, title: 'Scope Review', caption: 'Approve contract' },
-							{ id: 4, title: 'Team Recommendation', caption: 'Select team strategy' },
-							{ id: 5, title: 'Team Apply', caption: 'Apply team and finish' },
+							{ id: 1, title: 'Proje', caption: 'Create base project' },
+							{ id: 2, title: 'PM Intake', caption: 'Clarify scope with PM' },
+							{ id: 3, title: 'Scope & Takım', caption: 'Confirm scope and team' },
+							{ id: 4, title: 'Plan Onayı', caption: 'Review and approve plan' },
 						].map((item) => {
 							const active = step === item.id;
 							const complete = step > item.id;
@@ -552,7 +682,7 @@ export function CreateProjectModal({
 										</div>
 										<div className="text-[10px] text-[#525252]">{item.caption}</div>
 									</div>
-									{item.id < 5 && <div className="hidden sm:block h-px w-6 bg-[#262626]" />}
+									{item.id < 4 && <div className="hidden sm:block h-px w-6 bg-[#262626]" />}
 								</div>
 							);
 						})}
@@ -624,7 +754,7 @@ export function CreateProjectModal({
 							{step === 2 && (
 								<div className="rounded-2xl border border-[#1f1f1f] bg-[#0d0d0d] px-5 py-5 space-y-5">
 									<div>
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 2 — Scoping Interview</p>
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 2 — PM Intake</p>
 										<h3 className="text-[15px] font-semibold text-[#fafafa]">Projenizi birlikte tanımlayalım</h3>
 										<p className="text-[12px] leading-6 text-[#737373] mt-2 max-w-2xl">
 											PM asistanı projenizi anlamak için birkaç soru soracak. Teknik bilgi gerekmez — sadece ne istediğinizi anlatın.
@@ -636,7 +766,7 @@ export function CreateProjectModal({
 											{architectMessages.map((message, index) => {
 												const displayContent =
 													message.role === 'assistant'
-														? message.content.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').trim()
+														? message.content.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').replace(/```scope-json\s*\n[\s\S]*?\n```/g, '').trim()
 														: message.content;
 												if (!displayContent) return null;
 												return (
@@ -656,11 +786,16 @@ export function CreateProjectModal({
 											{architectStreaming && (
 												<div className="flex justify-start">
 													<div className="max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-6 bg-[#151515] border border-[#262626] text-[#d4d4d8] whitespace-pre-wrap">
-														{architectStreamText.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').trim() || 'Thinking...'}
+														{architectStreamText.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').replace(/```scope-json\s*\n[\s\S]*?\n```/g, '').trim() || 'Thinking...'}
 													</div>
 												</div>
 											)}
 										</div>
+										{architectError && (
+											<div className="mt-3 rounded-xl border border-[#7f1d1d] bg-[#450a0a]/30 px-3 py-2 text-[11px] text-[#fca5a5]">
+												{architectError}
+											</div>
+										)}
 										<div className="mt-3 flex gap-2">
 											<input
 												value={architectInput}
@@ -668,7 +803,7 @@ export function CreateProjectModal({
 												onKeyDown={(e) => {
 													if (e.key === 'Enter') {
 														e.preventDefault();
-														sendArchitectMessage(architectInput);
+														sendPMMessage(architectInput);
 													}
 												}}
 												placeholder="Soruları yanıtlayın veya projeniz hakkında detay ekleyin..."
@@ -676,7 +811,7 @@ export function CreateProjectModal({
 											/>
 											<button
 												type="button"
-												onClick={() => sendArchitectMessage(architectInput)}
+												onClick={() => sendPMMessage(architectInput)}
 												disabled={!architectInput.trim() || architectStreaming}
 												className="px-3 py-2 rounded-xl text-[12px] font-medium bg-[#22c55e] text-[#0a0a0a] disabled:opacity-50"
 											>
@@ -690,9 +825,11 @@ export function CreateProjectModal({
 							{step === 3 && (
 								<div className="rounded-2xl border border-[#1f1f1f] bg-[#0d0d0d] px-5 py-5 space-y-4">
 									<div>
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 3 — Scope Contract Review</p>
-										<h3 className="text-[15px] font-semibold text-[#fafafa]">Scope contract onayı zorunlu.</h3>
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 3 — Scope & Takım</p>
+										<h3 className="text-[15px] font-semibold text-[#fafafa]">Scope ve takımı onayla.</h3>
 									</div>
+
+									{/* Scope Summary */}
 									<div className="rounded-xl border border-[#262626] bg-[#090909] px-4 py-4 space-y-2 text-[12px]">
 										<div className="text-[#525252]">Problem Statement</div>
 										<div className="text-[#fafafa]">{description.trim() || 'No description provided.'}</div>
@@ -701,27 +838,48 @@ export function CreateProjectModal({
 										<div className="pt-2 text-[#525252]">Candidate roles</div>
 										<div className="text-[#fafafa]">{selectedTeam?.roles.join(', ') || 'No inferred roles yet'}</div>
 									</div>
-									<div className="text-[11px] text-[#737373]">
-										Bu adımı onaylamadan team recommendation ekranı açılmaz.
-									</div>
-								</div>
-							)}
 
-							{step === 4 && (
-								<div className="rounded-2xl border border-[#1f1f1f] bg-[#0d0d0d] px-5 py-5 space-y-5">
+									{/* Team recommendation */}
 									<div>
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 4 — Team Recommendation</p>
-										<h3 className="text-[15px] font-semibold text-[#fafafa]">Planlamadan önce takımı kur.</h3>
-										<p className="text-[12px] leading-6 text-[#737373] mt-2 max-w-2xl">
-											Scope approval sonrası backend recommendation burada görünür. İstersen manuel override yapabilirsin.
-										</p>
+										<div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-3">Takım Önerisi</div>
+										{recommendation.candidate && (
+											<div className="rounded-2xl border border-[#22c55e]/30 bg-[#22c55e]/5 px-5 py-4 space-y-3">
+												<div className="flex items-start justify-between gap-4">
+													<div>
+														<div className="text-[14px] font-semibold text-[#fafafa]">
+															{architectRecommendedTeam?.name ?? architectCustomTeam?.name ?? recommendation.candidate.name}
+														</div>
+														<p className="text-[12px] leading-6 text-[#a7f3d0] mt-1">
+															{architectRecommendation?.reasoning?.[0] ?? recommendation.reason}
+														</p>
+													</div>
+													<div className="rounded-full border border-[#22c55e]/30 px-2.5 py-1 text-[10px] font-medium text-[#86efac] shrink-0">
+														{architectCustomTeam
+															? 'Custom'
+															: architectRecommendedTeam?.source === 'custom' ||
+																  recommendation.candidate.source === 'custom'
+																? 'Custom'
+																: 'Preset'}
+													</div>
+												</div>
+												<TeamRosterPreview
+													roles={
+														architectCustomTeam?.roles ??
+														architectRecommendedTeam?.roles ??
+														recommendation.candidate.roles
+													}
+													presetAgents={presetAgents}
+													limit={6}
+													columns="wide"
+												/>
+											</div>
+										)}
+										{!recommendation.candidate && (
+											<div className="text-[12px] text-[#737373]">Takım önerisi bulunamadı. Scope onaylandıktan sonra otomatik atanacak.</div>
+										)}
 									</div>
-									{backendRecommendation && (
-										<div className="rounded-xl border border-[#22c55e]/30 bg-[#22c55e]/5 px-3 py-2 text-[12px] text-[#bbf7d0]">
-											{backendRecommendation.reasoning ?? `Decision: ${backendRecommendation.decision}`}
-										</div>
-									)}
 
+									{/* Manual team override */}
 									<div className="flex flex-wrap items-center gap-3">
 										<div className="inline-flex rounded-xl border border-[#262626] bg-[#0a0a0a] p-1">
 											<button
@@ -731,7 +889,7 @@ export function CreateProjectModal({
 													teamMode === 'auto' ? 'bg-[#22c55e] text-[#0a0a0a]' : 'text-[#a3a3a3] hover:text-[#fafafa]'
 												}`}
 											>
-												Team Architect
+												Otomatik
 											</button>
 											<button
 												type="button"
@@ -743,121 +901,7 @@ export function CreateProjectModal({
 												Ben seçeceğim
 											</button>
 										</div>
-										<div className="text-[11px] text-[#6b7280]">
-											Current: <span className="text-[#d4d4d8]">{selectedTeamName}</span>
-										</div>
 									</div>
-
-									{teamMode === 'auto' && recommendation.candidate && (
-										<div className="rounded-2xl border border-[#22c55e]/30 bg-[#22c55e]/5 px-5 py-5 space-y-4">
-											<div className="flex items-start justify-between gap-4">
-												<div>
-													<div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#86efac] mb-2">
-														Team Architect
-													</div>
-													<div className="text-[15px] font-semibold text-[#fafafa]">
-														{architectRecommendedTeam?.name ?? architectCustomTeam?.name ?? recommendation.candidate.name}
-													</div>
-													<p className="text-[12px] leading-6 text-[#a7f3d0] mt-2">
-														{architectRecommendation?.reasoning?.[0] ?? recommendation.reason}
-													</p>
-												</div>
-												<div className="rounded-full border border-[#22c55e]/30 px-2.5 py-1 text-[10px] font-medium text-[#86efac]">
-													{architectCustomTeam
-														? 'Custom'
-														: architectRecommendedTeam?.source === 'custom' ||
-															  recommendation.candidate.source === 'custom'
-															? 'Custom'
-															: 'Preset'}
-												</div>
-											</div>
-											<p className="text-[11px] text-[#737373] leading-5">
-												{architectCustomTeam?.description ??
-													architectRecommendedTeam?.description ??
-													recommendation.candidate.description}
-											</p>
-											<TeamRosterPreview
-												roles={
-													architectCustomTeam?.roles ??
-													architectRecommendedTeam?.roles ??
-													recommendation.candidate.roles
-												}
-												presetAgents={presetAgents}
-												limit={6}
-												columns="wide"
-											/>
-
-											<div className="rounded-2xl border border-[#1f1f1f] bg-[#0c0c0c] p-4">
-												<div className="text-[11px] font-medium text-[#a3a3a3] mb-3">Conversation</div>
-												<div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
-													{architectMessages.map((message, index) => {
-														const displayContent =
-															message.role === 'assistant'
-																? message.content.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').trim()
-																: message.content;
-														if (!displayContent) return null;
-														return (
-															<div
-																key={`${message.role}-${index}`}
-																className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-															>
-																<div
-																	className={`max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-6 whitespace-pre-wrap ${
-																		message.role === 'user'
-																			? 'bg-[#1f3d2a] text-[#e5e7eb]'
-																			: 'bg-[#151515] border border-[#262626] text-[#d4d4d8]'
-																	}`}
-																>
-																	{displayContent}
-																</div>
-															</div>
-														);
-													})}
-													{architectStreaming && (
-														<div className="flex justify-start">
-															<div className="max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-6 bg-[#151515] border border-[#262626] text-[#d4d4d8] whitespace-pre-wrap">
-																{architectStreamText.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').trim() ||
-																	'Thinking...'}
-															</div>
-														</div>
-													)}
-												</div>
-												{architectError && (
-													<div className="mt-3 rounded-xl border border-[#7f1d1d] bg-[#450a0a]/30 px-3 py-2 text-[11px] text-[#fca5a5]">
-														{architectError}
-													</div>
-												)}
-												{architectRecommendation?.followUpQuestions &&
-													architectRecommendation.followUpQuestions.length > 0 && (
-														<div className="mt-3 text-[11px] text-[#a3a3a3]">
-															Team Architect asks: {architectRecommendation.followUpQuestions.join(' / ')}
-														</div>
-													)}
-												<div className="mt-3 flex gap-2">
-													<input
-														value={architectInput}
-														onChange={(e) => setArchitectInput(e.target.value)}
-														onKeyDown={(e) => {
-															if (e.key === 'Enter') {
-																e.preventDefault();
-																sendArchitectMessage(architectInput);
-															}
-														}}
-														placeholder="Team Architect'a cevap ver..."
-														className="flex-1 px-3 py-2 bg-[#080808] border border-[#262626] rounded-xl text-[12px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
-													/>
-													<button
-														type="button"
-														onClick={() => sendArchitectMessage(architectInput)}
-														disabled={!architectInput.trim() || architectStreaming}
-														className="px-3 py-2 rounded-xl text-[12px] font-medium bg-[#22c55e] text-[#0a0a0a] disabled:opacity-50"
-													>
-														Send
-													</button>
-												</div>
-											</div>
-										</div>
-									)}
 
 									{teamMode === 'manual' && (
 										<div className="grid gap-3 xl:grid-cols-2">
@@ -891,19 +935,6 @@ export function CreateProjectModal({
 										</div>
 									)}
 
-									{selectedTemplate && !teamConfirmed && (
-										<button
-											type="button"
-											onClick={() => setTeamConfirmed(true)}
-											className="mt-3 px-4 py-2 rounded-xl text-[12px] font-medium bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30 hover:bg-[#22c55e]/20 transition-colors"
-										>
-											Bu takımı onayla
-										</button>
-									)}
-									{teamConfirmed && (
-										<p className="mt-3 text-[11px] text-[#22c55e]">Takım seçimi onaylandı</p>
-									)}
-
 									{plannerAgents.length > 0 && (
 										<div>
 											<label className="text-[12px] text-[#737373] font-medium block mb-1.5">Planner</label>
@@ -923,29 +954,27 @@ export function CreateProjectModal({
 											</p>
 										</div>
 									)}
+
+									<div className="text-[11px] text-[#737373]">
+										Onayladığınızda scope kaydedilecek, takım uygulanacak ve plan adımına geçilecek.
+									</div>
 								</div>
 							)}
 
-							{step === 5 && (
+							{step === 4 && (
 								<div className="rounded-2xl border border-[#1f1f1f] bg-[#0d0d0d] px-5 py-5 space-y-4">
 									<div>
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 5 — Team Apply</p>
-										<h3 className="text-[15px] font-semibold text-[#fafafa]">Takımı projeye uygula ve tamamla.</h3>
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 4 — Plan Onayı</p>
+										<h3 className="text-[15px] font-semibold text-[#fafafa]">Planı inceleyin ve onaylayın</h3>
 										<p className="text-[12px] leading-6 text-[#737373] mt-2">
-											Bu adım `applyProjectTeam` çağrısını manuel onayla tetikler.
+											PM Agent projeniz için bir plan oluşturdu. Fazları ve görevleri inceleyin, uygunsa onaylayın.
 										</p>
 									</div>
-									<div className="rounded-xl border border-[#262626] bg-[#090909] px-4 py-4 text-[12px]">
-										<div className="flex items-center justify-between gap-4">
-											<span className="text-[#525252]">Selected team</span>
-											<span className="text-[#fafafa]">{selectedTeamName}</span>
-										</div>
-										<div className="flex items-center justify-between gap-4 mt-2">
-											<span className="text-[#525252]">Scope approved</span>
-											<span className={scopeApproved ? 'text-[#22c55e]' : 'text-[#f87171]'}>{scopeApproved ? 'Yes' : 'No'}</span>
-										</div>
-									</div>
-									{teamApplied && <div className="text-[12px] text-[#86efac]">Team applied successfully.</div>}
+									{createdProject && (
+										<Suspense fallback={<div className="text-center py-8 text-[#525252]">Plan yükleniyor...</div>}>
+											<PlanPreviewEmbed projectId={createdProject.id} onApproved={() => { onCreate(createdProject); }} />
+										</Suspense>
+									)}
 								</div>
 							)}
 						</div>
@@ -997,8 +1026,8 @@ export function CreateProjectModal({
 					</div>
 				</div>
 
-				{architectRecommendation?.decision === 'need-more-info' && (
-					<p className="text-[11px] text-[#f59e0b] px-6 pb-2">Team Architect daha fazla bilgi istiyor. Lütfen soruları yanıtlayın.</p>
+				{architectRecommendation?.decision === 'need-more-info' && step === 2 && (
+					<p className="text-[11px] text-[#f59e0b] px-6 pb-2">PM Agent daha fazla bilgi istiyor. Lütfen soruları yanıtlayın.</p>
 				)}
 
 				{/* Actions */}
@@ -1011,7 +1040,7 @@ export function CreateProjectModal({
 					</button>
 					{step > 1 && (
 						<button
-							onClick={() => setStep((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3 | 4 | 5) : prev))}
+							onClick={() => setStep((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3 | 4) : prev))}
 							className="px-4 py-2 rounded-lg text-[13px] text-[#a3a3a3] hover:text-[#fafafa] border border-[#262626] hover:border-[#333] transition-colors"
 						>
 							Back
@@ -1035,29 +1064,13 @@ export function CreateProjectModal({
 						</button>
 					) : step === 3 ? (
 						<button
-							onClick={handleApproveScope}
+							onClick={handleApproveScopeAndTeam}
 							disabled={!createdProject || loading}
 							className="px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 						>
-							{loading ? 'Approving...' : 'Approve Scope Contract'}
+							{loading ? 'Onaylanıyor...' : 'Scope & Takımı Onayla'}
 						</button>
-					) : step === 4 ? (
-						<button
-							onClick={handleContinueToApply}
-							disabled={!scopeApproved || !teamConfirmed}
-							className="px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-						>
-							Continue to Team Apply
-						</button>
-					) : (
-						<button
-							onClick={handleApplyTeam}
-							disabled={!createdProject || !scopeApproved || loading}
-							className="px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-						>
-							{loading ? 'Applying...' : 'Apply Team & Finish'}
-						</button>
-					)}
+					) : null}
 				</div>
 			</div>
 		</div>

@@ -72,10 +72,13 @@ projectChatRoutes.post("/projects/:id/chat", async (c) => {
 	}
 
 	const projectId = c.req.param("id");
+	const mode = c.req.query("mode");
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
-	const teamGuard = await ensureProjectTeamInitialized(c, projectId);
-	if (teamGuard) return teamGuard;
+	if (mode !== "intake") {
+		const teamGuard = await ensureProjectTeamInitialized(c, projectId);
+		if (teamGuard) return teamGuard;
+	}
 
 	if (!project.repoPath) {
 		return c.json({ error: "Project has no repoPath configured." }, 400);
@@ -204,6 +207,10 @@ ${
 						]
 					: []),
 			].join("\n")
+}${
+	mode === "intake"
+		? "\n\n## INTAKE MODE\nYou are in intake/discovery mode. Your ONLY job is to understand the project through conversation. Do NOT create a plan yet. Do NOT use createProjectPlan tool. Ask questions, understand scope, and when ready output a scope-json block:\n```scope-json\n{\"problemStatement\": \"...\", \"goals\": [\"...\"], \"features\": [\"...\"], \"constraints\": [\"...\"], \"techPreferences\": [\"...\"]}\n```"
+		: ""
 }`;
 
 	const conversationContext = history

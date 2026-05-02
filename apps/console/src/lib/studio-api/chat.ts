@@ -58,10 +58,12 @@ export function streamPMChat(
   onText: (text: string) => void,
   onDone: () => void,
   onError: (err: Error) => void,
+  options?: { mode?: string },
 ): () => void {
   const controller = new AbortController();
+  const modeParam = options?.mode ? `?mode=${options.mode}` : '';
 
-  fetch(`${API}/projects/${projectId}/chat`, { // DIRECT_FETCH_INTENTIONAL: planner chat streams SSE chunks through ReadableStream.
+  fetch(`${API}/projects/${projectId}/chat${modeParam}`, { // DIRECT_FETCH_INTENTIONAL: planner chat streams SSE chunks through ReadableStream.
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, provider, model, effort }),
