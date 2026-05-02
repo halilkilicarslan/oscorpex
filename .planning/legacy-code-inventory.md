@@ -39,9 +39,9 @@
 
 | Aspect | Detail |
 |--------|--------|
-| File | `apps/kernel-src/` directory |
+| File | `archive/legacy/kernel-src/` directory |
 | Current callers | None (grep confirms zero references) |
-| Category | **DELETE** (blocked by CLAUDE.md instruction: "Never edit files under apps/kernel-src/") |
+| Category | **LEGACY_ARCHIVE** |
 | Migration target | N/A — fully migrated to `apps/kernel/` |
 | Delete after | When project owner authorizes |
 | Risk | NONE — zero callers confirmed |

@@ -62,15 +62,16 @@ Oscorpex is an AI-powered software development platform. Users describe an idea,
 
 **Core engine flow** (all in `studio/`):
 1. **pm-agent.ts** — PM analyzes requirements, generates phased plan with tasks
-2. **execution-engine.ts** (1306 LOC, 7 responsibilities) — Dispatches tasks via CLI, manages adapter chain, session lifecycle, sandbox, retry
-3. **task-engine.ts** — Task lifecycle: assign → start → done/fail. Review loops, sub-task rollup, escalation
-4. **pipeline-engine.ts** — DAG orchestrator via Kahn's algorithm. Phase progression, replan gate
+2. **execution-engine.ts** — Thin execution facade. Normal execution goes through TaskDispatcher → TaskExecutor → ProviderExecutionService → ProviderRegistry → ProviderAdapter
+3. **task-engine.ts** — Task facade backed by extracted approval, review, lifecycle, progress, completion, and subtask services
+4. **pipeline-engine.ts** — Pipeline facade backed by extracted build, stage advance, control, completion, VCS, replan, task-hook, and review-helper services
 
-**Extracted modules** (from execution-engine):
-- `execution-gates.ts` — Verification + test + goal validation gates
-- `proposal-processor.ts` — Routes structured output markers (task proposals, agent messages, graph mutations)
-- `prompt-builder.ts` — Task prompt assembly with RAG, context, error injection
-- `review-dispatcher.ts` — Review task lifecycle + agent resolution
+**Extracted modules**:
+- `execution/` — task execution lifecycle, provider execution, gates, sandbox guard, task output, dispatch, recovery, watchdog, timeout, queue wait
+- `task/` — approval, review loop, zero-file guard, completion effects, subtask rollup, lifecycle, progress
+- `pipeline/` — state, stage advance, replan gate, VCS hooks, build, control, task hook, review helpers, completion
+- `providers/` — provider model catalog and routing services
+- `legacy/` — compatibility-only CLI runtime and CLI adapter; not the normal execution path
 
 **Performance & scheduling** (EPIC 3 — 17 tasks):
 - `performance-config.ts` — Centralized tunables via env vars + feature flags (`OSCORPEX_PERF_FEATURES`)

@@ -119,14 +119,12 @@ Important groups from compact output:
 
 Proceed to feature planning.
 
-The cleanup-only batch archived `archive/legacy/kernel-src` and removed confirmed unused root-level duplicate modules. No feature-blocking issue was found.
+The cleanup-only and technical-debt closure batches archived `archive/legacy/kernel-src`, removed confirmed unused root-level duplicate modules, moved wrapper implementations into owned extracted folders, isolated the legacy CLI runtime boundary, split `execution/task-executor.ts`, slimmed `pipeline-engine.ts`, and reduced production kernel boundary casts. No feature-blocking issue was found.
 
 Recommended cleanup backlog:
 
 1. P1: Delete `archive/legacy/kernel-src` only after explicit confirmation.
-2. P1: Remove or migrate confirmed unused root-level duplicates: `task-executor.ts`, `task-lifecycle.ts`, `pipeline-branch-manager.ts`, `pipeline-state-manager.ts`.
-3. P1: Wrapper implementations moved into extracted folders.
-4. P2: Migrate review/test compatibility callers off `legacy/cli-adapter.ts`.
-5. P2: Migrate streaming/proposal callers off `legacy/cli-runtime.ts`.
-6. P2: Split active `execution/task-executor.ts` and slim `pipeline-engine.ts`.
-7. P3: Cleanup unsafe casts by boundary.
+2. P2: Migrate review/test compatibility callers off `legacy/cli-adapter.ts`.
+3. P2: Migrate streaming/proposal callers off `legacy/cli-runtime.ts`.
+4. P2: Continue optional micro-splits for `execution/task-executor.ts` and `pipeline-engine.ts` only if future changes need them.
+5. P3: Continue unsafe cast cleanup by boundary for routes, DB rows, adapters, and tests.

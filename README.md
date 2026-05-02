@@ -184,13 +184,20 @@ apps/kernel/src/studio/
 
   execution/
     index.ts                   # Execution module barrel
-    task-executor.ts           # Single-task execution lifecycle
+    task-executor.ts           # Single-task orchestration facade
     provider-execution-service.ts # Provider execution normalization and fallback handling
     dispatch-coordinator.ts    # Ready-task dispatch coordination
     execution-recovery.ts      # Startup recovery and running-task cancellation
     execution-watchdog.ts      # Self-healing dispatch watchdog
     queue-wait.ts              # Queue-wait metric calculation
     task-timeout.ts            # Timeout helper and TaskTimeoutError
+    task-start-service.ts      # Task claim/start and queue-wait persistence
+    special-task-runner.ts     # Integration-test and run-app task execution
+    review-task-runner.ts      # Code-review task execution
+    sandbox-execution-guard.ts # Sandbox policy and output-path enforcement
+    provider-task-runner.ts    # ProviderExecutionService invocation
+    execution-gates-runner.ts  # Verification, test, and goal gates
+    task-output-handler.ts     # Token usage, proposals, docs, and completion output
 
   task/
     approval-service.ts        # Approval lifecycle helpers
@@ -206,6 +213,11 @@ apps/kernel/src/studio/
     stage-advance-service.ts   # Stage transition decisions
     replan-gate.ts             # Pending replan gate
     vcs-phase-hooks.ts         # Branch/merge/PR side effects
+    pipeline-build-service.ts  # Pipeline graph construction
+    pipeline-control-service.ts # Pause/resume/retry behavior
+    pipeline-task-hook.ts      # Idempotent task hook registration
+    pipeline-review-helpers.ts # Reviewer/developer lookup helpers
+    pipeline-completion-service.ts # Completion/failure side effects
 
   providers/
     provider-model-catalog.ts  # Provider/model catalog constants
@@ -253,6 +265,7 @@ adapters/
 ## Refactor Status
 
 Execution refactor accepted at commit `85b3e34 Complete execution refactor batch`.
+Technical debt closure batches completed through `9c18ba6 chore(types): reduce unsafe casts at kernel boundaries`.
 
 Validated locally with:
 
@@ -266,9 +279,8 @@ pnpm --filter @oscorpex/provider-sdk test
 Known non-blocking technical debt:
 
 - legacy CLI runtime remains under `studio/legacy/` for compatibility, streaming, proposal processing, and test paths
-- `legacyCliAdapter` references remain, but fallback is disabled by default
-- unsafe casts remain and are tracked as a separate cleanup backlog
-```
+- root CLI shim files remain for compatibility and test mocks
+- some unsafe casts remain in tests, routes, DB row mappers, and adapters; production kernel boundary casts were reduced in the closure batch
 
 ## Database
 
