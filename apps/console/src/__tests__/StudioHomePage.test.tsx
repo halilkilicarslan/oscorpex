@@ -226,7 +226,7 @@ describe('StudioHomePage — proje olusturma modali', () => {
 
     expect(screen.getByText('New Project', { selector: 'h2' })).toBeInTheDocument();
     // Step 1: proje adi inputu olmali (yeni placeholder)
-    expect(screen.getByPlaceholderText(/Counter App/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Todo App/)).toBeInTheDocument();
   });
 
   it('modal "Cancel" butonuna tiklaninca kapanmali', async () => {
@@ -236,10 +236,10 @@ describe('StudioHomePage — proje olusturma modali', () => {
     await waitFor(() => screen.getByText('New Project'));
 
     await user.click(screen.getByText('New Project'));
-    expect(screen.getByPlaceholderText(/Counter App/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Todo App/)).toBeInTheDocument();
 
     await user.click(screen.getByText('Cancel'));
-    expect(screen.queryByPlaceholderText(/Counter App/)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Todo App/)).not.toBeInTheDocument();
   });
 
   it('Step 1 "Create Shell" butonu isim girilmeden disabled olmali', async () => {
@@ -260,11 +260,11 @@ describe('StudioHomePage — proje olusturma modali', () => {
     await waitFor(() => screen.getByText('New Project'));
     await user.click(screen.getByText('New Project'));
 
-    const nameInput = screen.getByPlaceholderText(/Counter App/);
+    const nameInput = screen.getByPlaceholderText(/Todo App/);
     await user.type(nameInput, 'Benim Projem');
 
     // Description da gerekli (min 10 karakter)
-    const descInput = screen.getByPlaceholderText(/Describe the product/);
+    const descInput = screen.getByPlaceholderText(/Projenizi kendi/);
     await user.type(descInput, 'Basit bir todo uygulamasi');
 
     const createShellBtn = screen.getByRole('button', { name: 'Create Shell' });
@@ -282,13 +282,13 @@ describe('StudioHomePage — proje olusturma modali', () => {
     const newProjectBtns = screen.getAllByText('New Project');
     await user.click(newProjectBtns[0]);
 
-    await waitFor(() => screen.getByPlaceholderText(/Counter App/));
+    await waitFor(() => screen.getByPlaceholderText(/Todo App/));
 
-    const nameInput = screen.getByPlaceholderText(/Counter App/);
+    const nameInput = screen.getByPlaceholderText(/Todo App/);
     await user.type(nameInput, 'Benim Projem');
 
     // Description da gerekli (min 10 karakter)
-    const descInput = screen.getByPlaceholderText(/Describe the product/);
+    const descInput = screen.getByPlaceholderText(/Projenizi kendi/);
     await user.type(descInput, 'Basit bir todo uygulamasi');
 
     // Step 1: Create Shell butonu ile proje olustur
@@ -308,7 +308,7 @@ describe('StudioHomePage — proje olusturma modali', () => {
     await waitFor(() => screen.getByText('New Project'));
     await user.click(screen.getByText('New Project'));
 
-    expect(screen.getByPlaceholderText(/Counter App/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Todo App/)).toBeInTheDocument();
   });
 });
 

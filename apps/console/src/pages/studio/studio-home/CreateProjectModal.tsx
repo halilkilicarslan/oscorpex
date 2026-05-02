@@ -561,80 +561,61 @@ export function CreateProjectModal({
 						<div className="space-y-6">
 							{step === 1 && (
 								<>
-									<div className="rounded-2xl border border-[#1f1f1f] bg-[linear-gradient(180deg,#121212_0%,#0a0a0a_100%)] px-5 py-5">
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 1 — Project Shell</p>
-										<h3 className="text-[15px] font-semibold text-[#fafafa]">Create project shell and base intake.</h3>
-										<p className="text-[12px] leading-6 text-[#737373] mt-2 max-w-2xl">
-											Bu adım sadece proje kabuğunu oluşturur. Sonraki adımlarda kapsam onayı ve takım uygulaması yapılır.
-										</p>
-									</div>
-
-									<div className="rounded-2xl border border-[#1f1f1f] bg-[#0d0d0d] px-5 py-5 space-y-5">
-										<div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+									<div className="rounded-2xl border border-[#1f1f1f] bg-[linear-gradient(180deg,#121212_0%,#0a0a0a_100%)] px-6 py-6">
+										<div className="flex items-center gap-3 mb-4">
+											<div className="w-10 h-10 rounded-xl bg-[#22c55e]/10 flex items-center justify-center">
+												<span className="text-[#22c55e] text-lg">+</span>
+											</div>
 											<div>
-												<label className="text-[12px] text-[#737373] font-medium block mb-1.5">Project Name</label>
+												<h3 className="text-[16px] font-semibold text-[#fafafa]">Yeni Proje</h3>
+												<p className="text-[12px] text-[#737373]">Fikrini anlat, gerisini biz halledelim</p>
+											</div>
+										</div>
+
+										<div className="space-y-5">
+											<div>
+												<label className="text-[12px] text-[#a3a3a3] font-medium block mb-2">Proje Adı</label>
 												<input
 													type="text"
 													value={name}
 													onChange={(e) => setName(e.target.value)}
-													placeholder="Counter App, CRM Dashboard, Landing Site..."
-													className="w-full px-3 py-2.5 bg-[#080808] border border-[#262626] rounded-xl text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
+													placeholder="Örn: Todo App, E-Ticaret Sitesi, Blog Platformu..."
+													className="w-full px-4 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[14px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none transition-colors"
 													autoFocus
 												/>
 											</div>
 
 											<div>
-												<label className="text-[12px] text-[#737373] font-medium block mb-1.5">Project Type</label>
+												<label className="text-[12px] text-[#a3a3a3] font-medium block mb-2">Proje Tipi</label>
 												<select
 													value={projectType}
 													onChange={(e) => setProjectType(e.target.value)}
-													className="w-full px-3 py-2.5 bg-[#080808] border border-[#262626] rounded-xl text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none"
+													className="w-full px-4 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[14px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none transition-colors"
 												>
 													{PROJECT_TYPE_OPTIONS.map((option) => (
 														<option key={option.value} value={option.value}>
-															{option.label}
+															{option.label} — {option.hint}
 														</option>
 													))}
 												</select>
 											</div>
-										</div>
 
-
-										<div>
-											<label className="text-[12px] text-[#737373] font-medium block mb-1.5">
-												What do you want to build?
-											</label>
-											<textarea
-												value={description}
-												onChange={(e) => setDescription(e.target.value)}
-												placeholder="Describe the product, user flow, and the outcome you expect. Example: A simple counter app with increment, decrement, reset, keyboard-friendly controls, and a clean mobile layout."
-												rows={6}
-												className="w-full px-3 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none resize-none leading-6"
-											/>
-											{description.trim().length > 0 && description.trim().length < 10 && (
-												<p className="text-[10px] text-[#f59e0b] mt-1">En az 10 karakter gerekli ({description.trim().length}/10)</p>
-											)}
-											<p className="text-[11px] text-[#525252] mt-2">
-												The planner interprets this text as project requirements, scope, and success criteria.
-											</p>
-										</div>
-
-										<div className="grid gap-4 xl:grid-cols-2">
-											<label className="flex items-start gap-3 rounded-xl border border-[#262626] bg-[#090909] px-3.5 py-3.5 cursor-pointer">
-												<input
-													type="checkbox"
-													checked={previewEnabled}
-													onChange={(e) => setPreviewEnabled(e.target.checked)}
-													className="mt-0.5 h-4 w-4 rounded border-[#333] bg-[#111111] text-[#22c55e] focus:ring-[#22c55e]"
+											<div>
+												<label className="text-[12px] text-[#a3a3a3] font-medium block mb-2">Ne yapmak istiyorsunuz?</label>
+												<textarea
+													value={description}
+													onChange={(e) => setDescription(e.target.value)}
+													placeholder={"Projenizi kendi cümlelerinizle anlatın. Teknik detay gerekmez.\n\nÖrnek: Kullanıcıların yapılacak işlerini ekleyip takip edebileceği basit bir uygulama. Filtreleme ve tamamlananları silme özelliği olsun."}
+													rows={5}
+													className="w-full px-4 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[14px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none resize-none leading-7 transition-colors"
 												/>
-												<div>
-													<div className="text-[12px] font-medium text-[#fafafa]">Preview / Run App required</div>
-													<div className="text-[11px] text-[#525252] mt-1 leading-5">
-														Keep enabled if you want to run and preview the app inside the studio.
-													</div>
-												</div>
-											</label>
-
+												{description.trim().length > 0 && description.trim().length < 10 && (
+													<p className="text-[11px] text-[#f59e0b] mt-1.5">En az 10 karakter gerekli ({description.trim().length}/10)</p>
+												)}
+												{description.trim().length >= 10 && (
+													<p className="text-[11px] text-[#525252] mt-1.5">Sonraki adımda PM asistanı sizinle detayları konuşacak</p>
+												)}
+											</div>
 										</div>
 									</div>
 								</>
