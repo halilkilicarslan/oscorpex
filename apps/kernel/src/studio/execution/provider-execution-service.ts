@@ -319,7 +319,9 @@ export class ProviderExecutionService {
 			lastAdapterError ?? new Error("All CLI adapters exhausted"),
 		);
 
-		throw lastAdapterError ?? new Error("All CLI adapters exhausted — no provider available.");
+		const err = lastAdapterError ?? new Error("All CLI adapters exhausted — no provider available.");
+		(err as any).classification = lastFailureClassification ?? "unknown";
+		throw err;
 	}
 }
 

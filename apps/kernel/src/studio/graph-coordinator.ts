@@ -51,16 +51,27 @@ async function applyInsertNode(
 		dependsOn?: string[];
 	},
 ): Promise<{ taskId: string }> {
+	const deps = params.dependsOn ?? [];
+
 	const task = await createTask({
 		phaseId: params.phaseId,
 		title: params.title,
 		description: params.description,
 		assignedAgent: params.assignedAgent,
 		complexity: params.complexity ?? "S",
-		dependsOn: params.dependsOn ?? [],
+		dependsOn: deps,
 		branch: "main",
 		projectId,
 	});
+
+	if (deps.length > 0) {
+		for (const depId of deps) {
+			if (await wouldCreateCycle(depId, task.id, projectId)) {
+				throw new GraphInvariantError("cycle", `insertNode: adding dependency ${depId} would create a cycle`);
+			}
+		}
+	}
+
 	return { taskId: task.id };
 }
 

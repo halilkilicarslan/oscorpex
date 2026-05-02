@@ -286,6 +286,13 @@ router.delete("/api-keys/:id", async (c) => {
 		const tid = ctx.get("tenantId") as string | undefined;
 		const uid = ctx.get("userId") as string | undefined;
 
+		if (tid) {
+			const tenantKeys = await listApiKeys(tid);
+			if (!tenantKeys.some((k) => k.id === keyId)) {
+				return c.json({ error: "API key not found" }, 404);
+			}
+		}
+
 		await revokeApiKey(keyId);
 
 		// M6.4: Audit log — non-blocking

@@ -4,7 +4,7 @@
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createLogger } from "../logger.js";
-import { execute, query, queryOne } from "../pg.js";
+import { execute, query, queryOne, withTransaction } from "../pg.js";
 const log = createLogger("tenant-repo");
 
 // ---------------------------------------------------------------------------
@@ -195,23 +195,25 @@ export async function createTenantWithOwner(params: {
 	passwordHash: string;
 	displayName: string;
 }): Promise<void> {
-	await execute("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)", [
-		params.tenantId,
-		params.tenantName,
-		params.tenantSlug,
-	]);
-	await execute("INSERT INTO users (id, email, password_hash, display_name, tenant_id) VALUES ($1, $2, $3, $4, $5)", [
-		params.userId,
-		params.email,
-		params.passwordHash,
-		params.displayName,
-		params.tenantId,
-	]);
-	await execute("INSERT INTO user_roles (user_id, tenant_id, role) VALUES ($1, $2, $3)", [
-		params.userId,
-		params.tenantId,
-		"owner",
-	]);
+	await withTransaction(async (client) => {
+		await client.query("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)", [
+			params.tenantId,
+			params.tenantName,
+			params.tenantSlug,
+		]);
+		await client.query("INSERT INTO users (id, email, password_hash, display_name, tenant_id) VALUES ($1, $2, $3, $4, $5)", [
+			params.userId,
+			params.email,
+			params.passwordHash,
+			params.displayName,
+			params.tenantId,
+		]);
+		await client.query("INSERT INTO user_roles (user_id, tenant_id, role) VALUES ($1, $2, $3)", [
+			params.userId,
+			params.tenantId,
+			"owner",
+		]);
+	});
 }
 
 export async function listTenantUsers(

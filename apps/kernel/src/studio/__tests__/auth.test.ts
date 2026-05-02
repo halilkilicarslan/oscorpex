@@ -13,7 +13,12 @@ vi.mock("../pg.js", () => ({
 	query: vi.fn(),
 	queryOne: vi.fn(),
 	execute: vi.fn(),
-	withTransaction: vi.fn(),
+	withTransaction: vi.fn().mockImplementation((cb: (client: any) => Promise<any>) => {
+		const fakeClient = {
+			query: vi.fn().mockResolvedValue({ rows: [], rowCount: 1 }),
+		};
+		return cb(fakeClient);
+	}),
 	setTenantContext: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -213,8 +218,9 @@ describe("Auth routes", () => {
 		expect(body.token.split(".")).toHaveLength(3);
 		expect(body.user.email).toBe("user@example.com");
 		expect(body.user.role).toBe("owner");
-		// 3 executes: tenant, user, role
-		expect(mockExecute).toHaveBeenCalledTimes(3);
+		// createTenantWithOwner now runs inside withTransaction
+		const { withTransaction } = await import("../pg.js");
+		expect(withTransaction).toHaveBeenCalledTimes(1);
 	});
 
 	it("POST /login — valid credentials return JWT (200)", async () => {

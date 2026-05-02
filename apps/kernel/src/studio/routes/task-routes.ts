@@ -75,13 +75,13 @@ taskRoutes.patch("/projects/:id/tasks/:taskId", async (c) => {
 		const teamGuard = await ensureProjectTeamInitialized(c, c.req.param("id"));
 		if (teamGuard) return teamGuard;
 		const body = await c.req.json();
-		if (body.status === "running" && !body.startedAt) {
-			body.startedAt = new Date().toISOString();
+		const ALLOWED_PATCH_FIELDS = new Set(["description", "complexity", "assignedAgent", "testExpectation"]);
+		const safeBody: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(body)) {
+			if (ALLOWED_PATCH_FIELDS.has(key)) safeBody[key] = value;
 		}
-		if (body.status === "done" && !body.completedAt) {
-			body.completedAt = new Date().toISOString();
-		}
-		const task = await updateTask(c.req.param("taskId"), body);
+		if (Object.keys(safeBody).length === 0) return c.json({ error: "No valid fields to update" }, 400);
+		const task = await updateTask(c.req.param("taskId"), safeBody);
 		if (!task) return c.json({ error: "Task not found" }, 404);
 		return c.json(task);
 	} catch (err) {

@@ -333,7 +333,7 @@ describe('KanbanBoard — periyodik guncelleme', () => {
 		vi.useRealTimers();
 	});
 
-	it('15 saniyede bir gorevler yeniden yuklenmeli', async () => {
+	it('5 saniyede bir gorevler yeniden yuklenmeli (WS yokken)', async () => {
 		vi.mocked(studioApi.fetchTasksPaginated).mockResolvedValue(paginated(ORNEK_GOREVLER));
 
 		render(<KanbanBoard projectId="proj-1" />);
@@ -345,17 +345,17 @@ describe('KanbanBoard — periyodik guncelleme', () => {
 
 		expect(studioApi.fetchTasksPaginated).toHaveBeenCalledTimes(1);
 
-		// 15 saniye ilerlet
+		// 5 saniye ilerlet (WS bagli degil → 5s polling)
 		await act(async () => {
-			vi.advanceTimersByTime(15000);
+			vi.advanceTimersByTime(5000);
 			await Promise.resolve();
 		});
 
 		expect(studioApi.fetchTasksPaginated).toHaveBeenCalledTimes(2);
 
-		// Bir 15 saniye daha ilerlet
+		// Bir 5 saniye daha ilerlet
 		await act(async () => {
-			vi.advanceTimersByTime(15000);
+			vi.advanceTimersByTime(5000);
 			await Promise.resolve();
 		});
 

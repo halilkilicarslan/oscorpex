@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import TaskDetailModal from '../pages/studio/TaskDetailModal';
 import type { Task } from '../lib/studio-api';
 
@@ -54,12 +55,14 @@ describe('TaskDetailModal — v3.0 B3 sub-task rollup', () => {
     });
 
     render(
-      <TaskDetailModal
-        task={parent}
-        projectId="p"
-        allTasks={[parent, sub1, sub2]}
-        onClose={() => {}}
-      />,
+      <MemoryRouter>
+        <TaskDetailModal
+          task={parent}
+          projectId="p"
+          allTasks={[parent, sub1, sub2]}
+          onClose={() => {}}
+        />
+      </MemoryRouter>,
     );
 
     expect(screen.getByText(/Sub-tasks \(1\/2\)/)).toBeInTheDocument();
@@ -78,7 +81,9 @@ describe('TaskDetailModal — v3.0 B3 sub-task rollup', () => {
     });
 
     render(
-      <TaskDetailModal task={sub} projectId="p" allTasks={[parent, sub]} onClose={() => {}} />,
+      <MemoryRouter>
+        <TaskDetailModal task={sub} projectId="p" allTasks={[parent, sub]} onClose={() => {}} />
+      </MemoryRouter>,
     );
 
     expect(screen.getByText('Parent Task')).toBeInTheDocument();
@@ -91,7 +96,7 @@ describe('TaskDetailModal — v3.0 B3 sub-task rollup', () => {
       estimatedLines: 42,
     });
 
-    render(<TaskDetailModal task={task} projectId="p" allTasks={[task]} onClose={() => {}} />);
+    render(<MemoryRouter><TaskDetailModal task={task} projectId="p" allTasks={[task]} onClose={() => {}} /></MemoryRouter>);
 
     expect(screen.getByText(/Hedef Dosyalar/)).toBeInTheDocument();
     expect(screen.getByText('src/auth/login.ts')).toBeInTheDocument();
@@ -102,7 +107,7 @@ describe('TaskDetailModal — v3.0 B3 sub-task rollup', () => {
 
   it('does not render sub-task or parent sections when relations are absent', () => {
     const task = makeTask();
-    render(<TaskDetailModal task={task} projectId="p" allTasks={[task]} onClose={() => {}} />);
+    render(<MemoryRouter><TaskDetailModal task={task} projectId="p" allTasks={[task]} onClose={() => {}} /></MemoryRouter>);
 
     expect(screen.queryByText(/Sub-tasks/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Parent Task/)).not.toBeInTheDocument();
@@ -114,13 +119,15 @@ describe('TaskDetailModal — v3.0 B3 sub-task rollup', () => {
     const onNavigate = vi.fn();
 
     render(
-      <TaskDetailModal
-        task={parent}
-        projectId="p"
-        allTasks={[parent, sub]}
-        onNavigateTask={onNavigate}
-        onClose={() => {}}
-      />,
+      <MemoryRouter>
+        <TaskDetailModal
+          task={parent}
+          projectId="p"
+          allTasks={[parent, sub]}
+          onNavigateTask={onNavigate}
+          onClose={() => {}}
+        />
+      </MemoryRouter>,
     );
 
     const subButton = screen.getByText('Login endpoint').closest('button');

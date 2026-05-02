@@ -8,6 +8,7 @@ import {
 	getProject,
 	getTask,
 	listAgentDependencies,
+	listTasks,
 	releaseTaskClaim,
 	updatePhaseStatus,
 	updateProject,
@@ -158,6 +159,7 @@ export class TaskLifecycle {
 			// Task'ı waiting_approval durumuna al ve kullanıcıdan onay iste
 			const waiting = (await updateTask(taskId, {
 				status: "waiting_approval",
+				startedAt: new Date().toISOString(),
 				requiresApproval: true,
 				approvalStatus: "pending",
 			}))!;
@@ -388,8 +390,16 @@ export class TaskLifecycle {
 			log.warn("[task-lifecycle] Auto work-item creation failed:" + " " + String(err));
 		}
 
-		await updatePhaseStatus(task.phaseId, "failed");
-		await updateProject(projectId, { status: "failed" });
+		// Only fail the phase when ALL tasks in it are terminal (done or failed).
+		// Don't cascade to project — let pipeline-engine handle project-level status.
+		const phaseTasks = await listTasks(task.phaseId);
+		const allTerminal = phaseTasks.every((t) => t.status === "done" || t.status === "failed");
+		if (allTerminal) {
+			const anyFailed = phaseTasks.some((t) => t.status === "failed");
+			if (anyFailed) {
+				await updatePhaseStatus(task.phaseId, "failed");
+			}
+		}
 		eventBus.emit({
 			projectId,
 			type: "execution:error",

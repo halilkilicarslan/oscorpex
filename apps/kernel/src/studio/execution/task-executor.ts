@@ -469,7 +469,7 @@ export class TaskExecutor {
 
 			// --- Self-healing: auto-retry with error context (TASK 10) ---
 			const failedTask = await getTask(task.id);
-			const failureClass = lastFailureClassification ?? "unknown";
+			const failureClass = (err as any)?.classification ?? "unknown";
 			const { shouldRetry, delayMs } = evaluateRetry(failureClass, failedTask?.retryCount ?? 0);
 
 			if (!isTimeout && shouldRetry && failedTask) {

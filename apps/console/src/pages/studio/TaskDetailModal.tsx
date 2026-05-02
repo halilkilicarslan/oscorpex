@@ -51,6 +51,8 @@ export default function TaskDetailModal({
 			await approveTask(projectId, task.id);
 			onRefresh?.();
 			onClose();
+		} catch (err) {
+			alert(err instanceof Error ? err.message : 'Onay islemi basarisiz oldu');
 		} finally {
 			setActionLoading(false);
 		}
@@ -62,6 +64,8 @@ export default function TaskDetailModal({
 			await rejectTask(projectId, task.id, 'Modal uzerinden reddedildi');
 			onRefresh?.();
 			onClose();
+		} catch (err) {
+			alert(err instanceof Error ? err.message : 'Reddetme islemi basarisiz oldu');
 		} finally {
 			setActionLoading(false);
 		}
@@ -73,6 +77,8 @@ export default function TaskDetailModal({
 			await retryTask(projectId, task.id);
 			onRefresh?.();
 			onClose();
+		} catch (err) {
+			alert(err instanceof Error ? err.message : 'Yeniden deneme islemi basarisiz oldu');
 		} finally {
 			setActionLoading(false);
 		}

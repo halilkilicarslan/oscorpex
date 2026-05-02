@@ -78,7 +78,7 @@ export class AdaptiveSemaphore {
 	}
 
 	release(): void {
-		this.current--;
+		this.current = Math.max(0, this.current - 1);
 		const next = this.queue.shift();
 		if (next) {
 			this.current++;

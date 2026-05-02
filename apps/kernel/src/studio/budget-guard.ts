@@ -4,7 +4,7 @@
 // Budget caps stored in project_settings category='budget'.
 // ---------------------------------------------------------------------------
 
-import { getProjectSetting, queryOne } from "./db.js";
+import { queryOne } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("budget-guard");
@@ -20,38 +20,37 @@ export interface BudgetCheck {
 }
 
 // ---------------------------------------------------------------------------
-// Cost queries
-// ---------------------------------------------------------------------------
-
-/** Get total project spend from token_usage table */
-async function getProjectSpend(projectId: string): Promise<number> {
-	const row = await queryOne<{ total: string }>(
-		`SELECT COALESCE(SUM(cost_usd), 0) AS total FROM token_usage WHERE project_id = $1`,
-		[projectId],
-	);
-	return Number(row?.total ?? 0);
-}
-
-// ---------------------------------------------------------------------------
-// Budget check
+// Budget check (atomic)
 // ---------------------------------------------------------------------------
 
 /**
  * Check if project spend exceeds the configured budget cap.
- * Budget cap is stored in project_settings: category='budget', key='max_usd'.
- * Returns the check result — caller decides whether to pause.
+ * Budget cap is stored in project_settings: category='budget', key='maxCostUsd'
+ * (fallback: 'max_usd').
+ *
+ * Uses a single atomic query so there is no window between reading spend and
+ * reading limit — prevents TOCTOU race under concurrent token recording.
  */
 export async function checkBudget(projectId: string): Promise<BudgetCheck> {
-	const [totalSpentUsd, budgetKeys] = await Promise.all([
-		getProjectSpend(projectId),
-		Promise.all([
-			getProjectSetting(projectId, "budget", "maxCostUsd"),
-			getProjectSetting(projectId, "budget", "max_usd"),
-		]),
-	]);
+	const row = await queryOne<{ total_spent: string; max_budget: string | null }>(
+		`WITH budget AS (
+			SELECT value FROM project_settings
+			WHERE project_id = $1
+			  AND category = 'budget'
+			  AND key IN ('maxCostUsd', 'max_usd')
+			ORDER BY CASE key WHEN 'maxCostUsd' THEN 0 ELSE 1 END
+			LIMIT 1
+		)
+		SELECT
+			COALESCE(SUM(tu.cost_usd), 0) AS total_spent,
+			(SELECT value FROM budget) AS max_budget
+		FROM token_usage tu
+		WHERE tu.project_id = $1`,
+		[projectId],
+	);
 
-	const [maxCostUsd, legacyMaxUsd] = budgetKeys;
-	const rawBudget = maxCostUsd ?? legacyMaxUsd;
+	const totalSpentUsd = Number(row?.total_spent ?? 0);
+	const rawBudget = row?.max_budget ?? null;
 	const budgetMaxUsd = rawBudget ? Number(rawBudget) : null;
 
 	if (budgetMaxUsd === null || Number.isNaN(budgetMaxUsd)) {

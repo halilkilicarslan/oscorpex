@@ -175,7 +175,7 @@ interface ProjectStateSnapshot {
 	blockedTasks: number;
 	queueRatio: number;
 	blockRatio: number;
-	phases: Array<{ id: string; title: string; status: string; taskCount: number; completedCount: number }>;
+	phases: Array<{ id: string; title: string; status: string; taskCount: number; completedCount: number; tasks: Array<{ id: string; status: string }> }>;
 }
 
 async function snapshotProjectState(projectId: string): Promise<ProjectStateSnapshot> {
@@ -207,6 +207,7 @@ async function snapshotProjectState(projectId: string): Promise<ProjectStateSnap
 			status: p.status,
 			taskCount: phaseTasks.length,
 			completedCount: phaseTasks.filter((t) => t.status === "done").length,
+			tasks: phaseTasks.map((t) => ({ id: t.id, status: t.status })),
 		};
 	});
 
@@ -380,13 +381,17 @@ function generatePatches(
 	if (trigger === "design_drift" && snapshot.phases.length > 0) {
 		const runningPhase = snapshot.phases.find((p) => p.status === "running");
 		if (runningPhase) {
-			patches.push({
-				action: "modify_task",
-				targetId: runningPhase.id,
-				payload: { complexity: "L" },
-				riskLevel: "medium",
-				reason: "Design drift detected — escalating remaining work complexity.",
-			});
+			// Find first queued/running task in the phase — modify_task targets a task, not a phase
+			const firstTask = runningPhase.tasks.find((t) => t.status === "queued" || t.status === "running");
+			if (firstTask) {
+				patches.push({
+					action: "modify_task",
+					targetId: firstTask.id,
+					payload: { complexity: "L" },
+					riskLevel: "medium",
+					reason: "Design drift detected — escalating remaining work complexity.",
+				});
+			}
 		}
 	}
 

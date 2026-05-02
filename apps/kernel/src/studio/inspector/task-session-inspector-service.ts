@@ -122,6 +122,8 @@ function sanitizeRaw(obj: Record<string, unknown>): Record<string, unknown> {
 	for (const [key, value] of Object.entries(obj)) {
 		if (SENSITIVE_KEYS.has(key.toLowerCase())) {
 			result[key] = "[REDACTED]";
+		} else if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+			result[key] = sanitizeRaw(value as Record<string, unknown>);
 		} else {
 			result[key] = value;
 		}

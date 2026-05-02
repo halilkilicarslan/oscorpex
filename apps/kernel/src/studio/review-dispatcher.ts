@@ -101,7 +101,7 @@ export async function executeReviewTask(
 		await taskEngine.assignTask(reviewTask.id, reviewTask.assignedAgent);
 		await taskEngine.startTask(reviewTask.id);
 		await taskEngine.failTask(reviewTask.id, "Reviewer agent bulunamadı");
-		await taskEngine.submitReview(originalTaskId!, true, "Reviewer bulunamadı — auto-approved");
+		await taskEngine.submitReview(originalTaskId!, false, "Reviewer bulunamadı — eskalasyon gerekli");
 		return;
 	}
 
@@ -211,7 +211,7 @@ export async function executeReviewTask(
 			termLog(`[review-cost] ${cliResult.model}: ${totalTokens} tokens ($${cliResult.totalCostUsd.toFixed(4)})`);
 		}
 
-		const approved = cliResult.text.toUpperCase().includes("APPROVED");
+		const approved = /APPROVED|FIXED/i.test(cliResult.text);
 		const feedback = cliResult.text.slice(0, 2000);
 		termLog(`[review] Sonuç: ${approved ? "APPROVED" : "NEEDS FIXES"}`);
 
@@ -251,7 +251,7 @@ export async function executeReviewTask(
 		}
 		await taskEngine.failTask(reviewTask.id, msg);
 		try {
-			await taskEngine.submitReview(originalTaskId!, true, `Review failed: ${msg.slice(0, 200)} — auto-approved`);
+			await taskEngine.submitReview(originalTaskId!, false, `Review başarısız: ${msg.slice(0, 200)} — insan incelemesi gerekli`);
 		} catch {
 			/* failsafe */
 		}
