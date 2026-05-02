@@ -42,7 +42,7 @@ ExecutionEngine -> TaskDispatcher -> TaskExecutor -> ProviderExecutionService ->
 
 | Path | Reason | Evidence | Risk | Recommendation |
 |---|---|---|---|---|
-| `apps/kernel-src/` | README and CLAUDE.md describe it as legacy/migration artifact; creates repeated search and knip noise | `find apps/kernel-src -type f | wc -l` = `288`; `rg "kernel-src" .` only found documentation references; no `package.json` under `apps/kernel-src`; `knip` reports many files as unused | Low runtime risk, high repository-noise reduction; medium historical-reference risk | P1 cleanup: move to `archive/legacy/kernel-src` or delete after explicit confirmation |
+| `archive/legacy/kernel-src/` | README and CLAUDE.md describe it as legacy/migration artifact; creates repeated search and knip noise | `find archive/legacy/kernel-src -type f | wc -l` = `288`; `rg "kernel-src" .` only found documentation references; no `package.json` under `archive/legacy/kernel-src`; `knip` reports many files as unused | Low runtime risk, high repository-noise reduction; medium historical-reference risk | Archived for explicit legacy ownership; delete only after explicit confirmation |
 
 ## Keep Compatibility
 
@@ -108,7 +108,7 @@ ExecutionEngine -> TaskDispatcher -> TaskExecutor -> ProviderExecutionService ->
 
 Important groups from compact output:
 
-- `apps/kernel-src/**`: many unused files and exports; consistent with legacy archive classification.
+- `archive/legacy/kernel-src/**`: many unused files and exports; consistent with legacy archive classification.
 - `apps/kernel/src/studio/task-executor.ts` and `apps/kernel/src/studio/task-lifecycle.ts`: root-level legacy duplicates reported unused.
 - `apps/kernel/src/studio/pipeline-branch-manager.ts` and `apps/kernel/src/studio/pipeline-state-manager.ts`: root-level pipeline leftovers reported unused.
 - `apps/kernel/src/studio/execution/index.ts`, `task/index.ts`, `pipeline/index.ts`, `providers/index.ts`: barrels reported unused; likely API policy decision, not immediate delete.
@@ -119,11 +119,11 @@ Important groups from compact output:
 
 Proceed to feature planning.
 
-Run a cleanup-only PR first only if the next feature work will be slowed by search noise from `apps/kernel-src` or by wrapper-only modules. No feature-blocking issue was found.
+The cleanup-only batch archived `archive/legacy/kernel-src` and removed confirmed unused root-level duplicate modules. No feature-blocking issue was found.
 
 Recommended cleanup backlog:
 
-1. P1: Archive or delete `apps/kernel-src` after explicit confirmation.
+1. P1: Delete `archive/legacy/kernel-src` only after explicit confirmation.
 2. P1: Remove or migrate confirmed unused root-level duplicates: `task-executor.ts`, `task-lifecycle.ts`, `pipeline-branch-manager.ts`, `pipeline-state-manager.ts`.
 3. P1: Move wrapper implementations into extracted folders and keep root compatibility shims only where imports require them.
 4. P2: Migrate review/test compatibility callers off `cli-adapter.ts`.

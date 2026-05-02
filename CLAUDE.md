@@ -161,7 +161,7 @@ All performance/scheduling subsystems read from `performance-config.ts`. Key env
 
 ## Constraints
 
-- Never edit files under `.voltagent/repos/` or `apps/kernel-src/` — these are legacy/generated
+- Never edit files under `.voltagent/repos/` or `archive/legacy/kernel-src/` — these are legacy/generated
 - Use `pnpm` exclusively (not npm or yarn)
 - Workspace packages use `workspace:*` protocol for inter-package deps
 - Kernel tests run serialized (`fileParallelism: false`) due to shared DB
