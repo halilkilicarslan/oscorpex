@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
 	X,
 	Loader2,
@@ -15,6 +16,7 @@ import {
 	ChevronRight,
 	Eye,
 	ShieldAlert,
+	Search,
 } from 'lucide-react';
 import { roleLabel, approveTask, rejectTask, retryTask, type Task, type ProjectAgent } from '../../lib/studio-api';
 import AgentAvatarImg from '../../components/AgentAvatar';
@@ -113,13 +115,21 @@ export default function TaskDetailModal({
 							</div>
 						</div>
 					</div>
-					<button
-						onClick={onClose}
-						className="p-1 rounded hover:bg-[#1f1f1f] text-[#525252] hover:text-[#a3a3a3] transition-colors shrink-0 ml-3"
-					>
-						<X size={18} />
-					</button>
-				</div>
+					<div className="flex items-center gap-1 shrink-0 ml-3">
+						<Link
+							to={`/studio/${projectId}/tasks/${task.id}/inspector`}
+							className="p-1 rounded hover:bg-[#1f1f1f] text-[#525252] hover:text-[#22c55e] transition-colors"
+							title="Inspector"
+						>
+							<Search size={16} />
+						</Link>
+						<button
+							onClick={onClose}
+							className="p-1 rounded hover:bg-[#1f1f1f] text-[#525252] hover:text-[#a3a3a3] transition-colors"
+						>
+							<X size={18} />
+						</button>
+					</div>
 
 				{/* Body */}
 				<div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
