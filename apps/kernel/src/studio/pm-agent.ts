@@ -30,51 +30,14 @@ import { createLogger } from "./logger.js";
 import { queryOne, updatePhaseDependencies, updateTaskDependencies } from "./db.js";
 import { canonicalizeAgentRole, roleMatches } from "./roles.js";
 import type { TaskComplexity } from "./types.js";
+import { getModelPricing } from "./providers/model-pricing.js";
 const log = createLogger("pm-agent");
 
 // ---------------------------------------------------------------------------
 // Maliyet Tahmini — Model fiyat tablosu (USD / 1M token)
 // ---------------------------------------------------------------------------
 
-/** Model ismine göre input/output fiyatlarını döndürür (USD per 1M token). */
-function getModelPricing(modelName: string): { inputPer1M: number; outputPer1M: number } {
-	const m = modelName.toLowerCase();
-
-	// Claude Sonnet ailesi
-	if (m.includes("claude") && m.includes("sonnet")) {
-		return { inputPer1M: 3.0, outputPer1M: 15.0 };
-	}
-	// Claude Opus ailesi
-	if (m.includes("claude") && m.includes("opus")) {
-		return { inputPer1M: 15.0, outputPer1M: 75.0 };
-	}
-	// Claude Haiku ailesi
-	if (m.includes("claude") && m.includes("haiku")) {
-		return { inputPer1M: 0.25, outputPer1M: 1.25 };
-	}
-	// GPT-4o
-	if (m.includes("gpt-4o")) {
-		return { inputPer1M: 2.5, outputPer1M: 10.0 };
-	}
-	// GPT-4 Turbo
-	if (m.includes("gpt-4-turbo") || m.includes("gpt-4-1106") || m.includes("gpt-4-0125")) {
-		return { inputPer1M: 10.0, outputPer1M: 30.0 };
-	}
-	// GPT-3.5 Turbo
-	if (m.includes("gpt-3.5")) {
-		return { inputPer1M: 0.5, outputPer1M: 1.5 };
-	}
-	// Gemini Pro / Flash
-	if (m.includes("gemini-1.5-pro")) {
-		return { inputPer1M: 1.25, outputPer1M: 5.0 };
-	}
-	if (m.includes("gemini")) {
-		return { inputPer1M: 0.075, outputPer1M: 0.3 };
-	}
-
-	// Varsayılan: claude-sonnet fiyatı
-	return { inputPer1M: 3.0, outputPer1M: 15.0 };
-}
+// Model pricing imported from providers/model-pricing.ts
 
 /** Her task için varsayılan token tahminleri. */
 const AVG_INPUT_TOKENS_PER_TASK = 2000;

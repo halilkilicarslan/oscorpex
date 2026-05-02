@@ -30,6 +30,7 @@ import {
 	recordSonarScan,
 	runSonarScan,
 } from "../sonar-runner.js";
+import { aggregateCostBreakdowns, type TokenUsageRecord } from "../providers/model-pricing.js";
 const log = createLogger("analytics-routes");
 
 export const analyticsRoutes = new Hono();
@@ -115,12 +116,25 @@ analyticsRoutes.get("/projects/:id/token-analytics", async (c) => {
 	const cacheRead = summary.totalCacheReadTokens;
 	const cacheHitRatio = totalInput > 0 ? cacheRead / totalInput : 0;
 
-	const estimatedSavingsUsd = cacheRead * 0.000003 * 0.9;
+	// Per-model accurate cost breakdown from raw token_usage records
+	const rawUsage = await listTokenUsage(id);
+	const records: TokenUsageRecord[] = rawUsage.map((r) => ({
+		model: r.model,
+		inputTokens: r.inputTokens,
+		outputTokens: r.outputTokens,
+		cacheCreationTokens: r.cacheCreationTokens,
+		cacheReadTokens: r.cacheReadTokens,
+		costUsd: r.costUsd,
+	}));
+	const breakdown = aggregateCostBreakdowns(records);
 
 	return c.json({
 		...summary,
 		cacheHitRatio: Math.round(cacheHitRatio * 100) / 100,
-		estimatedCacheSavingsUsd: Math.round(estimatedSavingsUsd * 10000) / 10000,
+		// Accurate per-model calculations
+		estimatedCacheSavingsUsd: Math.round(breakdown.cacheSavingsUsd * 10000) / 10000,
+		hypotheticalCostUsd: Math.round(breakdown.hypotheticalCostUsd * 10000) / 10000,
+		cacheWriteOverheadUsd: Math.round(breakdown.cacheWriteOverheadUsd * 10000) / 10000,
 	});
 });
 
