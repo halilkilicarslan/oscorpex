@@ -25,6 +25,7 @@ import {
   Search,
 } from 'lucide-react';
 import { httpGet, httpPost, httpPut, httpDelete } from '../lib/studio-api/base.js';
+import { useModalState } from '../hooks/useModalState.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -590,8 +591,7 @@ export default function TriggersPage() {
   const [search, setSearch] = useState('');
 
   // Form modal
-  const [showForm, setShowForm] = useState(false);
-  const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
+  const formModal = useModalState<Trigger>();
 
   // Logs state
   const [logs, setLogs] = useState<(TriggerLog & { trigger_name?: string })[]>([]);
@@ -856,7 +856,7 @@ export default function TriggersPage() {
 
               {/* Create button */}
               <button
-                onClick={() => { setEditingTrigger(null); setShowForm(true); }}
+                onClick={() => formModal.open()}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs bg-[#22c55e] text-[#0a0a0a] font-medium hover:bg-[#16a34a] transition-colors"
               >
                 <Plus className="w-3 h-3" />
@@ -875,7 +875,7 @@ export default function TriggersPage() {
                   <Workflow className="w-10 h-10 text-[#262626]" />
                   <p className="text-sm text-[#525252]">No triggers configured yet</p>
                   <button
-                    onClick={() => { setEditingTrigger(null); setShowForm(true); }}
+                    onClick={() => formModal.open()}
                     className="text-xs text-[#22c55e] hover:underline"
                   >
                     Create your first trigger
@@ -961,7 +961,7 @@ export default function TriggersPage() {
                             </button>
                             {/* Edit */}
                             <button
-                              onClick={() => { setEditingTrigger(trigger); setShowForm(true); }}
+                              onClick={() => formModal.open(trigger)}
                               title="Edit"
                               className="p-1.5 rounded-md hover:bg-[#1c1c1c] text-[#525252] hover:text-[#a3a3a3] transition-colors"
                             >
@@ -1153,10 +1153,10 @@ export default function TriggersPage() {
       </div>
 
       {/* Form Modal */}
-      {showForm && (
+      {formModal.isOpen && (
         <TriggerFormModal
-          editing={editingTrigger}
-          onClose={() => { setShowForm(false); setEditingTrigger(null); }}
+          editing={formModal.selectedItem}
+          onClose={formModal.close}
           onSaved={() => { void loadAll(); }}
         />
       )}

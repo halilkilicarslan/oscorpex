@@ -17,6 +17,8 @@ import {
   Hash,
 } from 'lucide-react';
 import { observabilityDelete, observabilityGet, observabilityPost } from '../lib/observability-api.js';
+import { useModalState } from '../hooks/useModalState.js';
+import { StatsCards, type StatCardDef } from '../components/StatsCards.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -167,29 +169,6 @@ function TagPill({ tag, onRemove }: { tag: string; onRemove?: () => void }) {
         </button>
       )}
     </span>
-  );
-}
-
-function StatCard({
-  title,
-  value,
-  sub,
-  icon: Icon,
-}: {
-  title: string;
-  value: string | number;
-  sub?: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-}) {
-  return (
-    <div className="bg-[#111111] border border-[#262626] rounded-lg p-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-[#a3a3a3]">{title}</span>
-        <Icon size={14} className="text-[#525252]" />
-      </div>
-      <div className="text-2xl font-semibold text-[#fafafa]">{value}</div>
-      {sub && <div className="text-xs text-[#525252] mt-1">{sub}</div>}
-    </div>
   );
 }
 
@@ -508,7 +487,7 @@ export default function FeedbacksPage() {
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  const addFeedbackModal = useModalState();
 
   // Filters
   const [filterAgent, setFilterAgent] = useState('');
@@ -592,7 +571,7 @@ export default function FeedbacksPage() {
 
   const handleAddFeedback = async (data: Parameters<AddFeedbackFormProps['onSubmit']>[0]) => {
     await observabilityPost('/feedbacks', data);
-    setShowForm(false);
+    addFeedbackModal.close();
     await Promise.all([fetchFeedbacks(0), fetchStats()]);
   };
 
@@ -651,7 +630,7 @@ export default function FeedbacksPage() {
               <RefreshCw size={14} className={loading || statsLoading ? 'animate-spin' : ''} />
             </button>
             <button
-              onClick={() => setShowForm((v) => !v)}
+              onClick={() => addFeedbackModal.isOpen ? addFeedbackModal.close() : addFeedbackModal.open()}
               className="flex items-center gap-2 px-3 py-2 text-sm bg-[#22c55e] text-black rounded font-medium hover:bg-[#16a34a] transition-colors"
             >
               <Plus size={14} />
@@ -663,46 +642,45 @@ export default function FeedbacksPage() {
 
       <div className="px-6 py-6 space-y-6">
         {/* Add form */}
-        {showForm && (
+        {addFeedbackModal.isOpen && (
           <AddFeedbackForm
             agents={agents}
             onSubmit={handleAddFeedback}
-            onCancel={() => setShowForm(false)}
+            onCancel={addFeedbackModal.close}
           />
         )}
 
         {/* Stats dashboard */}
-        <div className="grid grid-cols-4 gap-4">
-          <StatCard
-            title="Total Feedbacks"
-            value={stats?.totalFeedbacks ?? 0}
-            icon={MessageSquareMore}
-          />
-          <StatCard
-            title="Average Rating"
-            value={stats?.avgRating != null ? `${stats.avgRating.toFixed(1)} / 5` : '—'}
-            sub={
-              stats?.avgRating != null
-                ? Array.from({ length: 5 })
-                    .map((_, i) => (i < Math.round(stats.avgRating ?? 0) ? '★' : '☆'))
-                    .join('')
-                : undefined
-            }
-            icon={Star}
-          />
-          <StatCard
-            title="Positive Rate"
-            value={`${positiveRate}%`}
-            sub="4-5 star ratings"
-            icon={ThumbsUp}
-          />
-          <StatCard
-            title="Top Tag"
-            value={topTag}
-            sub={stats?.topTags[0] ? `${stats.topTags[0].count} uses` : undefined}
-            icon={Tag}
-          />
-        </div>
+        <StatsCards
+          columns={4}
+          stats={[
+            {
+              label: 'Total Feedbacks',
+              value: stats?.totalFeedbacks ?? 0,
+              icon: <MessageSquareMore size={16} className="text-[#22c55e]" />,
+            },
+            {
+              label: 'Average Rating',
+              value: stats?.avgRating != null ? `${stats.avgRating.toFixed(1)} / 5` : '—',
+              sub: stats?.avgRating != null
+                ? Array.from({ length: 5 }).map((_, i) => (i < Math.round(stats.avgRating ?? 0) ? '★' : '☆')).join('')
+                : undefined,
+              icon: <Star size={16} className="text-[#f59e0b]" />,
+            },
+            {
+              label: 'Positive Rate',
+              value: `${positiveRate}%`,
+              sub: '4-5 star ratings',
+              icon: <ThumbsUp size={16} className="text-[#3b82f6]" />,
+            },
+            {
+              label: 'Top Tag',
+              value: topTag,
+              sub: stats?.topTags[0] ? `${stats.topTags[0].count} uses` : undefined,
+              icon: <Tag size={16} className="text-[#a855f7]" />,
+            },
+          ] satisfies StatCardDef[]}
+        />
 
         {/* Rating distribution bar chart */}
         {stats && stats.totalFeedbacks > 0 && (

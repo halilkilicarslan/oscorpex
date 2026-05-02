@@ -17,6 +17,8 @@ import {
   AlertCircle,
   RefreshCw,
 } from 'lucide-react';
+import { useModalState } from '../hooks/useModalState.js';
+import { StatsCards, type StatCardDef } from '../components/StatsCards.js';
 import {
   type KnowledgeBase,
   type RagDocument,
@@ -81,21 +83,6 @@ function truncate(str: string, n: number): string {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-function StatCard({ icon: Icon, label, value, sub }: { icon: React.ElementType; label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="bg-[#111111] border border-[#262626] rounded-lg p-4 flex items-center gap-3">
-      <div className="p-2 bg-[#1a1a1a] rounded-lg">
-        <Icon className="w-5 h-5 text-[#22c55e]" />
-      </div>
-      <div>
-        <p className="text-xs text-[#525252] font-medium uppercase tracking-wide">{label}</p>
-        <p className="text-xl font-semibold text-[#fafafa]">{value}</p>
-        {sub && <p className="text-xs text-[#525252]">{sub}</p>}
-      </div>
-    </div>
-  );
-}
 
 function TypeBadge({ type }: { type: string }) {
   const cfg = TYPE_CONFIG[type] ?? TYPE_CONFIG.text;
@@ -475,9 +462,9 @@ function KBTab({
   kbs: KnowledgeBase[];
   onRefresh: () => void;
 }) {
-  const [showCreate, setShowCreate] = useState(false);
-  const [editTarget, setEditTarget] = useState<KnowledgeBase | null>(null);
-  const [viewDocs, setViewDocs] = useState<KnowledgeBase | null>(null);
+  const createModal = useModalState<KnowledgeBase>();
+  const editModal = useModalState<KnowledgeBase>();
+  const docsModal = useModalState<KnowledgeBase>();
 
   async function handleCreate(data: KBFormData) {
     await observabilityPost('/rag/knowledge-bases', data);
@@ -485,8 +472,8 @@ function KBTab({
   }
 
   async function handleUpdate(data: KBFormData) {
-    if (!editTarget) return;
-    await observabilityPut(`/rag/knowledge-bases/${editTarget.id}`, data);
+    if (!editModal.selectedItem) return;
+    await observabilityPut(`/rag/knowledge-bases/${editModal.selectedItem.id}`, data);
     onRefresh();
   }
 
@@ -501,7 +488,7 @@ function KBTab({
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-[#525252]">{kbs.length} knowledge base{kbs.length !== 1 ? 's' : ''}</p>
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={() => createModal.open()}
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-black bg-[#22c55e] rounded-lg hover:bg-[#16a34a] transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -515,7 +502,7 @@ function KBTab({
           <p className="text-[#525252] text-sm">No knowledge bases yet</p>
           <p className="text-[#404040] text-xs mt-1">Create one to start indexing documents</p>
           <button
-            onClick={() => setShowCreate(true)}
+            onClick={() => createModal.open()}
             className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-black bg-[#22c55e] rounded-lg hover:bg-[#16a34a] transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -569,14 +556,14 @@ function KBTab({
 
                 <div className="flex items-center gap-2 pt-3 border-t border-[#1e1e1e]">
                   <button
-                    onClick={() => setViewDocs(kb)}
+                    onClick={() => docsModal.open(kb)}
                     className="flex-1 text-xs font-medium text-[#a3a3a3] hover:text-[#fafafa] bg-[#1a1a1a] hover:bg-[#222] border border-[#262626] rounded-lg py-1.5 transition-colors flex items-center justify-center gap-1.5"
                   >
                     <FileText className="w-3.5 h-3.5" />
                     View Documents
                   </button>
                   <button
-                    onClick={() => setEditTarget(kb)}
+                    onClick={() => editModal.open(kb)}
                     className="p-1.5 text-[#525252] hover:text-[#a3a3a3] bg-[#1a1a1a] hover:bg-[#222] border border-[#262626] rounded-lg transition-colors"
                     title="Edit"
                   >
@@ -596,14 +583,14 @@ function KBTab({
         </div>
       )}
 
-      {showCreate && (
-        <KBFormModal onClose={() => setShowCreate(false)} onSave={handleCreate} />
+      {createModal.isOpen && (
+        <KBFormModal onClose={createModal.close} onSave={handleCreate} />
       )}
-      {editTarget && (
-        <KBFormModal initial={editTarget} onClose={() => setEditTarget(null)} onSave={handleUpdate} />
+      {editModal.isOpen && editModal.selectedItem && (
+        <KBFormModal initial={editModal.selectedItem} onClose={editModal.close} onSave={handleUpdate} />
       )}
-      {viewDocs && (
-        <KBDocsModal kb={viewDocs} onClose={() => { setViewDocs(null); onRefresh(); }} />
+      {docsModal.isOpen && docsModal.selectedItem && (
+        <KBDocsModal kb={docsModal.selectedItem} onClose={() => { docsModal.close(); onRefresh(); }} />
       )}
     </div>
   );
@@ -1059,13 +1046,17 @@ export default function RagPage() {
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-          <StatCard icon={Database} label="Knowledge Bases" value={statsLoading ? '—' : (stats?.totalKBs ?? 0)} />
-          <StatCard icon={FileText} label="Total Documents" value={statsLoading ? '—' : (stats?.totalDocuments ?? 0)} />
-          <StatCard icon={Layers} label="Total Chunks" value={statsLoading ? '—' : (stats?.totalChunks ?? 0).toLocaleString()} />
-          <StatCard icon={Search} label="Queries" value={statsLoading ? '—' : (stats?.totalQueries ?? 0)} sub="all time" />
-          <StatCard icon={Zap} label="Avg Latency" value={statsLoading ? '—' : stats?.avgLatency ? `${stats.avgLatency}ms` : '—'} />
-        </div>
+        <StatsCards
+          columns={5}
+          className="mb-6"
+          stats={[
+            { label: 'Knowledge Bases', value: statsLoading ? '—' : (stats?.totalKBs ?? 0), icon: <Database className="w-5 h-5 text-[#22c55e]" />, iconBg: 'bg-[#1a1a1a]' },
+            { label: 'Total Documents',  value: statsLoading ? '—' : (stats?.totalDocuments ?? 0), icon: <FileText className="w-5 h-5 text-[#22c55e]" />, iconBg: 'bg-[#1a1a1a]' },
+            { label: 'Total Chunks',     value: statsLoading ? '—' : (stats?.totalChunks ?? 0).toLocaleString(), icon: <Layers className="w-5 h-5 text-[#22c55e]" />, iconBg: 'bg-[#1a1a1a]' },
+            { label: 'Queries',          value: statsLoading ? '—' : (stats?.totalQueries ?? 0), sub: 'all time', icon: <Search className="w-5 h-5 text-[#22c55e]" />, iconBg: 'bg-[#1a1a1a]' },
+            { label: 'Avg Latency',      value: statsLoading ? '—' : stats?.avgLatency ? `${stats.avgLatency}ms` : '—', icon: <Zap className="w-5 h-5 text-[#22c55e]" />, iconBg: 'bg-[#1a1a1a]' },
+          ] satisfies StatCardDef[]}
+        />
 
         {/* Type distribution */}
         {stats && Object.values(stats.byType).some(v => v > 0) && (
