@@ -52,6 +52,15 @@ import { replayStore } from "../replay-store.js";
 import { taskEngine } from "../task-engine.js";
 import { costReporter } from "./cost-adapter.js";
 import { hookRegistry, runHooks } from "./hook-registry.js";
+import {
+	toCoreTask,
+	toCoreTaskOrNull,
+	toCoreTaskOrThrow,
+	toCorePipelineState,
+	toKernelTask,
+	toKernelTaskOutput,
+	toStudioEventInput,
+} from "./mappers.js";
 import { memoryProvider } from "./memory-adapter.js";
 import { policyEngine } from "./policy-adapter.js";
 import { providerRegistry } from "./provider-registry.js";
@@ -63,41 +72,60 @@ import { verificationRunner } from "./verification-adapter.js";
 
 class KernelEventPublisher implements EventPublisher {
 	async publish<TPayload>(event: import("@oscorpex/core").BaseEvent<string, TPayload>): Promise<void> {
-		// BaseEvent has a superset of fields vs StudioEvent's Omit shape — cast via unknown
-		eventBus.emit(event as unknown as import("../types.js").StudioEvent);
+		eventBus.emit(toStudioEventInput(event as import("@oscorpex/core").BaseEvent<string, unknown>));
 	}
 	publishTransient<TPayload>(event: import("@oscorpex/core").BaseEvent<string, TPayload>): void {
-		eventBus.emitTransient(event as unknown as import("../types.js").StudioEvent);
+		eventBus.emitTransient(toStudioEventInput(event as import("@oscorpex/core").BaseEvent<string, unknown>));
 	}
 }
 
 class KernelTaskStore implements TaskStore {
 	async create(task: CoreTask): Promise<CoreTask> {
 		const { createTask } = await import("../db.js");
-		// CoreTask and kernel Task are structurally compatible at the DB boundary
-		const result = await createTask(task as unknown as import("../types.js").Task);
-		return result as unknown as CoreTask;
+		const result = await createTask(toKernelTask(task));
+		return toCoreTask(result);
 	}
 	async get(id: string): Promise<CoreTask | null> {
 		const { getTask } = await import("../db.js");
 		const t = await getTask(id);
-		return t ? (t as unknown as CoreTask) : null;
+		return toCoreTaskOrNull(t);
 	}
 	async update(id: string, partial: Partial<CoreTask>): Promise<CoreTask> {
 		const { updateTask } = await import("../db.js");
-		return (await updateTask(id, partial as unknown as Partial<import("../types.js").Task>)) as unknown as CoreTask;
+		// Map only the fields that updateTask accepts; stageId→phaseId and type→taskType.
+		const kernelPartial: Parameters<typeof updateTask>[1] = {
+			...(partial.status !== undefined && { status: partial.status }),
+			...(partial.assignedRole !== undefined && { assignedAgent: partial.assignedRole }),
+			...(partial.output !== undefined && { output: toKernelTaskOutput(partial.output) }),
+			...(partial.retryCount !== undefined && { retryCount: partial.retryCount }),
+			...(partial.error !== undefined && { error: partial.error }),
+			...(partial.startedAt !== undefined && { startedAt: partial.startedAt }),
+			...(partial.completedAt !== undefined && { completedAt: partial.completedAt }),
+			...(partial.reviewStatus !== undefined && { reviewStatus: partial.reviewStatus }),
+			...(partial.reviewerAgentId !== undefined && { reviewerAgentId: partial.reviewerAgentId }),
+			...(partial.reviewTaskId !== undefined && { reviewTaskId: partial.reviewTaskId }),
+			...(partial.revisionCount !== undefined && { revisionCount: partial.revisionCount }),
+			...(partial.assignedProvider !== undefined && { assignedAgentId: partial.assignedProvider }),
+			...(partial.requiresApproval !== undefined && { requiresApproval: partial.requiresApproval }),
+			...(partial.approvalStatus !== undefined && { approvalStatus: partial.approvalStatus }),
+			...(partial.dependsOn !== undefined && { dependsOn: partial.dependsOn }),
+			...(partial.riskLevel !== undefined && { riskLevel: partial.riskLevel }),
+		};
+		const result = await updateTask(id, kernelPartial);
+		return toCoreTaskOrThrow(result, id);
 	}
 	async list(filter: import("@oscorpex/core").TaskListFilter): Promise<CoreTask[]> {
 		const { listProjectTasks } = await import("../db.js");
 		if (filter.projectId) {
-			return (await listProjectTasks(filter.projectId)) as unknown as CoreTask[];
+			const tasks = await listProjectTasks(filter.projectId);
+			return tasks.map(toCoreTask);
 		}
 		return [];
 	}
 	async claim(id: string, workerId: string): Promise<CoreTask> {
 		const { claimTask } = await import("../db.js");
 		const result = await claimTask(id, workerId);
-		return result as unknown as CoreTask;
+		return toCoreTaskOrThrow(result, id);
 	}
 }
 
@@ -122,11 +150,13 @@ class KernelRunStore implements RunStore {
 
 class KernelScheduler implements Scheduler {
 	async getReadyTasks(runId: string): Promise<CoreTask[]> {
-		return taskEngine.getReadyTasks(runId) as unknown as CoreTask[];
+		const tasks = await taskEngine.getReadyTasks(runId);
+		return tasks.map(toCoreTask);
 	}
 	async claim(taskId: string, workerId: string): Promise<CoreTask> {
 		const { claimTask } = await import("../db.js");
-		return (await claimTask(taskId, workerId)) as unknown as CoreTask;
+		const result = await claimTask(taskId, workerId);
+		return toCoreTaskOrThrow(result, taskId);
 	}
 	async release(taskId: string, _workerId: string): Promise<void> {
 		const { releaseTaskClaim } = await import("../db.js");
@@ -140,10 +170,12 @@ class KernelTaskGraph implements TaskGraphContract {
 		const agents = await listProjectAgents(projectId);
 		const deps = await listAgentDependencies(projectId);
 		const { buildDAGWaves } = await import("@oscorpex/task-graph");
-		// ProjectAgent satisfies GraphAgent and AgentDependency satisfies DependencyEdge structurally
+		// ProjectAgent and AgentDependency are structurally compatible with GraphAgent
+		// and DependencyEdge. The task-graph package uses `id` + `pipelineOrder` /
+		// `from` + `to` — both present on the kernel types.
 		const waveIds = buildDAGWaves(
-			agents as unknown as import("@oscorpex/task-graph").GraphAgent[],
-			deps as unknown as import("@oscorpex/task-graph").DependencyEdge[],
+			agents as import("@oscorpex/task-graph").GraphAgent[],
+			deps as import("@oscorpex/task-graph").DependencyEdge[],
 		);
 		// Map agent ID waves to empty PipelineStage shells (order only)
 		return waveIds.map((wave, idx) =>
@@ -287,7 +319,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 
 	async assignTask(taskId: string, agentId: string): Promise<CoreTask> {
 		const result = await taskEngine.assignTask(taskId, agentId);
-		return result as unknown as CoreTask;
+		return toCoreTask(result);
 	}
 
 	async startTask(taskId: string): Promise<CoreTask> {
@@ -296,48 +328,53 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		if (!proceed) throw new Error(`Task ${taskId} blocked by pre-start hook`);
 
 		const result = await taskEngine.startTask(taskId);
-		return result as unknown as CoreTask;
+		return toCoreTask(result);
 	}
 
 	async completeTask(taskId: string, output?: CoreTaskOutput): Promise<CoreTask> {
-		const result = await taskEngine.completeTask(taskId, output as unknown as import("../types.js").TaskOutput);
+		const kernelOutput = output !== undefined ? toKernelTaskOutput(output) : undefined;
+		const result = await taskEngine.completeTask(
+			taskId,
+			// completeTask requires a non-optional TaskOutput; supply an empty one when omitted
+			kernelOutput ?? { filesCreated: [], filesModified: [], logs: [] },
+		);
 		await runHooks("after_task_complete", { runId: "", taskId: result.id, projectId: "" });
-		return result as unknown as CoreTask;
+		return toCoreTask(result);
 	}
 
 	async failTask(taskId: string, error: string): Promise<CoreTask> {
 		const result = await taskEngine.failTask(taskId, error);
 		await runHooks("after_task_fail", { runId: "", taskId: result.id, projectId: "", metadata: { error } });
-		return result as unknown as CoreTask;
+		return toCoreTask(result);
 	}
 
 	async retryTask(taskId: string): Promise<CoreTask> {
 		const result = await taskEngine.retryTask(taskId);
-		return result as unknown as CoreTask;
+		return toCoreTask(result);
 	}
 
 	async submitReview(taskId: string, approved: boolean, feedback?: string): Promise<CoreTask> {
 		const result = await taskEngine.submitReview(taskId, approved, feedback);
-		return result as unknown as CoreTask;
+		return toCoreTask(result);
 	}
 
 	async restartRevision(taskId: string): Promise<CoreTask> {
 		const result = await taskEngine.restartRevision(taskId);
-		return result as unknown as CoreTask;
+		return toCoreTask(result);
 	}
 
 	async approveTask(taskId: string): Promise<CoreTask> {
 		const result = await taskEngine.approveTask(taskId);
-		return result as unknown as CoreTask;
+		return toCoreTask(result);
 	}
 
 	async rejectTask(taskId: string, reason?: string): Promise<CoreTask> {
 		const result = await taskEngine.rejectTask(taskId, reason);
-		return result as unknown as CoreTask;
+		return toCoreTask(result);
 	}
 
 	async executeTask(projectId: string, task: CoreTask): Promise<void> {
-		executionEngine.executeTask(projectId, task as unknown as import("../types.js").Task).catch((err) => {
+		executionEngine.executeTask(projectId, toKernelTask(task)).catch((err) => {
 			// eslint-disable-next-line no-console
 			console.warn("[kernel] executeTask background error:", err?.message ?? err);
 		});
@@ -460,7 +497,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 
 	async getPipelineState(projectId: string): Promise<PipelineState | null> {
 		const state = await pipelineEngine.getPipelineState(projectId);
-		return state as PipelineState | null;
+		return state !== null ? toCorePipelineState(state) : null;
 	}
 }
 
