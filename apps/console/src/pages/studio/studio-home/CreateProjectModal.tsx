@@ -407,12 +407,8 @@ export function CreateProjectModal({
 		if (step !== 2 || architectMessages.length > 0 || architectStreaming) return;
 		const desc = description.trim();
 		const hasTech = techPreference.length > 0;
-		let prompt: string;
-		if (desc.length < 100) {
-			prompt = `Kullanıcı şu projeyi tanımladı: "${name}" — "${desc}". Açıklama kısa. Lütfen projeyi daha iyi anlamak için 3-5 kısa soru sor: kapsam, temel özellikler, hedef kullanıcı, teknik gereksinimler.`;
-		} else {
-			prompt = `Bu projeyi analiz et ve en uygun takımı öner:\nProje: ${name}\nAçıklama: ${desc}\nTeknolojiler: ${hasTech ? techPreference.join(', ') : 'Belirtilmemiş'}\nEksik bilgi varsa kısa sorular sor.`;
-		}
+		const techInfo = hasTech ? `\nKullanıcının teknoloji tercihi: ${techPreference.join(', ')}` : '';
+		const prompt = `Yeni proje intake:\nProje adı: ${name}\nAçıklama: ${desc}${techInfo}\n\nLütfen projeyi anlamak için kullanıcıya sorular sor. İlk mesajda takım önerme — önce projeyi anla.`;
 		sendArchitectMessage(prompt);
 	}, [step]);
 
@@ -680,9 +676,9 @@ export function CreateProjectModal({
 								<div className="rounded-2xl border border-[#1f1f1f] bg-[#0d0d0d] px-5 py-5 space-y-5">
 									<div>
 										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 2 — Scoping Interview</p>
-										<h3 className="text-[15px] font-semibold text-[#fafafa]">Kapsamı Team Architect ile netleştir.</h3>
+										<h3 className="text-[15px] font-semibold text-[#fafafa]">Projenizi birlikte tanımlayalım</h3>
 										<p className="text-[12px] leading-6 text-[#737373] mt-2 max-w-2xl">
-											Bu adım scope contract için giriş niteliğinde. Sonraki adımda contract review zorunlu olarak onaylanır.
+											PM asistanı projenizi anlamak için birkaç soru soracak. Teknik bilgi gerekmez — sadece ne istediğinizi anlatın.
 										</p>
 									</div>
 									<div className="rounded-2xl border border-[#1f1f1f] bg-[#0c0c0c] p-4">
@@ -726,7 +722,7 @@ export function CreateProjectModal({
 														sendArchitectMessage(architectInput);
 													}
 												}}
-												placeholder="Kapsam için ek detay ver..."
+												placeholder="Soruları yanıtlayın veya projeniz hakkında detay ekleyin..."
 												className="flex-1 px-3 py-2 bg-[#080808] border border-[#262626] rounded-xl text-[12px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
 											/>
 											<button
