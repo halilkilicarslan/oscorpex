@@ -412,7 +412,7 @@ export async function recordVerificationResult(data: {
 	taskId: string;
 	verificationType: string;
 	passed: boolean;
-	details?: Record<string, unknown>;
+	details?: unknown;
 }): Promise<void> {
 	await execute(
 		`INSERT INTO verification_results (id, task_id, verification_type, status, details, created_at)

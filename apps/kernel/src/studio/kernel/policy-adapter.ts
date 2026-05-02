@@ -29,7 +29,7 @@ class KernelPolicyEngine implements PolicyEngine {
 		const raw = settingsMap["policy"]?.["rules"];
 		const customRules = parsePolicies(raw);
 
-		const result = evaluatePolicyRules(task as any, settingsMap as Record<string, Record<string, string>>, customRules);
+		const result = evaluatePolicyRules(task, settingsMap, customRules);
 
 		let action: PolicyAction = "allow";
 		if (!result.allowed) action = "block";

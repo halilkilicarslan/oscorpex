@@ -15,8 +15,7 @@ async function persistResult(taskId: string, result: VerificationResult): Promis
 		taskId,
 		verificationType: result.type,
 		passed: result.passed,
-		// details may be an array or object depending on check type — normalize via JSON round-trip
-		details: result.details as unknown as Record<string, unknown>,
+		details: result.details,
 	});
 }
 

@@ -41,7 +41,7 @@ async function persistResult(taskId: string, result: VerificationResult): Promis
 		taskId,
 		verificationType: result.type,
 		passed: result.passed,
-		details: result.details as unknown as Record<string, unknown>,
+		details: result.details,
 	});
 }
 
