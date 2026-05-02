@@ -81,7 +81,7 @@ Oscorpex is a full-stack development studio that orchestrates a team of 12 speci
 |-------|-----------|
 | Backend | Node.js, Hono, PostgreSQL |
 | Frontend | React 19, Vite, Tailwind CSS 4 |
-| AI Execution | Claude CLI, Codex CLI, Cursor, Google Gemini, Ollama (multi-provider) |
+| AI Execution | ProviderRegistry + ProviderAdapter boundary for Claude Code, Codex, Cursor, Google Gemini, and Ollama |
 | AI Framework | Oscorpex Kernel (custom execution engine) |
 | Container | Docker (Dockerode), container pool with health checks |
 | Terminal | xterm.js v6 |
@@ -95,7 +95,7 @@ Oscorpex is a full-stack development studio that orchestrates a team of 12 speci
 
 - Node.js 20+
 - pnpm
-- Claude CLI (for AI agent execution)
+- At least one configured provider CLI/API runtime: Claude Code, Codex, Cursor, Gemini, or Ollama
 - Docker (for PostgreSQL + optional container isolation)
 
 ### Installation
@@ -122,72 +122,147 @@ cd apps/console && pnpm dev
 ### Testing
 
 ```bash
-# Backend tests
-pnpm test
+# Full typecheck
+pnpm typecheck
+
+# Kernel tests
+pnpm --filter @oscorpex/kernel test
+
+# Task graph package tests
+pnpm --filter @oscorpex/task-graph test
+
+# Provider SDK tests
+pnpm --filter @oscorpex/provider-sdk test
 
 # Frontend tests
-cd console && pnpm test:run
-
-# Typecheck
-pnpm typecheck
-cd console && pnpm tsc -b
+pnpm --filter @oscorpex/console test:run
 ```
 
 ## Architecture
 
-```
-src/
-  studio/
-    execution-engine.ts       # Task orchestrator + CLI execution + claim-based dispatch
-    pipeline-engine.ts        # DAG pipeline with Kahn's algorithm + replan gate
-    task-engine.ts            # Task lifecycle, review loop, retry, approval gates
-    pm-agent.ts               # AI Planner — intake Q&A, phased plan generation
-    model-router.ts           # Complexity-based model selection + profile-aware routing
-    context-packet.ts         # Token-efficient prompt assembly
-    cli-adapter.ts            # Multi-provider adapter (Claude, Codex, Cursor, Gemini, Ollama)
-    provider-policy-profiles.ts # 5 routing profiles with behavior definitions
-    provider-state.ts         # Rate-limit and cooldown state manager
-    performance-config.ts     # Centralized performance tunables via env vars
-    adaptive-concurrency.ts   # Dynamic semaphore controller
-    retry-policy.ts           # Classification-aware retry with backoff
-    timeout-policy.ts         # Provider × complexity × project timeout resolution
-    fallback-decision.ts      # Severity-weighted fallback skipping with cooldown awareness
-    model-router.ts           # Cost-aware model selection with profile override
-    preflight-warmup.ts       # Cold-start tracking + preflight health checks
-    execution-workspace.ts    # Unified workspace contract (local/isolated/container)
-    isolated-workspace.ts     # File-copy isolation with write-back enforcement
-    sandbox-manager.ts        # Tool/path/output enforcement (hard/soft/off)
-    roles.ts                  # Role normalization (hyphen-case canonical)
-    agent-runtime/            # Agentic core (memory, strategy, session, protocol, constraints, injection)
-    goal-engine.ts            # Goal-based execution with LLM criteria validation
-    adaptive-replanner.ts     # Phase-boundary replanning with 6 triggers + 5 patch actions
-    graph-coordinator.ts      # Runtime DAG mutations with audit trail
-    cross-project-learning.ts # Anonymized pattern extraction + auto-promotion
-    budget-guard.ts           # Cost circuit breaker
-    output-verifier.ts        # Post-execution artifact verification gate
-    test-gate.ts              # Test execution gate (required/optional/skip)
-    container-pool.ts         # Docker container pool with health checks + network policy
-    agentic-metrics.ts        # 11 observability aggregation queries
-    event-bus.ts              # Event sourcing for state transitions
-    routes/                   # 32+ Hono sub-routers (modular)
-    control-plane/            # Operator governance routes (thin hosts)
-    db/                       # 39+ repository modules (modular)
-  control-plane/              # @oscorpex/control-plane — governance package
-    registry/                 # Agent & provider registry
-    presence/                 # Heartbeat & presence tracking
-    approvals/                # Approval center with SLA
-    audit/                    # Security audit layer
-    incidents/                # Incident management workflow
-    projections/              # Dashboard aggregations
-    policy/                   # Policy explainability surface
-    operator-actions/         # Controlled operator interventions
+Oscorpex uses a monorepo architecture with a backend kernel, React console, shared packages, and provider adapters.
 
-console/
-  src/
-    pages/studio/             # 49+ studio pages
-    components/               # Shared components
-    lib/studio-api/           # 25+ modular API client files
-    hooks/                    # WebSocket, notifications, collaboration
+Normal task execution flows through the post-refactor execution boundary:
+
+```txt
+ExecutionEngine facade
+  → TaskDispatcher
+  → TaskExecutor
+  → ProviderExecutionService
+  → ProviderRegistry
+  → ProviderAdapter
+```
+
+The legacy `cli-runtime.ts` compatibility path remains for streaming, proposal processing, tests, and explicit legacy entry points. It is not the normal task execution path.
+
+```txt
+apps/kernel/src/studio/
+  execution-engine.ts          # Thin facade wiring execution submodules
+  pipeline-engine.ts           # Pipeline facade using extracted stage and replan services
+  task-engine.ts               # Task facade using extracted lifecycle/review/approval services
+  pm-agent.ts                  # AI Planner: intake Q&A and phased plan generation
+  model-router.ts              # Public model-routing API shim
+  context-packet.ts            # Token-efficient prompt assembly
+  cli-adapter.ts               # Legacy compatibility adapter, fallback disabled by default
+  provider-policy-profiles.ts  # Routing profiles with behavior definitions
+  provider-state.ts            # Rate-limit and cooldown state manager
+  performance-config.ts        # Centralized performance tunables via env vars
+  adaptive-concurrency.ts      # Dynamic semaphore controller
+  retry-policy.ts              # Classification-aware retry with backoff
+  timeout-policy.ts            # Provider × complexity × project timeout resolution
+  fallback-decision.ts         # Severity-weighted fallback skipping with cooldown awareness
+  preflight-warmup.ts          # Cold-start tracking + preflight health checks
+  execution-workspace.ts       # Unified workspace contract (local/isolated/container)
+  isolated-workspace.ts        # File-copy isolation with write-back enforcement
+  sandbox-manager.ts           # Tool/path/output enforcement (hard/soft/off)
+  roles.ts                     # Role normalization
+  agent-runtime/               # Agentic core: memory, strategy, session, protocol, constraints
+  routes/                      # Hono route modules
+  control-plane/               # Operator governance route hosts
+  db/                          # Repository modules
+
+  execution/
+    index.ts                   # Execution module barrel
+    task-executor.ts           # Single-task execution lifecycle
+    provider-execution-service.ts # Provider execution normalization and fallback handling
+    dispatch-coordinator.ts    # Ready-task dispatch coordination
+    execution-recovery.ts      # Startup recovery and running-task cancellation
+    execution-watchdog.ts      # Self-healing dispatch watchdog
+    queue-wait.ts              # Queue-wait metric calculation
+    task-timeout.ts            # Timeout helper and TaskTimeoutError
+
+  task/
+    approval-service.ts        # Approval lifecycle helpers
+    zero-file-guard.ts         # Zero-file output validation
+    review-loop-service.ts     # Review/revision loop coordination
+    task-completion-effects.ts # Non-blocking completion side effects
+    subtask-rollup-service.ts  # Parent/subtask completion rollup
+    task-lifecycle-service.ts  # Task status transitions and lifecycle events
+    task-progress-service.ts   # Phase progress tracking facade
+
+  pipeline/
+    pipeline-state-service.ts  # Pipeline state loading/persistence helpers
+    stage-advance-service.ts   # Stage transition decisions
+    replan-gate.ts             # Pending replan gate
+    vcs-phase-hooks.ts         # Branch/merge/PR side effects
+
+  providers/
+    provider-model-catalog.ts  # Provider/model catalog constants
+    provider-routing-service.ts # Provider/model routing helpers
+
+  kernel/
+    provider-registry.ts       # ProviderRegistry and native adapter registration
+    index.ts                   # OscorpexKernel facade
+```
+
+```txt
+apps/console/src/
+  pages/studio/                # Studio pages
+  components/                  # Shared UI components
+  lib/studio-api/              # Modular API client files
+  hooks/                       # WebSocket, notifications, collaboration
+```
+
+```txt
+packages/
+  core/                        # Shared domain types, contracts, errors, utilities
+  control-plane/               # Operator governance layer
+  event-schema/                # Event type definitions
+  memory-kit/                  # Agent memory utilities
+  observability-sdk/           # Observability SDK
+  policy-kit/                  # Policy enforcement
+  provider-sdk/                # Provider adapter contracts and CLI runner utilities
+  task-graph/                  # DAG scheduling utilities
+  verification-kit/            # Output verification utilities
+```
+
+```txt
+adapters/
+  provider-claude/             # Claude Code provider adapter
+  provider-codex/              # Codex provider adapter
+  provider-cursor/             # Cursor provider adapter
+  provider-gemini/             # Gemini provider adapter
+  provider-ollama/             # Ollama provider adapter
+```
+
+## Refactor Status
+
+Execution refactor accepted at commit `85b3e34 Complete execution refactor batch`.
+
+Validated locally with:
+
+```bash
+pnpm typecheck
+pnpm --filter @oscorpex/kernel test
+pnpm --filter @oscorpex/task-graph test
+pnpm --filter @oscorpex/provider-sdk test
+```
+
+Known non-blocking technical debt:
+
+- legacy `cli-runtime.ts` remains for compatibility, streaming, proposal processing, and test paths
+- `legacyCliAdapter` references remain, but fallback is disabled by default
+- unsafe casts remain and are tracked as a separate cleanup backlog
 ```
 
 ## Database
