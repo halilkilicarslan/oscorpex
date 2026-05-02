@@ -15,10 +15,9 @@ import {
 	recordStep,
 } from "./agent-runtime/index.js";
 import { startApp } from "./app-runner.js";
-import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { enforceBudgetGuard } from "./budget-guard.js";
 import { resolveAllowedTools } from "./capability-resolver.js";
-import { executeWithCLI, isClaudeCliAvailable, resolveFilePaths } from "./cli-runtime.js";
+import { resolveFilePaths } from "./cli-runtime.js";
 import { buildPolicyPromptSection, getDefaultPolicy } from "./command-policy.js";
 import { buildRAGContext, formatRAGContext } from "./context-builder.js";
 import { compactCrossAgentContext } from "./context-sandbox.js";
@@ -45,20 +44,9 @@ import { createLogger } from "./logger.js";
 import { resolveModel } from "./model-router.js";
 import { persistAgentLog } from "./agent-log-store.js";
 import { markExecutionStarted } from "./preflight-warmup.js";
-import { buildTaskPrompt, defaultSystemPrompt } from "./prompt-builder.js";
+import { buildTaskPrompt } from "./prompt-builder.js";
 import { processAgentProposals } from "./proposal-processor.js";
-import { createProviderResolver } from "./provider-resolver.js";
-import { providerState } from "./provider-state.js";
-import {
-	CANCEL_REASONS,
-	type TelemetryRecord,
-	classifyProviderErrorWithReason,
-	finishProviderTelemetry,
-	recordProviderCancel,
-	recordProviderDegraded,
-	recordProviderFallback,
-	startProviderTelemetry,
-} from "./provider-telemetry.js";
+import { ProviderExecutionService, isProvidersExhausted } from "./execution/index.js";
 import { syncDeclaredDependencies } from "./repo-dependency-sync.js";
 import { MAX_AUTO_RETRIES, evaluateRetry } from "./retry-policy.js";
 import { executeReviewTask, resolveAgent } from "./review-dispatcher.js";
@@ -292,27 +280,9 @@ export class TaskExecutor {
 		const { isColdStart } = markExecutionStarted();
 
 		// Provider Telemetry Lifecycle (EPIC 3 — Observability)
-		// ═══════════════════════════════════════════════════════════════════════
-		// 1. Abort listener (cancel audit) — fires before telemetryRecord exists
-		// 2. startProviderTelemetry(...) — before adapter chain
-		// 3. recordProviderFallback(...) — on adapter failure when fallback exists
-		// 4. finishProviderTelemetry(...) — on success or final failure
-		// 5. recordProviderDegraded(...) — when all providers exhausted
-		// 6. recordProviderCancel(...) — when abort signal fires after step 2
-		// ═══════════════════════════════════════════════════════════════════════
-		let telemetryRecord: TelemetryRecord | undefined;
-		let cancelPending = false;
+		// Managed entirely by ProviderExecutionService — task-executor only tracks
+		// task-level abort (pipeline pause) and outer error handling.
 		let timeoutMs = 0;
-		taskController.signal.addEventListener(
-			"abort",
-			() => {
-				cancelPending = true;
-				if (telemetryRecord) {
-					recordProviderCancel(this.telemetry, telemetryRecord, CANCEL_REASONS.pipeline_pause);
-				}
-			},
-			{ once: true },
-		);
 
 		// --- Non-AI task types: integration-test & run-app ---
 		if (task.taskType === "integration-test" || task.taskType === "run-app") {
@@ -518,196 +488,98 @@ export class TaskExecutor {
 				}
 			}
 
-			// M4: Adapter fallback chain — resolved via ProviderResolver
-			const resolver = await createProviderResolver(primaryCliTool, ["claude-code", "cursor"], this.telemetry);
+			// M4: Provider dispatch — ProviderExecutionService handles fallback chain,
+			// telemetry lifecycle, cooldown marking, and error classification.
+			const providerService = new ProviderExecutionService(this.telemetry);
 
-			let cliResult: Awaited<ReturnType<import("./cli-adapter.js").CLIAdapter["execute"]>> | null = null;
-			let lastAdapterError: Error | null = null;
-			let lastFailureProvider: string | undefined;
-
-			// --- Telemetry lifecycle: START ---
-			telemetryRecord = startProviderTelemetry(this.telemetry, {
-				runId: projectId,
+			// Session step: CLI execution started (before we know which adapter wins)
+			if (sessionId) {
+				recordStep(sessionId, {
+					step: 1,
+					type: "action_executed",
+					summary: `CLI execution started: ${primaryCliTool}`,
+				}).catch((err) =>
+					log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+				);
+			}
+			eventBus.emitTransient({
+				projectId,
+				type: "agent:output",
+				agentId: agent.id,
 				taskId: task.id,
-				provider: primaryCliTool,
+				payload: { output: `[execution] CLI started: ${primaryCliTool}` },
+			});
+			agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
+			agentRuntime.appendVirtualOutput(
+				projectId,
+				agent.id,
+				formatTaskLog(`[execution] CLI started: ${primaryCliTool}`),
+			);
+
+			const providerExecResult = await providerService.execute({
+				projectId,
+				taskId: task.id,
+				agentId: agent.id,
+				agentName: agent.name,
 				repoPath: runtimeRepoPath,
 				prompt,
-				systemPrompt: agent.systemPrompt ? composeSystemPrompt(agent.systemPrompt) : defaultSystemPrompt(agent),
-				timeoutMs,
-				allowedTools,
+				rawSystemPrompt: agent.systemPrompt || undefined,
+				agentConfig: { name: agent.name, role: agent.role, model: agent.model, skills: agent.skills ?? [] },
 				model: routedModel,
+				cliTool: primaryCliTool,
+				allowedTools,
+				timeoutMs,
+				signal: taskController.signal,
+				onLog: (line: string) => {
+					agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
+					agentRuntime.appendVirtualOutput(projectId, agent.id, formatTaskLog(line));
+					eventBus.emitTransient({
+						projectId,
+						type: "agent:output",
+						agentId: agent.id,
+						taskId: task.id,
+						payload: { output: line },
+					});
+				},
+				queueWaitMs,
+				isColdStart,
 			});
-			if (telemetryRecord) {
-				telemetryRecord.queueWaitMs = queueWaitMs;
-			}
-			if (cancelPending && telemetryRecord) {
-				recordProviderCancel(this.telemetry, telemetryRecord, CANCEL_REASONS.pipeline_pause);
-			}
 
-			let adapter = await resolver.next({ allowedTools, lastFailureProvider, lastFailureClassification });
-			while (adapter) {
-				const adapterName = adapter.name as AgentCliTool;
-
-				// Session step: CLI execution started
-				if (sessionId) {
-					recordStep(sessionId, {
-						step: 1,
-						type: "action_executed",
-						summary: `CLI execution started: ${adapter.name}`,
-					}).catch((err) =>
-						log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
-					);
-				}
-				eventBus.emitTransient({
+			// Graceful degraded mode: if all providers are exhausted, defer the task
+			// instead of failing it. Reset to queued and schedule a retry.
+			if (isProvidersExhausted(providerExecResult)) {
+				const { retryMs } = providerExecResult;
+				log.warn(
+					`[task-executor] All providers exhausted — deferring "${task.title}" for ${Math.round(retryMs / 1000)}s`,
+				);
+				await updateTask(task.id, { status: "queued" });
+				eventBus.emit({
 					projectId,
-					type: "agent:output",
+					type: "pipeline:degraded",
 					agentId: agent.id,
 					taskId: task.id,
-					payload: { output: `[execution] CLI started: ${adapter.name}` },
+					payload: {
+						message: `All providers exhausted. Task "${task.title}" deferred. Retry in ${Math.round(retryMs / 1000)}s.`,
+						retryMs,
+					},
 				});
-				agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
-				agentRuntime.appendVirtualOutput(
-					projectId,
-					agent.id,
-					formatTaskLog(`[execution] CLI started: ${adapter.name}`),
-				);
-
-				const adapterStartMs = Date.now();
-				try {
-					cliResult = await adapter.execute({
-						projectId,
-						taskId: task.id,
-						agentId: agent.id,
-						agentName: agent.name,
-						repoPath: runtimeRepoPath,
-						prompt,
-						systemPrompt: agent.systemPrompt ? composeSystemPrompt(agent.systemPrompt) : defaultSystemPrompt(agent),
-						timeoutMs,
-						model: routedModel,
-						signal: taskController.signal,
-						allowedTools,
-						onLog: (line: string) => {
-							agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
-							agentRuntime.appendVirtualOutput(projectId, agent.id, formatTaskLog(line));
-							eventBus.emitTransient({
-								projectId,
-								type: "agent:output",
-								agentId: agent.id,
-								taskId: task.id,
-								payload: { output: line },
-							});
-						},
+				// Schedule a retry after cooldown expires
+				setTimeout(() => {
+					getTask(task.id).then((t) => {
+						if (t && t.status === "queued") {
+							executeTask(projectId, t).catch((err) =>
+								log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+							);
+						}
 					});
-					providerState.markSuccess(adapterName);
-					// Telemetry lifecycle: SUCCESS
-					if (telemetryRecord) {
-						finishProviderTelemetry(this.telemetry, telemetryRecord, {
-							provider: adapterName,
-							model: routedModel,
-							text: cliResult.text,
-							filesCreated: cliResult.filesCreated,
-							filesModified: cliResult.filesModified,
-							logs: cliResult.logs,
-							startedAt: telemetryRecord.startedAt,
-							completedAt: new Date().toISOString(),
-							metadata: { durationMs: cliResult.durationMs, isColdStart },
-						});
-					}
-					break; // success — exit chain
-				} catch (adapterErr) {
-					lastAdapterError = adapterErr instanceof Error ? adapterErr : new Error(String(adapterErr));
-					const errMsg = lastAdapterError.message;
-					const latencyMs = Date.now() - adapterStartMs;
-					const { classification, reason } = classifyProviderErrorWithReason(adapterErr);
-					lastFailureProvider = adapter.name;
-					lastFailureClassification = classification;
-					if (isRateLimitError(errMsg)) {
-						log.warn(`[task-executor] Rate limit on adapter "${adapter.name}" — marking cooldown.`);
-						providerState.markRateLimited(adapterName);
-					} else {
-						providerState.markFailure(adapterName, classification);
-					}
-					log.warn(
-						`[task-executor] Adapter "${adapter.name}" failed (${classification}, reason=${reason}): ${errMsg.slice(0, 200)}`,
-					);
-
-					// Advance to next candidate and record fallback telemetry
-					const nextAdapter = await resolver.next({
-						allowedTools,
-						lastFailureProvider: adapter.name,
-						lastFailureClassification: classification,
-					});
-					if (nextAdapter && telemetryRecord) {
-						recordProviderFallback(
-							this.telemetry,
-							telemetryRecord,
-							adapterName,
-							nextAdapter.name,
-							reason,
-							latencyMs,
-							adapterErr,
-						);
-					}
-					adapter = nextAdapter;
-				}
+				}, retryMs + 1000);
+				return;
 			}
 
-			if (cliResult === null) {
-				// Graceful degraded mode: if all providers are exhausted, defer the task
-				// instead of failing it. Reset to queued and schedule a retry.
-				if (providerState.isAllExhausted()) {
-					const retryMs = providerState.getEarliestRecoveryMs();
-					log.warn(
-						`[task-executor] All providers exhausted — deferring "${task.title}" for ${Math.round(retryMs / 1000)}s`,
-					);
-					// Telemetry lifecycle: DEGRADED
-					if (telemetryRecord) {
-						recordProviderDegraded(
-							this.telemetry,
-							telemetryRecord,
-							`All providers exhausted for task "${task.title}". Retry in ${Math.round(retryMs / 1000)}s.`,
-						);
-						finishProviderTelemetry(
-							this.telemetry,
-							telemetryRecord,
-							null,
-							lastAdapterError ?? new Error("All providers exhausted"),
-						);
-					}
-					await updateTask(task.id, { status: "queued" });
-					eventBus.emit({
-						projectId,
-						type: "pipeline:degraded",
-						agentId: agent.id,
-						taskId: task.id,
-						payload: {
-							message: `All providers exhausted. Task "${task.title}" deferred. Retry in ${Math.round(retryMs / 1000)}s.`,
-							retryMs,
-						},
-					});
-					// Schedule a retry after cooldown expires
-					setTimeout(() => {
-						getTask(task.id).then((t) => {
-							if (t && t.status === "queued") {
-								executeTask(projectId, t).catch((err) =>
-									log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
-								);
-							}
-						});
-					}, retryMs + 1000);
-					return;
-				}
-				// Telemetry lifecycle: ERROR (all adapters failed, not exhausted)
-				if (telemetryRecord) {
-					finishProviderTelemetry(
-						this.telemetry,
-						telemetryRecord,
-						null,
-						lastAdapterError ?? new Error("All CLI adapters exhausted"),
-					);
-				}
-				throw lastAdapterError ?? new Error("All CLI adapters exhausted — no provider available.");
-			}
+			// From here providerExecResult is NormalizedProviderResult
+			const cliResult = providerExecResult;
+			// Track the winning provider's classification for retry policy
+			lastFailureClassification = undefined;
 
 			const output: TaskOutput = {
 				filesCreated: resolveFilePaths(cliResult.filesCreated, runtimeRepoPath),
@@ -744,11 +616,11 @@ export class TaskExecutor {
 					taskId: task.id,
 					agentId: agent.id,
 					model: cliResult.model || "claude-sonnet-4-6",
-					provider: "anthropic",
+					provider: cliResult.provider || "anthropic",
 					inputTokens: cliResult.inputTokens,
 					outputTokens: cliResult.outputTokens,
 					totalTokens,
-					costUsd: cliResult.totalCostUsd,
+					costUsd: cliResult.costUsd,
 					cacheCreationTokens: cliResult.cacheCreationTokens,
 					cacheReadTokens: cliResult.cacheReadTokens,
 				});
@@ -882,18 +754,13 @@ export class TaskExecutor {
 			// --- Agent Runtime: record successful session ---
 			if (sessionId) {
 				completeSession(sessionId, projectId, agent.id, agent.role, task, {
-					costUsd: cliResult?.totalCostUsd,
+					costUsd: cliResult?.costUsd,
 				}).catch((e) => log.warn("[task-executor] Session complete failed:" + " " + String(e)));
 			}
 
 			// Review task dispatch: task-engine creates a review task which
 			// will be picked up by dispatchReadyTasks below.
 		} catch (err) {
-			// Telemetry lifecycle: OUTER ERROR (sandbox, verification, etc.)
-			if (telemetryRecord && !telemetryRecord.completedAt) {
-				finishProviderTelemetry(this.telemetry, telemetryRecord, null, err);
-			}
-
 			// If task was aborted by pipeline pause, don't mark as failed — cancelRunningTasks
 			// already reset it to queued. Just bail out silently.
 			if (taskController.signal.aborted) {
