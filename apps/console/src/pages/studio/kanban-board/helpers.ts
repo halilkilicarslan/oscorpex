@@ -2,7 +2,17 @@ import type { Task } from "../../../lib/studio-api";
 
 export const PAGE_SIZE = 50;
 
-export const KANBAN_WS_EVENTS = ['task:completed', 'task:failed', 'task:started', 'task:assigned', 'task:retry'];
+export const KANBAN_WS_EVENTS = [
+	'task:completed',
+	'task:failed',
+	'task:started',
+	'task:assigned',
+	'task:retry',
+	'task:approved',
+	'task:rejected',
+	'task:review_requested',
+	'task:review_completed',
+];
 
 export const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
 	{ key: 'queued', label: 'Queued', color: 'border-[#525252]' },
