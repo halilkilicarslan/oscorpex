@@ -377,6 +377,9 @@ projectCrudRoutes.post("/projects", requirePermission("projects:create"), async 
 	if (body.teamTemplateId) {
 		return c.json({ error: "teamTemplateId cannot be provided during initial project creation" }, 422);
 	}
+	if (!body.description || body.description.trim().length < 10) {
+		return c.json({ error: "Proje açıklaması en az 10 karakter olmalıdır" }, 400);
+	}
 	const { tenantId, userId } = getTenantContext(c);
 	const project = await createProject({
 		name: body.name,

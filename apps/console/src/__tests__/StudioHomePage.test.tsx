@@ -253,7 +253,7 @@ describe('StudioHomePage — proje olusturma modali', () => {
     expect(createShellBtn).toBeDisabled();
   });
 
-  it('isim girildikten sonra "Create Shell" butonu aktif olmali', async () => {
+  it('isim ve aciklama girildikten sonra "Create Shell" butonu aktif olmali', async () => {
     const user = userEvent.setup();
     renderSayfa();
 
@@ -262,6 +262,10 @@ describe('StudioHomePage — proje olusturma modali', () => {
 
     const nameInput = screen.getByPlaceholderText(/Counter App/);
     await user.type(nameInput, 'Benim Projem');
+
+    // Description da gerekli (min 10 karakter)
+    const descInput = screen.getByPlaceholderText(/Describe the product/);
+    await user.type(descInput, 'Basit bir todo uygulamasi');
 
     const createShellBtn = screen.getByRole('button', { name: 'Create Shell' });
     expect(createShellBtn).not.toBeDisabled();
@@ -282,6 +286,10 @@ describe('StudioHomePage — proje olusturma modali', () => {
 
     const nameInput = screen.getByPlaceholderText(/Counter App/);
     await user.type(nameInput, 'Benim Projem');
+
+    // Description da gerekli (min 10 karakter)
+    const descInput = screen.getByPlaceholderText(/Describe the product/);
+    await user.type(descInput, 'Basit bir todo uygulamasi');
 
     // Step 1: Create Shell butonu ile proje olustur
     await user.click(screen.getByRole('button', { name: 'Create Shell' }));

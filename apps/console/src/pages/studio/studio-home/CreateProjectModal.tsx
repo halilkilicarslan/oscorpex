@@ -292,6 +292,7 @@ export function CreateProjectModal({
 		templateName?: string;
 	} | null>(null);
 	const [teamApplied, setTeamApplied] = useState(false);
+	const [teamConfirmed, setTeamConfirmed] = useState(false);
 
 	useEffect(() => {
 		fetchTeamTemplates().then(setTemplates).catch(() => {});
@@ -322,6 +323,7 @@ export function CreateProjectModal({
 		if (teamMode !== 'auto') return;
 		if (recommendationId && recommendationId !== selectedTemplate) {
 			setSelectedTemplate(recommendationId);
+			setTeamConfirmed(false);
 		}
 	}, [teamMode, recommendationId, selectedTemplate]);
 
@@ -349,7 +351,7 @@ export function CreateProjectModal({
 		teamMode === 'auto'
 			? (architectRecommendedTeam?.id || recommendation.candidate?.id || selectedTemplate || undefined)
 			: (selectedTemplate || undefined);
-	const canCreateShell = name.trim().length > 0;
+	const canCreateShell = name.trim().length > 0 && description.trim().length >= 10;
 	const architectIntake: TeamArchitectIntake = {
 		name: name.trim(),
 		description: description.trim(),
@@ -389,6 +391,7 @@ export function CreateProjectModal({
 					setArchitectRecommendation(parsed);
 					if (parsed.decision === 'recommend-existing' && parsed.teamTemplateId) {
 						setSelectedTemplate(parsed.teamTemplateId);
+						setTeamConfirmed(false);
 					}
 				}
 			},
@@ -402,7 +405,15 @@ export function CreateProjectModal({
 
 	useEffect(() => {
 		if (step !== 2 || architectMessages.length > 0 || architectStreaming) return;
-		sendArchitectMessage('Recommend the best team for this intake. Ask brief follow-up questions if needed.');
+		const desc = description.trim();
+		const hasTech = techPreference.length > 0;
+		let prompt: string;
+		if (desc.length < 100) {
+			prompt = `Kullanıcı şu projeyi tanımladı: "${name}" — "${desc}". Açıklama kısa. Lütfen projeyi daha iyi anlamak için 3-5 kısa soru sor: kapsam, temel özellikler, hedef kullanıcı, teknik gereksinimler.`;
+		} else {
+			prompt = `Bu projeyi analiz et ve en uygun takımı öner:\nProje: ${name}\nAçıklama: ${desc}\nTeknolojiler: ${hasTech ? techPreference.join(', ') : 'Belirtilmemiş'}\nEksik bilgi varsa kısa sorular sor.`;
+		}
+		sendArchitectMessage(prompt);
 	}, [step]);
 
 	const handleCreateShell = async () => {
@@ -460,6 +471,7 @@ export function CreateProjectModal({
 			setBackendRecommendation(recommendationResult);
 			if (recommendationResult.decision === 'recommend-existing' && recommendationResult.teamTemplateId) {
 				setSelectedTemplate(recommendationResult.teamTemplateId);
+				setTeamConfirmed(false);
 			}
 			setStep(4);
 		} catch (err) {
@@ -620,6 +632,9 @@ export function CreateProjectModal({
 												rows={6}
 												className="w-full px-3 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none resize-none leading-6"
 											/>
+											{description.trim().length > 0 && description.trim().length < 10 && (
+												<p className="text-[10px] text-[#f59e0b] mt-1">En az 10 karakter gerekli ({description.trim().length}/10)</p>
+											)}
 											<p className="text-[11px] text-[#525252] mt-2">
 												The planner interprets this text as project requirements, scope, and success criteria.
 											</p>
@@ -905,7 +920,7 @@ export function CreateProjectModal({
 												<button
 													key={team.id}
 													type="button"
-													onClick={() => setSelectedTemplate(team.id)}
+													onClick={() => { setSelectedTemplate(team.id); setTeamConfirmed(false); }}
 													className={`text-left p-4 rounded-2xl border transition-colors ${
 														selectedTemplate === team.id
 															? 'border-[#3b82f6] bg-[#3b82f6]/6'
@@ -929,6 +944,19 @@ export function CreateProjectModal({
 												</button>
 											))}
 										</div>
+									)}
+
+									{selectedTemplate && !teamConfirmed && (
+										<button
+											type="button"
+											onClick={() => setTeamConfirmed(true)}
+											className="mt-3 px-4 py-2 rounded-xl text-[12px] font-medium bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30 hover:bg-[#22c55e]/20 transition-colors"
+										>
+											Bu takımı onayla
+										</button>
+									)}
+									{teamConfirmed && (
+										<p className="mt-3 text-[11px] text-[#22c55e]">Takım seçimi onaylandı</p>
 									)}
 
 									{plannerAgents.length > 0 && (
@@ -1024,6 +1052,10 @@ export function CreateProjectModal({
 					</div>
 				</div>
 
+				{architectRecommendation?.decision === 'need-more-info' && (
+					<p className="text-[11px] text-[#f59e0b] px-6 pb-2">Team Architect daha fazla bilgi istiyor. Lütfen soruları yanıtlayın.</p>
+				)}
+
 				{/* Actions */}
 				<div className="flex justify-end gap-2 px-6 py-4 border-t border-[#1f1f1f] shrink-0">
 					<button
@@ -1051,7 +1083,7 @@ export function CreateProjectModal({
 					) : step === 2 ? (
 						<button
 							onClick={handleSaveScopeDraft}
-							disabled={!createdProject || loading}
+							disabled={!createdProject || loading || architectMessages.length < 2}
 							className="px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 						>
 							{loading ? 'Saving scope...' : 'Continue to Scope Review'}
@@ -1067,7 +1099,7 @@ export function CreateProjectModal({
 					) : step === 4 ? (
 						<button
 							onClick={handleContinueToApply}
-							disabled={!scopeApproved}
+							disabled={!scopeApproved || !teamConfirmed}
 							className="px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 						>
 							Continue to Team Apply

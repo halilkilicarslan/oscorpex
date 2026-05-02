@@ -201,6 +201,10 @@ projectPlanRoutes.post("/projects/:id/scope/approve", requirePermission("project
 	if (!existing || !existing.problemStatement.trim()) {
 		return c.json({ error: "scope draft is required before approval" }, 422);
 	}
+	const scope = existing;
+	if (!scope.problemStatement || scope.problemStatement.trim().length < 20) {
+		return c.json({ error: "Problem statement en az 20 karakter olmalıdır" }, 400);
+	}
 	const actor = (c as any).get("userId") as string | undefined;
 	await setProjectSettings(
 		projectId,
@@ -212,7 +216,10 @@ projectPlanRoutes.post("/projects/:id/scope/approve", requirePermission("project
 		}),
 	);
 	const updated = readScopeContract(await getProjectSettingsMap(projectId));
-	return c.json({ ok: true, data: updated });
+	const warnings: string[] = [];
+	if (!scope.goals || scope.goals.length === 0) warnings.push("Hedefler (goals) tanımlanmamış");
+	if (!scope.requiredCapabilities || scope.requiredCapabilities.length === 0) warnings.push("Gerekli yetenekler tanımlanmamış");
+	return c.json({ ok: true, data: updated, warnings });
 });
 
 // ---- Team Recommendation --------------------------------------------------
