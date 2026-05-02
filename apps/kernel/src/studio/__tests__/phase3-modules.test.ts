@@ -425,8 +425,10 @@ describe("Adaptive Replanner", () => {
 			{ id: "phase-2", name: "Build", status: "running", tasks: [], order: 1, dependsOn: [] } as any,
 		]);
 		// 5 queued out of 10 total → queueRatio = 0.5 > 0.4
+		// createdAt set to 20 minutes ago to satisfy oldestQueuedMinutes >= 15 check
+		const oldCreatedAt = new Date(Date.now() - 20 * 60 * 1000).toISOString();
 		vi.mocked(listProjectTasks).mockResolvedValueOnce([
-			...Array.from({ length: 5 }, (_, i) => ({ id: `q-${i}`, phaseId: "phase-2", status: "queued" }) as any),
+			...Array.from({ length: 5 }, (_, i) => ({ id: `q-${i}`, phaseId: "phase-2", status: "queued", createdAt: oldCreatedAt }) as any),
 			...Array.from({ length: 3 }, (_, i) => ({ id: `d-${i}`, phaseId: "phase-2", status: "done" }) as any),
 			...Array.from({ length: 2 }, (_, i) => ({ id: `r-${i}`, phaseId: "phase-2", status: "running" }) as any),
 		]);

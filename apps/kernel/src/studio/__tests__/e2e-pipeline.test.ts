@@ -270,10 +270,12 @@ async function runExecutionWithDoneRaceTolerance(projectId: string): Promise<voi
 		// Task engine can surface a benign race in some runs: a retry path calls
 		// failTask after the task has already reached done. Treat that as non-fatal
 		// and let post-conditions assert the terminal state.
-		if (!message.includes("is not running (status: done)")) {
+		if (!message.includes("cannot be failed from status: done") && !message.includes("is not running (status: done)")) {
 			throw err;
 		}
 	}
+	// Allow setImmediate-based retries (self-heal) to flush before assertions
+	await new Promise((r) => setTimeout(r, 200));
 }
 
 // ---------------------------------------------------------------------------
@@ -694,7 +696,7 @@ describe.skipIf(!dbReady)("E2E Pipeline", { timeout: E2E_TEST_TIMEOUT_MS }, () =
 			// All attempts fail
 			getMockExecute().mockRejectedValue(new Error("transient network error"));
 
-			await executionEngine.startProjectExecution(project.id);
+			await runExecutionWithDoneRaceTolerance(project.id);
 
 			const task1 = await getTask(t1.id);
 			expect(task1?.status).toBe("failed");

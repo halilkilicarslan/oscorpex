@@ -119,7 +119,7 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 				"not running",
 			);
 			// Can't fail a queued task
-			await expect(taskEngine.failTask(t1.id, "err")).rejects.toThrow("not running");
+			await expect(taskEngine.failTask(t1.id, "err")).rejects.toThrow("cannot be failed");
 			// Can't retry a queued task
 			await expect(taskEngine.retryTask(t1.id)).rejects.toThrow("cannot be retried");
 		});
