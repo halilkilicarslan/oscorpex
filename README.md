@@ -153,7 +153,7 @@ ExecutionEngine facade
   → ProviderAdapter
 ```
 
-The legacy `cli-runtime.ts` compatibility path remains for streaming, proposal processing, tests, and explicit legacy entry points. It is not the normal task execution path.
+The legacy CLI runtime boundary remains for streaming, proposal processing, tests, and explicit legacy entry points. It is not the normal task execution path.
 
 ```txt
 apps/kernel/src/studio/
@@ -163,7 +163,8 @@ apps/kernel/src/studio/
   pm-agent.ts                  # AI Planner: intake Q&A and phased plan generation
   model-router.ts              # Public model-routing API shim
   context-packet.ts            # Token-efficient prompt assembly
-  cli-adapter.ts               # Legacy compatibility adapter, fallback disabled by default
+  cli-adapter.ts               # Compatibility shim for legacy CLI adapter imports
+  cli-runtime.ts               # Compatibility shim for legacy CLI runtime imports
   provider-policy-profiles.ts  # Routing profiles with behavior definitions
   provider-state.ts            # Rate-limit and cooldown state manager
   performance-config.ts        # Centralized performance tunables via env vars
@@ -209,6 +210,10 @@ apps/kernel/src/studio/
   providers/
     provider-model-catalog.ts  # Provider/model catalog constants
     provider-routing-service.ts # Provider/model routing helpers
+
+  legacy/
+    cli-adapter.ts             # Legacy compatibility adapter, fallback disabled by default
+    cli-runtime.ts             # Legacy CLI runtime for streaming/proposal/test paths
 
   kernel/
     provider-registry.ts       # ProviderRegistry and native adapter registration
@@ -260,7 +265,7 @@ pnpm --filter @oscorpex/provider-sdk test
 
 Known non-blocking technical debt:
 
-- legacy `cli-runtime.ts` remains for compatibility, streaming, proposal processing, and test paths
+- legacy CLI runtime remains under `studio/legacy/` for compatibility, streaming, proposal processing, and test paths
 - `legacyCliAdapter` references remain, but fallback is disabled by default
 - unsafe casts remain and are tracked as a separate cleanup backlog
 ```

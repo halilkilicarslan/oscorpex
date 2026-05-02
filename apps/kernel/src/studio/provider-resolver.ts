@@ -6,7 +6,7 @@
 
 import type { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
-import type { CLIAdapter, CLIAdapterOptions } from "./cli-adapter.js";
+import type { CLIAdapter, CLIAdapterOptions } from "./legacy/cli-adapter.js";
 import { markProviderUnavailable, shouldSkipProvider, sortAdapterChain } from "./fallback-decision.js";
 import { providerRegistry } from "./kernel/provider-registry.js";
 import { createLogger } from "./logger.js";

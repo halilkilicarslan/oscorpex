@@ -5,7 +5,7 @@
 // Extracted from execution-engine.ts for single-responsibility.
 // ---------------------------------------------------------------------------
 
-import type { AgentOutputProposal } from "./cli-runtime.js";
+import type { AgentOutputProposal } from "./legacy/cli-runtime.js";
 import { getPipelineRun } from "./db.js";
 import { createLogger } from "./logger.js";
 import type { Task } from "./types.js";

@@ -4,8 +4,8 @@
 
 | Aspect | Detail |
 |--------|--------|
-| File | `apps/kernel/src/studio/cli-runtime.ts` |
-| Current callers | `planner-cli.ts`, `proposal-processor.ts`, `cli-adapter.ts` |
+| File | `apps/kernel/src/studio/legacy/cli-runtime.ts` |
+| Current callers | `planner-cli.ts`, `proposal-processor.ts`, `legacy/cli-adapter.ts`, root compatibility shim |
 | Category | **KEEP_COMPATIBILITY** |
 | Migration target | All normal task execution now goes through ProviderExecutionService → ProviderRegistry → ProviderAdapter |
 | Remaining uses | PM chat streaming (`planner-cli.ts`), proposal processing streaming |
@@ -16,8 +16,8 @@
 
 | Aspect | Detail |
 |--------|--------|
-| File | `apps/kernel/src/studio/cli-adapter.ts` |
-| Current callers | Legacy tests and explicit legacy adapter callers only |
+| File | `apps/kernel/src/studio/legacy/cli-adapter.ts` |
+| Current callers | Legacy tests through root shim and explicit legacy adapter callers only |
 | Category | **KEEP_COMPATIBILITY** |
 | Migration target | Direct `ProviderAdapter` usage via `ProviderRegistry` |
 | Remaining uses | No normal execution use. Provider resolver builds its chain from ProviderRegistry directly. |
@@ -28,8 +28,8 @@
 
 | Aspect | Detail |
 |--------|--------|
-| File | `apps/kernel/src/studio/cli-runtime.ts` |
-| Current callers | `cli-adapter.ts`, tests |
+| File | `apps/kernel/src/studio/legacy/cli-runtime.ts` |
+| Current callers | `legacy/cli-adapter.ts`, tests through root shim |
 | Category | **DEPRECATE** |
 | Migration target | `NormalizedProviderResult` from provider-execution-service |
 | Delete after | All consumers use NormalizedProviderResult |

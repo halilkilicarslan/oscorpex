@@ -48,10 +48,10 @@ ExecutionEngine -> TaskDispatcher -> TaskExecutor -> ProviderExecutionService ->
 
 | Path | Reason | Evidence | Delete After |
 |---|---|---|---|
-| `apps/kernel/src/studio/cli-runtime.ts` | Compatibility path for streaming/proposal/test/legacy callers | Contains `executeWithCLI`, `isClaudeCliAvailable`, `streamWithCLI`, `CLIExecutionResult`; referenced by `cli-adapter.ts`, old root `task-executor.ts`, tests, docs | Delete or move to legacy only after streaming/proposal paths and compatibility callers migrate |
-| `apps/kernel/src/studio/cli-adapter.ts` | Explicit legacy compatibility adapter; fallback disabled by default | References `executeWithCLI`; exposes `getAdapter`/`getAdapterChain`; used by tests, `review-dispatcher.ts`, and Vitest branch in `provider-resolver.ts` | Move under `legacy/` after production compatibility callers disappear |
-| `apps/kernel/src/studio/review-dispatcher.ts` -> `getAdapter(...)` | Review dispatch still uses legacy adapter access | `rg` finds `const reviewAdapter = await getAdapter(...)` | Migrate review dispatch to ProviderRegistry before removing cli-adapter |
-| `apps/kernel/src/studio/provider-resolver.ts` Vitest branch -> `getAdapterChain(...)` | Test-only compatibility route to avoid real CLI spawning | `rg` finds `let testChain = await getAdapterChain(...)` | Remove after tests use ProviderRegistry test adapters directly |
+| `apps/kernel/src/studio/legacy/cli-runtime.ts` | Compatibility path for streaming/proposal/test/legacy callers | Contains `executeWithCLI`, `isClaudeCliAvailable`, `streamWithCLI`, `CLIExecutionResult`; root `cli-runtime.ts` is now a shim | Delete after streaming/proposal paths and compatibility callers migrate |
+| `apps/kernel/src/studio/legacy/cli-adapter.ts` | Explicit legacy compatibility adapter; fallback disabled by default | References `executeWithCLI`; exposes `getAdapter`/`getAdapterChain`; root `cli-adapter.ts` is now a shim | Delete after tests and explicit compatibility entry points are removed |
+| `apps/kernel/src/studio/review-dispatcher.ts` -> `getAdapter(...)` | Review dispatch still uses legacy adapter access through the root compatibility shim | `rg` finds `const reviewAdapter = await getAdapter(...)`; shim preserves existing test mocks while implementation lives in `legacy/cli-adapter.ts` | Migrate review dispatch to ProviderRegistry before removing cli-adapter |
+| `apps/kernel/src/studio/provider-resolver.ts` Vitest branch -> `getAdapterChain(...)` | Test-only compatibility route to avoid real CLI spawning | `rg` finds `let testChain = await getAdapterChain(...)` with type boundary moved under `legacy/` | Remove after tests use ProviderRegistry test adapters directly |
 
 ## Public API Shims
 
@@ -79,8 +79,8 @@ ExecutionEngine -> TaskDispatcher -> TaskExecutor -> ProviderExecutionService ->
 |---|---|---|---|
 | `apps/kernel/src/studio/execution/task-executor.ts` | Active executor is still large and contains prompt/context, sandbox, provider call, gates, output handling, retry, and completion logic | P2 | Split into `task-start-service`, `prompt-execution-context`, `sandbox-execution-guard`, `provider-task-runner`, `task-output-handler`, `execution-gates-runner` |
 | `apps/kernel/src/studio/pipeline-engine.ts` | Active facade still coordinates build/start/advance/pause/resume/retry/review/task hooks | P2 | Split into `pipeline-build-service`, `pipeline-control-service`, `pipeline-task-hook`, `pipeline-review-helpers` |
-| `apps/kernel/src/studio/cli-runtime.ts` | Compatibility code remains in active tree | P2 | Move to `legacy/` only after callers are migrated |
-| `apps/kernel/src/studio/cli-adapter.ts` | Compatibility adapter remains in active tree | P2 | Move to `legacy/` after review/test compatibility callers migrate |
+| `apps/kernel/src/studio/legacy/cli-runtime.ts` | Compatibility code remains for explicit legacy paths | P2 | Keep until streaming/proposal callers migrate off legacy runtime |
+| `apps/kernel/src/studio/legacy/cli-adapter.ts` | Compatibility adapter remains for tests and review compatibility | P2 | Keep until review/test compatibility callers migrate |
 | Unsafe casts across kernel/routes/db/adapters | Many `as any` and `as unknown as` remain | P3 | Group cleanup by boundary rather than one large PR |
 
 ## Unsafe Cast Groups
@@ -125,8 +125,8 @@ Recommended cleanup backlog:
 
 1. P1: Delete `archive/legacy/kernel-src` only after explicit confirmation.
 2. P1: Remove or migrate confirmed unused root-level duplicates: `task-executor.ts`, `task-lifecycle.ts`, `pipeline-branch-manager.ts`, `pipeline-state-manager.ts`.
-3. P1: Move wrapper implementations into extracted folders and keep root compatibility shims only where imports require them.
-4. P2: Migrate review/test compatibility callers off `cli-adapter.ts`.
-5. P2: Move `cli-runtime.ts` to a legacy boundary after streaming/proposal migration.
+3. P1: Wrapper implementations moved into extracted folders.
+4. P2: Migrate review/test compatibility callers off `legacy/cli-adapter.ts`.
+5. P2: Migrate streaming/proposal callers off `legacy/cli-runtime.ts`.
 6. P2: Split active `execution/task-executor.ts` and slim `pipeline-engine.ts`.
 7. P3: Cleanup unsafe casts by boundary.

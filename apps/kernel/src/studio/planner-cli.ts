@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { streamWithCLI } from "./cli-runtime.js";
+import { streamWithCLI } from "./legacy/cli-runtime.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("planner-cli");
 

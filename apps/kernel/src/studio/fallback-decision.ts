@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
-import type { CLIAdapter } from "./cli-adapter.js";
+import type { CLIAdapter } from "./legacy/cli-adapter.js";
 import { createLogger } from "./logger.js";
 import { getFallbackConfig } from "./performance-config.js";
 import type { ProviderCapabilities } from "./provider-runtime-cache.js";
