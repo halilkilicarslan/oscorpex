@@ -599,23 +599,6 @@ export function CreateProjectModal({
 											</div>
 										</div>
 
-										<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-											{PROJECT_TYPE_OPTIONS.map((option) => (
-												<button
-													key={option.value}
-													type="button"
-													onClick={() => setProjectType(option.value)}
-													className={`text-left rounded-2xl border px-3.5 py-3 transition-colors ${
-														projectType === option.value
-															? 'border-[#22c55e] bg-[#22c55e]/8'
-															: 'border-[#262626] bg-[#0a0a0a] hover:border-[#333]'
-													}`}
-												>
-													<div className="text-[12px] font-medium text-[#fafafa]">{option.label}</div>
-													<div className="text-[10px] text-[#6b7280] mt-1 leading-5">{option.hint}</div>
-												</button>
-											))}
-										</div>
 
 										<div>
 											<label className="text-[12px] text-[#737373] font-medium block mb-1.5">
@@ -652,21 +635,6 @@ export function CreateProjectModal({
 												</div>
 											</label>
 
-											<div className="rounded-xl border border-[#262626] bg-[#090909] px-4 py-4">
-												<label className="text-[12px] text-[#737373] font-medium block mb-1.5">
-													Technology Preference
-												</label>
-												<input
-													type="text"
-													value={techPreferenceInput}
-													onChange={(e) => setTechPreferenceInput(e.target.value)}
-													placeholder="React, Next.js, Supabase, Tailwind..."
-													className="w-full px-3 py-2.5 bg-[#080808] border border-[#262626] rounded-xl text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
-												/>
-												<p className="text-[11px] text-[#525252] mt-2 leading-5">
-													Bilmiyorsan boş bırak. Planner önerir; onaylı plandan sonra gerçek tech stack projeye yazılır.
-												</p>
-											</div>
 										</div>
 									</div>
 								</>
@@ -1001,7 +969,7 @@ export function CreateProjectModal({
 							)}
 						</div>
 
-						<div className="space-y-4 lg:sticky lg:top-0 self-start">
+						<div className="space-y-4 lg:sticky lg:top-0 self-start hidden">
 							<div className="rounded-2xl border border-[#1f1f1f] bg-[linear-gradient(180deg,#101010_0%,#0a0a0a_100%)] px-5 py-5">
 								<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-3">Summary</p>
 								<div className="space-y-3 text-[12px]">
