@@ -4,8 +4,6 @@
 // prompt building, CLI dispatch, output gates, retry, provider fallback.
 // ---------------------------------------------------------------------------
 
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { type ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import { agentRuntime } from "../agent-runtime.js";
 import {
@@ -14,10 +12,7 @@ import {
 	failSession,
 	initSession,
 	loadProtocolContext,
-	recordStep,
 } from "../agent-runtime/index.js";
-import { startApp } from "../app-runner.js";
-import { enforceBudgetGuard } from "../budget-guard.js";
 import { resolveAllowedTools } from "../capability-resolver.js";
 import { buildPolicyPromptSection, getDefaultPolicy } from "../command-policy.js";
 import { buildRAGContext, formatRAGContext } from "../context-builder.js";
@@ -26,47 +21,45 @@ import { buildResumeSnapshot, formatResumeSnapshot } from "../context-session.js
 import {
 	claimTask,
 	getAgentConfig,
-	getLatestPlan,
 	getProject,
 	getTask,
-	listPhases,
-	recordTokenUsage,
 	releaseTaskClaim,
-	updateProject,
 	updateTask,
 } from "../db.js";
-import { updateDocsAfterTask } from "../docs-generator.js";
 import { eventBus } from "../event-bus.js";
-import { runGoalEvaluation, runTestGateCheck, runVerificationGate } from "../execution-gates.js";
-import { type ExecutionWorkspace, resolveWorkspace } from "../execution-workspace.js";
 import { formatGoalPrompt, getGoalForTask } from "../goal-engine.js";
-import { runLintFix } from "../lint-runner.js";
 import { createLogger } from "../logger.js";
 import { resolveModel } from "../model-router.js";
 import { persistAgentLog } from "../agent-log-store.js";
 import { markExecutionStarted } from "../preflight-warmup.js";
 import { buildTaskPrompt } from "../prompt-builder.js";
-import { processAgentProposals } from "../proposal-processor.js";
-import { ProviderExecutionService, isProvidersExhausted } from "./provider-execution-service.js";
 import { syncDeclaredDependencies } from "../repo-dependency-sync.js";
 import { MAX_AUTO_RETRIES, evaluateRetry } from "../retry-policy.js";
-import { executeReviewTask, resolveAgent } from "../review-dispatcher.js";
-import {
-	type SandboxPolicy,
-	SandboxViolationError,
-	endSandboxSession,
-	enforceOutputSizeCheck,
-	enforcePathChecks,
-	enforceToolCheck,
-	resolveTaskPolicy,
-	startSandboxSession,
-} from "../sandbox-manager.js";
+import { resolveAgent } from "../review-dispatcher.js";
+import { SandboxViolationError } from "../sandbox-manager.js";
 import { taskEngine } from "../task-engine.js";
-import { runIntegrationTest } from "../task-runners.js";
 import { TIMEOUT_WARNING_THRESHOLD, resolveTaskTimeoutMs } from "../timeout-policy.js";
-import type { AgentCliTool, Project, Task, TaskOutput } from "../types.js";
+import type { AgentCliTool, Task } from "../types.js";
+import { runOutputAndTestGates, runGoalGate } from "./execution-gates-runner.js";
+import { runProviderTask } from "./provider-task-runner.js";
+import { executeTaskReview } from "./review-task-runner.js";
+import {
+	closeSandboxExecution,
+	enforceSandboxHardPreflight,
+	enforceSandboxPostExecution,
+	enforceSandboxPreExecution,
+	setupSandboxExecution,
+	type SandboxExecutionContext,
+} from "./sandbox-execution-guard.js";
+import { executeSpecialTask } from "./special-task-runner.js";
+import { startTaskForExecution } from "./task-start-service.js";
 import { TaskTimeoutError } from "./task-timeout.js";
 import { computeQueueWaitMs } from "./queue-wait.js";
+import {
+	buildTaskOutput,
+	recordOutputReceived,
+	runTaskCompletionEffects,
+} from "./task-output-handler.js";
 
 export { TaskTimeoutError } from "./task-timeout.js";
 export { computeQueueWaitMs } from "./queue-wait.js";
@@ -90,22 +83,6 @@ export function isRateLimitError(message: string): boolean {
 	return RATE_LIMIT_PATTERNS.some((rx) => rx.test(message));
 }
 
-function resolveFilePaths(files: string[], repoPath: string): string[] {
-	return files
-		.filter(Boolean)
-		.map((file) => {
-			if (file.startsWith(repoPath)) {
-				return file.slice(repoPath.length + 1);
-			}
-			const absolutePath = resolve(repoPath, file);
-			if (existsSync(absolutePath)) {
-				return file;
-			}
-			return file;
-		})
-		.filter((file, index, allFiles) => allFiles.indexOf(file) === index);
-}
-
 // ---------------------------------------------------------------------------
 // TaskExecutor
 // ---------------------------------------------------------------------------
@@ -125,18 +102,7 @@ export class TaskExecutor {
 		task: Task,
 		agentId: string,
 	): Promise<Task | undefined> {
-		const currentTask = await getTask(task.id);
-		const currentStatus = currentTask?.status ?? task.status;
-		let startedTask: Task | undefined;
-
-		if (currentStatus === "queued") {
-			await taskEngine.assignTask(task.id, agentId);
-			startedTask = await taskEngine.startTask(task.id);
-		} else if (currentStatus === "assigned") {
-			startedTask = await taskEngine.startTask(task.id);
-		}
-		// status === "running" → already started (e.g. revision restart), return undefined
-		return startedTask;
+		return startTaskForExecution(task, agentId);
 	}
 
 	/**
@@ -144,64 +110,11 @@ export class TaskExecutor {
 	 */
 	async executeSpecialTask(
 		projectId: string,
-		project: Project,
+		project: Parameters<typeof executeSpecialTask>[1],
 		task: Task,
 		dispatchReadyTasks: (projectId: string, phaseId: string) => Promise<void>,
 	): Promise<void> {
-		await taskEngine.assignTask(task.id, task.taskType ?? "system");
-		await taskEngine.startTask(task.id);
-
-		const termLog = (msg: string) => {
-			eventBus.emitTransient({
-				projectId,
-				type: "agent:output",
-				taskId: task.id,
-				payload: { output: msg },
-			});
-		};
-
-		try {
-			let output: TaskOutput;
-
-			if (task.taskType === "integration-test") {
-				termLog("[task-executor] Running integration tests...");
-				output = await runIntegrationTest(projectId, project.repoPath, termLog);
-			} else {
-				// run-app
-				termLog("[task-executor] Starting application...");
-				const result = await startApp(projectId, project.repoPath, termLog);
-				output = {
-					filesCreated: [],
-					filesModified: [],
-					logs: [`Started ${result.services.length} service(s). Preview: ${result.previewUrl}`],
-				};
-			}
-
-			await taskEngine.completeTask(task.id, output, { executionRepoPath: project.repoPath });
-		} catch (err) {
-			const errorMsg = err instanceof Error ? err.message : String(err);
-			log.error(`[task-executor] Special task failed: "${task.title}" — ${errorMsg}`);
-			eventBus.emit({
-				projectId,
-				type: "agent:error",
-				taskId: task.id,
-				payload: { error: errorMsg },
-			});
-			await taskEngine.failTask(task.id, errorMsg);
-			await updateProject(projectId, { status: "failed" });
-		}
-
-		// Dispatch next tasks
-		await dispatchReadyTasks(projectId, task.phaseId);
-		const plan = await getLatestPlan(projectId);
-		if (plan) {
-			const phases = await listPhases(plan.id);
-			for (const phase of phases) {
-				if (phase.status === "running" && phase.id !== task.phaseId) {
-					await dispatchReadyTasks(projectId, phase.id);
-				}
-			}
-		}
+		return executeSpecialTask(projectId, project, task, dispatchReadyTasks);
 	}
 
 	/**
@@ -239,7 +152,7 @@ export class TaskExecutor {
 
 		// --- Review task: "Code Review: X" — run review CLI and submit result ---
 		if (task.title.startsWith("Code Review: ")) {
-			await executeReviewTask(projectId, project, task, agentRuntime);
+			await executeTaskReview(projectId, project, task);
 			return;
 		}
 
@@ -324,26 +237,12 @@ export class TaskExecutor {
 		};
 
 		// --- Sandbox: resolve policy for this task ---
-		let sandboxSessionId: string | undefined;
-		let sandboxPolicy: SandboxPolicy | undefined;
-		let isolatedWorkspace: ExecutionWorkspace | undefined;
-		let runtimeRepoPath = project.repoPath;
-		try {
-			sandboxPolicy = await resolveTaskPolicy(projectId, task, agent.role);
-			if (project.repoPath) {
-				isolatedWorkspace = await resolveWorkspace(project.repoPath, task.id, sandboxPolicy);
-				runtimeRepoPath = isolatedWorkspace.repoPath || project.repoPath;
-				const sbSession = await startSandboxSession({
-					projectId,
-					taskId: task.id,
-					agentId: agent.id,
-					workspacePath: runtimeRepoPath,
-				});
-				sandboxSessionId = sbSession.id;
-			}
-		} catch (err) {
-			log.warn("[task-executor] Sandbox init failed (non-blocking):" + " " + String(err));
+		let sandboxContext: SandboxExecutionContext = { runtimeRepoPath: project.repoPath };
+		if (project.repoPath) {
+			sandboxContext = await setupSandboxExecution(projectId, task, agent.id, agent.role, project.repoPath);
 		}
+		const { sandboxPolicy, sandboxSessionId, isolatedWorkspace } = sandboxContext;
+		const runtimeRepoPath = sandboxContext.runtimeRepoPath;
 
 		// Sync node_modules vs package.json before CLI/test runs (partial clones often lack hoisted deps).
 		if (runtimeRepoPath) {
@@ -374,17 +273,7 @@ export class TaskExecutor {
 			const allowedTools = await resolveAllowedTools(projectId, agent.id, agent.role);
 
 			// --- Sandbox pre-execution: enforce tool restrictions ---
-			if (sandboxPolicy && sandboxPolicy.enforcementMode !== "off") {
-				for (const tool of allowedTools) {
-					await enforceToolCheck(sandboxPolicy, tool, sandboxSessionId);
-				}
-				// Also enforce denied tools list against any critical tool names
-				for (const denied of sandboxPolicy.deniedTools) {
-					if (allowedTools.includes(denied)) {
-						await enforceToolCheck(sandboxPolicy, denied, sandboxSessionId);
-					}
-				}
-			}
+			await enforceSandboxPreExecution(sandboxPolicy, allowedTools, sandboxSessionId);
 
 			// v3.4 + M4: Model routing — complexity + prior failures + review rejections + provider-native models.
 			const primaryCliTool: AgentCliTool = agent.cliTool ?? "claude-code";
@@ -424,278 +313,48 @@ export class TaskExecutor {
 			};
 
 			// Sandbox pre-execution gate: in hard mode, verify tools before spawning CLI
-			if (sandboxPolicy?.enforcementMode === "hard" && sandboxPolicy.deniedTools.length > 0) {
-				const deniedInAllowed = allowedTools.filter((t) => sandboxPolicy!.deniedTools.includes(t));
-				if (deniedInAllowed.length > 0) {
-					throw new SandboxViolationError({
-						type: "tool_denied",
-						detail: `Pre-execution tool check: denied tools in allowedTools list: ${deniedInAllowed.join(", ")}`,
-						timestamp: new Date().toISOString(),
-					});
-				}
-			}
+			enforceSandboxHardPreflight(sandboxPolicy, allowedTools);
 
-			// M4: Provider dispatch — ProviderExecutionService handles fallback chain,
-			// telemetry lifecycle, cooldown marking, and error classification.
-			const providerService = new ProviderExecutionService(this.telemetry);
-
-			// Session step: CLI execution started (before we know which adapter wins)
-			if (sessionId) {
-				recordStep(sessionId, {
-					step: 1,
-					type: "action_executed",
-					summary: `CLI execution started: ${primaryCliTool}`,
-				}).catch((err) =>
-					log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
-				);
-			}
-			eventBus.emitTransient({
+			const providerRun = await runProviderTask({
 				projectId,
-				type: "agent:output",
-				agentId: agent.id,
-				taskId: task.id,
-				payload: { output: `[execution] CLI started: ${primaryCliTool}` },
-			});
-			agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
-			agentRuntime.appendVirtualOutput(
-				projectId,
-				agent.id,
-				formatTaskLog(`[execution] CLI started: ${primaryCliTool}`),
-			);
-
-			const providerExecResult = await providerService.execute({
-				projectId,
-				taskId: task.id,
-				agentId: agent.id,
-				agentName: agent.name,
-				repoPath: runtimeRepoPath,
+				task,
+				agent,
+				runtimeRepoPath,
 				prompt,
-				rawSystemPrompt: agent.systemPrompt || undefined,
-				agentConfig: { name: agent.name, role: agent.role, model: agent.model, skills: agent.skills ?? [] },
-				model: routedModel,
-				cliTool: primaryCliTool,
+				routedModel,
+				primaryCliTool,
 				allowedTools,
 				timeoutMs,
 				signal: taskController.signal,
-				onLog: (line: string) => {
-					agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
-					agentRuntime.appendVirtualOutput(projectId, agent.id, formatTaskLog(line));
-					eventBus.emitTransient({
-						projectId,
-						type: "agent:output",
-						agentId: agent.id,
-						taskId: task.id,
-						payload: { output: line },
-					});
-				},
 				queueWaitMs,
 				isColdStart,
+				sessionId,
+				telemetry: this.telemetry,
+				executeTask,
+				formatTaskLog,
 			});
-
-			// Graceful degraded mode: if all providers are exhausted, defer the task
-			// instead of failing it. Reset to queued and schedule a retry.
-			if (isProvidersExhausted(providerExecResult)) {
-				const { retryMs } = providerExecResult;
-				log.warn(
-					`[task-executor] All providers exhausted — deferring "${task.title}" for ${Math.round(retryMs / 1000)}s`,
-				);
-				await updateTask(task.id, { status: "queued" });
-				eventBus.emit({
-					projectId,
-					type: "pipeline:degraded",
-					agentId: agent.id,
-					taskId: task.id,
-					payload: {
-						message: `All providers exhausted. Task "${task.title}" deferred. Retry in ${Math.round(retryMs / 1000)}s.`,
-						retryMs,
-					},
-				});
-				// Schedule a retry after cooldown expires
-				setTimeout(() => {
-					getTask(task.id).then((t) => {
-						if (t && t.status === "queued") {
-							executeTask(projectId, t).catch((err) =>
-								log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
-							);
-						}
-					});
-				}, retryMs + 1000);
+			if (providerRun.deferred) {
 				return;
 			}
 
-			// From here providerExecResult is NormalizedProviderResult
-			const cliResult = providerExecResult;
-			// Track the winning provider's classification for retry policy
+			const cliResult = providerRun.result!;
 			lastFailureClassification = undefined;
 
-			const output: TaskOutput = {
-				filesCreated: resolveFilePaths(cliResult.filesCreated, runtimeRepoPath),
-				filesModified: resolveFilePaths(cliResult.filesModified, runtimeRepoPath),
-				logs: cliResult.logs,
-			};
-
-			// Session step: CLI output received
-			if (sessionId) {
-				const fileCount = (output.filesCreated?.length ?? 0) + (output.filesModified?.length ?? 0);
-				recordStep(sessionId, {
-					step: 2,
-					type: "result_inspected",
-					summary: `Output received: ${fileCount} files (${output.filesCreated?.length ?? 0} created, ${output.filesModified?.length ?? 0} modified)`,
-				}).catch((err) =>
-					log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
-				);
-			}
-
-			if (isolatedWorkspace?.isolated) {
-				const synced = await isolatedWorkspace.writeBack([
-					...(output.filesCreated ?? []),
-					...(output.filesModified ?? []),
-				]);
-				output.filesCreated = output.filesCreated.filter((file) => synced.includes(file));
-				output.filesModified = output.filesModified.filter((file) => synced.includes(file));
-			}
-
-			// Record token usage from CLI result
-			if (cliResult.inputTokens || cliResult.outputTokens) {
-				const totalTokens = cliResult.inputTokens + cliResult.outputTokens;
-				await recordTokenUsage({
-					projectId,
-					taskId: task.id,
-					agentId: agent.id,
-					model: cliResult.model || "claude-sonnet-4-6",
-					provider: cliResult.provider || "anthropic",
-					inputTokens: cliResult.inputTokens,
-					outputTokens: cliResult.outputTokens,
-					totalTokens,
-					costUsd: cliResult.costUsd,
-					cacheCreationTokens: cliResult.cacheCreationTokens,
-					cacheReadTokens: cliResult.cacheReadTokens,
-				});
-
-				// Cost circuit breaker: check budget after recording spend
-				const budgetExceeded = await enforceBudgetGuard(projectId);
-				if (budgetExceeded) {
-					// Complete current task normally but stop dispatching further
-					log.warn(`[task-executor] Budget exceeded — completing "${task.title}" but pausing pipeline`);
-				}
-			}
-
-			eventBus.emitTransient({
-				projectId,
-				type: "agent:output",
-				agentId: agent.id,
-				taskId: task.id,
-				payload: { output: `[execution] Mode: cli` },
-			});
-			agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
-			agentRuntime.appendVirtualOutput(projectId, agent.id, formatTaskLog("[execution] Mode: cli"));
-
-			// --- ESLint/Prettier enforcement: auto-fix generated files ---
-			const allFiles = [...(output.filesCreated ?? []), ...(output.filesModified ?? [])];
-			if (allFiles.length > 0 && project.repoPath) {
-				try {
-					const termLog = (msg: string) => {
-						agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
-						agentRuntime.appendVirtualOutput(projectId, agent.id, formatTaskLog(msg));
-					};
-					const lintResult = await runLintFix(project.repoPath, allFiles, termLog);
-					if (lintResult.eslint.errors.length > 0 || lintResult.prettier.errors.length > 0) {
-						eventBus.emitTransient({
-							projectId,
-							type: "agent:output",
-							agentId: agent.id,
-							taskId: task.id,
-							payload: {
-								output: `[lint] Uyarılar: eslint(${lintResult.eslint.errors.length}), prettier(${lintResult.prettier.errors.length})`,
-							},
-						});
-					}
-				} catch (lintErr) {
-					// Lint failure should never block task completion
-					log.warn({ err: lintErr }, "Lint/format failed (non-blocking)");
-				}
-			}
-
-			// --- Auto-documentation: update docs based on agent role ---
-			try {
-				await updateDocsAfterTask(project, { ...task, output }, agent, (msg) => {
-					agentRuntime.ensureVirtualProcess(projectId, agent.id, agent.name);
-					agentRuntime.appendVirtualOutput(projectId, agent.id, formatTaskLog(msg));
-				});
-			} catch (docErr) {
-				log.warn({ err: docErr }, "Docs update failed (non-blocking)");
-			}
-
-			// Agent output buffer'ını log dosyasına persist et (restart sonrası terminal'de görünsün)
-			const agentOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
-			if (agentOutputLines.length > 0) {
-				persistAgentLog(projectId, agent.id, agentOutputLines).catch((err) =>
-					log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
-				);
-			}
-
-			// --- Sandbox post-execution: enforce path + output size restrictions ---
-			if (sandboxPolicy && sandboxPolicy.enforcementMode !== "off") {
-				const allPaths = [...(output.filesCreated ?? []), ...(output.filesModified ?? [])];
-				if (allPaths.length > 0) {
-					await enforcePathChecks(sandboxPolicy, allPaths, sandboxSessionId);
-				}
-				const outputSizeEstimate = JSON.stringify(output).length;
-				await enforceOutputSizeCheck(sandboxPolicy, outputSizeEstimate, sandboxSessionId);
-			}
-
-			// --- v8.0: Process structured proposals (delegated to proposal-processor.ts) ---
-			if (cliResult?.proposals && cliResult.proposals.length > 0) {
-				try {
-					await processAgentProposals(projectId, task, agent, cliResult.proposals);
-				} catch (err) {
-					log.warn("[task-executor] Proposal processing failed (non-blocking):" + " " + String(err));
-				}
-			}
-
-			// --- Output verification + test gates (delegated to execution-gates.ts) ---
+			const output = await buildTaskOutput(cliResult, runtimeRepoPath, isolatedWorkspace);
+			recordOutputReceived(sessionId, output);
+			await runTaskCompletionEffects({ projectId, project, task, agent, output, cliResult, agentRuntime, formatTaskLog });
+			await enforceSandboxPostExecution(sandboxPolicy, output, sandboxSessionId);
 			if (project.repoPath) {
-				const verifyResult = await runVerificationGate(projectId, task, project.repoPath, output, agent.id, sessionId);
-				if (!verifyResult.passed) {
-					throw new Error(`Output verification failed: ${verifyResult.failedChecks}`);
-				}
-
-				const testResult = await runTestGateCheck(
-					projectId,
-					task,
-					project.repoPath,
-					output,
-					agent.role,
-					agent.id,
-					sessionId,
-				);
-				if (!testResult.passed) {
-					throw new Error(testResult.failedChecks!);
-				}
+				await runOutputAndTestGates(projectId, task, project.repoPath, output, agent, sessionId);
 			}
 
 			await taskEngine.completeTask(task.id, output, { executionRepoPath: runtimeRepoPath });
 
-			// --- Sandbox: end session ---
-			if (sandboxSessionId) {
-				endSandboxSession(sandboxSessionId).catch((e) =>
-					log.warn("[task-executor] Sandbox end failed:" + " " + String(e)),
-				);
-			}
-			if (isolatedWorkspace?.isolated) {
-				isolatedWorkspace
-					.cleanup()
-					.catch((e) => log.warn("[task-executor] Workspace cleanup failed:" + " " + String(e)));
-			}
+			closeSandboxExecution(sandboxContext);
 
 			// --- Goal evaluation (delegated to execution-gates.ts) ---
 			if (goalId) {
-				try {
-					await runGoalEvaluation(task.id, task.title, output, projectId);
-				} catch (e) {
-					if (e instanceof Error && e.message.startsWith("Goal validation failed")) throw e;
-					log.warn({ err: e }, "Goal evaluation failed (non-blocking)");
-				}
+				await runGoalGate(task.id, task.title, output, projectId);
 			}
 
 			// --- Agent Runtime: record successful session ---
