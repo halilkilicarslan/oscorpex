@@ -15,7 +15,6 @@
 
 import {
 	buildDAGStages,
-	buildDAGWaves,
 	buildLinearStages,
 	findDevAgentId,
 	findReviewerAgentId,
@@ -27,25 +26,20 @@ import {
 	getLatestPlan,
 	getPipelineRun,
 	getProject,
-	getProjectSetting,
-	getTask,
 	listAgentDependencies,
 	listPhases,
 	listProjectAgents,
-	listTasks,
 	mutatePipelineState,
-	queryOne,
 	updatePipelineRun,
 	updateTask,
 } from "./db.js";
 import { generateReadme } from "./docs-generator.js";
 import { eventBus } from "./event-bus.js";
 import { executionEngine } from "./execution-engine.js";
-import { gitManager } from "./git-manager.js";
-import { GitHubIntegration } from "./github-integration.js";
-import { transitionProject } from "./lifecycle-manager.js";
 import { createLogger } from "./logger.js";
-import { decrypt, isEncrypted } from "./secret-vault.js";
+import { transitionProject } from "./lifecycle-manager.js";
+import { PipelineBranchManager } from "./pipeline-branch-manager.js";
+import { PipelineStateManager, runToState } from "./pipeline-state-manager.js";
 import { taskEngine } from "./task-engine.js";
 import type {
 	AgentDependency,
@@ -58,73 +52,6 @@ import type {
 } from "./types.js";
 
 const log = createLogger("pipeline-engine");
-
-// ---------------------------------------------------------------------------
-// Read-through cache (projectId → PipelineState)
-// This is a PERFORMANCE CACHE ONLY. DB is the single source of truth.
-// Cache is invalidated after every mutation via mutatePipelineState().
-// ---------------------------------------------------------------------------
-const _cache = new Map<string, PipelineState>();
-
-// ---------------------------------------------------------------------------
-// Yardımcı fonksiyonlar
-// ---------------------------------------------------------------------------
-
-function now(): string {
-	return new Date().toISOString();
-}
-
-/** Convert PipelineRun (DB row) to PipelineState (runtime model) */
-function runToState(run: {
-	projectId: string;
-	stagesJson: string;
-	currentStage: number;
-	status: PipelineStatus;
-	startedAt?: string;
-	completedAt?: string;
-}): PipelineState {
-	return {
-		projectId: run.projectId,
-		stages: JSON.parse(run.stagesJson) as PipelineStage[],
-		currentStage: run.currentStage,
-		status: run.status,
-		startedAt: run.startedAt,
-		completedAt: run.completedAt,
-	};
-}
-
-/** Persist state to DB and update cache. Used for simple non-locked writes. */
-async function persistState(state: PipelineState): Promise<void> {
-	await updatePipelineRun(state.projectId, {
-		currentStage: state.currentStage,
-		status: state.status,
-		stagesJson: JSON.stringify(state.stages),
-		startedAt: state.startedAt,
-		completedAt: state.completedAt,
-	});
-	_cache.set(state.projectId, state);
-}
-
-/** Load state from DB (single source of truth). Updates cache. */
-async function loadState(projectId: string): Promise<PipelineState | null> {
-	const run = await getPipelineRun(projectId);
-	if (!run) return null;
-	const state = runToState(run);
-	_cache.set(projectId, state);
-	return state;
-}
-
-/** Invalidate cache for a project — forces next read from DB */
-function invalidateCache(projectId: string): void {
-	_cache.delete(projectId);
-}
-
-/** Get state: cache first, then DB. Never trust cache for mutations. */
-async function getState(projectId: string): Promise<PipelineState | null> {
-	const cached = _cache.get(projectId);
-	if (cached) return cached;
-	return loadState(projectId);
-}
 
 // ---------------------------------------------------------------------------
 // DAG wave generation is now in @oscorpex/task-graph (buildDAGWaves).
@@ -143,6 +70,14 @@ class PipelineEngine {
 	// Debounce map: prevents concurrent advanceStage calls for the same project
 	// When multiple tasks complete near-simultaneously, only one advanceStage runs
 	private _advancePending = new Map<string, NodeJS.Timeout>();
+
+	private branchManager: PipelineBranchManager;
+	private stateManager: PipelineStateManager;
+
+	constructor() {
+		this.branchManager = new PipelineBranchManager();
+		this.stateManager = new PipelineStateManager();
+	}
 
 	// -------------------------------------------------------------------------
 	// Pipeline inşası
@@ -216,7 +151,7 @@ class PipelineEngine {
 		});
 
 		// Refresh cache from DB to ensure consistency
-		await loadState(projectId);
+		await this.stateManager.loadState(projectId);
 
 		if (state.stages.length > 0) {
 			await this.startStage(projectId, 0);
@@ -224,7 +159,7 @@ class PipelineEngine {
 			await this.markCompleted(projectId);
 		}
 
-		return (await getState(projectId))!;
+		return (await this.stateManager.getState(projectId))!;
 	}
 
 	// -------------------------------------------------------------------------
@@ -242,10 +177,10 @@ class PipelineEngine {
 				stagesJson: JSON.stringify(stages),
 			};
 		});
-		invalidateCache(projectId);
+		this.stateManager.invalidateCache(projectId);
 
 		const state = runToState(run);
-		_cache.set(projectId, state);
+		this.stateManager.setCacheEntry(projectId, state);
 
 		if (stageIndex >= state.stages.length) {
 			await this.markCompleted(projectId);
@@ -255,7 +190,7 @@ class PipelineEngine {
 		const stage = state.stages[stageIndex];
 
 		// Phase başlarken otomatik git branch oluştur — pipeline'ı bloklamaz
-		this.createPhaseBranch(projectId, stageIndex, stage).catch((err) =>
+		this.branchManager.createPhaseBranch(projectId, stageIndex, stage).catch((err) =>
 			log.warn(`[pipeline-engine] Phase branch oluşturulamadı (stage ${stageIndex}):` + " " + String(err)),
 		);
 
@@ -275,41 +210,6 @@ class PipelineEngine {
 		}
 	}
 
-	/**
-	 * Phase başlangıcında `phase/{stageIndex}-{agentRoles}` formatında
-	 * git branch oluşturur. Başarısızlık pipeline'ı durdurmaz.
-	 */
-	private async createPhaseBranch(projectId: string, stageIndex: number, stage: PipelineStage): Promise<void> {
-		const project = await getProject(projectId);
-		if (!project?.repoPath) return;
-
-		// Branch adı: phase/0-backend, phase/1-frontend vb.
-		const roleSlug = stage.agents
-			.map((a) => a.role.toLowerCase().replace(/[^a-z0-9]+/g, "-"))
-			.join("-")
-			.slice(0, 30); // Git branch adı sınırı
-		const branchName = `phase/${stageIndex}-${roleSlug || "stage"}`;
-
-		try {
-			const branches = await gitManager.listBranches(project.repoPath);
-			if (branches.includes(branchName)) {
-				// Branch zaten varsa geçiş yap
-				await gitManager.checkout(project.repoPath, branchName);
-			} else {
-				// Yeni branch oluştur
-				await gitManager.createBranch(project.repoPath, branchName);
-			}
-
-			eventBus.emit({
-				projectId,
-				type: "pipeline:branch_created",
-				payload: { branch: branchName, stageIndex },
-			});
-		} catch (err) {
-			log.warn(`[pipeline-engine] Branch oluşturulamadı: ${branchName}` + " " + String(err));
-		}
-	}
-
 	private async completeStage(projectId: string, stageIndex: number): Promise<void> {
 		// DB-first: mark stage completed via locked transaction
 		const run = await mutatePipelineState(projectId, async (dbRun) => {
@@ -318,16 +218,16 @@ class PipelineEngine {
 			stages[stageIndex].status = "completed";
 			return { stagesJson: JSON.stringify(stages) };
 		});
-		invalidateCache(projectId);
+		this.stateManager.invalidateCache(projectId);
 
 		const state = runToState(run);
-		_cache.set(projectId, state);
+		this.stateManager.setCacheEntry(projectId, state);
 
 		const stage = state.stages[stageIndex];
 		if (!stage) return;
 
 		// Phase tamamlanınca branch'i main'e merge et — pipeline'ı bloklamaz
-		this.mergePhaseBranchToMain(projectId, stageIndex, stage).catch((err) =>
+		this.branchManager.mergePhaseBranchToMain(projectId, stageIndex, stage).catch((err) =>
 			log.warn(`[pipeline-engine] Phase branch merge edilemedi (stage ${stageIndex}):` + " " + String(err)),
 		);
 
@@ -353,65 +253,14 @@ class PipelineEngine {
 		}
 	}
 
-	/**
-	 * Tamamlanan phase branch'ini main'e merge eder.
-	 * Commit'lenecek değişiklik varsa önce commit atar.
-	 * Conflict durumunda uyarı log'u bırakır ama pipeline devam eder.
-	 */
-	private async mergePhaseBranchToMain(projectId: string, stageIndex: number, stage: PipelineStage): Promise<void> {
-		const project = await getProject(projectId);
-		if (!project?.repoPath) return;
-
-		const roleSlug = stage.agents
-			.map((a) => a.role.toLowerCase().replace(/[^a-z0-9]+/g, "-"))
-			.join("-")
-			.slice(0, 30);
-		const branchName = `phase/${stageIndex}-${roleSlug || "stage"}`;
-
-		try {
-			// Aktif branch bu phase branch'i mi kontrol et
-			const currentBranch = await gitManager.getCurrentBranch(project.repoPath);
-			if (currentBranch !== branchName) return; // Farklı branch'teyiz, işlem yapma
-
-			// Uncommitted değişiklik varsa commit at
-			const status = await gitManager.getStatus(project.repoPath);
-			const hasChanges = status.modified.length > 0 || status.untracked.length > 0 || status.staged.length > 0;
-
-			if (hasChanges) {
-				await gitManager.commit(project.repoPath, `feat: phase ${stageIndex} tamamlandı (${roleSlug || "stage"})`);
-			}
-
-			// main branch'e merge et
-			const result = await gitManager.mergeBranch(project.repoPath, branchName, "main");
-
-			if (result.success) {
-				eventBus.emit({
-					projectId,
-					type: "pipeline:branch_merged",
-					payload: { branch: branchName, target: "main", stageIndex },
-				});
-			} else {
-				// Conflict varsa main'e geri dön
-				log.warn(
-					`[pipeline-engine] Merge conflict tespit edildi: ${branchName} → main` + " " + String(result.conflicts),
-				);
-				await gitManager
-					.checkout(project.repoPath, "main")
-					.catch((err) => log.warn("[pipeline-engine] Non-blocking operation failed:", err?.message ?? err));
-			}
-		} catch (err) {
-			log.warn(`[pipeline-engine] Branch merge atlandı: ${branchName}` + " " + String(err));
-		}
-	}
-
 	private async markCompleted(projectId: string): Promise<void> {
 		const completedAt = now();
 		await mutatePipelineState(projectId, async () => ({
 			status: "completed" as PipelineStatus,
 			completedAt,
 		}));
-		invalidateCache(projectId);
-		const state = await loadState(projectId);
+		this.stateManager.invalidateCache(projectId);
+		const state = await this.stateManager.loadState(projectId);
 		if (!state) return;
 
 		eventBus.emit({
@@ -428,7 +277,7 @@ class PipelineEngine {
 		});
 
 		// Auto PR: GitHub yapılandırılmışsa ve auto_pr aktifse PR oluştur — fire-and-forget
-		this.tryCreatePR(projectId).catch((err) => {
+		this.branchManager.tryCreatePR(projectId).catch((err) => {
 			log.warn("[pipeline-engine] Auto PR oluşturulamadı:" + " " + String(err));
 		});
 
@@ -445,46 +294,6 @@ class PipelineEngine {
 		});
 	}
 
-	/**
-	 * Pipeline tamamlandığında otomatik PR oluşturma.
-	 * GitHub token ve auto_pr ayarı kontrol edilir.
-	 */
-	private async tryCreatePR(projectId: string): Promise<void> {
-		const autoPR = await getProjectSetting(projectId, "github", "auto_pr");
-		if (autoPR !== "true") return;
-
-		const tokenEncrypted = await getProjectSetting(projectId, "github", "token");
-		if (!tokenEncrypted) return;
-
-		const project = await getProject(projectId);
-		if (!project?.repoPath) return;
-
-		const repoInfo = GitHubIntegration.getRepoInfo(project.repoPath);
-		if (!repoInfo) return;
-
-		const token = isEncrypted(tokenEncrypted) ? decrypt(tokenEncrypted) : tokenEncrypted;
-		const currentBranch = await gitManager.getCurrentBranch(project.repoPath);
-		if (!currentBranch || currentBranch === "main" || currentBranch === "master") return;
-
-		const gh = new GitHubIntegration(token);
-		const pr = await gh.createPR({
-			owner: repoInfo.owner,
-			repo: repoInfo.repo,
-			head: currentBranch,
-			base: "main",
-			title: `[Oscorpex] ${project.name} — Pipeline Completed`,
-			body: `Automated PR from Oscorpex pipeline.\n\nProject: ${project.name}\nBranch: ${currentBranch}`,
-		});
-
-		log.info(`[pipeline-engine] PR oluşturuldu: ${pr.url}`);
-
-		eventBus.emit({
-			projectId,
-			type: "git:pr-created" as any,
-			payload: { prNumber: pr.number, prUrl: pr.url, branch: currentBranch },
-		});
-	}
-
 	private async markFailed(projectId: string, reason: string): Promise<void> {
 		const completedAt = now();
 		await mutatePipelineState(projectId, async (dbRun) => {
@@ -497,8 +306,8 @@ class PipelineEngine {
 				completedAt,
 			};
 		});
-		invalidateCache(projectId);
-		const state = await loadState(projectId);
+		this.stateManager.invalidateCache(projectId);
+		const state = await this.stateManager.loadState(projectId);
 		if (!state) return;
 
 		eventBus.emit({
@@ -523,7 +332,7 @@ class PipelineEngine {
 	async advanceStage(projectId: string): Promise<PipelineState> {
 		// Always read from DB for correctness (cache is just performance)
 		// Use withTransaction + SELECT FOR UPDATE to prevent concurrent advanceStage race conditions
-		const state = await loadState(projectId);
+		const state = await this.stateManager.loadState(projectId);
 		if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
 
 		if (state.status === "paused" || state.status === "completed" || state.status === "failed") {
@@ -531,20 +340,14 @@ class PipelineEngine {
 		}
 
 		// Acquire row-level lock to prevent concurrent advanceStage from double-advancing
-		const lockedRun = await queryOne(
-			`SELECT id FROM pipeline_runs WHERE project_id = $1 AND status = 'running' FOR UPDATE SKIP LOCKED`,
-			[projectId],
-		);
+		const lockedRun = await this.stateManager.acquireAdvanceLock(projectId);
 		if (!lockedRun) {
 			log.info(`[pipeline-engine] advanceStage skipped — could not acquire lock (project=${projectId})`);
 			return state;
 		}
 
 		// Block advance if there's a pending replan awaiting approval
-		const pendingReplan = await queryOne(
-			`SELECT id FROM replan_events WHERE project_id = $1 AND status = 'pending' LIMIT 1`,
-			[projectId],
-		);
+		const pendingReplan = await this.stateManager.getPendingReplan(projectId);
 		if (pendingReplan) {
 			log.info(`[pipeline-engine] advanceStage blocked — pending replan ${pendingReplan.id} awaiting approval`);
 			eventBus.emit({
@@ -559,14 +362,14 @@ class PipelineEngine {
 		const currentStage = state.stages[currentIndex];
 		if (!currentStage) return state;
 
-		const freshTaskIds = await this.resolveStageTaskIds(projectId, currentIndex, state);
+		const freshTaskIds = await this.stateManager.resolveStageTaskIds(projectId, currentIndex, state);
 
 		if (freshTaskIds.length === 0) {
 			await this.completeStage(projectId, currentIndex);
-			return (await getState(projectId))!;
+			return (await this.stateManager.getState(projectId))!;
 		}
 
-		const statuses = await Promise.all(freshTaskIds.map((id) => this.getTaskStatus(id)));
+		const statuses = await Promise.all(freshTaskIds.map((id) => this.stateManager.getTaskStatus(id)));
 
 		const anyFailed = statuses.some((s) => s === "failed");
 		const allDone = statuses.every((s) => s === "done");
@@ -577,50 +380,15 @@ class PipelineEngine {
 			await this.completeStage(projectId, currentIndex);
 		}
 
-		return (await getState(projectId))!;
-	}
-
-	private async resolveStageTaskIds(projectId: string, stageIndex: number, state: PipelineState): Promise<string[]> {
-		const stage = state.stages[stageIndex];
-		if (!stage) return [];
-
-		// IMPORTANT:
-		// In DAG mode, a stage can include tasks spanning multiple phaseIds.
-		// If we prioritize stage.phaseId here, we may only inspect a subset and
-		// complete the stage prematurely while queued tasks still exist.
-		// Therefore, prefer explicit stage task IDs whenever available.
-		if (stage.tasks.length > 0) {
-			return stage.tasks.map((t) => t.id);
-		}
-
-		if (stage.phaseId) {
-			const latestTasks = await listTasks(stage.phaseId);
-			stage.tasks = latestTasks;
-			return latestTasks.map((t) => t.id);
-		}
-
-		const plan = await getLatestPlan(projectId);
-		if (!plan) return [];
-
-		const phases = (await listPhases(plan.id)).sort((a, b) => a.order - b.order);
-		const matchedPhase = phases[stageIndex];
-		if (!matchedPhase) return [];
-
-		stage.tasks = matchedPhase.tasks ?? [];
-		return stage.tasks.map((t) => t.id);
-	}
-
-	private async getTaskStatus(taskId: string): Promise<string> {
-		const task = await getTask(taskId);
-		return task?.status ?? "queued";
+		return (await this.stateManager.getState(projectId))!;
 	}
 
 	// -------------------------------------------------------------------------
-	// Durum sorgulama
+	// Durum sorgulama — delegates to stateManager
 	// -------------------------------------------------------------------------
 
 	async getPipelineState(projectId: string): Promise<PipelineState | null> {
-		return getState(projectId);
+		return this.stateManager.getPipelineState(projectId);
 	}
 
 	async getEnrichedPipelineStatus(projectId: string): Promise<{
@@ -629,38 +397,7 @@ class PipelineEngine {
 		derivedStatus: PipelineStatus;
 		warning?: string;
 	}> {
-		let pipelineState = await this.getPipelineState(projectId);
-
-		if (pipelineState?.status === "running") {
-			try {
-				await this.advanceStage(projectId);
-				pipelineState = await this.getPipelineState(projectId);
-			} catch {
-				// status sorgusu sırasında hata olursa sessizce devam et
-			}
-		}
-
-		const taskProgress = await taskEngine.getProgress(projectId);
-		const overall = taskProgress.overall;
-
-		let derivedStatus: PipelineStatus = pipelineState?.status ?? "idle";
-
-		if (derivedStatus === "idle" || derivedStatus === "failed") {
-			if (overall.running > 0) {
-				derivedStatus = "running";
-			} else if (overall.done > 0 && overall.running === 0 && overall.queued === 0 && overall.failed === 0) {
-				derivedStatus = "completed";
-			} else if (overall.failed > 0 && overall.running === 0 && overall.queued === 0) {
-				derivedStatus = "failed";
-			}
-		}
-
-		let warning: string | undefined;
-		if (pipelineState?.status === "failed" && overall.running > 0) {
-			warning = 'Pipeline kaydı "failed" gösterse de task\'lar hâlâ çalışıyor. Durum task verilerinden türetildi.';
-		}
-
-		return { pipelineState, taskProgress, derivedStatus, warning };
+		return this.stateManager.getEnrichedPipelineStatus(projectId, (pid) => this.advanceStage(pid));
 	}
 
 	// -------------------------------------------------------------------------
@@ -675,8 +412,8 @@ class PipelineEngine {
 			}
 			return { status: "paused" as PipelineStatus };
 		});
-		invalidateCache(projectId);
-		_cache.set(projectId, runToState(run));
+		this.stateManager.invalidateCache(projectId);
+		this.stateManager.setCacheEntry(projectId, runToState(run));
 
 		// Actually stop running agent processes and abort in-flight tasks
 		const cancelledCount = await executionEngine.cancelRunningTasks(projectId);
@@ -697,8 +434,8 @@ class PipelineEngine {
 			}
 			return { status: "running" as PipelineStatus };
 		});
-		invalidateCache(projectId);
-		_cache.set(projectId, runToState(run));
+		this.stateManager.invalidateCache(projectId);
+		this.stateManager.setCacheEntry(projectId, runToState(run));
 
 		eventBus.emit({
 			projectId,
@@ -733,14 +470,14 @@ class PipelineEngine {
 				completedAt: undefined,
 			};
 		});
-		invalidateCache(projectId);
+		this.stateManager.invalidateCache(projectId);
 		const state = runToState(run);
-		_cache.set(projectId, state);
+		this.stateManager.setCacheEntry(projectId, state);
 
 		// Failed task'ları queued'e çevir
-		const taskIds = await this.resolveStageTaskIds(projectId, state.currentStage, state);
+		const taskIds = await this.stateManager.resolveStageTaskIds(projectId, state.currentStage, state);
 		for (const taskId of taskIds) {
-			const status = await this.getTaskStatus(taskId);
+			const status = await this.stateManager.getTaskStatus(taskId);
 			if (status === "failed") {
 				await updateTask(taskId, { status: "queued", error: undefined, retryCount: 0 });
 			}
@@ -755,43 +492,9 @@ class PipelineEngine {
 		await this.advanceStage(projectId);
 	}
 
-	// v3.3: Refresh pipeline — rebuild DAG waves without resetting completed stages
+	// v3.3: Refresh pipeline — delegates to stateManager
 	async refreshPipeline(projectId: string): Promise<void> {
-		const agents = await listProjectAgents(projectId);
-		const deps = await listAgentDependencies(projectId);
-		const newWaves = buildDAGWaves(agents, deps);
-
-		// DB-first: lock + validate + mutate atomically
-		await mutatePipelineState(projectId, async (dbRun) => {
-			if (dbRun.status !== "running") {
-				throw new Error(`Pipeline refresh edilemiyor — mevcut durum: ${dbRun.status}`);
-			}
-
-			const stages = JSON.parse(dbRun.stagesJson) as PipelineStage[];
-			const completedStageCount = stages.filter((s) => s.status === "completed").length;
-
-			for (let i = completedStageCount; i < newWaves.length; i++) {
-				const waveAgentIds = newWaves[i];
-				const waveAgents = agents.filter((a) => waveAgentIds.includes(a.id));
-
-				if (i < stages.length) {
-					stages[i].agents = waveAgents;
-				} else {
-					stages.push({
-						order: i,
-						agents: waveAgents,
-						tasks: [],
-						status: "pending",
-					});
-				}
-			}
-
-			log.info(
-				`[pipeline-engine] Pipeline refresh — ${newWaves.length} stage (${completedStageCount} completed korundu)`,
-			);
-			return { stagesJson: JSON.stringify(stages) };
-		});
-		invalidateCache(projectId);
+		return this.stateManager.refreshPipeline(projectId);
 	}
 
 	// -------------------------------------------------------------------------
@@ -936,6 +639,14 @@ function toKernelTasks(phases: Phase[], stagePlan: StagePlan): Task[] {
 	const allKernelTasks = phases.flatMap((ph) => ph.tasks ?? []);
 	const stageTaskIds = new Set(stagePlan.tasks.map((t) => t.id));
 	return allKernelTasks.filter((t) => stageTaskIds.has(t.id));
+}
+
+// ---------------------------------------------------------------------------
+// Helper functions (module-level)
+// ---------------------------------------------------------------------------
+
+function now(): string {
+	return new Date().toISOString();
 }
 
 // ---------------------------------------------------------------------------
