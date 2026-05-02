@@ -27,8 +27,7 @@ import {
 	replanUnfinishedTasks as incReplan,
 } from "./incremental-planner.js";
 import { createLogger } from "./logger.js";
-// Direct pg access: tightly coupled to module logic — JSON array UPDATEs and count queries with no repo equivalent
-import { execute, queryOne } from "./pg.js";
+import { queryOne, updatePhaseDependencies, updateTaskDependencies } from "./db.js";
 import { canonicalizeAgentRole, roleMatches } from "./roles.js";
 import type { TaskComplexity } from "./types.js";
 const log = createLogger("pm-agent");
@@ -425,7 +424,7 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 			.map((order: number) => orderToPhaseId.get(order))
 			.filter((id: string | undefined): id is string => !!id);
 		if (depIds.length > 0) {
-			await execute("UPDATE phases SET depends_on = $1 WHERE id = $2", [JSON.stringify(depIds), created.id]);
+			await updatePhaseDependencies(created.id, depIds);
 		}
 	}
 
@@ -521,7 +520,7 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 				.map((title: string) => titleToId.get(title))
 				.filter((id: string | undefined): id is string => !!id);
 			if (depIds.length > 0) {
-				await execute("UPDATE tasks SET depends_on = $1 WHERE id = $2", [JSON.stringify(depIds), taskId]);
+				await updateTaskDependencies(taskId, depIds);
 			}
 		}
 	}

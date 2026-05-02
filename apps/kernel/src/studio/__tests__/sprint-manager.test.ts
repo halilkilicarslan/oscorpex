@@ -1,13 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../pg.js", () => ({
+vi.mock("../db.js", () => ({
 	execute: vi.fn(),
 	getPool: vi.fn(),
 	query: vi.fn(),
 	queryOne: vi.fn(),
-}));
-
-vi.mock("../db.js", () => ({
 	now: () => "2026-04-15T00:00:00.000Z",
 	rowToSprint: (row: any) => ({
 		id: row.id,
@@ -21,7 +18,7 @@ vi.mock("../db.js", () => ({
 	}),
 }));
 
-import { execute, query, queryOne } from "../pg.js";
+import { execute, query, queryOne } from "../db.js";
 import {
 	calculateBurndown,
 	calculateSprintVelocity,

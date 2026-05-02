@@ -5,7 +5,7 @@
 
 import { searchContext } from "./context-store.js";
 import { createLogger } from "./logger.js";
-import { execute, query, queryOne } from "./pg.js";
+import { execute, query, queryOne } from "./db.js";
 import { searchSimilar } from "./vector-store.js";
 const log = createLogger("context-builder");
 

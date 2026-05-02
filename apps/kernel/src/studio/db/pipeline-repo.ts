@@ -235,3 +235,34 @@ export async function listAgentRuns(projectId: string, agentId: string, limit = 
 	);
 	return rows.map(rowToAgentRun);
 }
+
+// ---------------------------------------------------------------------------
+// Cross-table Aggregates (extracted from consumer modules — repo pattern enforcement)
+// ---------------------------------------------------------------------------
+
+/**
+ * Consolidated query: fetch all running projects with their active phase IDs in one shot.
+ * Replaces N+1 pattern of listProjects → getPipelineRun → getLatestPlan → listPhases.
+ * Used by execution-engine dispatch watchdog.
+ */
+export async function getRunningProjectPhases(): Promise<Array<{ projectId: string; phaseId: string }>> {
+	const rows = await query<{ project_id: string; phase_id: string }>(
+		`SELECT p.id AS project_id, ph.id AS phase_id
+		 FROM projects p
+		 JOIN pipeline_runs pr ON pr.project_id = p.id AND pr.status = 'running'
+		 JOIN project_plans pp ON pp.project_id = p.id AND pp.status = 'approved'
+		 JOIN phases ph ON ph.plan_id = pp.id AND ph.status IN ('running', 'queued')
+		 WHERE p.status = 'running'
+		 ORDER BY p.id, ph."order"`,
+		[],
+	);
+	return rows.map((r) => ({ projectId: r.project_id, phaseId: r.phase_id }));
+}
+
+/**
+ * Update phase dependency edges (depends_on JSON array).
+ * Used by pm-agent when wiring phase dependency edges after plan creation.
+ */
+export async function updatePhaseDependencies(phaseId: string, dependsOn: string[]): Promise<void> {
+	await execute("UPDATE phases SET depends_on = $1 WHERE id = $2", [JSON.stringify(dependsOn), phaseId]);
+}

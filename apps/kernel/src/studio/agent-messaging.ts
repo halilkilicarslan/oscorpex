@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { listProjectAgents } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
-import { execute, query, queryOne } from "./pg.js";
+import { execute, query, queryOne } from "./db.js";
 import type { AgentMessage, MessageStatus, MessageType } from "./types.js";
 const log = createLogger("agent-messaging");
 

@@ -55,8 +55,7 @@ import { runLintFix } from "./lint-runner.js";
 import { createLogger } from "./logger.js";
 import { resolveModel } from "./model-router.js";
 // test-gate imported via execution-gates.ts
-// Direct pg access: tightly coupled to module logic — raw COUNT aggregates with no repo equivalent
-import { query as pgQuery, queryOne as pgQueryOne } from "./pg.js";
+import { getFailedTaskCountInPhase, getRunningProjectPhases as dbGetRunningProjectPhases } from "./db.js";
 import { markExecutionStarted } from "./preflight-warmup.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { buildTaskPrompt, defaultSystemPrompt } from "./prompt-builder.js";
@@ -270,17 +269,7 @@ class ExecutionEngine {
 	 * Replaces N+1 pattern of listProjects → getPipelineRun → getLatestPlan → listPhases.
 	 */
 	private async getRunningProjectPhases(): Promise<Array<{ projectId: string; phaseId: string }>> {
-		const rows = await pgQuery<{ project_id: string; phase_id: string }>(
-			`SELECT p.id AS project_id, ph.id AS phase_id
-			 FROM projects p
-			 JOIN pipeline_runs pr ON pr.project_id = p.id AND pr.status = 'running'
-			 JOIN project_plans pp ON pp.project_id = p.id AND pp.status = 'approved'
-			 JOIN phases ph ON ph.plan_id = pp.id AND ph.status IN ('running', 'queued')
-			 WHERE p.status = 'running'
-			 ORDER BY p.id, ph."order"`,
-			[],
-		);
-		return rows.map((r) => ({ projectId: r.project_id, phaseId: r.phase_id }));
+		return dbGetRunningProjectPhases();
 	}
 
 	private async runDispatchWatchdog(): Promise<void> {
@@ -1426,11 +1415,7 @@ class ExecutionEngine {
 		{
 			const currentTask = await getTask(task.id);
 			if (currentTask?.status === "failed") {
-				const failCountRow = await pgQueryOne<{ cnt: number }>(
-					`SELECT COUNT(*) AS cnt FROM tasks WHERE phase_id = $1 AND status = 'failed'`,
-					[task.phaseId],
-				);
-				const phaseFailures = Number(failCountRow?.cnt ?? 0);
+				const phaseFailures = await getFailedTaskCountInPhase(task.phaseId);
 				if (phaseFailures >= 3) {
 					evaluateReplan({ projectId, trigger: "repeated_review_failure", phaseId: task.phaseId }).catch((err) =>
 						log.warn("[execution-engine] Replan trigger failed (non-blocking):" + " " + String(err)),

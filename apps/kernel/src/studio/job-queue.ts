@@ -24,7 +24,7 @@ import {
 	updateJobStatus,
 } from "./db/job-repo.js";
 import { createLogger } from "./logger.js";
-import { execute } from "./pg.js";
+import { execute } from "./db.js";
 const log = createLogger("job-queue");
 
 export type { Job, JobStatus };

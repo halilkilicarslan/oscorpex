@@ -7,7 +7,7 @@ import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
 import { getCooldownConfig } from "./performance-config.js";
-import { execute as pgExec, query } from "./pg.js";
+import { execute as pgExec, query } from "./db.js";
 import { providerRuntimeCache } from "./provider-runtime-cache.js";
 import type { AgentCliTool } from "./types.js";
 const log = createLogger("provider-state");

@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
-import { execute, query, queryOne } from "./pg.js";
+import { execute, query, queryOne } from "./db.js";
 import type { AgentProcessRecord, AgentProcessStatus, AgentRun } from "./types.js";
 const log = createLogger("agent-runtime");
 

@@ -4,7 +4,7 @@
 
 import { createHash } from "node:crypto";
 import type { ReplaySnapshot, ReplayStore } from "@oscorpex/core";
-import { execute, query, queryOne } from "./pg.js";
+import { execute, query, queryOne } from "./db.js";
 
 class DbReplayStore implements ReplayStore {
 	private hashSnapshot(snapshot: ReplaySnapshot): string {

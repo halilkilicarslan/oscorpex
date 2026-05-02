@@ -464,3 +464,40 @@ export async function appendTaskLogs(taskId: string, logs: string[]): Promise<vo
 		[JSON.stringify(logs), taskId],
 	);
 }
+
+// ---------------------------------------------------------------------------
+// Aggregate Queries (extracted from consumer modules — repo pattern enforcement)
+// ---------------------------------------------------------------------------
+
+/** Count failed tasks in a phase. Used by execution-engine replan trigger. */
+export async function getFailedTaskCountInPhase(phaseId: string): Promise<number> {
+	const row = await queryOne<{ cnt: number }>(
+		`SELECT COUNT(*) AS cnt FROM tasks WHERE phase_id = $1 AND status = 'failed'`,
+		[phaseId],
+	);
+	return Number(row?.cnt ?? 0);
+}
+
+/**
+ * Resolve the owning project_id for a given task through the phase→plan→project chain.
+ * Used by task-engine for project lookup with caching.
+ */
+export async function getProjectIdForTaskViaJoin(taskId: string): Promise<string | undefined> {
+	const row = await queryOne<{ project_id: string }>(
+		`SELECT COALESCE(t.project_id, pp.project_id) AS project_id
+		 FROM tasks t
+		 JOIN phases p ON t.phase_id = p.id
+		 JOIN project_plans pp ON p.plan_id = pp.id
+		 WHERE t.id = $1`,
+		[taskId],
+	);
+	return row?.project_id;
+}
+
+/**
+ * Batch-update depends_on JSON for a task.
+ * Used by pm-agent when wiring task dependency edges after plan creation.
+ */
+export async function updateTaskDependencies(taskId: string, dependsOn: string[]): Promise<void> {
+	await execute("UPDATE tasks SET depends_on = $1 WHERE id = $2", [JSON.stringify(dependsOn), taskId]);
+}

@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { openai } from "@ai-sdk/openai";
 import { embed, embedMany } from "ai";
 import { createLogger } from "./logger.js";
-import { execute, getPool, query, queryOne } from "./pg.js";
+import { execute, getPool, query, queryOne } from "./db.js";
 const log = createLogger("vector-store");
 
 // ---------------------------------------------------------------------------

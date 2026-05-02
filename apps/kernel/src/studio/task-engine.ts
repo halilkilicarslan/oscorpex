@@ -35,8 +35,7 @@ import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
 import { recordAgentStep } from "./memory-bridge.js";
 import { updateWorkingMemory } from "./memory-manager.js";
-// Direct pg access: tightly coupled to module logic — COALESCE JOIN with no repo equivalent
-import { queryOne } from "./pg.js";
+import { getProjectIdForTaskViaJoin } from "./db.js";
 import { evaluatePolicies } from "./policy-engine.js";
 import { syncDeclaredDependencies } from "./repo-dependency-sync.js";
 import type { Phase, ProjectAgent, Task, TaskOutput } from "./types.js";
@@ -1274,15 +1273,7 @@ class TaskEngine {
 		if (cached !== undefined) return cached;
 
 		// DB lookup: try direct column first (COALESCE), fall back to JOIN for un-backfilled rows.
-		const row = await queryOne<{ project_id: string }>(
-			`SELECT COALESCE(t.project_id, pp.project_id) AS project_id
-			 FROM tasks t
-			 JOIN phases p ON t.phase_id = p.id
-			 JOIN project_plans pp ON p.plan_id = pp.id
-			 WHERE t.id = $1`,
-			[task.id],
-		);
-		const projectId = row?.project_id ?? "";
+		const projectId = (await getProjectIdForTaskViaJoin(task.id)) ?? "";
 
 		// Evict the oldest entry when the cache is full (Map preserves insertion order).
 		if (this._projectIdCache.size >= PROJECT_ID_CACHE_MAX) {

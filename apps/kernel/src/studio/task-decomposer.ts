@@ -13,7 +13,7 @@ import { z } from "zod";
 import { getAIModelWithFallback } from "./ai-provider-factory.js";
 import { createTask, getProject, listProjectAgents } from "./db.js";
 import { createLogger } from "./logger.js";
-import { execute } from "./pg.js";
+import { execute } from "./db.js";
 import type { Project, Task, TaskComplexity } from "./types.js";
 const log = createLogger("task-decomposer");
 

@@ -10,7 +10,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "./logger.js";
-import { execute, query, queryOne } from "./pg.js";
+import { execute, query, queryOne } from "./db.js";
 const log = createLogger("cli-usage");
 
 export type CLIProviderId = "claude" | "codex" | "gemini" | "cursor";

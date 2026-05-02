@@ -11,9 +11,6 @@ import { getContextMetrics, getPerTaskContextMetrics } from "../context-analytic
 
 vi.mock("../db.js", () => ({
 	listContextSources: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock("../pg.js", () => ({
 	query: vi.fn().mockResolvedValue([]),
 	queryOne: vi.fn().mockResolvedValue({ total_bytes: "0", cnt: "0" }),
 }));
@@ -34,10 +31,8 @@ describe("getContextMetrics", () => {
 	beforeEach(async () => {
 		const db = await import("../db.js");
 		listContextSources = db.listContextSources as ReturnType<typeof vi.fn>;
-
-		const pg = await import("../pg.js");
-		queryFn = pg.query as ReturnType<typeof vi.fn>;
-		queryOneFn = pg.queryOne as ReturnType<typeof vi.fn>;
+		queryFn = db.query as ReturnType<typeof vi.fn>;
+		queryOneFn = db.queryOne as ReturnType<typeof vi.fn>;
 
 		// Reset defaults
 		listContextSources.mockResolvedValue([]);
