@@ -37,12 +37,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	});
 	const [isLoading, setIsLoading] = useState(true);
 
+	const [authDisabled, setAuthDisabled] = useState(false);
+
 	// On mount: validate stored token or detect auth-disabled mode
 	useEffect(() => {
 		if (token) {
 			fetchCurrentUser(token)
 				.then((data) => {
-					if ((data as any).authDisabled) return;
+					if ((data as any).authDisabled) {
+						setAuthDisabled(true);
+						return;
+					}
 					setUser(data);
 				})
 				.catch((err: unknown) => {
@@ -59,8 +64,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				})
 				.finally(() => setIsLoading(false));
 		} else {
-			// No token: remain logged out and require explicit login.
-			setIsLoading(false);
+			// No token: check if auth is disabled on the server
+			fetchCurrentUser("")
+				.then((data) => {
+					if ((data as any).authDisabled) {
+						setAuthDisabled(true);
+					}
+				})
+				.catch(() => {
+					// Auth endpoint failed — assume auth is enabled, stay logged out
+				})
+				.finally(() => setIsLoading(false));
 		}
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
@@ -106,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			value={{
 				user,
 				token,
-				isAuthenticated: !!token,
+				isAuthenticated: authDisabled || !!token,
 				isLoading,
 				login: loginFn,
 				register: registerFn,
