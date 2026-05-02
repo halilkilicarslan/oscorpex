@@ -49,3 +49,5 @@ export {
 	applyManualOverride,
 	triggerRollback,
 } from './releases.js';
+// v8.1: Task Session Inspector
+export * from './inspector.js';

@@ -36,6 +36,7 @@ import { collaborationRoutes } from "./collaboration-routes.js";
 import { costRoutes } from "./cost-routes.js";
 import { gitFileRoutes } from "./git-file-routes.js";
 import { graphRoutes } from "./graph-routes.js";
+import { inspectorRoutes } from "./inspector-routes.js";
 import { integrationRoutes } from "./integration-routes.js";
 import { jobRoutes } from "./job-routes.js";
 import { lifecycleRoutes } from "./lifecycle-routes.js";
@@ -139,7 +140,8 @@ studio.route("/", gitFileRoutes);
 studio.route("/plugins", pluginRoutes);
 studio.route("/", integrationRoutes);
 
-// Observability — analytics, telemetry, cost, replay, notifications
+// Observability — analytics, telemetry, cost, replay, notifications, inspector
+studio.route("/", inspectorRoutes);
 studio.route("/", analyticsRoutes);
 studio.route("/cost", costRoutes);
 studio.route("/notifications", notificationRoutes);

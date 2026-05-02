@@ -64,5 +64,8 @@ export * from "./graph-mutation-repo.js";
 // v7.0 Section 14.3: Capability Grants
 export * from "./capability-grant-repo.js";
 
+// v8.1: Task Session Inspector
+export * from "./inspector-repo.js";
+
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";

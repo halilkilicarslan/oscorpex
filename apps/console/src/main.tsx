@@ -32,6 +32,7 @@ const ControlPlanePage = lazy(() => import('./pages/studio/ControlPlanePage'));
 const QualityGatesDashboardPage = lazy(() => import('./pages/studio/QualityGatesDashboardPage'));
 const ApprovalQueuePage = lazy(() => import('./pages/studio/ApprovalQueuePage'));
 const ReleaseDecisionPanelPage = lazy(() => import('./pages/studio/ReleaseDecisionPanelPage'));
+const TaskSessionInspectorPage = lazy(() => import('./pages/studio/TaskSessionInspectorPage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 
@@ -156,6 +157,12 @@ createRoot(document.getElementById('root')!).render(
                   path="/studio/quality-gates/:goalId"
                   element={
                     <QualityGatesDashboardPage />
+                  }
+                />
+                <Route
+                  path="/studio/projects/:projectId/tasks/:taskId/inspector"
+                  element={
+                    <TaskSessionInspectorPage />
                   }
                 />
                 <Route
