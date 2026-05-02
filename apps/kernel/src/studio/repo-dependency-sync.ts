@@ -34,10 +34,7 @@ function readMergedDeps(repoRoot: string): string[] | null {
 			dependencies?: Record<string, string>;
 			devDependencies?: Record<string, string>;
 		};
-		const names = [
-			...Object.keys(pkg.dependencies ?? {}),
-			...Object.keys(pkg.devDependencies ?? {}),
-		];
+		const names = [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.devDependencies ?? {})];
 		return [...new Set(names)];
 	} catch {
 		return null;

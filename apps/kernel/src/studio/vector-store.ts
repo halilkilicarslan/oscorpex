@@ -7,8 +7,8 @@
 import { randomUUID } from "node:crypto";
 import { openai } from "@ai-sdk/openai";
 import { embed, embedMany } from "ai";
-import { execute, getPool, query, queryOne } from "./pg.js";
 import { createLogger } from "./logger.js";
+import { execute, getPool, query, queryOne } from "./pg.js";
 const log = createLogger("vector-store");
 
 // ---------------------------------------------------------------------------
@@ -234,9 +234,7 @@ export async function searchSimilar(
 		metadata: row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : null,
 	}));
 
-	log.info(
-		`[VectorStore] Search complete: ${rows.length} results, top score=${results[0]?.score.toFixed(4) ?? "n/a"}`,
-	);
+	log.info(`[VectorStore] Search complete: ${rows.length} results, top score=${results[0]?.score.toFixed(4) ?? "n/a"}`);
 
 	return results;
 }

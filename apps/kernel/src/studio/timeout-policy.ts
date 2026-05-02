@@ -3,10 +3,10 @@
 // Provider-aware + complexity-aware timeout calculation with config surface.
 // ---------------------------------------------------------------------------
 
-import type { AgentCliTool } from "./types.js";
 import { getProjectSetting } from "./db.js";
 import { createLogger } from "./logger.js";
 import { getTimeoutPolicyConfig } from "./performance-config.js";
+import type { AgentCliTool } from "./types.js";
 const log = createLogger("timeout-policy");
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,9 @@ export async function resolveTaskTimeoutMs(
 	const effectiveMs = Math.round(baseMs * profile.multiplier * safeProjectMultiplier);
 	const clampedMs = Math.max(profile.minMs, Math.min(profile.maxMs, effectiveMs));
 
-	log.info(`[timeout-policy] ${provider} / ${complexity ?? "S"} → ${Math.round(clampedMs / 1000)}s (base=${baseMs}ms, provider×=${profile.multiplier}, project×=${safeProjectMultiplier})`);
+	log.info(
+		`[timeout-policy] ${provider} / ${complexity ?? "S"} → ${Math.round(clampedMs / 1000)}s (base=${baseMs}ms, provider×=${profile.multiplier}, project×=${safeProjectMultiplier})`,
+	);
 
 	return clampedMs;
 }

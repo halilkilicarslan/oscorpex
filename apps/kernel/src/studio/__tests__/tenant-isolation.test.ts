@@ -22,8 +22,8 @@ vi.mock("../db.js", () => ({
 	insertEvent: vi.fn(),
 }));
 
+import { queryOne as dbQueryOne, insertEvent } from "../db.js";
 import { execute, setTenantContext } from "../pg.js";
-import { insertEvent, queryOne as dbQueryOne } from "../db.js";
 
 const mockExecute = vi.mocked(execute);
 const mockSetTenantContext = vi.mocked(setTenantContext);
@@ -34,18 +34,20 @@ const mockDbQueryOne = vi.mocked(dbQueryOne);
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
+import { signJwt, verifyJwt } from "../auth/jwt.js";
 import { hasPermission, requirePermission } from "../auth/rbac.js";
 import { logTenantActivity, verifyProjectAccess } from "../auth/tenant-context.js";
-import { signJwt, verifyJwt } from "../auth/jwt.js";
 
 // ---------------------------------------------------------------------------
 // Helper: minimal Hono Context mock
 // ---------------------------------------------------------------------------
-function makeMockContext(overrides: {
-	authType?: string;
-	userRole?: string;
-	apiKeyScopes?: string[];
-} = {}) {
+function makeMockContext(
+	overrides: {
+		authType?: string;
+		userRole?: string;
+		apiKeyScopes?: string[];
+	} = {},
+) {
 	const store: Record<string, unknown> = {
 		authType: overrides.authType ?? "api-key-db",
 		userRole: overrides.userRole ?? "developer",
@@ -272,9 +274,7 @@ describe("logTenantActivity", () => {
 		mockInsertEvent.mockRejectedValue(new Error("DB connection failed"));
 
 		// Hata fırlatmamalı
-		await expect(
-			logTenantActivity("tenant-1", "user-1", "register"),
-		).resolves.toBeUndefined();
+		await expect(logTenantActivity("tenant-1", "user-1", "register")).resolves.toBeUndefined();
 	});
 
 	it("details olmadan da çalışır", async () => {
@@ -460,9 +460,15 @@ describe("WS manager — tenant isolation", () => {
 		await new Promise((r) => setTimeout(r, 50));
 
 		expect(record.subscriptions.has("p-1")).toBe(false);
-		const sent = ws.send.mock.calls.map((c: any) => {
-			try { return JSON.parse(c[0]); } catch { return null; }
-		}).filter(Boolean);
+		const sent = ws.send.mock.calls
+			.map((c: any) => {
+				try {
+					return JSON.parse(c[0]);
+				} catch {
+					return null;
+				}
+			})
+			.filter(Boolean);
 		const errorMsg = sent.find((m: any) => m.type === "error" && m.payload?.message === "Tenant validation failed");
 		expect(errorMsg).toBeDefined();
 	});
@@ -478,10 +484,18 @@ describe("WS manager — tenant isolation", () => {
 		await new Promise((r) => setTimeout(r, 50));
 
 		expect(record.subscriptions.has("p-1")).toBe(false);
-		const sent = ws.send.mock.calls.map((c: any) => {
-			try { return JSON.parse(c[0]); } catch { return null; }
-		}).filter(Boolean);
-		const errorMsg = sent.find((m: any) => m.type === "error" && m.payload?.message === "Access denied: tenant mismatch");
+		const sent = ws.send.mock.calls
+			.map((c: any) => {
+				try {
+					return JSON.parse(c[0]);
+				} catch {
+					return null;
+				}
+			})
+			.filter(Boolean);
+		const errorMsg = sent.find(
+			(m: any) => m.type === "error" && m.payload?.message === "Access denied: tenant mismatch",
+		);
 		expect(errorMsg).toBeDefined();
 	});
 
@@ -496,9 +510,15 @@ describe("WS manager — tenant isolation", () => {
 		await new Promise((r) => setTimeout(r, 50));
 
 		expect(record.subscriptions.has("p-1")).toBe(true);
-		const sent = ws.send.mock.calls.map((c: any) => {
-			try { return JSON.parse(c[0]); } catch { return null; }
-		}).filter(Boolean);
+		const sent = ws.send.mock.calls
+			.map((c: any) => {
+				try {
+					return JSON.parse(c[0]);
+				} catch {
+					return null;
+				}
+			})
+			.filter(Boolean);
 		const okMsg = sent.find((m: any) => m.type === "subscribed" && m.projectId === "p-1");
 		expect(okMsg).toBeDefined();
 	});

@@ -5,8 +5,8 @@
 
 import { execFileSync } from "node:child_process";
 import { insertTaskDiffs } from "./db.js";
-import type { TaskOutput } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { TaskOutput } from "./types.js";
 const log = createLogger("diff-capture");
 
 // ---------------------------------------------------------------------------

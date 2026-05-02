@@ -10,16 +10,10 @@
 //   finishProviderTelemetry(record, result, err);
 // ---------------------------------------------------------------------------
 
-import type {
-	ProviderExecutionInput,
-	ProviderExecutionResult,
-} from "@oscorpex/core";
-import {
-	ProviderTelemetryCollector,
-	classifyProviderError,
-} from "@oscorpex/provider-sdk";
-import { createLogger } from "./logger.js";
+import type { ProviderExecutionInput, ProviderExecutionResult } from "@oscorpex/core";
+import { type ProviderTelemetryCollector, classifyProviderError } from "@oscorpex/provider-sdk";
 import { eventBus } from "./event-bus.js";
+import { createLogger } from "./logger.js";
 
 const log = createLogger("provider-telemetry");
 
@@ -93,10 +87,7 @@ export function recordProviderDegraded(
 	if (record.degradedMode) return;
 
 	collector.recordDegraded(record, message);
-	log.warn(
-		{ runId: record.runId, taskId: record.taskId, degradedMessage: message },
-		"Provider degraded mode recorded",
-	);
+	log.warn({ runId: record.runId, taskId: record.taskId, degradedMessage: message }, "Provider degraded mode recorded");
 	eventBus.emitTransient({
 		projectId: record.runId,
 		type: "provider:degraded",

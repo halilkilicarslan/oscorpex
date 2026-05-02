@@ -4,7 +4,7 @@
 // decisions consistently.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProviderRegistry } from "../kernel/provider-registry.js";
 
 describe("Provider Registry — policy consistency", () => {

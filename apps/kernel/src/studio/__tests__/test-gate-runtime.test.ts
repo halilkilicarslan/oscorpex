@@ -44,9 +44,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 describe("test gate runtime behavior", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		mockExistsSync.mockImplementation((path: string) =>
-			path.endsWith("vitest.config.ts"),
-		);
+		mockExistsSync.mockImplementation((path: string) => path.endsWith("vitest.config.ts"));
 	});
 
 	it("defers required test-authoring tasks on soft 0/0 failures", async () => {

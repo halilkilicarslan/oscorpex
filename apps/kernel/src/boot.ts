@@ -5,27 +5,27 @@
 // ---------------------------------------------------------------------------
 
 import "dotenv/config";
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
+import type { serve } from "@hono/node-server";
+import type { Hono } from "hono";
 import { createLogger } from "./studio/logger.js";
 
-import { dbPhase } from "./boot-phases/db-phase.js";
-import { providerStatePhase } from "./boot-phases/provider-state-phase.js";
-import { websocketPhase } from "./boot-phases/websocket-phase.js";
-import { webhookPhase } from "./boot-phases/webhook-phase.js";
+import { authConfigPhase } from "./boot-phases/auth-config-phase.js";
 import { containerPoolPhase } from "./boot-phases/container-pool-phase.js";
-import { recoveryPhase } from "./boot-phases/recovery-phase.js";
+import { dbPhase } from "./boot-phases/db-phase.js";
+import { httpPhase } from "./boot-phases/http-phase.js";
 import { pipelinePhase } from "./boot-phases/pipeline-phase.js";
 import { providerRegistryPhase } from "./boot-phases/provider-registry-phase.js";
+import { providerStatePhase } from "./boot-phases/provider-state-phase.js";
+import { recoveryPhase } from "./boot-phases/recovery-phase.js";
 import { replayPhase } from "./boot-phases/replay-phase.js";
-import { httpPhase } from "./boot-phases/http-phase.js";
-import { authConfigPhase } from "./boot-phases/auth-config-phase.js";
+import { webhookPhase } from "./boot-phases/webhook-phase.js";
+import { websocketPhase } from "./boot-phases/websocket-phase.js";
 import {
-	registerSeeders,
 	registerEventBridges,
-	registerWebhookBridge,
-	registerPluginBridge,
 	registerNotificationBridge,
+	registerPluginBridge,
+	registerSeeders,
+	registerWebhookBridge,
 } from "./studio/composition/index.js";
 
 const log = createLogger("boot");

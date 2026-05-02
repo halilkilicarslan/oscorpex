@@ -21,6 +21,7 @@ import {
 } from "../db.js";
 import { getAgentConfig, getProjectAgent, listProjectTasks } from "../db.js";
 import { checkDocsFreshness, generateReadme, regenerateAllDocs } from "../docs-generator.js";
+import { createLogger } from "../logger.js";
 import {
 	fetchQualityGate,
 	getLatestSonarScan,
@@ -29,7 +30,6 @@ import {
 	recordSonarScan,
 	runSonarScan,
 } from "../sonar-runner.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("analytics-routes");
 
 export const analyticsRoutes = new Hono();

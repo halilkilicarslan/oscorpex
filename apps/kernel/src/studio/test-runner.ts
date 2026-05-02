@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { spawn } from "node:child_process";
-import { readFile, access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createLogger } from "./logger.js";
 const log = createLogger("test-runner");
@@ -85,19 +85,19 @@ export class TestRunner {
 			if (await fileExists(join(repoPath, cfg))) return "jest";
 		}
 
-		if (await fileExists(join(repoPath, ".mocharc.js")) || await fileExists(join(repoPath, ".mocharc.yml"))) {
+		if ((await fileExists(join(repoPath, ".mocharc.js"))) || (await fileExists(join(repoPath, ".mocharc.yml")))) {
 			return "mocha";
 		}
 
 		// 3) Python — check for pytest
 		if (
-			await fileExists(join(repoPath, "pytest.ini")) ||
-			await fileExists(join(repoPath, "setup.cfg")) ||
-			await fileExists(join(repoPath, "pyproject.toml"))
+			(await fileExists(join(repoPath, "pytest.ini"))) ||
+			(await fileExists(join(repoPath, "setup.cfg"))) ||
+			(await fileExists(join(repoPath, "pyproject.toml")))
 		) {
 			// Confirm pytest is actually installed / used
 			const pyproject = await readFile(join(repoPath, "pyproject.toml"), "utf8").catch(() => "");
-			if (pyproject.includes("pytest") || await fileExists(join(repoPath, "pytest.ini"))) {
+			if (pyproject.includes("pytest") || (await fileExists(join(repoPath, "pytest.ini")))) {
 				return "pytest";
 			}
 		}
@@ -129,7 +129,10 @@ export class TestRunner {
 	// parseTestOutput
 	// -------------------------------------------------------------------------
 
-	parseTestOutput(stdout: string, framework: TestFramework): Pick<TestRunResult, "passed" | "failed" | "skipped" | "total" | "coverage"> {
+	parseTestOutput(
+		stdout: string,
+		framework: TestFramework,
+	): Pick<TestRunResult, "passed" | "failed" | "skipped" | "total" | "coverage"> {
 		let passed = 0;
 		let failed = 0;
 		let skipped = 0;
@@ -140,11 +143,13 @@ export class TestRunner {
 		if (framework === "vitest") {
 			// vitest verbose: "Tests  3 passed | 1 failed | 2 skipped"
 			// or: "Test Files  2 passed (2)"
-			const testsLine = combined.match(/Tests\s+([\d]+)\s+passed(?:\s*\|\s*([\d]+)\s+failed)?(?:\s*\|\s*([\d]+)\s+skipped)?/i);
+			const testsLine = combined.match(
+				/Tests\s+([\d]+)\s+passed(?:\s*\|\s*([\d]+)\s+failed)?(?:\s*\|\s*([\d]+)\s+skipped)?/i,
+			);
 			if (testsLine) {
-				passed = parseInt(testsLine[1] ?? "0", 10);
-				failed = parseInt(testsLine[2] ?? "0", 10);
-				skipped = parseInt(testsLine[3] ?? "0", 10);
+				passed = Number.parseInt(testsLine[1] ?? "0", 10);
+				failed = Number.parseInt(testsLine[2] ?? "0", 10);
+				skipped = Number.parseInt(testsLine[3] ?? "0", 10);
 			} else {
 				// Alternative: count individual lines "✓" / "✕" / "↓"
 				const passMatches = combined.match(/✓|✔|√/g);
@@ -157,7 +162,7 @@ export class TestRunner {
 
 			// Coverage: "All files  |  85.71 |"
 			const covMatch = combined.match(/All files\s*\|\s*([\d.]+)/);
-			if (covMatch) coverage = parseFloat(covMatch[1]);
+			if (covMatch) coverage = Number.parseFloat(covMatch[1]);
 		} else if (framework === "jest") {
 			// jest: "Tests: 2 failed, 5 passed, 1 skipped, 8 total"
 			const summary = combined.match(/Tests:\s*(.*)/i);
@@ -166,36 +171,36 @@ export class TestRunner {
 				const p = line.match(/([\d]+)\s+passed/);
 				const f = line.match(/([\d]+)\s+failed/);
 				const s = line.match(/([\d]+)\s+skipped/);
-				passed = parseInt(p?.[1] ?? "0", 10);
-				failed = parseInt(f?.[1] ?? "0", 10);
-				skipped = parseInt(s?.[1] ?? "0", 10);
+				passed = Number.parseInt(p?.[1] ?? "0", 10);
+				failed = Number.parseInt(f?.[1] ?? "0", 10);
+				skipped = Number.parseInt(s?.[1] ?? "0", 10);
 			}
 
 			// Jest coverage: "Stmts | Branch | Funcs | Lines"
 			const covMatch = combined.match(/All files\s*\|\s*([\d.]+)/);
-			if (covMatch) coverage = parseFloat(covMatch[1]);
+			if (covMatch) coverage = Number.parseFloat(covMatch[1]);
 		} else if (framework === "mocha") {
 			// mocha: "5 passing" / "2 failing" / "1 pending"
 			const passMatch = combined.match(/([\d]+)\s+passing/i);
 			const failMatch = combined.match(/([\d]+)\s+failing/i);
 			const skipMatch = combined.match(/([\d]+)\s+pending/i);
-			passed = parseInt(passMatch?.[1] ?? "0", 10);
-			failed = parseInt(failMatch?.[1] ?? "0", 10);
-			skipped = parseInt(skipMatch?.[1] ?? "0", 10);
+			passed = Number.parseInt(passMatch?.[1] ?? "0", 10);
+			failed = Number.parseInt(failMatch?.[1] ?? "0", 10);
+			skipped = Number.parseInt(skipMatch?.[1] ?? "0", 10);
 		} else if (framework === "pytest") {
 			// pytest: "5 passed, 2 failed, 1 skipped in 0.5s"
 			const summaryMatch = combined.match(/([\d]+)\s+passed(?:,\s*([\d]+)\s+failed)?(?:,\s*([\d]+)\s+skipped)?/);
 			if (summaryMatch) {
-				passed = parseInt(summaryMatch[1] ?? "0", 10);
-				failed = parseInt(summaryMatch[2] ?? "0", 10);
-				skipped = parseInt(summaryMatch[3] ?? "0", 10);
+				passed = Number.parseInt(summaryMatch[1] ?? "0", 10);
+				failed = Number.parseInt(summaryMatch[2] ?? "0", 10);
+				skipped = Number.parseInt(summaryMatch[3] ?? "0", 10);
 			}
 		} else {
 			// Generic: scan for numbers near "pass" / "fail" keywords
 			const passMatch = combined.match(/([\d]+)\s+(?:test[s]?\s+)?pass/i);
 			const failMatch = combined.match(/([\d]+)\s+(?:test[s]?\s+)?fail/i);
-			passed = parseInt(passMatch?.[1] ?? "0", 10);
-			failed = parseInt(failMatch?.[1] ?? "0", 10);
+			passed = Number.parseInt(passMatch?.[1] ?? "0", 10);
+			failed = Number.parseInt(failMatch?.[1] ?? "0", 10);
 		}
 
 		const total = passed + failed + skipped;

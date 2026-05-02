@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import {
-	approvalService,
-	TenantRequiredForProductionApprovalError,
 	InvalidApprovalTransitionError,
+	TenantRequiredForProductionApprovalError,
+	approvalService,
 } from "../approval-service.js";
 import { getTenantContext, logTenantActivity } from "../auth/tenant-context.js";
 

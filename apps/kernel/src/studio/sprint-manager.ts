@@ -5,9 +5,9 @@
 
 import { randomUUID } from "node:crypto";
 import { now, rowToSprint } from "./db.js";
+import { createLogger } from "./logger.js";
 import { execute, getPool, query, queryOne } from "./pg.js";
 import type { Sprint, SprintStatus } from "./types.js";
-import { createLogger } from "./logger.js";
 const log = createLogger("sprint-manager");
 
 // ---------------------------------------------------------------------------

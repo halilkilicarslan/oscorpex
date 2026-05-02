@@ -3,12 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
+import { canonicalizeAgentRole } from "../roles.js";
 import type { AgentConfig, AgentRole, DependencyType, ProjectAgent } from "../types.js";
 import { bulkCreateDependencies } from "./dependency-repo.js";
 import { now, rowToAgentConfig, rowToProjectAgent } from "./helpers.js";
-import { canonicalizeAgentRole } from "../roles.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("agent-repo");
 
 // ---------------------------------------------------------------------------

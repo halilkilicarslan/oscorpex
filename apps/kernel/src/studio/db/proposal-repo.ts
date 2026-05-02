@@ -3,9 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne, withTransaction } from "../pg.js";
 import type { ProposalStatus, TaskProposal } from "../types.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("proposal-repo");
 
 // ---------------------------------------------------------------------------
@@ -74,10 +74,9 @@ export async function listProposals(projectId: string, status?: ProposalStatus):
 		);
 		return rows.map(rowToProposal);
 	}
-	const rows = await query<any>(
-		`SELECT * FROM task_proposals WHERE project_id = $1 ORDER BY created_at DESC`,
-		[projectId],
-	);
+	const rows = await query<any>(`SELECT * FROM task_proposals WHERE project_id = $1 ORDER BY created_at DESC`, [
+		projectId,
+	]);
 	return rows.map(rowToProposal);
 }
 

@@ -1,45 +1,41 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { signJwt } from "../auth/jwt.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { accessGuard } from "../auth/access-guard.js";
+import { signJwt } from "../auth/jwt.js";
 
-const {
-	mockQualityGateService,
-	mockApprovalService,
-	mockReleaseDecisionService,
-	mockArtifactReferenceService,
-} = vi.hoisted(() => ({
-	mockQualityGateService: {
-		isReleaseReady: vi.fn(),
-		evaluateGate: vi.fn(),
-		getLatestEvaluations: vi.fn(),
-		getBlockingGates: vi.fn(),
-	},
-	mockApprovalService: {
-		rejectRequest: vi.fn(),
-		createApprovalRequest: vi.fn(),
-		approveRequest: vi.fn(),
-		getPendingApprovals: vi.fn(),
-		getApprovalState: vi.fn(),
-		isApprovalSatisfied: vi.fn(),
-	},
-	mockReleaseDecisionService: {
-		createReleaseCandidate: vi.fn(),
-		getReleaseCandidate: vi.fn(),
-		evaluateReleaseDecision: vi.fn(),
-		resolveReleaseState: vi.fn(),
-		applyManualOverride: vi.fn(),
-		triggerRollback: vi.fn(),
-	},
-	mockArtifactReferenceService: {
-		registerArtifact: vi.fn(),
-		verifyArtifact: vi.fn(),
-		rejectArtifact: vi.fn(),
-		supersedeArtifact: vi.fn(),
-		getArtifacts: vi.fn(),
-		isArtifactCompletenessSatisfied: vi.fn(),
-	},
-}));
+const { mockQualityGateService, mockApprovalService, mockReleaseDecisionService, mockArtifactReferenceService } =
+	vi.hoisted(() => ({
+		mockQualityGateService: {
+			isReleaseReady: vi.fn(),
+			evaluateGate: vi.fn(),
+			getLatestEvaluations: vi.fn(),
+			getBlockingGates: vi.fn(),
+		},
+		mockApprovalService: {
+			rejectRequest: vi.fn(),
+			createApprovalRequest: vi.fn(),
+			approveRequest: vi.fn(),
+			getPendingApprovals: vi.fn(),
+			getApprovalState: vi.fn(),
+			isApprovalSatisfied: vi.fn(),
+		},
+		mockReleaseDecisionService: {
+			createReleaseCandidate: vi.fn(),
+			getReleaseCandidate: vi.fn(),
+			evaluateReleaseDecision: vi.fn(),
+			resolveReleaseState: vi.fn(),
+			applyManualOverride: vi.fn(),
+			triggerRollback: vi.fn(),
+		},
+		mockArtifactReferenceService: {
+			registerArtifact: vi.fn(),
+			verifyArtifact: vi.fn(),
+			rejectArtifact: vi.fn(),
+			supersedeArtifact: vi.fn(),
+			getArtifacts: vi.fn(),
+			isArtifactCompletenessSatisfied: vi.fn(),
+		},
+	}));
 
 vi.mock("../quality-gate-service.js", () => ({
 	qualityGateService: mockQualityGateService,
@@ -99,9 +95,14 @@ describe("H2-G route-level API wiring", () => {
 		mockApprovalService.rejectRequest.mockResolvedValue({ state: "rejected", request: { goalId: "goal-1" } });
 		mockReleaseDecisionService.evaluateReleaseDecision.mockResolvedValue({ blocked: true });
 		mockReleaseDecisionService.triggerRollback.mockResolvedValue({ id: "rt-1" });
-		mockReleaseDecisionService.applyManualOverride.mockRejectedValue(new Error("gate security_scan cannot be overridden"));
+		mockReleaseDecisionService.applyManualOverride.mockRejectedValue(
+			new Error("gate security_scan cannot be overridden"),
+		);
 		mockArtifactReferenceService.rejectArtifact.mockResolvedValue({ id: "art-2", status: "rejected" });
-		mockArtifactReferenceService.isArtifactCompletenessSatisfied.mockResolvedValue({ satisfied: false, missingArtifacts: ["approval_evidence"] });
+		mockArtifactReferenceService.isArtifactCompletenessSatisfied.mockResolvedValue({
+			satisfied: false,
+			missingArtifacts: ["approval_evidence"],
+		});
 	});
 
 	it("permission denied without RBAC", async () => {

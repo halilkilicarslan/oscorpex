@@ -6,22 +6,22 @@
 // handles persistence (DB) and event emission (kernel layer).
 // ---------------------------------------------------------------------------
 
-import { existsSync, statSync } from "node:fs";
-import { join, isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
-import { execute } from "./pg.js";
-import { eventBus } from "./event-bus.js";
-import { getProjectSetting } from "./db.js";
-import type { TaskOutput } from "./types.js";
-import { createLogger } from "./logger.js";
+import { existsSync, statSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 import {
+	type VerificationResult,
+	type VerificationStrictness,
+	shouldBlockCompletion,
 	verifyFilesExist,
 	verifyFilesModified,
 	verifyOutputNonEmpty,
-	shouldBlockCompletion,
-	type VerificationResult,
-	type VerificationStrictness,
 } from "@oscorpex/verification-kit";
+import { getProjectSetting } from "./db.js";
+import { eventBus } from "./event-bus.js";
+import { createLogger } from "./logger.js";
+import { execute } from "./pg.js";
+import type { TaskOutput } from "./types.js";
 const log = createLogger("output-verifier");
 
 // Re-export types and functions from verification-kit for backward compatibility
@@ -42,13 +42,7 @@ async function persistResult(taskId: string, result: VerificationResult): Promis
 	await execute(
 		`INSERT INTO verification_results (id, task_id, verification_type, status, details, created_at)
 		 VALUES ($1, $2, $3, $4, $5, now())`,
-		[
-			randomUUID(),
-			taskId,
-			result.type,
-			result.passed ? "passed" : "failed",
-			JSON.stringify(result.details),
-		],
+		[randomUUID(), taskId, result.type, result.passed ? "passed" : "failed", JSON.stringify(result.details)],
 	);
 }
 

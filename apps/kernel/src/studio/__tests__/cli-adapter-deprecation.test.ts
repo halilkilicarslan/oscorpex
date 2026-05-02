@@ -2,7 +2,7 @@
 // Legacy CLI Adapter Deprecation Boundary Tests (P1 E5)
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAdapter, getAdapterChain } from "../cli-adapter.js";
 
 // Mock performance-config so we can toggle legacyCliAdapter
@@ -78,9 +78,7 @@ describe("E5: Legacy CLI Adapter Deprecation Boundary", () => {
 			legacyCliAdapter: false,
 		});
 
-		await expect(getAdapter("claude-code")).rejects.toThrow(
-			"Legacy CLI adapter fallback is disabled",
-		);
+		await expect(getAdapter("claude-code")).rejects.toThrow("Legacy CLI adapter fallback is disabled");
 	});
 
 	it("throws for unknown tool when legacyCliAdapter=false", async () => {
@@ -100,9 +98,7 @@ describe("E5: Legacy CLI Adapter Deprecation Boundary", () => {
 			legacyCliAdapter: false,
 		});
 
-		await expect(getAdapter("none" as any)).rejects.toThrow(
-			"Legacy CLI adapter fallback is disabled",
-		);
+		await expect(getAdapter("none" as any)).rejects.toThrow("Legacy CLI adapter fallback is disabled");
 	});
 
 	it("getAdapterChain falls back to legacy for each item when registry missing", async () => {

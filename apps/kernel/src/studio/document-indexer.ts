@@ -6,10 +6,10 @@
 import { randomUUID } from "node:crypto";
 import { extname, join } from "node:path";
 import { gitManager } from "./git-manager.js";
+import { createLogger } from "./logger.js";
 import { execute, query, queryOne } from "./pg.js";
 import type { FileTreeNode } from "./types.js";
 import { vectorStore } from "./vector-store.js";
-import { createLogger } from "./logger.js";
 const log = createLogger("document-indexer");
 
 // ---------------------------------------------------------------------------

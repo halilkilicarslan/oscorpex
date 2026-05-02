@@ -12,10 +12,10 @@
 
 import { createPhase, createTask, getLatestPlan, listProjectAgents, updateTask } from "./db.js";
 import { eventBus } from "./event-bus.js";
-import { ensureGoalForTask, type GoalDefinition } from "./goal-engine.js";
+import { type GoalDefinition, ensureGoalForTask } from "./goal-engine.js";
+import { createLogger } from "./logger.js";
 import { pipelineEngine } from "./pipeline-engine.js";
 import type { Phase, ProjectPlan, Task, TaskComplexity } from "./types.js";
-import { createLogger } from "./logger.js";
 const log = createLogger("incremental-planner");
 
 export interface AppendPhaseInput {

@@ -6,8 +6,8 @@
 import { randomUUID } from "node:crypto";
 import { createTask, getLatestPlan, getProject, listPhases, updateProject } from "./db.js";
 import { eventBus } from "./event-bus.js";
-import type { ProjectStatus } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { ProjectStatus } from "./types.js";
 const log = createLogger("lifecycle-manager");
 
 // ---------------------------------------------------------------------------

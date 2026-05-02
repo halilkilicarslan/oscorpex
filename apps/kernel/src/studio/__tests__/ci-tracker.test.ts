@@ -3,7 +3,7 @@
 // GitLabClient + CITracker + webhook processing
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock DB layer — must come before imports that use db.js
@@ -32,9 +32,9 @@ vi.mock("../db/ci-repo.js", () => ({
 	deleteCITracking: (...args: unknown[]) => mockDeleteCITracking(...args),
 }));
 
-import { GitLabClient } from "../gitlab-integration.js";
 import { CITracker } from "../ci-tracker.js";
 import type { CITracking } from "../db/ci-repo.js";
+import { GitLabClient } from "../gitlab-integration.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

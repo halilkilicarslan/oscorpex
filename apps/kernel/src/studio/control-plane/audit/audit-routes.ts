@@ -2,8 +2,8 @@
 // Control Plane — Audit Routes (thin host)
 // ---------------------------------------------------------------------------
 
+import { appendAuditEvent, appendSecurityEvent, listAuditEvents, listSecurityEvents } from "@oscorpex/control-plane";
 import { Hono } from "hono";
-import { listAuditEvents, listSecurityEvents, appendAuditEvent, appendSecurityEvent } from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-audit-routes");

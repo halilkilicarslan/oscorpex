@@ -5,7 +5,12 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it, vi } from "vitest";
-import { getCurrentCorrelationId, getCurrentCausationId, withCorrelation, getCorrelationIds } from "../../correlation-context.js";
+import {
+	getCorrelationIds,
+	getCurrentCausationId,
+	getCurrentCorrelationId,
+	withCorrelation,
+} from "../../correlation-context.js";
 
 describe("CorrelationContext", () => {
 	it("generates a new correlationId outside any context", () => {

@@ -2,7 +2,7 @@
 // Oscorpex — TestRunner unit tests (V6 M2)
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock fs/promises so detectFramework works without a real filesystem
@@ -265,8 +265,16 @@ describe("TestRunner.runTests", () => {
 			const stdoutCbs: ((c: Buffer) => void)[] = [];
 			const stderrCbs: ((c: Buffer) => void)[] = [];
 			return {
-				stdout: { on(_: string, cb: (c: Buffer) => void) { stdoutCbs.push(cb); } },
-				stderr: { on(_: string, cb: (c: Buffer) => void) { stderrCbs.push(cb); } },
+				stdout: {
+					on(_: string, cb: (c: Buffer) => void) {
+						stdoutCbs.push(cb);
+					},
+				},
+				stderr: {
+					on(_: string, cb: (c: Buffer) => void) {
+						stderrCbs.push(cb);
+					},
+				},
 				on(ev: string, cb: (...a: unknown[]) => void) {
 					if (ev === "close") closeCbs.push(cb);
 					if (ev === "error") errorCbs.push(cb);
@@ -290,9 +298,12 @@ describe("TestRunner.runTests", () => {
 		const runPromise = runner.runTests("proj-1", "/fake/repo");
 
 		// Poll until spawn has been called (detectFramework completes first)
-		await vi.waitFor(() => {
-			expect(mockSpawn).toHaveBeenCalled();
-		}, { timeout: 3000 });
+		await vi.waitFor(
+			() => {
+				expect(mockSpawn).toHaveBeenCalled();
+			},
+			{ timeout: 3000 },
+		);
 
 		storedChild!.fireClose();
 
@@ -333,9 +344,12 @@ describe("TestRunner.runTests", () => {
 		const runner = makeRunner();
 		const runPromise = runner.runTests("proj-1", "/fake/repo");
 
-		await vi.waitFor(() => {
-			expect(mockSpawn).toHaveBeenCalled();
-		}, { timeout: 3000 });
+		await vi.waitFor(
+			() => {
+				expect(mockSpawn).toHaveBeenCalled();
+			},
+			{ timeout: 3000 },
+		);
 
 		storedChild!.fireError(new Error("spawn ENOENT"));
 

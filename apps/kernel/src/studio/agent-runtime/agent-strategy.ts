@@ -5,9 +5,9 @@
 // ---------------------------------------------------------------------------
 
 import { getBestStrategies, getDefaultStrategy, getStrategiesForRole } from "../db.js";
-import type { AgentStrategy, AgentStrategyPattern, Task } from "../types.js";
-import { getBehaviorRoleKey } from "../roles.js";
 import { createLogger } from "../logger.js";
+import { getBehaviorRoleKey } from "../roles.js";
+import type { AgentStrategy, AgentStrategyPattern, Task } from "../types.js";
 const log = createLogger("agent-strategy");
 
 // ---------------------------------------------------------------------------
@@ -26,23 +26,95 @@ export interface StrategySelection {
 
 export const BUILTIN_STRATEGIES: Omit<AgentStrategy, "id">[] = [
 	// Backend
-	{ agentRole: "backend-dev", name: "test_first", description: "Write tests before implementation. Start with failing tests, then implement to make them pass.", promptAddendum: "IMPORTANT: Write failing tests FIRST, then implement the code to make them pass. Follow TDD strictly.", allowedTaskTypes: ["ai"], isDefault: false },
-	{ agentRole: "backend-dev", name: "scaffold_then_refine", description: "Create the basic structure first, then iterate on details. Get the skeleton working before polishing.", promptAddendum: "Start with a minimal working skeleton. Get the basic structure compiling and running first, then add details and error handling.", allowedTaskTypes: ["ai"], isDefault: true },
-	{ agentRole: "backend-dev", name: "minimal_patch", description: "Make the smallest possible change to achieve the goal. Minimize blast radius.", promptAddendum: "Make the MINIMUM change needed. Do not refactor surrounding code. Touch as few files as possible.", allowedTaskTypes: ["ai"], isDefault: false },
+	{
+		agentRole: "backend-dev",
+		name: "test_first",
+		description: "Write tests before implementation. Start with failing tests, then implement to make them pass.",
+		promptAddendum:
+			"IMPORTANT: Write failing tests FIRST, then implement the code to make them pass. Follow TDD strictly.",
+		allowedTaskTypes: ["ai"],
+		isDefault: false,
+	},
+	{
+		agentRole: "backend-dev",
+		name: "scaffold_then_refine",
+		description:
+			"Create the basic structure first, then iterate on details. Get the skeleton working before polishing.",
+		promptAddendum:
+			"Start with a minimal working skeleton. Get the basic structure compiling and running first, then add details and error handling.",
+		allowedTaskTypes: ["ai"],
+		isDefault: true,
+	},
+	{
+		agentRole: "backend-dev",
+		name: "minimal_patch",
+		description: "Make the smallest possible change to achieve the goal. Minimize blast radius.",
+		promptAddendum: "Make the MINIMUM change needed. Do not refactor surrounding code. Touch as few files as possible.",
+		allowedTaskTypes: ["ai"],
+		isDefault: false,
+	},
 
 	// Frontend
-	{ agentRole: "frontend-dev", name: "component_first", description: "Build reusable components before composing pages. Focus on component isolation and reusability.", promptAddendum: "Build isolated, reusable components first. Each component should work standalone before being composed into pages.", allowedTaskTypes: ["ai"], isDefault: true },
-	{ agentRole: "frontend-dev", name: "page_shell_then_wire", description: "Create the page layout shell first, then wire up data and interactivity.", promptAddendum: "Start with the page layout and static structure. Get the visual layout right, then add data fetching and interactivity.", allowedTaskTypes: ["ai"], isDefault: false },
+	{
+		agentRole: "frontend-dev",
+		name: "component_first",
+		description: "Build reusable components before composing pages. Focus on component isolation and reusability.",
+		promptAddendum:
+			"Build isolated, reusable components first. Each component should work standalone before being composed into pages.",
+		allowedTaskTypes: ["ai"],
+		isDefault: true,
+	},
+	{
+		agentRole: "frontend-dev",
+		name: "page_shell_then_wire",
+		description: "Create the page layout shell first, then wire up data and interactivity.",
+		promptAddendum:
+			"Start with the page layout and static structure. Get the visual layout right, then add data fetching and interactivity.",
+		allowedTaskTypes: ["ai"],
+		isDefault: false,
+	},
 
 	// QA / Reviewer
-	{ agentRole: "reviewer", name: "risk_hotspot_review", description: "Focus review on high-risk code paths: auth, data mutation, external integrations.", promptAddendum: "Prioritize reviewing: authentication/authorization code, database mutations, external API calls, and error handling paths. These are the highest-risk areas.", allowedTaskTypes: ["ai"], isDefault: true },
-	{ agentRole: "reviewer", name: "test_gap_review", description: "Focus on identifying missing test coverage and untested edge cases.", promptAddendum: "Focus on: Which code paths lack tests? What edge cases are untested? What error scenarios are not covered? Recommend specific tests to add.", allowedTaskTypes: ["ai"], isDefault: false },
+	{
+		agentRole: "reviewer",
+		name: "risk_hotspot_review",
+		description: "Focus review on high-risk code paths: auth, data mutation, external integrations.",
+		promptAddendum:
+			"Prioritize reviewing: authentication/authorization code, database mutations, external API calls, and error handling paths. These are the highest-risk areas.",
+		allowedTaskTypes: ["ai"],
+		isDefault: true,
+	},
+	{
+		agentRole: "reviewer",
+		name: "test_gap_review",
+		description: "Focus on identifying missing test coverage and untested edge cases.",
+		promptAddendum:
+			"Focus on: Which code paths lack tests? What edge cases are untested? What error scenarios are not covered? Recommend specific tests to add.",
+		allowedTaskTypes: ["ai"],
+		isDefault: false,
+	},
 
 	// Tech Lead
-	{ agentRole: "tech-lead", name: "spec_contract_first", description: "Define interfaces, types, and contracts before implementation details.", promptAddendum: "Start by defining interfaces, types, and API contracts. Ensure the contract is solid before implementing any logic.", allowedTaskTypes: ["ai"], isDefault: true },
+	{
+		agentRole: "tech-lead",
+		name: "spec_contract_first",
+		description: "Define interfaces, types, and contracts before implementation details.",
+		promptAddendum:
+			"Start by defining interfaces, types, and API contracts. Ensure the contract is solid before implementing any logic.",
+		allowedTaskTypes: ["ai"],
+		isDefault: true,
+	},
 
 	// DevOps
-	{ agentRole: "devops", name: "config_validation_first", description: "Validate all configuration before applying changes. Check for conflicts and compatibility.", promptAddendum: "Before making any infrastructure changes: validate all config values, check for port/resource conflicts, verify compatibility with existing setup.", allowedTaskTypes: ["ai"], isDefault: true },
+	{
+		agentRole: "devops",
+		name: "config_validation_first",
+		description: "Validate all configuration before applying changes. Check for conflicts and compatibility.",
+		promptAddendum:
+			"Before making any infrastructure changes: validate all config values, check for port/resource conflicts, verify compatibility with existing setup.",
+		allowedTaskTypes: ["ai"],
+		isDefault: true,
+	},
 ];
 
 // ---------------------------------------------------------------------------
@@ -53,11 +125,7 @@ export const BUILTIN_STRATEGIES: Omit<AgentStrategy, "id">[] = [
  * Select the best strategy for an agent about to execute a task.
  * Priority: historical patterns → role catalog → builtin default.
  */
-export async function selectStrategy(
-	projectId: string,
-	agentRole: string,
-	task: Task,
-): Promise<StrategySelection> {
+export async function selectStrategy(projectId: string, agentRole: string, task: Task): Promise<StrategySelection> {
 	const strategyRole = getBehaviorRoleKey(agentRole);
 	const taskType = task.taskType ?? "ai";
 
@@ -66,7 +134,7 @@ export async function selectStrategy(
 	if (patterns.length > 0 && patterns[0].sampleCount >= 3 && patterns[0].successRate >= 0.6) {
 		const bestPattern = patterns[0];
 		// Find the matching strategy definition
-			const strategies = await getStrategiesForRole(strategyRole, taskType);
+		const strategies = await getStrategiesForRole(strategyRole, taskType);
 		const matchingStrategy = strategies.find((s) => s.name === bestPattern.strategy);
 		if (matchingStrategy) {
 			return {
@@ -81,12 +149,13 @@ export async function selectStrategy(
 	try {
 		const { getLearningPatterns } = await import("../cross-project-learning.js");
 		const { queryOne: qo } = await import("../pg.js");
-		const projRow = await qo<{ tenant_id: string | null }>(
-			"SELECT tenant_id FROM projects WHERE id = $1",
-			[projectId],
-		);
+		const projRow = await qo<{ tenant_id: string | null }>("SELECT tenant_id FROM projects WHERE id = $1", [projectId]);
 		const learningPatterns = await getLearningPatterns(taskType, strategyRole, projRow?.tenant_id ?? undefined);
-		if (learningPatterns.length > 0 && learningPatterns[0].sampleCount >= 5 && learningPatterns[0].successRate >= 0.65) {
+		if (
+			learningPatterns.length > 0 &&
+			learningPatterns[0].sampleCount >= 5 &&
+			learningPatterns[0].successRate >= 0.65
+		) {
 			const lpBest = learningPatterns[0];
 			const strategyName = (lpBest.pattern as { strategy?: string }).strategy;
 			if (strategyName) {

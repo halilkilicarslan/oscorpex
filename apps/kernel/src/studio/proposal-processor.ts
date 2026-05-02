@@ -5,10 +5,10 @@
 // Extracted from execution-engine.ts for single-responsibility.
 // ---------------------------------------------------------------------------
 
-import { getPipelineRun } from "./db.js";
-import type { Task } from "./types.js";
 import type { AgentOutputProposal } from "./cli-runtime.js";
+import { getPipelineRun } from "./db.js";
 import { createLogger } from "./logger.js";
+import type { Task } from "./types.js";
 const log = createLogger("proposal-processor");
 
 // ---------------------------------------------------------------------------
@@ -22,13 +22,20 @@ export async function processAgentProposals(
 	proposals: AgentOutputProposal[],
 ): Promise<void> {
 	const { proposeTask } = await import("./agent-runtime/task-injection.js");
-	const { requestInfo, signalBlocker, handoffArtifact, recordDesignDecision } = await import("./agent-runtime/agent-protocol.js");
+	const { requestInfo, signalBlocker, handoffArtifact, recordDesignDecision } = await import(
+		"./agent-runtime/agent-protocol.js"
+	);
 
 	for (const proposal of proposals) {
 		if (proposal.type === "task_proposal") {
 			await handleTaskProposal(proposal, projectId, task, agent, proposeTask);
 		} else if (proposal.type === "agent_message") {
-			await handleAgentMessage(proposal, projectId, task, agent, { requestInfo, signalBlocker, handoffArtifact, recordDesignDecision });
+			await handleAgentMessage(proposal, projectId, task, agent, {
+				requestInfo,
+				signalBlocker,
+				handoffArtifact,
+				recordDesignDecision,
+			});
 		} else if (proposal.type === "graph_mutation") {
 			await handleGraphMutation(proposal, projectId, agent);
 		}
@@ -47,8 +54,11 @@ async function handleTaskProposal(
 	proposeTask: (req: any) => Promise<any>,
 ): Promise<void> {
 	const p = proposal.payload as {
-		title?: string; description?: string; severity?: string;
-		suggestedRole?: string; proposalType?: string;
+		title?: string;
+		description?: string;
+		severity?: string;
+		suggestedRole?: string;
+		proposalType?: string;
 	};
 	if (!p.title) return;
 
@@ -83,7 +93,9 @@ async function handleAgentMessage(
 	},
 ): Promise<void> {
 	const m = proposal.payload as {
-		targetAgentId?: string; messageType?: string; content?: string;
+		targetAgentId?: string;
+		messageType?: string;
+		content?: string;
 	};
 	if (!m.content || !m.targetAgentId) return;
 

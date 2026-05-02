@@ -41,9 +41,9 @@ vi.mock("../event-bus.js", () => ({
 	},
 }));
 
-import { insertNode, splitTask, addEdge, deferBranch, removeEdge } from "../graph-coordinator.js";
-import { requiresApproval, recordGraphMutation, createTask, updateTask, getTask } from "../db.js";
+import { createTask, getTask, recordGraphMutation, requiresApproval, updateTask } from "../db.js";
 import { eventBus } from "../event-bus.js";
+import { addEdge, deferBranch, insertNode, removeEdge, splitTask } from "../graph-coordinator.js";
 import type { MutationContext } from "../graph-coordinator.js";
 
 const mockRequiresApproval = requiresApproval as ReturnType<typeof vi.fn>;
@@ -81,9 +81,7 @@ describe("Graph Mutation Approval Enforcement", () => {
 		expect(result.mutationType).toBe("insert_node");
 		expect(createTask).toHaveBeenCalledOnce();
 		expect(recordGraphMutation).toHaveBeenCalledOnce();
-		expect(eventBus.emit).toHaveBeenCalledWith(
-			expect.objectContaining({ type: "graph:mutation_applied" }),
-		);
+		expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: "graph:mutation_applied" }));
 	});
 
 	// -----------------------------------------------------------------------
@@ -197,9 +195,7 @@ describe("Graph Mutation Approval Enforcement", () => {
 	it("splitTask emits graph:mutation_applied event", async () => {
 		await splitTask(ctx, {
 			parentTaskId: "parent-1",
-			children: [
-				{ title: "Sub-event-test", description: "test", assignedAgent: "backend_dev" },
-			],
+			children: [{ title: "Sub-event-test", description: "test", assignedAgent: "backend_dev" }],
 		});
 
 		expect(eventBus.emit).toHaveBeenCalledWith(

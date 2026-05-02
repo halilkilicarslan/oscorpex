@@ -6,8 +6,8 @@
 
 import { indexContent, searchContext } from "./context-store.js";
 import { getProjectSetting, listProjectTasks } from "./db.js";
-import type { ContextSearchResult, Task, TaskOutput } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { ContextSearchResult, Task, TaskOutput } from "./types.js";
 const log = createLogger("context-sandbox");
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 // Auth Config Boot Phase — Fail-Closed Tests
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockLogger = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn() }));
 vi.mock("../logger.js", () => ({
@@ -50,9 +50,7 @@ describe("authConfigPhase — fail-closed", () => {
 		delete process.env.OSCORPEX_JWT_SECRET;
 		delete process.env.OSCORPEX_API_KEY;
 		const { authConfigPhase } = await import("../../boot-phases/auth-config-phase.js");
-		expect(() => authConfigPhase()).toThrow(
-			"Production boot failed: auth enabled but no mechanism configured",
-		);
+		expect(() => authConfigPhase()).toThrow("Production boot failed: auth enabled but no mechanism configured");
 	});
 
 	it("passes when production auth enabled with JWT secret", async () => {

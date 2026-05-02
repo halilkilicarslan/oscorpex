@@ -4,8 +4,19 @@
 // containers (or falls back to local AI SDK execution when Docker unavailable).
 // ---------------------------------------------------------------------------
 
+import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
+import { AdaptiveConcurrencyController, AdaptiveSemaphore, ConcurrencyTracker } from "./adaptive-concurrency.js";
+import { evaluateReplan } from "./adaptive-replanner.js";
 import { persistAgentLog } from "./agent-log-store.js";
 import { agentRuntime } from "./agent-runtime.js";
+import {
+	acknowledgeMessages,
+	completeSession,
+	failSession,
+	initSession,
+	loadProtocolContext,
+	recordStep,
+} from "./agent-runtime/index.js";
 import { startApp, stopApp } from "./app-runner.js";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { enforceBudgetGuard } from "./budget-guard.js";
@@ -28,8 +39,8 @@ import {
 	listProjectAgents,
 	listProjectTasks,
 	listProjects,
-	recordTokenUsage,
 	reclaimStaleQueuedClaimsForProject,
+	recordTokenUsage,
 	releaseTaskClaim,
 	updatePhaseStatus,
 	updateProject,
@@ -37,61 +48,51 @@ import {
 } from "./db.js";
 import { updateDocsAfterTask } from "./docs-generator.js";
 import { eventBus } from "./event-bus.js";
+import { runGoalEvaluation, runTestGateCheck, runVerificationGate } from "./execution-gates.js";
+import { type ExecutionWorkspace, resolveWorkspace } from "./execution-workspace.js";
+import { formatGoalPrompt, getGoalForTask } from "./goal-engine.js";
 import { runLintFix } from "./lint-runner.js";
-import {
-	acknowledgeMessages,
-	completeSession,
-	failSession,
-	initSession,
-	loadProtocolContext,
-	recordStep,
-} from "./agent-runtime/index.js";
-import { getGoalForTask, formatGoalPrompt } from "./goal-engine.js";
-import { evaluateReplan } from "./adaptive-replanner.js";
+import { createLogger } from "./logger.js";
 import { resolveModel } from "./model-router.js";
-import { runVerificationGate, runTestGateCheck, runGoalEvaluation } from "./execution-gates.js";
-import { processAgentProposals } from "./proposal-processor.js";
-import { buildTaskPrompt, defaultSystemPrompt } from "./prompt-builder.js";
-import { executeReviewTask, resolveAgent } from "./review-dispatcher.js";
-import {
-	resolveTaskPolicy, startSandboxSession, endSandboxSession,
-	checkToolAllowed, checkPathAllowed,
-	enforceToolCheck, enforcePathChecks, enforceOutputSizeCheck,
-	SandboxViolationError,
-	type SandboxPolicy,
-} from "./sandbox-manager.js";
-import { resolveWorkspace, type ExecutionWorkspace } from "./execution-workspace.js";
 // test-gate imported via execution-gates.ts
 import { queryOne as pgQueryOne } from "./pg.js";
-import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
-import { providerState } from "./provider-state.js";
-import { createProviderResolver } from "./provider-resolver.js";
-import { resolveTaskTimeoutMs, TIMEOUT_WARNING_THRESHOLD } from "./timeout-policy.js";
-import {
-	AdaptiveSemaphore,
-	ConcurrencyTracker,
-	AdaptiveConcurrencyController,
-} from "./adaptive-concurrency.js";
-import { sortTasksByFairness } from "./task-scheduler.js";
-import { evaluateRetry, MAX_AUTO_RETRIES, type RetryTelemetry } from "./retry-policy.js";
 import { markExecutionStarted } from "./preflight-warmup.js";
-import { syncDeclaredDependencies } from "./repo-dependency-sync.js";
-import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
+import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
+import { buildTaskPrompt, defaultSystemPrompt } from "./prompt-builder.js";
+import { processAgentProposals } from "./proposal-processor.js";
+import { createProviderResolver } from "./provider-resolver.js";
+import { providerState } from "./provider-state.js";
 import {
-	startProviderTelemetry,
-	finishProviderTelemetry,
-	recordProviderFallback,
-	recordProviderDegraded,
-	recordProviderCancel,
-	classifyProviderErrorWithReason,
 	CANCEL_REASONS,
 	type TelemetryRecord,
+	classifyProviderErrorWithReason,
+	finishProviderTelemetry,
+	recordProviderCancel,
+	recordProviderDegraded,
+	recordProviderFallback,
+	startProviderTelemetry,
 } from "./provider-telemetry.js";
+import { syncDeclaredDependencies } from "./repo-dependency-sync.js";
+import { MAX_AUTO_RETRIES, type RetryTelemetry, evaluateRetry } from "./retry-policy.js";
+import { executeReviewTask, resolveAgent } from "./review-dispatcher.js";
+import { canonicalizeAgentRole, roleMatches } from "./roles.js";
+import {
+	type SandboxPolicy,
+	SandboxViolationError,
+	checkPathAllowed,
+	checkToolAllowed,
+	endSandboxSession,
+	enforceOutputSizeCheck,
+	enforcePathChecks,
+	enforceToolCheck,
+	resolveTaskPolicy,
+	startSandboxSession,
+} from "./sandbox-manager.js";
 import { taskEngine } from "./task-engine.js";
 import { runIntegrationTest } from "./task-runners.js";
-import type { AgentConfig, AgentCliTool, Project, Task, TaskOutput } from "./types.js";
-import { canonicalizeAgentRole, roleMatches } from "./roles.js";
-import { createLogger } from "./logger.js";
+import { sortTasksByFairness } from "./task-scheduler.js";
+import { TIMEOUT_WARNING_THRESHOLD, resolveTaskTimeoutMs } from "./timeout-policy.js";
+import type { AgentCliTool, AgentConfig, Project, Task, TaskOutput } from "./types.js";
 
 const log = createLogger("execution-engine");
 
@@ -233,11 +234,13 @@ class ExecutionEngine {
 		// races with the inline dispatch path.
 
 		// TASK 15: Log active performance configuration at startup
-		import("./performance-config.js").then(({ logPerformanceConfig }) => {
-			logPerformanceConfig();
-		}).catch(() => {
-			// Non-blocking — config logging is best-effort
-		});
+		import("./performance-config.js")
+			.then(({ logPerformanceConfig }) => {
+				logPerformanceConfig();
+			})
+			.catch(() => {
+				// Non-blocking — config logging is best-effort
+			});
 
 		// TASK 8: Adaptive concurrency controller
 		this._concurrencyController = new AdaptiveConcurrencyController(
@@ -333,7 +336,7 @@ class ExecutionEngine {
 				let phaseRecovered = false;
 				for (const task of phase.tasks ?? []) {
 					if (task.status === "running" || task.status === "assigned") {
-						await updateTask(task.id, { status: "queued", startedAt: undefined });
+						await updateTask(task.id, { status: "queued", startedAt: null as unknown as string });
 						await releaseTaskClaim(task.id);
 						log.info(`[execution-engine] Recovery: "${task.title}" → queued (was ${task.status})`);
 						phaseRecovered = true;
@@ -363,7 +366,9 @@ class ExecutionEngine {
 							await taskEngine.restartRevision(task.id);
 							const fresh = await getTask(task.id);
 							if (fresh) {
-								this.executeTask(project.id, fresh).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
+								this.executeTask(project.id, fresh).catch((err) =>
+									log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+								);
 							}
 						} catch (e) {
 							log.error({ err: e }, `Revision recovery failed for "${task.title}"`);
@@ -381,7 +386,9 @@ class ExecutionEngine {
 					log.info(
 						`[execution-engine] Recovery: ${ready.length} orphaned ready task(s) in phase "${phase.name}" — dispatching`,
 					);
-					Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
+					Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch((err) =>
+						log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+					);
 				}
 
 				// Recover orphaned running tasks — stuck in "running" with no active CLI process
@@ -393,7 +400,7 @@ class ExecutionEngine {
 						!this._activeControllers.has(`${project.id}:${task.id}`)
 					) {
 						log.info(`[execution-engine] Recovery: orphaned running task "${task.title}" → queued`);
-						await updateTask(task.id, { status: "queued", startedAt: undefined });
+						await updateTask(task.id, { status: "queued", startedAt: null as unknown as string });
 						await releaseTaskClaim(task.id);
 						hasRecovered = true;
 					}
@@ -406,7 +413,9 @@ class ExecutionEngine {
 					if (phase.status !== "running") continue;
 					const ready = await taskEngine.getReadyTasks(phase.id);
 					if (ready.length > 0) {
-						Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
+						Promise.allSettled(ready.map((task: any) => this.executeTask(project.id, task))).catch((err) =>
+							log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+						);
 					}
 				}
 			}
@@ -455,7 +464,7 @@ class ExecutionEngine {
 		for (const task of tasks) {
 			if (task.status === "running" || task.status === "assigned") {
 				try {
-					await updateTask(task.id, { status: "queued", startedAt: undefined });
+					await updateTask(task.id, { status: "queued", startedAt: null as unknown as string });
 					log.info(`[execution-engine] Task "${task.title}" → queued (pipeline paused)`);
 				} catch (err) {
 					log.warn(`[execution-engine] Task reset failed: ${task.id}` + " " + String(err));
@@ -546,8 +555,8 @@ class ExecutionEngine {
 				this._dispatchingTasks.delete(task.id);
 				log.warn(`[execution-engine] Cleared stale dispatch marker for task "${task.title}"`);
 			} else {
-			log.info(`[execution-engine] Task "${task.title}" zaten dispatch ediliyor, skip.`);
-			return;
+				log.info(`[execution-engine] Task "${task.title}" zaten dispatch ediliyor, skip.`);
+				return;
 			}
 		}
 
@@ -559,9 +568,7 @@ class ExecutionEngine {
 			// Otherwise tasks can remain queued+claimed while waiting on semaphore.
 			const freshTask = await claimTask(task.id, this._workerId);
 			if (!freshTask) {
-				log.info(
-					`[execution-engine] Task "${task.title}" could not be claimed (already taken or not queued), skip.`,
-				);
+				log.info(`[execution-engine] Task "${task.title}" could not be claimed (already taken or not queued), skip.`);
 				return;
 			}
 			claimedTaskId = freshTask.id;
@@ -576,7 +583,9 @@ class ExecutionEngine {
 				});
 				const constraint = await checkConstraints(projectId, "execute_task", riskLevel);
 				if (!constraint.allowed && constraint.requiresApproval) {
-					log.warn(`[execution-engine] Task "${freshTask.title}" blocked by constraints (${riskLevel} risk — requires approval)`);
+					log.warn(
+						`[execution-engine] Task "${freshTask.title}" blocked by constraints (${riskLevel} risk — requires approval)`,
+					);
 					await updateTask(freshTask.id, { status: "waiting_approval", requiresApproval: true });
 					await releaseTaskClaim(freshTask.id);
 					claimedTaskId = null;
@@ -654,12 +663,16 @@ class ExecutionEngine {
 		let telemetryRecord: TelemetryRecord | undefined;
 		let cancelPending = false;
 		let timeoutMs = 0;
-		taskController.signal.addEventListener("abort", () => {
-			cancelPending = true;
-			if (telemetryRecord) {
-				recordProviderCancel(this.telemetry, telemetryRecord, CANCEL_REASONS.pipeline_pause);
-			}
-		}, { once: true });
+		taskController.signal.addEventListener(
+			"abort",
+			() => {
+				cancelPending = true;
+				if (telemetryRecord) {
+					recordProviderCancel(this.telemetry, telemetryRecord, CANCEL_REASONS.pipeline_pause);
+				}
+			},
+			{ once: true },
+		);
 
 		// --- Non-AI task types: integration-test & run-app ---
 		if (task.taskType === "integration-test" || task.taskType === "run-app") {
@@ -747,7 +760,7 @@ class ExecutionEngine {
 			log.warn("[execution-engine] Goal lookup failed (non-blocking):" + " " + String(err));
 		}
 
-		const prompt = await buildTaskPrompt(task, project, agent.role) + promptSuffix;
+		const prompt = (await buildTaskPrompt(task, project, agent.role)) + promptSuffix;
 		const formatTaskLog = (line: string): string => {
 			const shortId = task.id.slice(0, 8);
 			return `[task:${shortId}] ${line}`;
@@ -879,9 +892,7 @@ class ExecutionEngine {
 				provider: primaryCliTool,
 				repoPath: runtimeRepoPath,
 				prompt,
-				systemPrompt: agent.systemPrompt
-					? composeSystemPrompt(agent.systemPrompt)
-					: defaultSystemPrompt(agent),
+				systemPrompt: agent.systemPrompt ? composeSystemPrompt(agent.systemPrompt) : defaultSystemPrompt(agent),
 				timeoutMs,
 				allowedTools,
 				model: routedModel,
@@ -899,7 +910,13 @@ class ExecutionEngine {
 
 				// Session step: CLI execution started
 				if (sessionId) {
-					recordStep(sessionId, { step: 1, type: "action_executed", summary: `CLI execution started: ${adapter.name}` }).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
+					recordStep(sessionId, {
+						step: 1,
+						type: "action_executed",
+						summary: `CLI execution started: ${adapter.name}`,
+					}).catch((err) =>
+						log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+					);
 				}
 				eventBus.emitTransient({
 					projectId,
@@ -924,9 +941,7 @@ class ExecutionEngine {
 						agentName: agent.name,
 						repoPath: runtimeRepoPath,
 						prompt,
-						systemPrompt: agent.systemPrompt
-							? composeSystemPrompt(agent.systemPrompt)
-							: defaultSystemPrompt(agent),
+						systemPrompt: agent.systemPrompt ? composeSystemPrompt(agent.systemPrompt) : defaultSystemPrompt(agent),
 						timeoutMs,
 						model: routedModel,
 						signal: taskController.signal,
@@ -955,8 +970,8 @@ class ExecutionEngine {
 							logs: cliResult.logs,
 							startedAt: telemetryRecord.startedAt,
 							completedAt: new Date().toISOString(),
-						metadata: { durationMs: cliResult.durationMs, isColdStart },
-					});
+							metadata: { durationMs: cliResult.durationMs, isColdStart },
+						});
 					}
 					break; // success — exit chain
 				} catch (adapterErr) {
@@ -972,10 +987,16 @@ class ExecutionEngine {
 					} else {
 						providerState.markFailure(adapterName, classification);
 					}
-					log.warn(`[execution] Adapter "${adapter.name}" failed (${classification}, reason=${reason}): ${errMsg.slice(0, 200)}`);
+					log.warn(
+						`[execution] Adapter "${adapter.name}" failed (${classification}, reason=${reason}): ${errMsg.slice(0, 200)}`,
+					);
 
 					// Advance to next candidate and record fallback telemetry
-					const nextAdapter = await resolver.next({ allowedTools, lastFailureProvider: adapter.name, lastFailureClassification: classification });
+					const nextAdapter = await resolver.next({
+						allowedTools,
+						lastFailureProvider: adapter.name,
+						lastFailureClassification: classification,
+					});
 					if (nextAdapter && telemetryRecord) {
 						recordProviderFallback(
 							this.telemetry,
@@ -1006,7 +1027,12 @@ class ExecutionEngine {
 							telemetryRecord,
 							`All providers exhausted for task "${task.title}". Retry in ${Math.round(retryMs / 1000)}s.`,
 						);
-						finishProviderTelemetry(this.telemetry, telemetryRecord, null, lastAdapterError ?? new Error("All providers exhausted"));
+						finishProviderTelemetry(
+							this.telemetry,
+							telemetryRecord,
+							null,
+							lastAdapterError ?? new Error("All providers exhausted"),
+						);
 					}
 					await updateTask(task.id, { status: "queued" });
 					eventBus.emit({
@@ -1023,7 +1049,9 @@ class ExecutionEngine {
 					setTimeout(() => {
 						getTask(task.id).then((t) => {
 							if (t && t.status === "queued") {
-								this.executeTask(projectId, t).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
+								this.executeTask(projectId, t).catch((err) =>
+									log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+								);
 							}
 						});
 					}, retryMs + 1000);
@@ -1031,7 +1059,12 @@ class ExecutionEngine {
 				}
 				// Telemetry lifecycle: ERROR (all adapters failed, not exhausted)
 				if (telemetryRecord) {
-					finishProviderTelemetry(this.telemetry, telemetryRecord, null, lastAdapterError ?? new Error("All CLI adapters exhausted"));
+					finishProviderTelemetry(
+						this.telemetry,
+						telemetryRecord,
+						null,
+						lastAdapterError ?? new Error("All CLI adapters exhausted"),
+					);
 				}
 				throw lastAdapterError ?? new Error("All CLI adapters exhausted — no provider available.");
 			}
@@ -1045,7 +1078,13 @@ class ExecutionEngine {
 			// Session step: CLI output received
 			if (sessionId) {
 				const fileCount = (output.filesCreated?.length ?? 0) + (output.filesModified?.length ?? 0);
-				recordStep(sessionId, { step: 2, type: "result_inspected", summary: `Output received: ${fileCount} files (${output.filesCreated?.length ?? 0} created, ${output.filesModified?.length ?? 0} modified)` }).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
+				recordStep(sessionId, {
+					step: 2,
+					type: "result_inspected",
+					summary: `Output received: ${fileCount} files (${output.filesCreated?.length ?? 0} created, ${output.filesModified?.length ?? 0} modified)`,
+				}).catch((err) =>
+					log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+				);
 			}
 
 			if (isolatedWorkspace?.isolated) {
@@ -1131,15 +1170,14 @@ class ExecutionEngine {
 			// Agent output buffer'ını log dosyasına persist et (restart sonrası terminal'de görünsün)
 			const agentOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
 			if (agentOutputLines.length > 0) {
-				persistAgentLog(projectId, agent.id, agentOutputLines).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
+				persistAgentLog(projectId, agent.id, agentOutputLines).catch((err) =>
+					log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+				);
 			}
 
 			// --- Sandbox post-execution: enforce path + output size restrictions ---
 			if (sandboxPolicy && sandboxPolicy.enforcementMode !== "off") {
-				const allPaths = [
-					...(output.filesCreated ?? []),
-					...(output.filesModified ?? []),
-				];
+				const allPaths = [...(output.filesCreated ?? []), ...(output.filesModified ?? [])];
 				if (allPaths.length > 0) {
 					await enforcePathChecks(sandboxPolicy, allPaths, sandboxSessionId);
 				}
@@ -1163,7 +1201,15 @@ class ExecutionEngine {
 					throw new Error(`Output verification failed: ${verifyResult.failedChecks}`);
 				}
 
-				const testResult = await runTestGateCheck(projectId, task, project.repoPath, output, agent.role, agent.id, sessionId);
+				const testResult = await runTestGateCheck(
+					projectId,
+					task,
+					project.repoPath,
+					output,
+					agent.role,
+					agent.id,
+					sessionId,
+				);
 				if (!testResult.passed) {
 					throw new Error(testResult.failedChecks!);
 				}
@@ -1173,10 +1219,14 @@ class ExecutionEngine {
 
 			// --- Sandbox: end session ---
 			if (sandboxSessionId) {
-				endSandboxSession(sandboxSessionId).catch((e) => log.warn("[execution-engine] Sandbox end failed:" + " " + String(e)));
+				endSandboxSession(sandboxSessionId).catch((e) =>
+					log.warn("[execution-engine] Sandbox end failed:" + " " + String(e)),
+				);
 			}
 			if (isolatedWorkspace?.isolated) {
-				isolatedWorkspace.cleanup().catch((e) => log.warn("[execution-engine] Workspace cleanup failed:" + " " + String(e)));
+				isolatedWorkspace
+					.cleanup()
+					.catch((e) => log.warn("[execution-engine] Workspace cleanup failed:" + " " + String(e)));
 			}
 
 			// --- Goal evaluation (delegated to execution-gates.ts) ---
@@ -1283,7 +1333,9 @@ class ExecutionEngine {
 			// Agent output buffer'ını log dosyasına persist et
 			const failOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
 			if (failOutputLines.length > 0) {
-				persistAgentLog(projectId, agent.id, failOutputLines).catch((err) => log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)));
+				persistAgentLog(projectId, agent.id, failOutputLines).catch((err) =>
+					log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+				);
 			}
 
 			await taskEngine.failTask(task.id, errorMsg);
@@ -1295,7 +1347,9 @@ class ExecutionEngine {
 				);
 			}
 			if (isolatedWorkspace?.isolated) {
-				isolatedWorkspace.cleanup().catch((e) => log.warn("[execution-engine] Workspace cleanup failed:" + " " + String(e)));
+				isolatedWorkspace
+					.cleanup()
+					.catch((e) => log.warn("[execution-engine] Workspace cleanup failed:" + " " + String(e)));
 			}
 
 			// --- Self-healing: auto-retry with error context (TASK 10) ---
@@ -1304,7 +1358,9 @@ class ExecutionEngine {
 			const { shouldRetry, delayMs } = evaluateRetry(failureClass, failedTask?.retryCount ?? 0);
 
 			if (!isTimeout && shouldRetry && failedTask) {
-				log.info(`[execution-engine] Self-healing: auto-retry #${failedTask.retryCount + 1} for "${task.title}" after ${delayMs}ms`);
+				log.info(
+					`[execution-engine] Self-healing: auto-retry #${failedTask.retryCount + 1} for "${task.title}" after ${delayMs}ms`,
+				);
 				eventBus.emit({
 					projectId,
 					type: "task:transient_failure",
@@ -1334,9 +1390,13 @@ class ExecutionEngine {
 				}
 
 				const retried = await taskEngine.retryTask(task.id);
-				// Re-execute with error context — bypass guard since we're retrying within the same dispatch
-				await this._executeTaskInner(projectId, { ...retried, error: errorMsg });
-				return; // skip dispatchReadyTasks — executeTask will handle it
+				// Re-queue through executeTask to respect semaphore concurrency limits
+				setImmediate(() => {
+					this.executeTask(projectId, retried).catch((err) =>
+						log.warn("[execution-engine] Self-heal retry dispatch failed:" + " " + String(err?.message ?? err)),
+					);
+				});
+				return; // skip dispatchReadyTasks — retry will go through executeTask
 			}
 		}
 

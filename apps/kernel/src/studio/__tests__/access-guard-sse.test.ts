@@ -2,11 +2,17 @@
 // Access Guard — SSE Auth Enforcement Tests
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { accessGuard } from "../auth/access-guard.js";
 
 describe("accessGuard — SSE requests", () => {
-	function makeCtx(opts: { path: string; method?: string; accept?: string; tenantId?: string; authType?: string }): any {
+	function makeCtx(opts: {
+		path: string;
+		method?: string;
+		accept?: string;
+		tenantId?: string;
+		authType?: string;
+	}): any {
 		const store: Record<string, unknown> = {};
 		return {
 			req: {
@@ -17,7 +23,9 @@ describe("accessGuard — SSE requests", () => {
 					return "";
 				},
 			},
-			set: (key: string, value: unknown) => { store[key] = value; },
+			set: (key: string, value: unknown) => {
+				store[key] = value;
+			},
 			get: (key: string) => {
 				if (key === "tenantId") return opts.tenantId ?? null;
 				return store[key] ?? null;

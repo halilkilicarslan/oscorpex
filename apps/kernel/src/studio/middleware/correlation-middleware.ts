@@ -5,9 +5,9 @@
 // correlation context so logger calls automatically pick up the ID.
 // ---------------------------------------------------------------------------
 
+import { randomUUID } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
 import { getCurrentCorrelationId, withCorrelation } from "../correlation-context.js";
-import { randomUUID } from "node:crypto";
 
 const CORRELATION_HEADER = "x-correlation-id";
 

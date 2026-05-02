@@ -6,8 +6,8 @@
 
 import { randomUUID } from "node:crypto";
 import { eventBus } from "../studio/event-bus.js";
-import { createCheckpointSnapshot } from "../studio/replay-store.js";
 import { createLogger } from "../studio/logger.js";
+import { createCheckpointSnapshot } from "../studio/replay-store.js";
 
 const log = createLogger("boot:replay");
 

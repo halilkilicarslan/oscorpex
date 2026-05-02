@@ -5,8 +5,8 @@
 
 import { listEvents, listProjectAgents, listProjectTasks } from "./db.js";
 import { eventBus } from "./event-bus.js";
-import type { ProjectAgent, StudioEvent, Task } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { ProjectAgent, StudioEvent, Task } from "./types.js";
 const log = createLogger("ceremony-engine");
 
 // ---------------------------------------------------------------------------

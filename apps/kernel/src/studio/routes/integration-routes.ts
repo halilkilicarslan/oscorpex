@@ -18,9 +18,9 @@ import {
 	updateWebhook,
 } from "../db.js";
 import { GitHubIntegration } from "../github-integration.js";
+import { createLogger } from "../logger.js";
 import { decrypt, encrypt, isEncrypted } from "../secret-vault.js";
 import { sendWebhookNotification } from "../webhook-sender.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("integration-routes");
 
 export const integrationRoutes = new Hono();

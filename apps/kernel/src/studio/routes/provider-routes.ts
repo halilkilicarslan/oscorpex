@@ -16,9 +16,9 @@ import {
 	updateFallbackOrder,
 	updateProvider,
 } from "../db.js";
+import { createLogger } from "../logger.js";
 import { isAnyPlannerCLIAvailable, listPlannerCLIProviders } from "../planner-cli.js";
 import { providerState } from "../provider-state.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("provider-routes");
 
 export const providerRoutes = new Hono();

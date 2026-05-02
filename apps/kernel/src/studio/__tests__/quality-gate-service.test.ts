@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { QualityGateService, TenantRequiredForProductionError } from "../quality-gate-service.js";
 import { execute, query, queryOne } from "../pg.js";
+import { QualityGateService, TenantRequiredForProductionError } from "../quality-gate-service.js";
 
 let dbReady = false;
 try {

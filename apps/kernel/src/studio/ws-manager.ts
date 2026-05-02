@@ -15,8 +15,8 @@ import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
 import { verifyJwt } from "./auth/jwt.js";
 import { eventBus } from "./event-bus.js";
-import type { StudioEvent } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { StudioEvent } from "./types.js";
 const log = createLogger("ws-manager");
 
 // ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ export type WSMessageType =
 	| "subscribed" // Abone onayı
 	| "unsubscribed"; // Abonelik iptali onayı
 
-	/** Bağlı client'ı temsil eden dahili kayıt */
+/** Bağlı client'ı temsil eden dahili kayıt */
 interface ClientRecord {
 	ws: WebSocket;
 	/** Client'ın abone olduğu proje ID'leri */

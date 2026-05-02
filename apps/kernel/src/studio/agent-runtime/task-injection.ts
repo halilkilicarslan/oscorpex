@@ -6,10 +6,10 @@
 
 import { autoApproveProposal, createProposal, createTask, hasCapability, listProjectAgents, query } from "../db.js";
 import { eventBus } from "../event-bus.js";
+import { createLogger } from "../logger.js";
+import { canonicalizeAgentRole, roleMatches } from "../roles.js";
 import type { ProposalType, Task, TaskProposal } from "../types.js";
 import { canAutoApprove } from "./agent-constraints.js";
-import { canonicalizeAgentRole, roleMatches } from "../roles.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("task-injection");
 
 // ---------------------------------------------------------------------------
@@ -33,23 +33,27 @@ export class InjectionLimitError extends Error {
 async function checkInjectionLimits(request: InjectionRequest): Promise<void> {
 	// Per-task quota: max proposals from a single originating task
 	if (request.originatingTaskId) {
-		const taskProposals = await query(
-			`SELECT COUNT(*) AS cnt FROM task_proposals WHERE originating_task_id = $1`,
-			[request.originatingTaskId],
-		);
+		const taskProposals = await query(`SELECT COUNT(*) AS cnt FROM task_proposals WHERE originating_task_id = $1`, [
+			request.originatingTaskId,
+		]);
 		if (Number(taskProposals[0]?.cnt ?? 0) >= MAX_PROPOSALS_PER_TASK) {
-			throw new InjectionLimitError("per_task_quota", `Task ${request.originatingTaskId} has reached proposal limit (${MAX_PROPOSALS_PER_TASK})`);
+			throw new InjectionLimitError(
+				"per_task_quota",
+				`Task ${request.originatingTaskId} has reached proposal limit (${MAX_PROPOSALS_PER_TASK})`,
+			);
 		}
 	}
 
 	// Per-phase budget: max proposals in a single phase
 	if (request.phaseId) {
-		const phaseProposals = await query(
-			`SELECT COUNT(*) AS cnt FROM task_proposals WHERE phase_id = $1`,
-			[request.phaseId],
-		);
+		const phaseProposals = await query(`SELECT COUNT(*) AS cnt FROM task_proposals WHERE phase_id = $1`, [
+			request.phaseId,
+		]);
 		if (Number(phaseProposals[0]?.cnt ?? 0) >= MAX_PROPOSALS_PER_PHASE) {
-			throw new InjectionLimitError("per_phase_budget", `Phase ${request.phaseId} has reached injection budget (${MAX_PROPOSALS_PER_PHASE})`);
+			throw new InjectionLimitError(
+				"per_phase_budget",
+				`Phase ${request.phaseId} has reached injection budget (${MAX_PROPOSALS_PER_PHASE})`,
+			);
 		}
 	}
 

@@ -4,7 +4,7 @@
 // performance snapshots. No behavioral changes; read-only aggregation.
 // ---------------------------------------------------------------------------
 
-import { ProviderTelemetryCollector, type ProviderExecutionTelemetry } from "@oscorpex/provider-sdk";
+import type { ProviderExecutionTelemetry, ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import { createLogger } from "./logger.js";
 
 const log = createLogger("performance-metrics");
@@ -133,30 +133,24 @@ function buildProviderSnapshot(
 	records: ProviderExecutionTelemetry[],
 	_cutoff: number,
 ): ProviderPerfSnapshot {
-	const providerRecords = records.filter(
-		(r) => (r.finalProvider ?? r.primaryProvider) === providerId,
-	);
+	const providerRecords = records.filter((r) => (r.finalProvider ?? r.primaryProvider) === providerId);
 	const total = providerRecords.length;
 	const successful = providerRecords.filter((r) => r.success).length;
 	const failed = total - successful;
 	const fallbackCount = providerRecords.reduce((sum, r) => sum + r.fallbackCount, 0);
 	const cancelCount = providerRecords.filter((r) => r.canceled).length;
 	const timeoutCount = providerRecords.filter(
-		(r) =>
-			r.errorClassification === "timeout" ||
-			r.fallbackTimeline.some((f) => f.errorClassification === "timeout"),
+		(r) => r.errorClassification === "timeout" || r.fallbackTimeline.some((f) => f.errorClassification === "timeout"),
 	).length;
 
 	const latencies = providerRecords.map((r) => r.latencyMs).sort((a, b) => a - b);
 	const classificationDistribution: Record<string, number> = {};
 	for (const r of providerRecords) {
 		if (r.errorClassification) {
-			classificationDistribution[r.errorClassification] =
-				(classificationDistribution[r.errorClassification] ?? 0) + 1;
+			classificationDistribution[r.errorClassification] = (classificationDistribution[r.errorClassification] ?? 0) + 1;
 		}
 		for (const f of r.fallbackTimeline) {
-			classificationDistribution[f.errorClassification] =
-				(classificationDistribution[f.errorClassification] ?? 0) + 1;
+			classificationDistribution[f.errorClassification] = (classificationDistribution[f.errorClassification] ?? 0) + 1;
 		}
 	}
 
@@ -183,9 +177,7 @@ function buildProviderSnapshot(
 	};
 }
 
-function buildTopSlowest(
-	records: ProviderExecutionTelemetry[],
-): ExecutionBaseline["topSlowestPatterns"] {
+function buildTopSlowest(records: ProviderExecutionTelemetry[]): ExecutionBaseline["topSlowestPatterns"] {
 	const groups = new Map<string, { latencies: number[]; provider: string; classification?: string }>();
 	for (const r of records) {
 		const key = `${r.finalProvider ?? r.primaryProvider}:${r.errorClassification ?? "success"}`;
@@ -214,9 +206,7 @@ function buildTopSlowest(
 	return items;
 }
 
-function buildTopFallbackPatterns(
-	records: ProviderExecutionTelemetry[],
-): ExecutionBaseline["topFallbackPatterns"] {
+function buildTopFallbackPatterns(records: ProviderExecutionTelemetry[]): ExecutionBaseline["topFallbackPatterns"] {
 	const groups = new Map<string, { fromProvider: string; toProvider: string; reason: string; count: number }>();
 	for (const r of records) {
 		for (const f of r.fallbackTimeline) {

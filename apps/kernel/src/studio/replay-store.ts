@@ -2,9 +2,9 @@
 // Persists checkpoint-level replay snapshots to PostgreSQL.
 // Implements the ReplayStore contract from @oscorpex/core.
 
-import type { ReplaySnapshot, ReplayStore } from "@oscorpex/core";
 import { createHash } from "node:crypto";
-import { execute, queryOne, query } from "./pg.js";
+import type { ReplaySnapshot, ReplayStore } from "@oscorpex/core";
+import { execute, query, queryOne } from "./pg.js";
 
 class DbReplayStore implements ReplayStore {
 	private hashSnapshot(snapshot: ReplaySnapshot): string {
@@ -83,8 +83,12 @@ class DbReplayStore implements ReplayStore {
 			stages: parsed.stages ?? [],
 			tasks: parsed.tasks ?? [],
 			artifacts: parsed.artifacts ?? [],
-			policyDecisions: row.policy_decisions_json ? JSON.parse(row.policy_decisions_json) : (parsed.policyDecisions ?? []),
-			verificationReports: row.verification_reports_json ? JSON.parse(row.verification_reports_json) : (parsed.verificationReports ?? []),
+			policyDecisions: row.policy_decisions_json
+				? JSON.parse(row.policy_decisions_json)
+				: (parsed.policyDecisions ?? []),
+			verificationReports: row.verification_reports_json
+				? JSON.parse(row.verification_reports_json)
+				: (parsed.verificationReports ?? []),
 		} as ReplaySnapshot;
 	}
 
@@ -116,8 +120,12 @@ class DbReplayStore implements ReplayStore {
 			stages: parsed.stages ?? [],
 			tasks: parsed.tasks ?? [],
 			artifacts: parsed.artifacts ?? [],
-			policyDecisions: row.policy_decisions_json ? JSON.parse(row.policy_decisions_json) : (parsed.policyDecisions ?? []),
-			verificationReports: row.verification_reports_json ? JSON.parse(row.verification_reports_json) : (parsed.verificationReports ?? []),
+			policyDecisions: row.policy_decisions_json
+				? JSON.parse(row.policy_decisions_json)
+				: (parsed.policyDecisions ?? []),
+			verificationReports: row.verification_reports_json
+				? JSON.parse(row.verification_reports_json)
+				: (parsed.verificationReports ?? []),
 		} as ReplaySnapshot;
 	}
 
@@ -150,8 +158,12 @@ class DbReplayStore implements ReplayStore {
 				stages: parsed.stages ?? [],
 				tasks: parsed.tasks ?? [],
 				artifacts: parsed.artifacts ?? [],
-				policyDecisions: row.policy_decisions_json ? JSON.parse(row.policy_decisions_json) : (parsed.policyDecisions ?? []),
-				verificationReports: row.verification_reports_json ? JSON.parse(row.verification_reports_json) : (parsed.verificationReports ?? []),
+				policyDecisions: row.policy_decisions_json
+					? JSON.parse(row.policy_decisions_json)
+					: (parsed.policyDecisions ?? []),
+				verificationReports: row.verification_reports_json
+					? JSON.parse(row.verification_reports_json)
+					: (parsed.verificationReports ?? []),
 			} as ReplaySnapshot;
 		});
 	}
@@ -337,11 +349,11 @@ export async function restoreFromSnapshot(
 	for (const task of snapshot.tasks as any[]) {
 		try {
 			if (!dryRun) {
-			await updateTask(task.id, {
-				status: task.status,
-				output: task.output ?? undefined,
-				error: task.error ?? undefined,
-			});
+				await updateTask(task.id, {
+					status: task.status,
+					output: task.output ?? undefined,
+					error: task.error ?? undefined,
+				});
 			}
 			result.tasksRestored++;
 		} catch (err) {

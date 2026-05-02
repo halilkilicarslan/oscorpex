@@ -1,11 +1,8 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-	findMissingHoistedDependencies,
-	hoistPathForDeclaredPackage,
-} from "../repo-dependency-sync.js";
+import { findMissingHoistedDependencies, hoistPathForDeclaredPackage } from "../repo-dependency-sync.js";
 
 describe("repo-dependency-sync", () => {
 	it("resolves hoisted paths for scoped and unscoped packages", () => {

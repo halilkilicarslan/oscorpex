@@ -3,12 +3,19 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
 import type { ApprovalRule, RiskLevel } from "../types.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("approval-repo");
 
-export type ApprovalRequestState = "pending" | "in-review" | "approved" | "rejected" | "expired" | "superseded" | "cancelled";
+export type ApprovalRequestState =
+	| "pending"
+	| "in-review"
+	| "approved"
+	| "rejected"
+	| "expired"
+	| "superseded"
+	| "cancelled";
 export type ApprovalDecisionValue = "approved" | "rejected";
 
 export interface QualityApprovalRequest {
@@ -192,9 +199,7 @@ function rowToRule(row: any): ApprovalRule {
 // CRUD
 // ---------------------------------------------------------------------------
 
-export async function createApprovalRule(
-	data: Omit<ApprovalRule, "id" | "createdAt">,
-): Promise<ApprovalRule> {
+export async function createApprovalRule(data: Omit<ApprovalRule, "id" | "createdAt">): Promise<ApprovalRule> {
 	const id = randomUUID();
 	await execute(
 		`INSERT INTO approval_rules (id, project_id, action_type, risk_level, requires_approval, auto_approve, max_per_run, description)
@@ -241,11 +246,7 @@ export async function getApprovalRule(
 }
 
 /** Check if an action requires approval */
-export async function requiresApproval(
-	projectId: string,
-	actionType: string,
-	riskLevel: RiskLevel,
-): Promise<boolean> {
+export async function requiresApproval(projectId: string, actionType: string, riskLevel: RiskLevel): Promise<boolean> {
 	const rule = await getApprovalRule(projectId, actionType, riskLevel);
 	if (!rule) {
 		// Default: high/critical require approval, low/medium auto-approve

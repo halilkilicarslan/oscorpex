@@ -8,12 +8,12 @@
 // uses BaseEvent with correlationId and causationId.
 // ---------------------------------------------------------------------------
 
-import { getEvent, insertEvent } from "./db.js";
-import { pgListener } from "./pg-listener.js";
-import type { EventType, StudioEvent } from "./types.js";
 import type { BaseEvent, EventPayloadMap } from "@oscorpex/event-schema";
 import { getCorrelationIds } from "./correlation-context.js";
+import { getEvent, insertEvent } from "./db.js";
 import { createLogger } from "./logger.js";
+import { pgListener } from "./pg-listener.js";
+import type { EventType, StudioEvent } from "./types.js";
 const log = createLogger("event-bus");
 
 type Handler = (event: StudioEvent) => void;
@@ -100,7 +100,9 @@ class EventBus {
 				setTimeout(() => this._recentlyEmitted.delete(event.id), DEDUP_TTL_MS);
 
 				// PG LISTEN/NOTIFY — durable event notification (diğer process'ler için)
-				pgListener.notify({ id: event.id, projectId: event.projectId, type: event.type }).catch((err) => log.warn("[event-bus] Non-blocking operation failed:", err?.message ?? err));
+				pgListener
+					.notify({ id: event.id, projectId: event.projectId, type: event.type })
+					.catch((err) => log.warn("[event-bus] Non-blocking operation failed:", err?.message ?? err));
 
 				// Notify project subscribers
 				const projectHandlers = this.handlers.get(`project:${event.projectId}`);
@@ -179,7 +181,9 @@ class EventBus {
 		setTimeout(() => this._recentlyEmitted.delete(event.id), DEDUP_TTL_MS);
 
 		// PG LISTEN/NOTIFY — durable event notification (diğer process'ler için)
-		pgListener.notify({ id: event.id, projectId: event.projectId, type: event.type }).catch((err) => log.warn("[event-bus] Non-blocking operation failed:", err?.message ?? err));
+		pgListener
+			.notify({ id: event.id, projectId: event.projectId, type: event.type })
+			.catch((err) => log.warn("[event-bus] Non-blocking operation failed:", err?.message ?? err));
 
 		// Notify project subscribers
 		const projectHandlers = this.handlers.get(`project:${event.projectId}`);
@@ -250,10 +254,7 @@ class EventBus {
 					}
 				})
 				.catch((err) => {
-					log.warn(
-						"[event-bus] Failed to fetch event from PG notification:",
-						err instanceof Error ? err.message : err,
-					);
+					log.warn("[event-bus] Failed to fetch event from PG notification:", err instanceof Error ? err.message : err);
 				});
 		});
 	}

@@ -3,9 +3,9 @@
 // Verifies register, execute, cancel, list, and capability contracts.
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { ProviderRegistry } from "../../kernel/provider-registry.js";
 import type { ProviderAdapter, ProviderExecutionInput, ProviderExecutionResult } from "@oscorpex/core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ProviderRegistry } from "../../kernel/provider-registry.js";
 
 function createFakeAdapter(id: string): FakeAdapter {
 	return new FakeAdapter(id);

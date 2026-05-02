@@ -9,8 +9,8 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { agentRuntime } from "./agent-runtime.js";
 import { eventBus } from "./event-bus.js";
-import type { TaskOutput } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { TaskOutput } from "./types.js";
 const log = createLogger("cli-runtime");
 
 // ---------------------------------------------------------------------------

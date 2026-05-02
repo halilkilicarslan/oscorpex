@@ -4,9 +4,9 @@
 // PostgreSQL, MySQL, MongoDB, Redis destekler.
 // ---------------------------------------------------------------------------
 
-import { ChildProcess, execSync, spawn } from "node:child_process";
-import type { DatabaseType, DetectedDatabase } from "./runtime-analyzer.js";
+import { ChildProcess, execFileSync, execSync, spawn } from "node:child_process";
 import { createLogger } from "./logger.js";
+import type { DatabaseType, DetectedDatabase } from "./runtime-analyzer.js";
 const log = createLogger("db-provisioner");
 
 // ---------------------------------------------------------------------------
@@ -44,7 +44,7 @@ const DB_DEFAULTS: Record<
 	{
 		envVars: Record<string, string>;
 		connectionUrl: (port: number) => string;
-		healthCmd: (containerName: string) => string;
+		healthArgs: (containerName: string) => string[];
 	}
 > = {
 	postgresql: {
@@ -56,7 +56,7 @@ const DB_DEFAULTS: Record<
 			DB_PORT: "5432",
 		},
 		connectionUrl: (port) => `postgresql://postgres:postgres@localhost:${port}/app_dev`,
-		healthCmd: (c) => `docker exec ${c} pg_isready -U postgres`,
+		healthArgs: (c) => ["exec", c, "pg_isready", "-U", "postgres"],
 	},
 	mysql: {
 		envVars: {
@@ -67,14 +67,14 @@ const DB_DEFAULTS: Record<
 			MYSQL_PORT: "3306",
 		},
 		connectionUrl: (port) => `mysql://root:root@localhost:${port}/app_dev`,
-		healthCmd: (c) => `docker exec ${c} mysqladmin ping -h localhost -u root -proot`,
+		healthArgs: (c) => ["exec", c, "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"],
 	},
 	mongodb: {
 		envVars: {
 			MONGO_URI: "mongodb://localhost:27017/app_dev",
 		},
 		connectionUrl: (port) => `mongodb://localhost:${port}/app_dev`,
-		healthCmd: (c) => `docker exec ${c} mongosh --eval "db.runCommand('ping')"`,
+		healthArgs: (c) => ["exec", c, "mongosh", "--eval", "db.runCommand('ping')"],
 	},
 	redis: {
 		envVars: {
@@ -83,12 +83,12 @@ const DB_DEFAULTS: Record<
 			REDIS_URL: "redis://localhost:6379",
 		},
 		connectionUrl: (port) => `redis://localhost:${port}`,
-		healthCmd: (c) => `docker exec ${c} redis-cli ping`,
+		healthArgs: (c) => ["exec", c, "redis-cli", "ping"],
 	},
 	sqlite: {
 		envVars: {},
 		connectionUrl: () => "",
-		healthCmd: () => "true",
+		healthArgs: () => [],
 	},
 };
 
@@ -156,9 +156,10 @@ function isDockerAvailable(): boolean {
 
 function isContainerRunning(containerName: string): boolean {
 	try {
-		const result = execSync(`docker inspect -f '{{.State.Running}}' ${containerName} 2>/dev/null`, {
+		const result = execFileSync("docker", ["inspect", "-f", "{{.State.Running}}", containerName], {
 			encoding: "utf-8",
 			timeout: 5000,
+			stdio: ["pipe", "pipe", "ignore"],
 		}).trim();
 		return result === "true";
 	} catch {
@@ -168,7 +169,7 @@ function isContainerRunning(containerName: string): boolean {
 
 function containerExists(containerName: string): boolean {
 	try {
-		execSync(`docker inspect ${containerName} 2>/dev/null`, { stdio: "ignore", timeout: 5000 });
+		execFileSync("docker", ["inspect", containerName], { stdio: "ignore", timeout: 5000 });
 		return true;
 	} catch {
 		return false;
@@ -189,6 +190,10 @@ export async function provisionDatabase(
 	onLog: (msg: string) => void,
 ): Promise<{ envVars: Record<string, string>; status: DbStatus }> {
 	const key = containerKey(projectId, db.type);
+	// Validate projectId to prevent shell injection via container name
+	if (!/^[a-f0-9-]{36}$/i.test(projectId)) {
+		throw new Error(`Invalid projectId format: ${projectId.slice(0, 40)}`);
+	}
 	const containerName = `studio-${db.type}-${projectId.slice(0, 8)}`;
 	const defaults = DB_DEFAULTS[db.type];
 
@@ -228,7 +233,7 @@ export async function provisionDatabase(
 	if (containerExists(containerName)) {
 		onLog(`[db-provisioner] Eski container kaldırılıyor: ${containerName}`);
 		try {
-			execSync(`docker rm -f ${containerName}`, { stdio: "ignore", timeout: 10000 });
+			execFileSync("docker", ["rm", "-f", containerName], { stdio: "ignore", timeout: 10000 });
 		} catch {
 			/* */
 		}
@@ -237,26 +242,52 @@ export async function provisionDatabase(
 	// Yeni container başlat
 	onLog(`[db-provisioner] ${db.type} başlatılıyor: ${db.image} → port ${port}`);
 
-	let dockerCmd: string;
+	let dockerArgs: string[];
 	switch (db.type) {
 		case "postgresql":
-			dockerCmd = `docker run -d --name ${containerName} -p ${port}:5432 -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=app_dev ${db.image}`;
+			dockerArgs = [
+				"run",
+				"-d",
+				"--name",
+				containerName,
+				"-p",
+				`${port}:5432`,
+				"-e",
+				"POSTGRES_USER=postgres",
+				"-e",
+				"POSTGRES_PASSWORD=postgres",
+				"-e",
+				"POSTGRES_DB=app_dev",
+				db.image,
+			];
 			break;
 		case "mysql":
-			dockerCmd = `docker run -d --name ${containerName} -p ${port}:3306 -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=app_dev ${db.image}`;
+			dockerArgs = [
+				"run",
+				"-d",
+				"--name",
+				containerName,
+				"-p",
+				`${port}:3306`,
+				"-e",
+				"MYSQL_ROOT_PASSWORD=root",
+				"-e",
+				"MYSQL_DATABASE=app_dev",
+				db.image,
+			];
 			break;
 		case "mongodb":
-			dockerCmd = `docker run -d --name ${containerName} -p ${port}:27017 ${db.image}`;
+			dockerArgs = ["run", "-d", "--name", containerName, "-p", `${port}:27017`, db.image];
 			break;
 		case "redis":
-			dockerCmd = `docker run -d --name ${containerName} -p ${port}:6379 ${db.image}`;
+			dockerArgs = ["run", "-d", "--name", containerName, "-p", `${port}:6379`, db.image];
 			break;
 		default:
 			throw new Error(`Desteklenmeyen veritabanı tipi: ${db.type}`);
 	}
 
 	try {
-		execSync(dockerCmd, { encoding: "utf-8", timeout: 30000 });
+		execFileSync("docker", dockerArgs, { encoding: "utf-8", timeout: 30000 });
 		onLog(`[db-provisioner] ${db.type} container başlatıldı: ${containerName}`);
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
@@ -265,13 +296,13 @@ export async function provisionDatabase(
 			const retryPort = findAvailablePort(port + 1);
 			onLog(`[db-provisioner] Port ${port} Docker tarafında da meşgul, ${retryPort} deneniyor...`);
 			try {
-				execSync(`docker rm -f ${containerName}`, { stdio: "ignore", timeout: 5000 });
+				execFileSync("docker", ["rm", "-f", containerName], { stdio: "ignore", timeout: 5000 });
 			} catch {
 				/* */
 			}
-			const retryCmd = dockerCmd.replace(`-p ${port}:`, `-p ${retryPort}:`);
+			const retryArgs = dockerArgs.map((a) => (a.includes(`${port}:`) ? a.replace(`${port}:`, `${retryPort}:`) : a));
 			try {
-				execSync(retryCmd, { encoding: "utf-8", timeout: 30000 });
+				execFileSync("docker", retryArgs, { encoding: "utf-8", timeout: 30000 });
 				onLog(`[db-provisioner] ${db.type} container başlatıldı: ${containerName} (port ${retryPort})`);
 				// Aşağıda port değişkenini kullanamayız, bu yüzden erken return
 				const retryStatus: DbStatus = {
@@ -295,13 +326,15 @@ export async function provisionDatabase(
 
 	// Health check — DB'nin hazır olmasını bekle
 	onLog(`[db-provisioner] ${db.type} hazır olması bekleniyor...`);
-	const healthCmd = defaults.healthCmd(containerName);
+	const healthArgs = defaults.healthArgs(containerName);
 	const maxAttempts = 20;
 
 	for (let i = 0; i < maxAttempts; i++) {
 		await new Promise((r) => setTimeout(r, 1000));
 		try {
-			execSync(healthCmd, { stdio: "ignore", timeout: 5000 });
+			if (healthArgs.length > 0) {
+				execFileSync("docker", healthArgs, { stdio: "ignore", timeout: 5000 });
+			}
 			onLog(`[db-provisioner] ${db.type} hazır! (${i + 1}s)`);
 			break;
 		} catch {
@@ -333,8 +366,8 @@ export async function stopDatabase(projectId: string, dbType: DatabaseType): Pro
 	if (!status?.containerName) return;
 
 	try {
-		execSync(`docker stop ${status.containerName}`, { stdio: "ignore", timeout: 10000 });
-		execSync(`docker rm ${status.containerName}`, { stdio: "ignore", timeout: 10000 });
+		execFileSync("docker", ["stop", status.containerName], { stdio: "ignore", timeout: 10000 });
+		execFileSync("docker", ["rm", status.containerName], { stdio: "ignore", timeout: 10000 });
 	} catch {
 		/* ignore */
 	}
@@ -350,8 +383,8 @@ export async function stopAllDatabases(projectId: string): Promise<void> {
 		if (key.startsWith(`${projectId}:`)) {
 			if (status.containerName) {
 				try {
-					execSync(`docker stop ${status.containerName}`, { stdio: "ignore", timeout: 10000 });
-					execSync(`docker rm ${status.containerName}`, { stdio: "ignore", timeout: 10000 });
+					execFileSync("docker", ["stop", status.containerName], { stdio: "ignore", timeout: 10000 });
+					execFileSync("docker", ["rm", status.containerName], { stdio: "ignore", timeout: 10000 });
 				} catch {
 					/* ignore */
 				}

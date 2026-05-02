@@ -6,9 +6,9 @@
 import { Hono } from "hono";
 import { getProject } from "../db.js";
 import { getValidTransitions, transitionProject, triggerHotfix } from "../lifecycle-manager.js";
+import { createLogger } from "../logger.js";
 import { generateProjectReport, generateStakeholderReport } from "../report-generator.js";
 import type { ProjectStatus } from "../types.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("lifecycle-routes");
 
 const VALID_STATUSES: ProjectStatus[] = [

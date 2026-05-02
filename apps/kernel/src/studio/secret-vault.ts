@@ -20,9 +20,7 @@ function getVaultKey(): Buffer {
 	}
 
 	// Production'da mutlaka env var set edilmeli
-	log.warn(
-		"[secret-vault] OSCORPEX_VAULT_KEY not set — using hostname-derived key. Set a proper key for production.",
-	);
+	log.warn("[secret-vault] OSCORPEX_VAULT_KEY not set — using hostname-derived key. Set a proper key for production.");
 	return createHash("sha256").update(hostname()).digest();
 }
 

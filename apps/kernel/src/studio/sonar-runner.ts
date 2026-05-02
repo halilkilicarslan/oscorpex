@@ -14,8 +14,8 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getProjectSetting } from "./db.js";
-import { execute, query, queryOne } from "./pg.js";
 import { createLogger } from "./logger.js";
+import { execute, query, queryOne } from "./pg.js";
 const log = createLogger("sonar-runner");
 
 // ---------------------------------------------------------------------------

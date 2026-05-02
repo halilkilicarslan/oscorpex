@@ -2,15 +2,15 @@
 // Tests — Preflight Warm-up (TASK 12)
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-	markExecutionStarted,
-	isColdStart,
-	resetColdStart,
-	runPreflightHealthChecks,
-	resolveBinaryPath,
 	clearBinaryPathCache,
 	getLastPreflightTelemetry,
+	isColdStart,
+	markExecutionStarted,
+	resetColdStart,
+	resolveBinaryPath,
+	runPreflightHealthChecks,
 } from "../preflight-warmup.js";
 import { providerRuntimeCache } from "../provider-runtime-cache.js";
 
@@ -52,9 +52,7 @@ describe("runPreflightHealthChecks", () => {
 	});
 
 	it("returns results for all adapters", async () => {
-		vi.mocked(providerRuntimeCache.resolveAvailability)
-			.mockResolvedValueOnce(true)
-			.mockResolvedValueOnce(false);
+		vi.mocked(providerRuntimeCache.resolveAvailability).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
 		const adapters = [
 			{ name: "claude-code", isAvailable: vi.fn().mockResolvedValue(true) },
 			{ name: "codex", isAvailable: vi.fn().mockResolvedValue(false) },
@@ -76,9 +74,7 @@ describe("runPreflightHealthChecks", () => {
 	});
 
 	it("stores telemetry after run (TASK 7.3)", async () => {
-		vi.mocked(providerRuntimeCache.resolveAvailability)
-			.mockResolvedValueOnce(true)
-			.mockResolvedValueOnce(false);
+		vi.mocked(providerRuntimeCache.resolveAvailability).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
 		const adapters = [
 			{ name: "claude-code", isAvailable: vi.fn().mockResolvedValue(true) },
 			{ name: "codex", isAvailable: vi.fn().mockResolvedValue(false) },

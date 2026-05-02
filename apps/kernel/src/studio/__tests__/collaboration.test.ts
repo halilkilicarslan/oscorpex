@@ -2,7 +2,7 @@
 // Oscorpex — Collaboration Service Tests (V6 M6 F11)
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CollaborationService } from "../collaboration.js";
 
 describe("CollaborationService", () => {

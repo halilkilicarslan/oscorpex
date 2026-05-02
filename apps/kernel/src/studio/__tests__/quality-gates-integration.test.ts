@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { signJwt } from "../auth/jwt.js";
-import { accessGuard } from "../auth/access-guard.js";
-import { qualityGateRoutes } from "../routes/quality-gates.js";
-import { approvalRoutes } from "../routes/approvals.js";
-import { releaseRoutes } from "../routes/releases.js";
-import { artifactRoutes } from "../routes/artifacts.js";
-import { qualityGateService } from "../quality-gate-service.js";
+import { beforeEach, describe, expect, it } from "vitest";
 import { artifactReferenceService } from "../artifact-reference-service.js";
+import { accessGuard } from "../auth/access-guard.js";
+import { signJwt } from "../auth/jwt.js";
 import { execute, query, queryOne } from "../pg.js";
+import { qualityGateService } from "../quality-gate-service.js";
+import { approvalRoutes } from "../routes/approvals.js";
+import { artifactRoutes } from "../routes/artifacts.js";
+import { qualityGateRoutes } from "../routes/quality-gates.js";
+import { releaseRoutes } from "../routes/releases.js";
 
 let dbReady = false;
 try {
@@ -173,7 +173,9 @@ describe.skipIf(!dbReady)("H2-I Quality Gates Integration", () => {
 			headers: authHeaders("admin", tenantId),
 		});
 		expect(releaseEval.status).toBe(200);
-		const body = (await releaseEval.json()) as { data: { allowed: boolean; blocked: boolean; rollbackRequired: boolean } };
+		const body = (await releaseEval.json()) as {
+			data: { allowed: boolean; blocked: boolean; rollbackRequired: boolean };
+		};
 		expect(body.data.allowed).toBe(true);
 		expect(body.data.blocked).toBe(false);
 		expect(body.data.rollbackRequired).toBe(false);
@@ -230,7 +232,9 @@ describe.skipIf(!dbReady)("H2-I Quality Gates Integration", () => {
 			method: "POST",
 			headers: authHeaders("admin", tenantId),
 		});
-		const releaseBody = (await releaseEval.json()) as { data: { blocked: boolean; blockingReasons: Array<{ code: string }> } };
+		const releaseBody = (await releaseEval.json()) as {
+			data: { blocked: boolean; blockingReasons: Array<{ code: string }> };
+		};
 		expect(releaseBody.data.blocked).toBe(true);
 		expect(releaseBody.data.blockingReasons.some((x) => x.code === "approval_rejected")).toBe(true);
 	});

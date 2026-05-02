@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { query, queryOne, execute } from "../pg.js";
 import { createLogger } from "../logger.js";
+import { execute, query, queryOne } from "../pg.js";
 const log = createLogger("graph-mutation-repo");
 
 // ---------------------------------------------------------------------------
@@ -111,10 +111,10 @@ export async function listGraphMutations(
 		);
 		return rows.map(rowToMutation);
 	}
-	const rows = await query(
-		`SELECT * FROM graph_mutations WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2`,
-		[projectId, limit],
-	);
+	const rows = await query(`SELECT * FROM graph_mutations WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2`, [
+		projectId,
+		limit,
+	]);
 	return rows.map(rowToMutation);
 }
 

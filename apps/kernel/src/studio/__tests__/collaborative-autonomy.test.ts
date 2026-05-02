@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { extractProposals, type AgentOutputProposal } from "../cli-runtime.js";
+import { describe, expect, it } from "vitest";
+import { type AgentOutputProposal, extractProposals } from "../cli-runtime.js";
 
 // ---------------------------------------------------------------------------
 // 1. Marker extraction from CLI output text
@@ -29,8 +29,9 @@ All done.`;
 	});
 
 	it("enforces max 3 proposals per type", () => {
-		const text = Array.from({ length: 5 }, (_, i) =>
-			`<!-- TASK_PROPOSAL: {"title": "Task ${i}", "proposalType": "fix_task"} -->`,
+		const text = Array.from(
+			{ length: 5 },
+			(_, i) => `<!-- TASK_PROPOSAL: {"title": "Task ${i}", "proposalType": "fix_task"} -->`,
 		).join("\n");
 		const proposals = extractProposals(text);
 		expect(proposals).toHaveLength(3); // capped at MAX_PROPOSALS_PER_TYPE
@@ -96,11 +97,13 @@ Done with the task.`;
 	});
 
 	it("rate limits each type independently", () => {
-		const tasks = Array.from({ length: 5 }, (_, i) =>
-			`<!-- TASK_PROPOSAL: {"title": "T${i}", "proposalType": "fix_task"} -->`,
+		const tasks = Array.from(
+			{ length: 5 },
+			(_, i) => `<!-- TASK_PROPOSAL: {"title": "T${i}", "proposalType": "fix_task"} -->`,
 		).join("\n");
-		const msgs = Array.from({ length: 5 }, (_, i) =>
-			`<!-- AGENT_MESSAGE: {"targetAgentId": "a${i}", "content": "msg"} -->`,
+		const msgs = Array.from(
+			{ length: 5 },
+			(_, i) => `<!-- AGENT_MESSAGE: {"targetAgentId": "a${i}", "content": "msg"} -->`,
 		).join("\n");
 		const proposals = extractProposals(tasks + "\n" + msgs);
 		const taskProposals = proposals.filter((p) => p.type === "task_proposal");

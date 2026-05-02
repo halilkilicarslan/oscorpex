@@ -4,7 +4,7 @@
 // DB-backed — skips if database unavailable.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, beforeAll } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { getPipelineRun, mutatePipelineState } from "../db.js";
 import { execute, query } from "../pg.js";
 
@@ -38,13 +38,23 @@ describe.skipIf(!dbReady)("Restart Recovery — DB-Authoritative Pipeline State"
 			`INSERT INTO pipeline_runs (id, project_id, status, current_stage, stages_json, version, created_at)
 			 VALUES ($1, $2, 'running', 0, $3, 1, now())
 			 ON CONFLICT (project_id) DO UPDATE SET status = 'running', current_stage = 0, version = 1`,
-			["rr-run-1", PROJECT_ID, JSON.stringify([{ name: "Phase 1", status: "pending" }, { name: "Phase 2", status: "pending" }])],
+			[
+				"rr-run-1",
+				PROJECT_ID,
+				JSON.stringify([
+					{ name: "Phase 1", status: "pending" },
+					{ name: "Phase 2", status: "pending" },
+				]),
+			],
 		);
 
 		// Mutate state (simulates advancing stage)
 		await mutatePipelineState(PROJECT_ID, async (run) => ({
 			currentStage: 1,
-			stagesJson: JSON.stringify([{ name: "Phase 1", status: "completed" }, { name: "Phase 2", status: "running" }]),
+			stagesJson: JSON.stringify([
+				{ name: "Phase 1", status: "completed" },
+				{ name: "Phase 2", status: "running" },
+			]),
 		}));
 
 		// "Restart" — read from DB cold (no in-memory cache)
@@ -53,9 +63,8 @@ describe.skipIf(!dbReady)("Restart Recovery — DB-Authoritative Pipeline State"
 		expect(recovered!.currentStage).toBe(1);
 		expect(recovered!.status).toBe("running");
 
-		const stages = typeof recovered!.stagesJson === "string"
-			? JSON.parse(recovered!.stagesJson)
-			: recovered!.stagesJson;
+		const stages =
+			typeof recovered!.stagesJson === "string" ? JSON.parse(recovered!.stagesJson) : recovered!.stagesJson;
 		expect(stages[0].status).toBe("completed");
 		expect(stages[1].status).toBe("running");
 	});
@@ -76,7 +85,10 @@ describe.skipIf(!dbReady)("Restart Recovery — DB-Authoritative Pipeline State"
 		// Run two concurrent mutations — both should succeed sequentially, not corrupt
 		await Promise.all([
 			mutatePipelineState(PROJECT_ID, async (run) => ({
-				stagesJson: JSON.stringify([{ name: "Phase 1", status: "completed" }, { name: "Phase 2", status: "completed" }]),
+				stagesJson: JSON.stringify([
+					{ name: "Phase 1", status: "completed" },
+					{ name: "Phase 2", status: "completed" },
+				]),
 			})),
 			mutatePipelineState(PROJECT_ID, async (run) => ({
 				status: "completed",

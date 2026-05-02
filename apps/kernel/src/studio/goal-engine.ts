@@ -6,18 +6,18 @@
 
 import { randomUUID } from "node:crypto";
 import {
+	createTask,
+	execute,
+	getProjectSetting,
+	getTask,
+	listProjectTasks,
 	query,
 	queryOne,
-	execute,
-	getTask,
 	updateTask,
-	createTask,
-	listProjectTasks,
-	getProjectSetting,
 } from "./db.js";
 import { eventBus } from "./event-bus.js";
-import type { Task } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { Task } from "./types.js";
 const log = createLogger("goal-engine");
 
 export type GoalEnforcementMode = "enforce" | "advisory";
@@ -132,10 +132,7 @@ export async function listGoals(projectId: string, status?: GoalStatus): Promise
 		);
 		return rows.map(rowToGoal);
 	}
-	const rows = await query(
-		`SELECT * FROM execution_goals WHERE project_id = $1 ORDER BY created_at DESC`,
-		[projectId],
-	);
+	const rows = await query(`SELECT * FROM execution_goals WHERE project_id = $1 ORDER BY created_at DESC`, [projectId]);
 	return rows.map(rowToGoal);
 }
 
@@ -144,17 +141,11 @@ export async function listGoals(projectId: string, status?: GoalStatus): Promise
 // ---------------------------------------------------------------------------
 
 export async function activateGoal(goalId: string): Promise<ExecutionGoal> {
-	const row = await queryOne(
-		`UPDATE execution_goals SET status = 'active' WHERE id = $1 RETURNING *`,
-		[goalId],
-	);
+	const row = await queryOne(`UPDATE execution_goals SET status = 'active' WHERE id = $1 RETURNING *`, [goalId]);
 	return rowToGoal(row!);
 }
 
-export async function evaluateGoal(
-	goalId: string,
-	results: CriterionResult[],
-): Promise<ExecutionGoal> {
+export async function evaluateGoal(goalId: string, results: CriterionResult[]): Promise<ExecutionGoal> {
 	const goal = await getGoal(goalId);
 	if (!goal) throw new Error(`Goal ${goalId} not found`);
 
@@ -222,19 +213,26 @@ export function formatGoalPrompt(goal: ExecutionGoal): string {
 
 export function validateCriteriaFromOutput(
 	goal: ExecutionGoal,
-	output: { filesCreated?: string[]; filesModified?: string[]; logs?: string[]; testResults?: { passed: number; failed: number; total: number } },
+	output: {
+		filesCreated?: string[];
+		filesModified?: string[];
+		logs?: string[];
+		testResults?: { passed: number; failed: number; total: number };
+	},
 ): CriterionResult[] {
-	const testSummary = output.testResults ? `tests: ${output.testResults.passed} passed, ${output.testResults.failed} failed` : "";
-	const allText = [
-		...(output.filesCreated ?? []),
-		...(output.filesModified ?? []),
-		...(output.logs ?? []),
-		testSummary,
-	].join("\n").toLowerCase();
+	const testSummary = output.testResults
+		? `tests: ${output.testResults.passed} passed, ${output.testResults.failed} failed`
+		: "";
+	const allText = [...(output.filesCreated ?? []), ...(output.filesModified ?? []), ...(output.logs ?? []), testSummary]
+		.join("\n")
+		.toLowerCase();
 
 	return goal.definition.successCriteria.map((criterion) => {
 		// Keyword-based heuristic — fast fallback when LLM validation unavailable
-		const keywords = criterion.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+		const keywords = criterion
+			.toLowerCase()
+			.split(/\s+/)
+			.filter((w) => w.length > 3);
 		const matchCount = keywords.filter((kw) => allText.includes(kw)).length;
 		const confidence = keywords.length > 0 ? matchCount / keywords.length : 0;
 
@@ -242,9 +240,10 @@ export function validateCriteriaFromOutput(
 			criterion,
 			met: confidence >= 0.5,
 			confidence,
-			evidence: confidence >= 0.5
-				? `Keyword match: ${Math.round(confidence * 100)}% of criteria terms found in output`
-				: `Low match: only ${Math.round(confidence * 100)}% of criteria terms found`,
+			evidence:
+				confidence >= 0.5
+					? `Keyword match: ${Math.round(confidence * 100)}% of criteria terms found in output`
+					: `Low match: only ${Math.round(confidence * 100)}% of criteria terms found`,
 		};
 	});
 }
@@ -261,7 +260,12 @@ export function validateCriteriaFromOutput(
  */
 export async function validateCriteriaWithLLM(
 	goal: ExecutionGoal,
-	output: { filesCreated?: string[]; filesModified?: string[]; logs?: string[]; testResults?: { passed: number; failed: number; total: number } },
+	output: {
+		filesCreated?: string[];
+		filesModified?: string[];
+		logs?: string[];
+		testResults?: { passed: number; failed: number; total: number };
+	},
 ): Promise<CriterionResult[]> {
 	try {
 		const { getAIModelWithFallback } = await import("./ai-provider-factory.js");
@@ -273,20 +277,26 @@ export async function validateCriteriaWithLLM(
 			output.filesModified?.length ? `Files modified: ${output.filesModified.join(", ")}` : "",
 			output.logs?.slice(0, 10).join("\n") ?? "",
 			output.testResults ? `Tests: ${output.testResults.passed}/${output.testResults.total} passed` : "",
-		].filter(Boolean).join("\n").slice(0, 3000); // Cap for token budget
+		]
+			.filter(Boolean)
+			.join("\n")
+			.slice(0, 3000); // Cap for token budget
 
 		const result = await getAIModelWithFallback(async (model: any) => {
 			return generateObject({
 				model,
 				schema: z.object({
-					criteria: z.array(z.object({
-						criterion: z.string(),
-						met: z.boolean(),
-						confidence: z.number().min(0).max(1),
-						evidence: z.string(),
-					})),
+					criteria: z.array(
+						z.object({
+							criterion: z.string(),
+							met: z.boolean(),
+							confidence: z.number().min(0).max(1),
+							evidence: z.string(),
+						}),
+					),
 				}),
-				system: "You are a goal validation assistant. Evaluate whether the given output satisfies each success criterion. Be precise and evidence-based.",
+				system:
+					"You are a goal validation assistant. Evaluate whether the given output satisfies each success criterion. Be precise and evidence-based.",
 				prompt: `Goal: ${goal.definition.goal}\n\nSuccess Criteria:\n${goal.definition.successCriteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}\n\nTask Output:\n${outputSummary}\n\nFor each criterion, determine if it was met and provide evidence.`,
 				maxOutputTokens: 500,
 			});
@@ -322,10 +332,7 @@ export async function resolveGoalEnforcement(projectId: string): Promise<GoalEnf
  * Check if goal results indicate failure and whether enforcement should trigger.
  * Returns true if goal failed AND enforcement mode requires action.
  */
-export function shouldEnforceGoalFailure(
-	results: CriterionResult[],
-	mode: GoalEnforcementMode,
-): boolean {
+export function shouldEnforceGoalFailure(results: CriterionResult[], mode: GoalEnforcementMode): boolean {
 	if (mode !== "enforce") return false;
 	// All criteria must be met for goal success
 	const allMet = results.every((r) => r.met);

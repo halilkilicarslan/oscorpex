@@ -274,8 +274,12 @@ class ContainerPool {
 			// Wait for health check to pass
 			const healthy = await this.waitForHealthy(port, 15_000);
 			if (!healthy) {
-				await container.stop({ t: 2 }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
-				await container.remove({ force: true }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+				await container
+					.stop({ t: 2 })
+					.catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+				await container
+					.remove({ force: true })
+					.catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
 				return undefined;
 			}
 
@@ -303,8 +307,12 @@ class ContainerPool {
 
 		try {
 			const container = this.docker.getContainer(containerId);
-			await container.stop({ t: 3 }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
-			await container.remove({ force: true }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+			await container
+				.stop({ t: 3 })
+				.catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+			await container
+				.remove({ force: true })
+				.catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
 		} catch {
 			/* already gone */
 		}
@@ -318,15 +326,17 @@ class ContainerPool {
 
 	private async configureContainer(poolContainer: PoolContainer, env: Record<string, string>): Promise<void> {
 		const container = this.docker.getContainer(poolContainer.id);
-		// Write env vars as a shell file the worker can source, or just set them
-		// Since the worker reads env at startup, we use exec to set process env
-		const envScript = Object.entries(env)
-			.map(([k, v]) => `export ${k}="${v.replace(/"/g, '\\"')}"`)
-			.join(" && ");
+		// Write env vars to a file using env command (no shell interpolation)
+		// This avoids shell injection via env values containing $(), backticks, etc.
+		const envArgs = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
 
-		// Touch a signal file that the worker can watch for env changes
+		// Write env file for the worker to source safely
+		const envFileContent = Object.entries(env)
+			.map(([k, v]) => `${k}=${v}`)
+			.join("\n");
+
 		const exec = await container.exec({
-			Cmd: ["sh", "-c", `${envScript} && echo "configured" > /tmp/.agent-env`],
+			Cmd: ["sh", "-c", `cat > /tmp/.agent-env << 'ENVEOF'\n${envFileContent}\nENVEOF`],
 			AttachStdout: true,
 			AttachStderr: true,
 		});
@@ -436,8 +446,12 @@ class ContainerPool {
 			});
 			for (const c of containers) {
 				const container = this.docker.getContainer(c.Id);
-				await container.stop({ t: 2 }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
-				await container.remove({ force: true }).catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+				await container
+					.stop({ t: 2 })
+					.catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
+				await container
+					.remove({ force: true })
+					.catch((err) => log.warn("[container-pool] Non-blocking operation failed:", err?.message ?? err));
 			}
 			if (containers.length > 0) {
 				log.info(`[pool] Cleaned up ${containers.length} stale containers`);
@@ -515,15 +529,34 @@ class ContainerPool {
 
 	/** Bind a project's repo path to a container */
 	async bindWorkspace(containerId: string, repoPath: string): Promise<void> {
+		// Validate repoPath to prevent command injection
+		if (!/^[a-zA-Z0-9/_.\-]+$/.test(repoPath)) {
+			throw new Error(`Invalid repoPath: contains unsafe characters`);
+		}
 		// Docker doesn't support live mount changes, so we use a workaround:
 		// Copy the workspace content or use a shared volume
+		// Use array-based Cmd to avoid shell interpolation of repoPath
 		const container = this.docker.getContainer(containerId);
-		const exec = await container.exec({
-			Cmd: ["sh", "-c", `rm -rf /workspace/* && cp -a ${repoPath}/. /workspace/ 2>/dev/null || true`],
+		const cleanExec = await container.exec({
+			Cmd: ["rm", "-rf", "/workspace"],
 			AttachStdout: true,
 			AttachStderr: true,
 		});
-		await exec.start({ Detach: false, Tty: false });
+		await cleanExec.start({ Detach: false, Tty: false });
+
+		const mkdirExec = await container.exec({
+			Cmd: ["mkdir", "-p", "/workspace"],
+			AttachStdout: true,
+			AttachStderr: true,
+		});
+		await mkdirExec.start({ Detach: false, Tty: false });
+
+		const copyExec = await container.exec({
+			Cmd: ["cp", "-a", `${repoPath}/.`, "/workspace/"],
+			AttachStdout: true,
+			AttachStderr: true,
+		});
+		await copyExec.start({ Detach: false, Tty: false });
 	}
 }
 

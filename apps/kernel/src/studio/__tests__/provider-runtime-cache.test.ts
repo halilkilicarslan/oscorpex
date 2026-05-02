@@ -2,7 +2,7 @@
 // Tests — Provider Runtime Cache Layer (TASK 4)
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { providerRuntimeCache } from "../provider-runtime-cache.js";
 
 describe("ProviderRuntimeCache", () => {
@@ -196,15 +196,15 @@ describe("ProviderRuntimeCache", () => {
 
 			await providerRuntimeCache.resolveAvailability("a", checkFn);
 			await providerRuntimeCache.resolveCapability("b", fetchFn);
-		providerRuntimeCache.clear();
+			providerRuntimeCache.clear();
 
-		const stats = providerRuntimeCache.getStats();
-		expect(stats.availabilityHits).toBe(0);
-		expect(stats.availabilityMisses).toBe(0);
-		expect(stats.capabilityHits).toBe(0);
-		expect(stats.capabilityMisses).toBe(0);
-		expect(providerRuntimeCache.getAvailability("a")).toBeUndefined();
-		expect(providerRuntimeCache.getCapability("b")).toBeUndefined();
+			const stats = providerRuntimeCache.getStats();
+			expect(stats.availabilityHits).toBe(0);
+			expect(stats.availabilityMisses).toBe(0);
+			expect(stats.capabilityHits).toBe(0);
+			expect(stats.capabilityMisses).toBe(0);
+			expect(providerRuntimeCache.getAvailability("a")).toBeUndefined();
+			expect(providerRuntimeCache.getCapability("b")).toBeUndefined();
 		});
 	});
 });

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { prepareIsolatedWorkspace, __testables } from "../isolated-workspace.js";
+import { __testables, prepareIsolatedWorkspace } from "../isolated-workspace.js";
 
 describe("isolated-workspace", () => {
 	let sourceRepo: string;
@@ -77,10 +77,17 @@ import type { SandboxPolicy } from "../sandbox-manager.js";
 
 describe("checkPathAllowed — realpath hardening", () => {
 	const makePolicy = (scope: string[]): SandboxPolicy => ({
-		id: "p", projectId: "proj-1", isolationLevel: "workspace",
-		allowedTools: [], deniedTools: [], filesystemScope: scope,
-		networkPolicy: "project_only", maxExecutionTimeMs: 1000,
-		maxOutputSizeBytes: 1000, elevatedCapabilities: [], enforcementMode: "hard",
+		id: "p",
+		projectId: "proj-1",
+		isolationLevel: "workspace",
+		allowedTools: [],
+		deniedTools: [],
+		filesystemScope: scope,
+		networkPolicy: "project_only",
+		maxExecutionTimeMs: 1000,
+		maxOutputSizeBytes: 1000,
+		elevatedCapabilities: [],
+		enforcementMode: "hard",
 	});
 
 	it("allows path exactly matching scope", () => {
@@ -129,10 +136,17 @@ describe("execution-workspace", () => {
 
 	it("returns local workspace when isolationLevel is none", async () => {
 		const ws = await resolveWorkspace(sourceRepo, "task-1", {
-			id: "p", projectId: "proj-1", isolationLevel: "none",
-			allowedTools: [], deniedTools: [], filesystemScope: [],
-			networkPolicy: "project_only", maxExecutionTimeMs: 1000,
-			maxOutputSizeBytes: 1000, elevatedCapabilities: [], enforcementMode: "off",
+			id: "p",
+			projectId: "proj-1",
+			isolationLevel: "none",
+			allowedTools: [],
+			deniedTools: [],
+			filesystemScope: [],
+			networkPolicy: "project_only",
+			maxExecutionTimeMs: 1000,
+			maxOutputSizeBytes: 1000,
+			elevatedCapabilities: [],
+			enforcementMode: "off",
 		});
 		expect(ws.type).toBe("local");
 		expect(ws.isolated).toBe(false);
@@ -141,10 +155,17 @@ describe("execution-workspace", () => {
 
 	it("returns isolated workspace when isolationLevel is workspace", async () => {
 		const ws = await resolveWorkspace(sourceRepo, "task-2", {
-			id: "p", projectId: "proj-1", isolationLevel: "workspace",
-			allowedTools: [], deniedTools: [], filesystemScope: [],
-			networkPolicy: "project_only", maxExecutionTimeMs: 1000,
-			maxOutputSizeBytes: 1000, elevatedCapabilities: [], enforcementMode: "hard",
+			id: "p",
+			projectId: "proj-1",
+			isolationLevel: "workspace",
+			allowedTools: [],
+			deniedTools: [],
+			filesystemScope: [],
+			networkPolicy: "project_only",
+			maxExecutionTimeMs: 1000,
+			maxOutputSizeBytes: 1000,
+			elevatedCapabilities: [],
+			enforcementMode: "hard",
 		});
 		expect(ws.type).toBe("isolated");
 		expect(ws.isolated).toBe(true);
@@ -154,10 +175,17 @@ describe("execution-workspace", () => {
 
 	it("falls back to isolated when isolationLevel is container (no Docker)", async () => {
 		const ws = await resolveWorkspace(sourceRepo, "task-3", {
-			id: "p", projectId: "proj-1", isolationLevel: "container",
-			allowedTools: [], deniedTools: [], filesystemScope: [],
-			networkPolicy: "no_network", maxExecutionTimeMs: 1000,
-			maxOutputSizeBytes: 1000, elevatedCapabilities: [], enforcementMode: "hard",
+			id: "p",
+			projectId: "proj-1",
+			isolationLevel: "container",
+			allowedTools: [],
+			deniedTools: [],
+			filesystemScope: [],
+			networkPolicy: "no_network",
+			maxExecutionTimeMs: 1000,
+			maxOutputSizeBytes: 1000,
+			elevatedCapabilities: [],
+			enforcementMode: "hard",
 		});
 		// Without Docker, container mode falls back to file-copy — type is "isolated" not "container"
 		expect(ws.type).toBe("isolated");
@@ -173,10 +201,17 @@ describe("execution-workspace", () => {
 
 	it("writeBack and cleanup conform to contract", async () => {
 		const ws = await resolveWorkspace(sourceRepo, "task-5", {
-			id: "p", projectId: "proj-1", isolationLevel: "workspace",
-			allowedTools: [], deniedTools: [], filesystemScope: [],
-			networkPolicy: "project_only", maxExecutionTimeMs: 1000,
-			maxOutputSizeBytes: 1000, elevatedCapabilities: [], enforcementMode: "soft",
+			id: "p",
+			projectId: "proj-1",
+			isolationLevel: "workspace",
+			allowedTools: [],
+			deniedTools: [],
+			filesystemScope: [],
+			networkPolicy: "project_only",
+			maxExecutionTimeMs: 1000,
+			maxOutputSizeBytes: 1000,
+			elevatedCapabilities: [],
+			enforcementMode: "soft",
 		});
 		expect(typeof ws.writeBack).toBe("function");
 		expect(typeof ws.cleanup).toBe("function");

@@ -6,8 +6,8 @@
 
 import { getUnreadMessages, markMessagesRead, sendProtocolMessage } from "../db.js";
 import { eventBus } from "../event-bus.js";
-import type { AgentProtocolMessage, ProtocolMessageType } from "../types.js";
 import { createLogger } from "../logger.js";
+import type { AgentProtocolMessage, ProtocolMessageType } from "../types.js";
 const log = createLogger("agent-protocol");
 
 // ---------------------------------------------------------------------------

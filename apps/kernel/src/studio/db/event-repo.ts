@@ -3,10 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
 import type { ChatMessage, ChatRole, StudioEvent } from "../types.js";
 import { now, rowToEvent } from "./helpers.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("event-repo");
 
 // ---------------------------------------------------------------------------
@@ -84,15 +84,17 @@ export async function insertChatMessage(
 	};
 }
 
-export async function listChatMessages(projectId: string, agentId?: string): Promise<ChatMessage[]> {
+export async function listChatMessages(projectId: string, agentId?: string, limit = 1000): Promise<ChatMessage[]> {
 	const conditions = ["project_id = $1"];
 	const values: unknown[] = [projectId];
 	if (agentId) {
-		conditions.push("agent_id = $2");
+		conditions.push(`agent_id = $2`);
 		values.push(agentId);
 	}
+	values.push(limit);
+	const limitParam = `$${values.length}`;
 	const rows = await query<any>(
-		`SELECT * FROM chat_messages WHERE ${conditions.join(" AND ")} ORDER BY created_at`,
+		`SELECT * FROM chat_messages WHERE ${conditions.join(" AND ")} ORDER BY created_at LIMIT ${limitParam}`,
 		values,
 	);
 	return rows.map((row) => ({

@@ -4,13 +4,13 @@
 
 import { describe, expect, it } from "vitest";
 import {
-	isValidProviderPolicyProfile,
-	normalizeProviderPolicyProfile,
-	getProfileBehavior,
-	selectPrimaryProvider,
-	getFallbackChain,
 	DEFAULT_PROFILE,
 	VALID_PROFILES,
+	getFallbackChain,
+	getProfileBehavior,
+	isValidProviderPolicyProfile,
+	normalizeProviderPolicyProfile,
+	selectPrimaryProvider,
 } from "../provider-policy-profiles.js";
 
 // ---------------------------------------------------------------------------

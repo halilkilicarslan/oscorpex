@@ -5,8 +5,8 @@
 
 import { Hono } from "hono";
 import { getTestResults, getTestSummary, saveTestResult } from "../db.js";
-import { testRunner } from "../test-runner.js";
 import { createLogger } from "../logger.js";
+import { testRunner } from "../test-runner.js";
 const log = createLogger("test-routes");
 
 const router = new Hono();
@@ -19,7 +19,7 @@ const router = new Hono();
 router.post("/run/:projectId", async (c) => {
 	try {
 		const projectId = c.req.param("projectId");
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+		const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
 		const repoPath = body.repoPath as string | undefined;
 		const taskId = (body.taskId as string | undefined) ?? undefined;
 

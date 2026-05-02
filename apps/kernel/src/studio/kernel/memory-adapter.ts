@@ -2,9 +2,15 @@
 // Implements the MemoryProvider contract from @oscorpex/core.
 // Delegates context packet building to @oscorpex/memory-kit; DB fetch stays here.
 
-import type { MemoryProvider, ContextPacket, ContextPacketOptions } from "@oscorpex/core";
-import { estimateTokens, assemblePlannerPrompt, assembleTeamArchitectPrompt, buildSection, SECTION_BUDGETS } from "@oscorpex/memory-kit";
 import { randomUUID } from "node:crypto";
+import type { ContextPacket, ContextPacketOptions, MemoryProvider } from "@oscorpex/core";
+import {
+	SECTION_BUDGETS,
+	assemblePlannerPrompt,
+	assembleTeamArchitectPrompt,
+	buildSection,
+	estimateTokens,
+} from "@oscorpex/memory-kit";
 
 class KernelMemoryProvider implements MemoryProvider {
 	async buildContextPacket(options: ContextPacketOptions): Promise<ContextPacket> {
@@ -25,16 +31,22 @@ class KernelMemoryProvider implements MemoryProvider {
 			case "planner": {
 				const data = {
 					project: { name: project.name, description: project.description, techStack: project.techStack },
-					plan: plan ? {
-						version: plan.version,
-						status: plan.status,
-						phases: phases.map((ph: any) => ({
-							order: ph.order,
-							name: ph.name,
-							status: ph.status,
-							tasks: (ph.tasks ?? []).map((t: any) => ({ title: t.title, status: t.status, assignedAgent: t.assignedAgent })),
-						})),
-					} : undefined,
+					plan: plan
+						? {
+								version: plan.version,
+								status: plan.status,
+								phases: phases.map((ph: any) => ({
+									order: ph.order,
+									name: ph.name,
+									status: ph.status,
+									tasks: (ph.tasks ?? []).map((t: any) => ({
+										title: t.title,
+										status: t.status,
+										assignedAgent: t.assignedAgent,
+									})),
+								})),
+							}
+						: undefined,
 				};
 				const result = assemblePlannerPrompt(data, maxTokens);
 				prompt = result.prompt;
@@ -44,7 +56,13 @@ class KernelMemoryProvider implements MemoryProvider {
 			case "team_architect": {
 				const data = {
 					project: { name: project.name, description: project.description, techStack: project.techStack },
-					agents: agents.map((a: any) => ({ id: a.id, name: a.name, role: a.role, skills: a.skills, reportsTo: a.reportsTo })),
+					agents: agents.map((a: any) => ({
+						id: a.id,
+						name: a.name,
+						role: a.role,
+						skills: a.skills,
+						reportsTo: a.reportsTo,
+					})),
 				};
 				const result = assembleTeamArchitectPrompt(data, maxTokens);
 				prompt = result.prompt;
@@ -53,7 +71,14 @@ class KernelMemoryProvider implements MemoryProvider {
 			}
 			case "execution": {
 				if (!options.taskId) throw new Error("taskId is required for execution mode");
-				const result = await this.assembleExecutionContext(projectId, options.taskId, options.agentId, project, agents, maxTokens);
+				const result = await this.assembleExecutionContext(
+					projectId,
+					options.taskId,
+					options.agentId,
+					project,
+					agents,
+					maxTokens,
+				);
 				prompt = result.prompt;
 				Object.assign(sections, result.sections);
 				break;

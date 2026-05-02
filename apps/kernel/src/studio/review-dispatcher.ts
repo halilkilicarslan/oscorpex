@@ -5,23 +5,17 @@
 // Extracted from execution-engine.ts for single-responsibility.
 // ---------------------------------------------------------------------------
 
-import {
-	getAgentConfig,
-	getTask,
-	listAgentConfigs,
-	listProjectAgents,
-	recordTokenUsage,
-} from "./db.js";
-import { getAdapter } from "./cli-adapter.js";
-import { resolveAllowedTools } from "./capability-resolver.js";
-import { resolveWorkspace, type ExecutionWorkspace } from "./execution-workspace.js";
-import { defaultSystemPrompt } from "./prompt-builder.js";
-import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { persistAgentLog } from "./agent-log-store.js";
-import { taskEngine } from "./task-engine.js";
-import { canonicalizeAgentRole, roleMatches } from "./roles.js";
-import type { AgentConfig, Project, Task } from "./types.js";
+import { composeSystemPrompt } from "./behavioral-prompt.js";
+import { resolveAllowedTools } from "./capability-resolver.js";
+import { getAdapter } from "./cli-adapter.js";
+import { getAgentConfig, getTask, listAgentConfigs, listProjectAgents, recordTokenUsage } from "./db.js";
+import { type ExecutionWorkspace, resolveWorkspace } from "./execution-workspace.js";
 import { createLogger } from "./logger.js";
+import { defaultSystemPrompt } from "./prompt-builder.js";
+import { canonicalizeAgentRole, roleMatches } from "./roles.js";
+import { taskEngine } from "./task-engine.js";
+import type { AgentConfig, Project, Task } from "./types.js";
 const log = createLogger("review-dispatcher");
 
 const DEFAULT_TASK_TIMEOUT_MS = 5 * 60 * 1000;
@@ -118,10 +112,7 @@ export async function executeReviewTask(
 	const termLog = (msg: string) => agentRuntime.appendVirtualOutput(projectId, reviewer.id, msg);
 
 	// Gather files to review
-	const allFiles = [
-		...(originalTask.output?.filesCreated ?? []),
-		...(originalTask.output?.filesModified ?? []),
-	];
+	const allFiles = [...(originalTask.output?.filesCreated ?? []), ...(originalTask.output?.filesModified ?? [])];
 
 	// Zero-file decision detection
 	const isZeroFileDecision = allFiles.length <= 1 && allFiles.some((f) => f.endsWith("decision.md"));
@@ -132,8 +123,14 @@ export async function executeReviewTask(
 		let capture = false;
 		const lines: string[] = [];
 		for (const line of logs) {
-			if (line.includes("--- DECISION ---")) { capture = true; continue; }
-			if (line.includes("--- /DECISION ---")) { capture = false; continue; }
+			if (line.includes("--- DECISION ---")) {
+				capture = true;
+				continue;
+			}
+			if (line.includes("--- /DECISION ---")) {
+				capture = false;
+				continue;
+			}
 			if (capture) lines.push(line);
 		}
 		decisionContent = lines.join("\n");
@@ -151,7 +148,11 @@ export async function executeReviewTask(
 			filesModified: [],
 			logs: ["İncelenecek dosya yok — orijinal task dosya değişikliği üretmedi"],
 		});
-		await taskEngine.submitReview(originalTaskId!, false, "İncelenecek dosya yok — orijinal task dosya değişikliği üretmedi");
+		await taskEngine.submitReview(
+			originalTaskId!,
+			false,
+			"İncelenecek dosya yok — orijinal task dosya değişikliği üretmedi",
+		);
 		return;
 	} else {
 		termLog(`[review] "${originalTask.title}" inceleniyor — ${allFiles.length} dosya...`);
@@ -182,9 +183,7 @@ export async function executeReviewTask(
 			agentName: reviewer.name,
 			repoPath: reviewWorkspace.repoPath,
 			prompt: reviewPrompt,
-			systemPrompt: reviewer.systemPrompt
-				? composeSystemPrompt(reviewer.systemPrompt)
-				: defaultSystemPrompt(reviewer),
+			systemPrompt: reviewer.systemPrompt ? composeSystemPrompt(reviewer.systemPrompt) : defaultSystemPrompt(reviewer),
 			timeoutMs: reviewer.taskTimeout ?? DEFAULT_TASK_TIMEOUT_MS,
 			model: "sonnet",
 			allowedTools: reviewTools,
@@ -218,8 +217,9 @@ export async function executeReviewTask(
 
 		const reviewOutputLines = agentRuntime.getAgentOutput(projectId, reviewer.id);
 		if (reviewOutputLines.length > 0) {
-			persistAgentLog(projectId, reviewer.id, reviewOutputLines)
-				.catch((err) => log.warn("[review-dispatcher] Non-blocking operation failed:", err?.message ?? err));
+			persistAgentLog(projectId, reviewer.id, reviewOutputLines).catch((err) =>
+				log.warn("[review-dispatcher] Non-blocking operation failed:", err?.message ?? err),
+			);
 		}
 
 		await taskEngine.completeTask(reviewTask.id, {
@@ -229,7 +229,8 @@ export async function executeReviewTask(
 		});
 		await taskEngine.submitReview(originalTaskId!, approved, feedback);
 		agentRuntime.markVirtualStopped(projectId, reviewer.id);
-		await reviewWorkspace.cleanup()
+		await reviewWorkspace
+			.cleanup()
 			.catch((err) => log.warn("[review-dispatcher] Non-blocking operation failed:", err?.message ?? err));
 
 		if (!approved) {
@@ -244,13 +245,16 @@ export async function executeReviewTask(
 		termLog(`[review] Hata: ${msg.slice(0, 200)}`);
 		agentRuntime.markVirtualStopped(projectId, reviewer.id);
 		if (reviewWorkspace?.isolated) {
-			await reviewWorkspace.cleanup()
+			await reviewWorkspace
+				.cleanup()
 				.catch((e) => log.warn("[review-dispatcher] Non-blocking operation failed:", e?.message ?? e));
 		}
 		await taskEngine.failTask(reviewTask.id, msg);
 		try {
 			await taskEngine.submitReview(originalTaskId!, true, `Review failed: ${msg.slice(0, 200)} — auto-approved`);
-		} catch { /* failsafe */ }
+		} catch {
+			/* failsafe */
+		}
 	}
 }
 
@@ -258,7 +262,12 @@ export async function executeReviewTask(
 // Prompt builders
 // ---------------------------------------------------------------------------
 
-function buildZeroFileReviewPrompt(project: Project, originalTask: Task, allFiles: string[], decisionContent: string): string {
+function buildZeroFileReviewPrompt(
+	project: Project,
+	originalTask: Task,
+	allFiles: string[],
+	decisionContent: string,
+): string {
 	return [
 		`# Zero-File Decision Review: ${originalTask.title}`,
 		"",
@@ -273,9 +282,7 @@ function buildZeroFileReviewPrompt(project: Project, originalTask: Task, allFile
 		...(allFiles.length > 0 ? [`## Decision Dosyası`, `- \`${allFiles[0]}\``, ""] : []),
 		...(decisionContent ? ["## Decision İçeriği (inline)", decisionContent, ""] : []),
 		`## Reviewer Talimatları`,
-		...(allFiles.length > 0
-			? ["1. readFile ile decision.md dosyasını oku"]
-			: ["1. Yukarıdaki decision içeriğini oku"]),
+		...(allFiles.length > 0 ? ["1. readFile ile decision.md dosyasını oku"] : ["1. Yukarıdaki decision içeriğini oku"]),
 		"2. Orijinal task açıklamasını dikkatlice incele",
 		"3. Task'ın dosya değişikliği gerektirip gerektirmediğini değerlendir:",
 		"   - Eğer task gerçekten dosya değişikliği gerektirmiyorsa (analiz, araştırma vb.) → APPROVED",

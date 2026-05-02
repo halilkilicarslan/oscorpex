@@ -5,7 +5,6 @@
 import { resolve } from "node:path";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { hasPermission } from "../auth/rbac.js";
 import {
 	createAgentFiles,
 	deleteAgentFiles,
@@ -14,6 +13,7 @@ import {
 	updateAgentFiles,
 	writeAgentFile,
 } from "../agent-files.js";
+import { hasPermission } from "../auth/rbac.js";
 import {
 	copyAgentsToProject,
 	createCustomTeamTemplate,
@@ -32,6 +32,7 @@ import {
 	updateCustomTeamTemplate,
 	updateProjectAgent,
 } from "../db.js";
+import { createLogger } from "../logger.js";
 import {
 	type PlannerCLIProvider,
 	type PlannerReasoningEffort,
@@ -40,7 +41,6 @@ import {
 } from "../planner-cli.js";
 import { TEAM_ARCHITECT_SYSTEM_PROMPT } from "../team-architect.js";
 import type { ProjectAgent } from "../types.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("team-routes");
 
 export const teamRoutes = new Hono();
@@ -434,7 +434,9 @@ teamRoutes.delete("/projects/:id/team/:agentId", async (c) => {
 	}
 	const ok = await deleteProjectAgent(agentId);
 	if (!ok) return c.json({ error: "Agent not found" }, 404);
-	deleteAgentFiles(c.req.param("id"), existing.name).catch((err) => log.warn("[team-routes] Non-blocking operation failed:", err?.message ?? err));
+	deleteAgentFiles(c.req.param("id"), existing.name).catch((err) =>
+		log.warn("[team-routes] Non-blocking operation failed:", err?.message ?? err),
+	);
 	return c.json({ success: true });
 });
 

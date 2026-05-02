@@ -32,12 +32,9 @@ function generateReport(results: BenchmarkResult[]): string {
 		md += `## ${provider}\n\n`;
 		const successes = prs.filter((r) => r.success);
 		const failures = prs.filter((r) => !r.success);
-		const avgLatency = successes.length > 0
-			? Math.round(successes.reduce((s, r) => s + r.latencyMs, 0) / successes.length)
-			: 0;
-		const avgCost = successes.length > 0
-			? successes.reduce((s, r) => s + r.costUsd, 0) / successes.length
-			: 0;
+		const avgLatency =
+			successes.length > 0 ? Math.round(successes.reduce((s, r) => s + r.latencyMs, 0) / successes.length) : 0;
+		const avgCost = successes.length > 0 ? successes.reduce((s, r) => s + r.costUsd, 0) / successes.length : 0;
 
 		md += `| Metric | Value |\n`;
 		md += `|--------|-------|\n`;
@@ -63,9 +60,39 @@ function generateReport(results: BenchmarkResult[]): string {
 describe("generateReport", () => {
 	it("generates markdown with provider sections", () => {
 		const results: BenchmarkResult[] = [
-			{ provider: "claude-code", model: "sonnet", promptName: "small", repeat: 1, success: true, latencyMs: 1200, inputTokens: 10, outputTokens: 5, costUsd: 0.0001 },
-			{ provider: "claude-code", model: "sonnet", promptName: "small", repeat: 2, success: true, latencyMs: 1300, inputTokens: 10, outputTokens: 5, costUsd: 0.0001 },
-			{ provider: "gemini", model: "flash", promptName: "small", repeat: 1, success: true, latencyMs: 800, inputTokens: 10, outputTokens: 5, costUsd: 0.00001 },
+			{
+				provider: "claude-code",
+				model: "sonnet",
+				promptName: "small",
+				repeat: 1,
+				success: true,
+				latencyMs: 1200,
+				inputTokens: 10,
+				outputTokens: 5,
+				costUsd: 0.0001,
+			},
+			{
+				provider: "claude-code",
+				model: "sonnet",
+				promptName: "small",
+				repeat: 2,
+				success: true,
+				latencyMs: 1300,
+				inputTokens: 10,
+				outputTokens: 5,
+				costUsd: 0.0001,
+			},
+			{
+				provider: "gemini",
+				model: "flash",
+				promptName: "small",
+				repeat: 1,
+				success: true,
+				latencyMs: 800,
+				inputTokens: 10,
+				outputTokens: 5,
+				costUsd: 0.00001,
+			},
 		];
 
 		const report = generateReport(results);
@@ -78,7 +105,18 @@ describe("generateReport", () => {
 
 	it("includes failure section for failed runs", () => {
 		const results: BenchmarkResult[] = [
-			{ provider: "codex", model: "gpt-4o", promptName: "large", repeat: 1, success: false, latencyMs: 5000, inputTokens: 0, outputTokens: 0, costUsd: 0, error: "timeout" },
+			{
+				provider: "codex",
+				model: "gpt-4o",
+				promptName: "large",
+				repeat: 1,
+				success: false,
+				latencyMs: 5000,
+				inputTokens: 0,
+				outputTokens: 0,
+				costUsd: 0,
+				error: "timeout",
+			},
 		];
 
 		const report = generateReport(results);
@@ -89,7 +127,18 @@ describe("generateReport", () => {
 
 	it("handles zero successes gracefully", () => {
 		const results: BenchmarkResult[] = [
-			{ provider: "ollama", model: "llama3.2", promptName: "small", repeat: 1, success: false, latencyMs: 100, inputTokens: 0, outputTokens: 0, costUsd: 0, error: "unavailable" },
+			{
+				provider: "ollama",
+				model: "llama3.2",
+				promptName: "small",
+				repeat: 1,
+				success: false,
+				latencyMs: 100,
+				inputTokens: 0,
+				outputTokens: 0,
+				costUsd: 0,
+				error: "unavailable",
+			},
 		];
 
 		const report = generateReport(results);

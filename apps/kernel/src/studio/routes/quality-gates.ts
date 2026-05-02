@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { qualityGateService, TenantRequiredForProductionError } from "../quality-gate-service.js";
 import { getTenantContext, logTenantActivity } from "../auth/tenant-context.js";
+import { TenantRequiredForProductionError, qualityGateService } from "../quality-gate-service.js";
 
 const qualityGateRoutes = new Hono();
 
@@ -62,7 +62,7 @@ qualityGateRoutes.post("/quality-gates/evaluate", async (c) => {
 			tenantId: tenant.tenantId,
 			actor: tenant.userId ?? "system",
 			reason: typeof body.reason === "string" ? body.reason : "",
-			details: typeof body.details === "object" && body.details ? body.details as Record<string, unknown> : {},
+			details: typeof body.details === "object" && body.details ? (body.details as Record<string, unknown>) : {},
 			metadata: {
 				route: "quality-gates.evaluate",
 				actor: tenant.userId,

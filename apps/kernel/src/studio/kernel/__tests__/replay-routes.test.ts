@@ -4,9 +4,9 @@
 // All assertions use strict status codes and deep response-shape validation.
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { replayRoutes, buildInspectResponse } from "../../routes/replay-routes.js";
+import { describe, expect, it } from "vitest";
+import { buildInspectResponse, replayRoutes } from "../../routes/replay-routes.js";
 import { buildReplaySnapshot } from "./replay-fixtures.js";
 
 describe("Replay Routes", () => {
@@ -174,36 +174,35 @@ describe("Replay Routes", () => {
 	});
 
 	describe("buildInspectResponse standardization", () => {
-	it("returns consistent shape for both inspect endpoints", () => {
-		const snapshot = buildReplaySnapshot();
+		it("returns consistent shape for both inspect endpoints", () => {
+			const snapshot = buildReplaySnapshot();
 
-		const response = buildInspectResponse(snapshot as any);
+			const response = buildInspectResponse(snapshot as any);
 
-		expect(response).toHaveProperty("id");
-		expect(typeof response.id).toBe("string");
-		expect(response).toHaveProperty("runId");
-		expect(typeof response.runId).toBe("string");
-		expect(response).toHaveProperty("projectId");
-		expect(typeof response.projectId).toBe("string");
-		expect(response).toHaveProperty("checkpoint");
-		expect(typeof response.checkpoint).toBe("string");
-		expect(response).toHaveProperty("createdAt");
-		expect(typeof response.createdAt).toBe("string");
-		expect(response).toHaveProperty("run");
-		expect(typeof response.run).toBe("object");
-		expect(response).toHaveProperty("stages");
-		expect(Array.isArray(response.stages)).toBe(true);
-		expect(response).toHaveProperty("tasks");
-		expect(Array.isArray(response.tasks)).toBe(true);
-		expect(response).toHaveProperty("artifacts");
-		expect(Array.isArray(response.artifacts)).toBe(true);
-		expect(response).toHaveProperty("policyDecisions");
-		expect(Array.isArray(response.policyDecisions)).toBe(true);
-		expect(response).toHaveProperty("verificationReports");
-		expect(Array.isArray(response.verificationReports)).toBe(true);
-		expect(response).toHaveProperty("metadata");
-		expect(typeof response.metadata).toBe("object");
+			expect(response).toHaveProperty("id");
+			expect(typeof response.id).toBe("string");
+			expect(response).toHaveProperty("runId");
+			expect(typeof response.runId).toBe("string");
+			expect(response).toHaveProperty("projectId");
+			expect(typeof response.projectId).toBe("string");
+			expect(response).toHaveProperty("checkpoint");
+			expect(typeof response.checkpoint).toBe("string");
+			expect(response).toHaveProperty("createdAt");
+			expect(typeof response.createdAt).toBe("string");
+			expect(response).toHaveProperty("run");
+			expect(typeof response.run).toBe("object");
+			expect(response).toHaveProperty("stages");
+			expect(Array.isArray(response.stages)).toBe(true);
+			expect(response).toHaveProperty("tasks");
+			expect(Array.isArray(response.tasks)).toBe(true);
+			expect(response).toHaveProperty("artifacts");
+			expect(Array.isArray(response.artifacts)).toBe(true);
+			expect(response).toHaveProperty("policyDecisions");
+			expect(Array.isArray(response.policyDecisions)).toBe(true);
+			expect(response).toHaveProperty("verificationReports");
+			expect(Array.isArray(response.verificationReports)).toBe(true);
+			expect(response).toHaveProperty("metadata");
+			expect(typeof response.metadata).toBe("object");
+		});
 	});
-});
-
 });

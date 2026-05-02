@@ -2,51 +2,69 @@
 // Control Plane — Operator Action Routes (thin host)
 // ---------------------------------------------------------------------------
 
+import type { OperatorActionType } from "@oscorpex/control-plane";
+import { executeOperatorAction, getOperatorFlag, isQueuePaused, listOperatorActions } from "@oscorpex/control-plane";
+import type { Context } from "hono";
 import { Hono } from "hono";
-import {
-	executeOperatorAction,
-	listOperatorActions,
-	isQueuePaused,
-	getOperatorFlag,
-} from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-operator-actions");
 
 export const cpOperatorActionRoutes = new Hono();
 
-const actionBodySchema = (actionType: string) => ({
-	actionType,
-	targetId: "string?",
-	targetType: "string?",
-	actor: "string",
-	reason: "string",
-	metadata: "object?",
-});
-
-function requireBody(c: any): { actionType: string; targetId?: string; targetType?: string; actor: string; reason: string; metadata?: Record<string, unknown> } {
-	return c.req.json() as any;
-}
-
-function requireActorReason(body: any): { actor: string; reason: string } {
-	if (!body.actor || !body.reason) {
-		throw new Error("actor and reason are required");
+function requireActorReason(body: Record<string, unknown>): { actor: string; reason: string } {
+	if (!body.actor || typeof body.actor !== "string") {
+		throw new Error("actor is required and must be a string");
+	}
+	if (!body.reason || typeof body.reason !== "string") {
+		throw new Error("reason is required and must be a string");
 	}
 	return { actor: body.actor, reason: body.reason };
+}
+
+function createActionHandler(actionType: OperatorActionType): (c: Context) => Promise<Response> {
+	return async (c) => {
+		try {
+			const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+			const { targetId, metadata } = body;
+			if (targetId !== undefined && typeof targetId !== "string") {
+				return c.json({ error: "targetId must be a string" }, 400);
+			}
+			const { actor, reason } = requireActorReason(body);
+			const result = await executeOperatorAction({
+				actionType,
+				targetId: targetId as string | undefined,
+				actor,
+				reason,
+				metadata: metadata as Record<string, unknown> | undefined,
+			});
+			return c.json(result);
+		} catch (err) {
+			log.error(`[${actionType}] failed: ${String(err)}`);
+			return c.json({ error: String(err) }, 400);
+		}
+	};
 }
 
 // Unified action endpoint
 cpOperatorActionRoutes.post("/actions", async (c) => {
 	try {
-		const body = await requireBody(c);
+		const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+		const { actionType, targetId, targetType, metadata } = body;
+		if (!actionType || typeof actionType !== "string") {
+			return c.json({ error: "actionType is required and must be a string" }, 400);
+		}
+		if (targetId !== undefined && typeof targetId !== "string") {
+			return c.json({ error: "targetId must be a string" }, 400);
+		}
 		const { actor, reason } = requireActorReason(body);
 		const result = await executeOperatorAction({
-			actionType: body.actionType as any,
-			targetId: body.targetId,
-			targetType: body.targetType,
+			actionType: actionType as OperatorActionType,
+			targetId: targetId as string | undefined,
+			targetType: targetType as string | undefined,
 			actor,
 			reason,
-			metadata: body.metadata,
+			metadata: metadata as Record<string, unknown> | undefined,
 		});
 		return c.json(result, result.status === "success" ? 200 : 400);
 	} catch (err) {
@@ -56,89 +74,13 @@ cpOperatorActionRoutes.post("/actions", async (c) => {
 });
 
 // Specific endpoints for convenience
-cpOperatorActionRoutes.post("/actions/provider-disable", async (c) => {
-	try {
-		const { targetId, actor, reason } = await c.req.json() as any;
-		if (!targetId || !actor || !reason) throw new Error("targetId, actor, and reason are required");
-		const result = await executeOperatorAction({ actionType: "provider_disable", targetId, targetType: "provider", actor, reason });
-		return c.json(result);
-	} catch (err) {
-		log.error("[provider-disable] failed: " + String(err));
-		return c.json({ error: String(err) }, 400);
-	}
-});
-
-cpOperatorActionRoutes.post("/actions/provider-enable", async (c) => {
-	try {
-		const { targetId, actor, reason } = await c.req.json() as any;
-		if (!targetId || !actor || !reason) throw new Error("targetId, actor, and reason are required");
-		const result = await executeOperatorAction({ actionType: "provider_enable", targetId, targetType: "provider", actor, reason });
-		return c.json(result);
-	} catch (err) {
-		log.error("[provider-enable] failed: " + String(err));
-		return c.json({ error: String(err) }, 400);
-	}
-});
-
-cpOperatorActionRoutes.post("/actions/retry-task", async (c) => {
-	try {
-		const { targetId, actor, reason } = await c.req.json() as any;
-		if (!targetId || !actor || !reason) throw new Error("targetId, actor, and reason are required");
-		const result = await executeOperatorAction({ actionType: "retry_task", targetId, targetType: "task", actor, reason });
-		return c.json(result);
-	} catch (err) {
-		log.error("[retry-task] failed: " + String(err));
-		return c.json({ error: String(err) }, 400);
-	}
-});
-
-cpOperatorActionRoutes.post("/actions/cancel-task", async (c) => {
-	try {
-		const { targetId, actor, reason } = await c.req.json() as any;
-		if (!targetId || !actor || !reason) throw new Error("targetId, actor, and reason are required");
-		const result = await executeOperatorAction({ actionType: "cancel_task", targetId, targetType: "task", actor, reason });
-		return c.json(result);
-	} catch (err) {
-		log.error("[cancel-task] failed: " + String(err));
-		return c.json({ error: String(err) }, 400);
-	}
-});
-
-cpOperatorActionRoutes.post("/actions/pause-queue", async (c) => {
-	try {
-		const { actor, reason } = await c.req.json() as any;
-		if (!actor || !reason) throw new Error("actor and reason are required");
-		const result = await executeOperatorAction({ actionType: "pause_queue", actor, reason });
-		return c.json(result);
-	} catch (err) {
-		log.error("[pause-queue] failed: " + String(err));
-		return c.json({ error: String(err) }, 400);
-	}
-});
-
-cpOperatorActionRoutes.post("/actions/resume-queue", async (c) => {
-	try {
-		const { actor, reason } = await c.req.json() as any;
-		if (!actor || !reason) throw new Error("actor and reason are required");
-		const result = await executeOperatorAction({ actionType: "resume_queue", actor, reason });
-		return c.json(result);
-	} catch (err) {
-		log.error("[resume-queue] failed: " + String(err));
-		return c.json({ error: String(err) }, 400);
-	}
-});
-
-cpOperatorActionRoutes.post("/actions/reset-cooldown", async (c) => {
-	try {
-		const { targetId, actor, reason } = await c.req.json() as any;
-		if (!targetId || !actor || !reason) throw new Error("targetId, actor, and reason are required");
-		const result = await executeOperatorAction({ actionType: "reset_cooldown", targetId, targetType: "provider", actor, reason });
-		return c.json(result);
-	} catch (err) {
-		log.error("[reset-cooldown] failed: " + String(err));
-		return c.json({ error: String(err) }, 400);
-	}
-});
+cpOperatorActionRoutes.post("/actions/provider-disable", createActionHandler("provider_disable"));
+cpOperatorActionRoutes.post("/actions/provider-enable", createActionHandler("provider_enable"));
+cpOperatorActionRoutes.post("/actions/retry-task", createActionHandler("retry_task"));
+cpOperatorActionRoutes.post("/actions/cancel-task", createActionHandler("cancel_task"));
+cpOperatorActionRoutes.post("/actions/pause-queue", createActionHandler("pause_queue"));
+cpOperatorActionRoutes.post("/actions/resume-queue", createActionHandler("resume_queue"));
+cpOperatorActionRoutes.post("/actions/reset-cooldown", createActionHandler("reset_cooldown"));
 
 // List actions
 cpOperatorActionRoutes.get("/actions", async (c) => {

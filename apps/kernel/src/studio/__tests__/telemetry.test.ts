@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ConsoleExporter, Span, Tracer } from "../telemetry.js";
+import { ConsoleExporter, type Span, Tracer } from "../telemetry.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

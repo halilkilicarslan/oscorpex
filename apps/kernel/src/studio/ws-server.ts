@@ -24,8 +24,8 @@
 // ---------------------------------------------------------------------------
 
 import { createServer } from "node:http";
-import { wsManager } from "./ws-manager.js";
 import { createLogger } from "./logger.js";
+import { wsManager } from "./ws-manager.js";
 const log = createLogger("ws-server");
 
 const WS_PORT = Number(process.env.STUDIO_WS_PORT ?? 3142);

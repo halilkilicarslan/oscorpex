@@ -3,11 +3,11 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
+import { canonicalizeAgentRole } from "../roles.js";
 import type { TeamTemplate } from "../types.js";
 import { now, rowToTeamTemplate } from "./helpers.js";
-import { canonicalizeAgentRole } from "../roles.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("team-repo");
 
 // ---------------------------------------------------------------------------
@@ -35,9 +35,7 @@ function rowToCustomTeamTemplate(row: any): CustomTeamTemplate {
 }
 
 function ensurePlannerRole(roles: string[]): string[] {
-	const deduped = Array.from(
-		new Set(roles.map((role) => canonicalizeAgentRole(role)).filter(Boolean)),
-	);
+	const deduped = Array.from(new Set(roles.map((role) => canonicalizeAgentRole(role)).filter(Boolean)));
 	const hasPlanner = deduped.some((role) => role === "product-owner" || role === "pm");
 	return hasPlanner ? deduped : ["product-owner", ...deduped];
 }

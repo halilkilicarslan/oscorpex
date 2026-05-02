@@ -1,12 +1,12 @@
 import { Hono } from "hono";
+import { getTenantContext, logTenantActivity } from "../auth/tenant-context.js";
 import {
-	releaseDecisionService,
 	InvalidOverrideInputError,
 	NonOverridableGateError,
 	ReleaseCandidateNotFoundError,
 	TenantRequiredForProductionReleaseError,
+	releaseDecisionService,
 } from "../release-decision-service.js";
-import { getTenantContext, logTenantActivity } from "../auth/tenant-context.js";
 
 const releaseRoutes = new Hono();
 
@@ -17,7 +17,8 @@ function badRequest(c: any, message: string) {
 function mapReleaseError(c: any, err: unknown) {
 	if (err instanceof TenantRequiredForProductionReleaseError) return c.json({ error: err.message }, 422);
 	if (err instanceof ReleaseCandidateNotFoundError) return c.json({ error: err.message }, 404);
-	if (err instanceof InvalidOverrideInputError || err instanceof NonOverridableGateError) return c.json({ error: err.message }, 422);
+	if (err instanceof InvalidOverrideInputError || err instanceof NonOverridableGateError)
+		return c.json({ error: err.message }, 422);
 	if (err instanceof Error && err.message.includes("not found")) return c.json({ error: err.message }, 404);
 	if (err instanceof Error) return c.json({ error: err.message }, 409);
 	return c.json({ error: "unexpected error" }, 500);
@@ -147,7 +148,11 @@ releaseRoutes.post("/release/:goalId/rollback", async (c) => {
 	const body = await c.req.json().catch(() => null);
 	if (!goalId) return badRequest(c, "goalId is required");
 	if (!body || typeof body !== "object") return badRequest(c, "invalid request body");
-	if (typeof body.releaseCandidateId !== "string" || typeof body.reason !== "string" || typeof body.source !== "string") {
+	if (
+		typeof body.releaseCandidateId !== "string" ||
+		typeof body.reason !== "string" ||
+		typeof body.source !== "string"
+	) {
 		return badRequest(c, "releaseCandidateId, reason and source are required");
 	}
 	if (!["info", "warning", "high", "critical"].includes(body.severity)) {

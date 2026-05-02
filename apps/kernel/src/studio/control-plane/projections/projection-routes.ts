@@ -2,8 +2,14 @@
 // Control Plane — Dashboard Projection Routes (thin host)
 // ---------------------------------------------------------------------------
 
+import {
+	getApprovalSummary,
+	getControlPlaneSummary,
+	getProviderOps,
+	getQueueHealth,
+	getRuntimeHealthSummary,
+} from "@oscorpex/control-plane";
 import { Hono } from "hono";
-import { getControlPlaneSummary, getApprovalSummary, getRuntimeHealthSummary, getProviderOps, getQueueHealth } from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-projection-routes");

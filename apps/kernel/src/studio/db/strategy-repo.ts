@@ -3,9 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
 import type { AgentStrategy } from "../types.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("strategy-repo");
 
 // ---------------------------------------------------------------------------
@@ -28,14 +28,20 @@ function rowToStrategy(row: any): AgentStrategy {
 // CRUD
 // ---------------------------------------------------------------------------
 
-export async function createStrategy(
-	data: Omit<AgentStrategy, "id">,
-): Promise<AgentStrategy> {
+export async function createStrategy(data: Omit<AgentStrategy, "id">): Promise<AgentStrategy> {
 	const id = randomUUID();
 	await execute(
 		`INSERT INTO agent_strategies (id, agent_role, name, description, prompt_addendum, allowed_task_types, is_default)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		[id, data.agentRole, data.name, data.description, data.promptAddendum ?? null, data.allowedTaskTypes, data.isDefault],
+		[
+			id,
+			data.agentRole,
+			data.name,
+			data.description,
+			data.promptAddendum ?? null,
+			data.allowedTaskTypes,
+			data.isDefault,
+		],
 	);
 	return { ...data, id };
 }
@@ -46,10 +52,7 @@ export async function getStrategy(id: string): Promise<AgentStrategy | undefined
 }
 
 /** Get strategies available for a role and task type */
-export async function getStrategiesForRole(
-	agentRole: string,
-	taskType?: string,
-): Promise<AgentStrategy[]> {
+export async function getStrategiesForRole(agentRole: string, taskType?: string): Promise<AgentStrategy[]> {
 	if (taskType) {
 		const rows = await query<any>(
 			`SELECT * FROM agent_strategies WHERE agent_role = $1 AND ($2 = ANY(allowed_task_types) OR allowed_task_types = '{}')
@@ -58,10 +61,9 @@ export async function getStrategiesForRole(
 		);
 		return rows.map(rowToStrategy);
 	}
-	const rows = await query<any>(
-		`SELECT * FROM agent_strategies WHERE agent_role = $1 ORDER BY is_default DESC, name`,
-		[agentRole],
-	);
+	const rows = await query<any>(`SELECT * FROM agent_strategies WHERE agent_role = $1 ORDER BY is_default DESC, name`, [
+		agentRole,
+	]);
 	return rows.map(rowToStrategy);
 }
 

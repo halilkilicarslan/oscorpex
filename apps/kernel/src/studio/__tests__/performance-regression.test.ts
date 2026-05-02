@@ -14,13 +14,13 @@
 // 6. Throughput does not collapse under moderate concurrent load
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { sortTasksByFairness, groupTasksByLane, getTaskCategory } from "../task-scheduler.js";
-import { evaluateRetry, isRetryable, MAX_AUTO_RETRIES } from "../retry-policy.js";
-import { shouldSkipProvider, sortAdapterChain, getFallbackSeverity } from "../fallback-decision.js";
-import { AdaptiveSemaphore, ConcurrencyTracker, AdaptiveConcurrencyController } from "../adaptive-concurrency.js";
-import { providerState } from "../provider-state.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AdaptiveConcurrencyController, AdaptiveSemaphore, ConcurrencyTracker } from "../adaptive-concurrency.js";
+import { getFallbackSeverity, shouldSkipProvider, sortAdapterChain } from "../fallback-decision.js";
 import { providerRuntimeCache } from "../provider-runtime-cache.js";
+import { providerState } from "../provider-state.js";
+import { MAX_AUTO_RETRIES, evaluateRetry, isRetryable } from "../retry-policy.js";
+import { getTaskCategory, groupTasksByLane, sortTasksByFairness } from "../task-scheduler.js";
 import type { Task } from "../types.js";
 
 // ---------------------------------------------------------------------------
@@ -68,15 +68,17 @@ function makeAdapter(name: string, caps?: Record<string, unknown>) {
 	return {
 		name,
 		isAvailable: vi.fn().mockResolvedValue(true),
-		capabilities: vi.fn().mockResolvedValue(caps ?? {
-			supportedModels: ["model-1"],
-			supportsToolRestriction: true,
-			supportsStreaming: false,
-			supportsResume: false,
-			supportsCancel: true,
-			supportsStructuredOutput: false,
-			supportsSandboxHinting: true,
-		}),
+		capabilities: vi.fn().mockResolvedValue(
+			caps ?? {
+				supportedModels: ["model-1"],
+				supportsToolRestriction: true,
+				supportsStreaming: false,
+				supportsResume: false,
+				supportsCancel: true,
+				supportsStructuredOutput: false,
+				supportsSandboxHinting: true,
+			},
+		),
 		execute: vi.fn(),
 	};
 }
@@ -352,11 +354,7 @@ describe("INVARIANT 6: Throughput does not collapse under moderate concurrent lo
 		const sem = new AdaptiveSemaphore(1);
 		await sem.acquire();
 
-		const pending = [
-			sem.acquire(),
-			sem.acquire(),
-			sem.acquire(),
-		];
+		const pending = [sem.acquire(), sem.acquire(), sem.acquire()];
 
 		await new Promise((r) => setTimeout(r, 5));
 		expect(sem.pendingCount).toBe(3);
@@ -370,9 +368,7 @@ describe("INVARIANT 6: Throughput does not collapse under moderate concurrent lo
 	});
 
 	it("sortAdapterChain is O(n log n) and handles 50 providers without timeout", () => {
-		const adapters = Array.from({ length: 50 }, (_, i) =>
-			makeAdapter(`provider-${i}`),
-		);
+		const adapters = Array.from({ length: 50 }, (_, i) => makeAdapter(`provider-${i}`));
 		const start = performance.now();
 		const sorted = sortAdapterChain(adapters, (id) => ({
 			successRate: Math.random(),

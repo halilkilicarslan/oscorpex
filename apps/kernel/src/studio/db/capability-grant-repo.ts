@@ -3,10 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { query, queryOne, execute } from "../pg.js";
-import type { CapabilityGrant, CapabilityToken } from "../types.js";
-import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
 import { createLogger } from "../logger.js";
+import { execute, query, queryOne } from "../pg.js";
+import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
+import type { CapabilityGrant, CapabilityToken } from "../types.js";
 const log = createLogger("capability-grant-repo");
 
 function rowToGrant(row: Record<string, unknown>): CapabilityGrant {
@@ -44,12 +44,21 @@ export async function upsertCapabilityGrant(params: {
 export async function getCapabilityGrants(projectId: string, agentRole?: string): Promise<CapabilityGrant[]> {
 	const canonicalRole = agentRole ? canonicalizeAgentRole(agentRole) : undefined;
 	const rows = canonicalRole
-		? await query("SELECT * FROM agent_capability_grants WHERE project_id = $1 AND agent_role = $2 ORDER BY capability", [projectId, canonicalRole])
-		: await query("SELECT * FROM agent_capability_grants WHERE project_id = $1 ORDER BY agent_role, capability", [projectId]);
+		? await query(
+				"SELECT * FROM agent_capability_grants WHERE project_id = $1 AND agent_role = $2 ORDER BY capability",
+				[projectId, canonicalRole],
+			)
+		: await query("SELECT * FROM agent_capability_grants WHERE project_id = $1 ORDER BY agent_role, capability", [
+				projectId,
+			]);
 	return rows.map(rowToGrant);
 }
 
-export async function hasCapability(projectId: string, agentRole: string, capability: CapabilityToken): Promise<boolean> {
+export async function hasCapability(
+	projectId: string,
+	agentRole: string,
+	capability: CapabilityToken,
+): Promise<boolean> {
 	const canonicalRole = canonicalizeAgentRole(agentRole);
 	const behaviorRole = getBehaviorRoleKey(agentRole);
 	const row =
@@ -67,7 +76,11 @@ export async function hasCapability(projectId: string, agentRole: string, capabi
 	return row.granted as boolean;
 }
 
-export async function deleteCapabilityGrant(projectId: string, agentRole: string, capability: CapabilityToken): Promise<boolean> {
+export async function deleteCapabilityGrant(
+	projectId: string,
+	agentRole: string,
+	capability: CapabilityToken,
+): Promise<boolean> {
 	const result = await execute(
 		"DELETE FROM agent_capability_grants WHERE project_id = $1 AND agent_role = $2 AND capability = $3",
 		[projectId, canonicalizeAgentRole(agentRole), capability],
@@ -81,7 +94,13 @@ export async function deleteCapabilityGrant(projectId: string, agentRole: string
 
 const ROLE_DEFAULTS: Record<string, CapabilityToken[]> = {
 	"product-owner": ["can_propose_task", "can_request_replan", "can_request_human_review"],
-	"tech-lead": ["can_propose_task", "can_inject_task_low_risk", "can_request_replan", "can_modify_graph_same_phase", "can_request_human_review"],
+	"tech-lead": [
+		"can_propose_task",
+		"can_inject_task_low_risk",
+		"can_request_replan",
+		"can_modify_graph_same_phase",
+		"can_request_human_review",
+	],
 	"backend-dev": ["can_propose_task", "can_inject_task_low_risk", "can_trigger_tests", "can_commit_code"],
 	"frontend-dev": ["can_propose_task", "can_inject_task_low_risk", "can_trigger_tests", "can_commit_code"],
 	qa: ["can_trigger_tests", "can_propose_task", "can_request_human_review"],

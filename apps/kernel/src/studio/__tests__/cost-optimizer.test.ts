@@ -127,9 +127,7 @@ describe("CostOptimizer", () => {
 	describe("getRecommendation — with historical data", () => {
 		it("recommends cheaper model when it has good efficiency for S tasks", async () => {
 			// Haiku: 3 tasks, cheap, reliable
-			getProjectCostBreakdownMock.mockResolvedValue([
-				makeBreakdownEntry("claude-haiku-4-5-20251001", 3, 0.003, 4500),
-			]);
+			getProjectCostBreakdownMock.mockResolvedValue([makeBreakdownEntry("claude-haiku-4-5-20251001", 3, 0.003, 4500)]);
 			listTokenUsageMock.mockResolvedValue([
 				makeUsageEntry("claude-haiku-4-5-20251001", "anthropic", 0.001),
 				makeUsageEntry("claude-haiku-4-5-20251001", "anthropic", 0.001),
@@ -221,12 +219,8 @@ describe("CostOptimizer", () => {
 		});
 
 		it("computes avgCostPerTask correctly", async () => {
-			getProjectCostBreakdownMock.mockResolvedValue([
-				makeBreakdownEntry("claude-sonnet-4-6", 4, 0.08, 12000),
-			]);
-			listTokenUsageMock.mockResolvedValue([
-				makeUsageEntry("claude-sonnet-4-6", "anthropic", 0.02),
-			]);
+			getProjectCostBreakdownMock.mockResolvedValue([makeBreakdownEntry("claude-sonnet-4-6", 4, 0.08, 12000)]);
+			listTokenUsageMock.mockResolvedValue([makeUsageEntry("claude-sonnet-4-6", "anthropic", 0.02)]);
 
 			const stats = await optimizer.getModelEfficiency("proj-1");
 			expect(stats.length).toBe(1);
@@ -234,12 +228,8 @@ describe("CostOptimizer", () => {
 		});
 
 		it("reflects in-memory outcome quality in successRate", async () => {
-			getProjectCostBreakdownMock.mockResolvedValue([
-				makeBreakdownEntry("claude-sonnet-4-6", 2, 0.02, 3000),
-			]);
-			listTokenUsageMock.mockResolvedValue([
-				makeUsageEntry("claude-sonnet-4-6", "anthropic", 0.01),
-			]);
+			getProjectCostBreakdownMock.mockResolvedValue([makeBreakdownEntry("claude-sonnet-4-6", 2, 0.02, 3000)]);
+			listTokenUsageMock.mockResolvedValue([makeUsageEntry("claude-sonnet-4-6", "anthropic", 0.01)]);
 
 			// Record one failure outcome
 			optimizer.recordOutcome("t1", "claude-sonnet-4-6", 0.01, 0.0);
@@ -254,7 +244,7 @@ describe("CostOptimizer", () => {
 		it("sorts models by efficiencyScore descending", async () => {
 			getProjectCostBreakdownMock.mockResolvedValue([
 				makeBreakdownEntry("claude-haiku-4-5-20251001", 5, 0.005, 7500), // cheaper
-				makeBreakdownEntry("claude-opus-4-6", 5, 0.5, 30000),             // expensive
+				makeBreakdownEntry("claude-opus-4-6", 5, 0.5, 30000), // expensive
 			]);
 			listTokenUsageMock.mockResolvedValue([
 				makeUsageEntry("claude-haiku-4-5-20251001", "anthropic", 0.001),
@@ -289,8 +279,12 @@ describe("CostOptimizer", () => {
 				makeBreakdownEntry("claude-opus-4-6", 3, 0.6, 18000),
 			]);
 			listTokenUsageMock.mockResolvedValue([
-				...Array(10).fill(null).map(() => makeUsageEntry("claude-haiku-4-5-20251001", "anthropic", 0.001)),
-				...Array(3).fill(null).map(() => makeUsageEntry("claude-opus-4-6", "anthropic", 0.2)),
+				...Array(10)
+					.fill(null)
+					.map(() => makeUsageEntry("claude-haiku-4-5-20251001", "anthropic", 0.001)),
+				...Array(3)
+					.fill(null)
+					.map(() => makeUsageEntry("claude-opus-4-6", "anthropic", 0.2)),
 			]);
 
 			const insights = await optimizer.getCostInsights("proj-1");

@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
-import { getDbPoolConfig } from "../performance-config.js";
 import { getDbPoolSnapshot } from "../db-pool-metrics.js";
+import { getDbPoolConfig } from "../performance-config.js";
 
 describe("EPIC 14 — Infra Regression Tests", () => {
 	// ---------------------------------------------------------------------------

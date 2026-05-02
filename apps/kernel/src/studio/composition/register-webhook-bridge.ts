@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { eventBus } from "../event-bus.js";
-import { sendWebhookNotification } from "../webhook-sender.js";
 import { createLogger } from "../logger.js";
+import { sendWebhookNotification } from "../webhook-sender.js";
 
 const log = createLogger("composition:webhook-bridge");
 

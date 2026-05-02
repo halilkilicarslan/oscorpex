@@ -4,19 +4,19 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { eventBus } from "./event-bus.js";
-import { getGoalScope, type QualityGateEnvironment } from "./db/quality-gate-repo.js";
-import { getLatestReleaseCandidateForGoal } from "./db/release-decision-repo.js";
 import {
+	type ArtifactReferenceRow,
+	type ArtifactStatus,
 	getArtifactById,
 	insertArtifactAndSupersedePrevious,
 	insertArtifactReference,
 	listArtifactsForGoal,
 	listLatestArtifactsForGoal,
 	supersedeArtifactById,
-	type ArtifactReferenceRow,
-	type ArtifactStatus,
 } from "./db/artifact-reference-repo.js";
+import { type QualityGateEnvironment, getGoalScope } from "./db/quality-gate-repo.js";
+import { getLatestReleaseCandidateForGoal } from "./db/release-decision-repo.js";
+import { eventBus } from "./event-bus.js";
 
 export interface ArtifactReferenceInput {
 	goalId: string;
@@ -98,7 +98,8 @@ export class ArtifactReferenceService {
 			throw new Error(`tenant_id is required for production artifacts (goal ${input.goalId})`);
 		}
 
-		const releaseCandidateId = input.releaseCandidateId ?? (await getLatestReleaseCandidateForGoal(input.goalId))?.id ?? null;
+		const releaseCandidateId =
+			input.releaseCandidateId ?? (await getLatestReleaseCandidateForGoal(input.goalId))?.id ?? null;
 
 		const row = await insertArtifactAndSupersedePrevious({
 			tenantId,
@@ -353,4 +354,3 @@ export class ArtifactReferenceService {
 }
 
 export const artifactReferenceService = new ArtifactReferenceService();
-

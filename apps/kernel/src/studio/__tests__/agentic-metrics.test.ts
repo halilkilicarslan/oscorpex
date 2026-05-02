@@ -30,7 +30,13 @@ describe("Agentic Metrics", () => {
 		expect(metrics.strategySuccessRates).toEqual([]);
 		expect(metrics.avgRetriesBeforeCompletion).toBe(0);
 		expect(metrics.reviewRejectionByRole).toEqual([]);
-		expect(metrics.injectedTaskVolume).toEqual({ total: 0, humanApproved: 0, autoApproved: 0, pending: 0, rejected: 0 });
+		expect(metrics.injectedTaskVolume).toEqual({
+			total: 0,
+			humanApproved: 0,
+			autoApproved: 0,
+			pending: 0,
+			rejected: 0,
+		});
 		expect(metrics.graphMutationStats).toEqual({ total: 0, byType: {} });
 		expect(metrics.replanTriggerFrequency).toEqual({ total: 0, byTrigger: {}, byStatus: {} });
 		expect(metrics.degradedProviderDuration).toEqual([]);
@@ -55,7 +61,13 @@ describe("Agentic Metrics", () => {
 		expect(metrics.duplicateDispatchPrevented).toBe(3);
 		expect(metrics.verificationFailureRate).toBe(20);
 		expect(metrics.avgRetriesBeforeCompletion).toBe(1.45);
-		expect(metrics.injectedTaskVolume).toEqual({ total: 8, humanApproved: 3, autoApproved: 2, pending: 2, rejected: 1 });
+		expect(metrics.injectedTaskVolume).toEqual({
+			total: 8,
+			humanApproved: 3,
+			autoApproved: 2,
+			pending: 2,
+			rejected: 1,
+		});
 		expect(metrics.failureClassification).toEqual({ transientFailures: 5, terminalFailures: 2, retryExhausted: 1 });
 	});
 

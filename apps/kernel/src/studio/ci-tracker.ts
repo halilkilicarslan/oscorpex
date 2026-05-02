@@ -187,19 +187,13 @@ export class CITracker {
 	// Internal — GitHub webhook processing
 	// ---------------------------------------------------------------------------
 
-	private async _processGitHubWebhook(
-		payload: GitHubWebhookPayload,
-		projectId?: string,
-	): Promise<CITracking | null> {
+	private async _processGitHubWebhook(payload: GitHubWebhookPayload, projectId?: string): Promise<CITracking | null> {
 		const p = payload as Record<string, unknown>;
 
 		// check_run event
 		if (p.check_run && typeof p.check_run === "object") {
 			const cr = p.check_run as Record<string, unknown>;
-			const status = normaliseGitHubStatus(
-				String(cr.status ?? "queued"),
-				(cr.conclusion as string | null) ?? null,
-			);
+			const status = normaliseGitHubStatus(String(cr.status ?? "queued"), (cr.conclusion as string | null) ?? null);
 			const pipelineUrl = (cr.html_url as string | undefined) ?? undefined;
 
 			// Find the PR number from check_run.pull_requests
@@ -214,10 +208,7 @@ export class CITracker {
 		// check_suite event
 		if (p.check_suite && typeof p.check_suite === "object") {
 			const cs = p.check_suite as Record<string, unknown>;
-			const status = normaliseGitHubStatus(
-				String(cs.status ?? "queued"),
-				(cs.conclusion as string | null) ?? null,
-			);
+			const status = normaliseGitHubStatus(String(cs.status ?? "queued"), (cs.conclusion as string | null) ?? null);
 			const pullRequests = (cs.pull_requests as Array<{ number: number }> | undefined) ?? [];
 			if (pullRequests.length > 0) {
 				const prNumber = String(pullRequests[0].number);
@@ -233,10 +224,7 @@ export class CITracker {
 	// Internal — GitLab webhook processing
 	// ---------------------------------------------------------------------------
 
-	private async _processGitLabWebhook(
-		payload: GitLabWebhookPayload,
-		projectId?: string,
-	): Promise<CITracking | null> {
+	private async _processGitLabWebhook(payload: GitLabWebhookPayload, projectId?: string): Promise<CITracking | null> {
 		const p = payload as Record<string, unknown>;
 
 		if (p.object_kind !== "pipeline") return null;

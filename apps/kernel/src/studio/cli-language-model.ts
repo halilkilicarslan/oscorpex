@@ -15,8 +15,8 @@ import type {
 	LanguageModelV3StreamPart,
 	LanguageModelV3StreamResult,
 } from "@ai-sdk/provider";
-import type { ProviderCliTool } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { ProviderCliTool } from "./types.js";
 const log = createLogger("cli-language-model");
 
 // ---------------------------------------------------------------------------

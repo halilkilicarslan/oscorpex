@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { execute, query, queryOne } from "../pg.js";
 import { createLogger } from "../logger.js";
+import { execute, query, queryOne } from "../pg.js";
 const log = createLogger("notification-repo");
 
 // ---------------------------------------------------------------------------
@@ -48,15 +48,22 @@ function rowToNotification(row: Record<string, unknown>): Notification {
 // createNotification
 // ---------------------------------------------------------------------------
 
-export async function createNotification(
-	data: Omit<Notification, "id" | "read" | "createdAt">,
-): Promise<Notification> {
+export async function createNotification(data: Omit<Notification, "id" | "read" | "createdAt">): Promise<Notification> {
 	const id = randomUUID();
 	const row = await queryOne<Record<string, unknown>>(
 		`INSERT INTO notifications (id, tenant_id, user_id, project_id, type, title, body, data)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING *`,
-		[id, data.tenantId ?? null, data.userId ?? null, data.projectId, data.type, data.title, data.body ?? "", data.data ?? {}],
+		[
+			id,
+			data.tenantId ?? null,
+			data.userId ?? null,
+			data.projectId,
+			data.type,
+			data.title,
+			data.body ?? "",
+			data.data ?? {},
+		],
 	);
 	if (!row) throw new Error("notification insert returned no row");
 	return rowToNotification(row);
@@ -127,10 +134,7 @@ export async function countUnread(opts: CountUnreadOpts = {}): Promise<number> {
 	}
 
 	const where = `WHERE ${conditions.join(" AND ")}`;
-	const row = await queryOne<{ count: string }>(
-		`SELECT COUNT(*) AS count FROM notifications ${where}`,
-		params,
-	);
+	const row = await queryOne<{ count: string }>(`SELECT COUNT(*) AS count FROM notifications ${where}`, params);
 	return Number(row?.count ?? 0);
 }
 

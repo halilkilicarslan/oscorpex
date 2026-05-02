@@ -2,13 +2,7 @@
 // Implements the HookRegistry contract from @oscorpex/core.
 // Hooks are called synchronously or asynchronously at well-defined lifecycle points.
 
-import type {
-	HookPhase,
-	HookContext,
-	HookResult,
-	HookRegistration,
-	HookRegistry,
-} from "@oscorpex/core";
+import type { HookContext, HookPhase, HookRegistration, HookRegistry, HookResult } from "@oscorpex/core";
 
 class InMemoryHookRegistry implements HookRegistry {
 	private hooks = new Map<HookPhase, HookRegistration[]>();

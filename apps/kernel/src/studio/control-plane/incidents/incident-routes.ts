@@ -2,8 +2,18 @@
 // Control Plane — Incident Routes (thin host)
 // ---------------------------------------------------------------------------
 
+import {
+	ackIncident,
+	addIncidentNote,
+	assignIncident,
+	getIncident,
+	listIncidents,
+	openIncident,
+	reopenIncident,
+	resolveIncident,
+	updateIncidentSeverity,
+} from "@oscorpex/control-plane";
 import { Hono } from "hono";
-import { listIncidents, getIncident, ackIncident, resolveIncident, openIncident, assignIncident, addIncidentNote, updateIncidentSeverity, reopenIncident } from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-incident-routes");

@@ -3,13 +3,13 @@
 // Smarter fallback chain construction and provider skipping logic.
 // ---------------------------------------------------------------------------
 
+import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
 import type { CLIAdapter } from "./cli-adapter.js";
+import { createLogger } from "./logger.js";
+import { getFallbackConfig } from "./performance-config.js";
 import type { ProviderCapabilities } from "./provider-runtime-cache.js";
 import { providerRuntimeCache } from "./provider-runtime-cache.js";
 import { providerState } from "./provider-state.js";
-import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
-import { getFallbackConfig } from "./performance-config.js";
-import { createLogger } from "./logger.js";
 const log = createLogger("fallback-decision");
 
 // ---------------------------------------------------------------------------
@@ -70,10 +70,7 @@ export async function shouldSkipProvider(
 	}
 
 	// 2. Don't retry same provider immediately after timeout
-	if (
-		options.lastFailureProvider === adapter.name &&
-		options.lastFailureClassification === "timeout"
-	) {
+	if (options.lastFailureProvider === adapter.name && options.lastFailureClassification === "timeout") {
 		return {
 			shouldSkip: true,
 			reason: "timeout_retry_avoided",
@@ -94,8 +91,8 @@ export async function shouldSkipProvider(
 function isToolRestrictionCompatible(caps: ProviderCapabilities, allowedTools: string[]): boolean {
 	// Full access = no restriction, always compatible
 	const fullAccessTools = ["Read", "Edit", "Glob", "Grep", "Bash", "Write", "Replace"];
-	const isFullAccess = allowedTools.length >= fullAccessTools.length &&
-		fullAccessTools.every((t) => allowedTools.includes(t));
+	const isFullAccess =
+		allowedTools.length >= fullAccessTools.length && fullAccessTools.every((t) => allowedTools.includes(t));
 	if (isFullAccess) return true;
 
 	return caps.supportsToolRestriction;

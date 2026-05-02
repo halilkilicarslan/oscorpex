@@ -3,9 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
 import type { AgentObservation, AgentSession, AgentSessionStatus } from "../types.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("session-repo");
 
 // ---------------------------------------------------------------------------
@@ -106,11 +106,7 @@ export async function addObservation(sessionId: string, observation: AgentObserv
 }
 
 /** List recent sessions for a project/agent */
-export async function listAgentSessions(
-	projectId: string,
-	agentId?: string,
-	limit = 20,
-): Promise<AgentSession[]> {
+export async function listAgentSessions(projectId: string, agentId?: string, limit = 20): Promise<AgentSession[]> {
 	if (agentId) {
 		const rows = await query<any>(
 			`SELECT * FROM agent_sessions WHERE project_id = $1 AND agent_id = $2 ORDER BY created_at DESC LIMIT $3`,

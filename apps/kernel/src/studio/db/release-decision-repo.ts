@@ -558,4 +558,3 @@ export async function listActiveRollbackTriggersForCandidate(
 	);
 	return rows.map(rowToRollbackTrigger);
 }
-

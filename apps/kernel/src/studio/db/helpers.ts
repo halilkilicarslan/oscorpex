@@ -2,6 +2,8 @@
 // Oscorpex — DB Helpers: row mappers + utility
 // ---------------------------------------------------------------------------
 
+import { createLogger } from "../logger.js";
+import { canonicalizeAgentRole } from "../roles.js";
 import type {
 	AIProvider,
 	AIProviderType,
@@ -50,8 +52,6 @@ import type {
 	WorkItemStatus,
 	WorkItemType,
 } from "../types.js";
-import { canonicalizeAgentRole } from "../roles.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("helpers");
 
 // ---------------------------------------------------------------------------

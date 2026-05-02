@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { registerPlugin as dbRegisterPlugin, updatePlugin as dbUpdatePlugin, insertPluginExecution } from "./db.js";
-import type { StudioEvent } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { StudioEvent } from "./types.js";
 const log = createLogger("plugin-registry");
 
 // ---------------------------------------------------------------------------

@@ -8,11 +8,17 @@
 
 import { randomUUID } from "node:crypto";
 import { normalize, resolve, sep } from "node:path";
-import { query, queryOne, execute, getProjectSetting } from "./db.js";
-import type { Task } from "./types.js";
-import { checkToolAllowed, checkPathAllowed, checkOutputSize, buildDefaultSandboxPolicy, isSecurityTask } from "@oscorpex/policy-kit";
 import { SandboxViolationError as CoreSandboxViolationError } from "@oscorpex/core";
+import {
+	buildDefaultSandboxPolicy,
+	checkOutputSize,
+	checkPathAllowed,
+	checkToolAllowed,
+	isSecurityTask,
+} from "@oscorpex/policy-kit";
+import { execute, getProjectSetting, query, queryOne } from "./db.js";
 import { createLogger } from "./logger.js";
+import type { Task } from "./types.js";
 const log = createLogger("sandbox-manager");
 
 // Re-export for backward compatibility
@@ -113,10 +119,15 @@ export async function createSandboxPolicy(params: Omit<SandboxPolicy, "id">): Pr
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 RETURNING *`,
 		[
-			id, params.projectId, params.isolationLevel,
-			JSON.stringify(params.allowedTools), JSON.stringify(params.deniedTools),
-			JSON.stringify(params.filesystemScope), params.networkPolicy,
-			params.maxExecutionTimeMs, params.maxOutputSizeBytes,
+			id,
+			params.projectId,
+			params.isolationLevel,
+			JSON.stringify(params.allowedTools),
+			JSON.stringify(params.deniedTools),
+			JSON.stringify(params.filesystemScope),
+			params.networkPolicy,
+			params.maxExecutionTimeMs,
+			params.maxOutputSizeBytes,
 			JSON.stringify(params.elevatedCapabilities),
 			params.enforcementMode ?? "hard",
 		],
@@ -125,10 +136,9 @@ export async function createSandboxPolicy(params: Omit<SandboxPolicy, "id">): Pr
 }
 
 export async function getSandboxPolicy(projectId: string): Promise<SandboxPolicy | null> {
-	const row = await queryOne(
-		`SELECT * FROM sandbox_policies WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1`,
-		[projectId],
-	);
+	const row = await queryOne(`SELECT * FROM sandbox_policies WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1`, [
+		projectId,
+	]);
 	return row ? rowToPolicy(row) : null;
 }
 
@@ -156,17 +166,14 @@ export async function startSandboxSession(params: {
 }
 
 export async function endSandboxSession(sessionId: string): Promise<void> {
-	await execute(
-		`UPDATE sandbox_sessions SET ended_at = now() WHERE id = $1`,
-		[sessionId],
-	);
+	await execute(`UPDATE sandbox_sessions SET ended_at = now() WHERE id = $1`, [sessionId]);
 }
 
 export async function recordViolation(sessionId: string, violation: SandboxViolation): Promise<void> {
-	await execute(
-		`UPDATE sandbox_sessions SET violations = violations || $2::jsonb WHERE id = $1`,
-		[sessionId, JSON.stringify([violation])],
-	);
+	await execute(`UPDATE sandbox_sessions SET violations = violations || $2::jsonb WHERE id = $1`, [
+		sessionId,
+		JSON.stringify([violation]),
+	]);
 }
 
 export async function getSessionViolations(sessionId: string): Promise<SandboxViolation[]> {
@@ -178,11 +185,7 @@ export async function getSessionViolations(sessionId: string): Promise<SandboxVi
  * Resolve effective sandbox policy for a task.
  * Uses buildDefaultSandboxPolicy from @oscorpex/policy-kit for defaults.
  */
-export async function resolveTaskPolicy(
-	projectId: string,
-	task: Task,
-	agentRole: string,
-): Promise<SandboxPolicy> {
+export async function resolveTaskPolicy(projectId: string, task: Task, agentRole: string): Promise<SandboxPolicy> {
 	const projectPolicy = await getSandboxPolicy(projectId);
 	const defaultPolicy = buildDefaultSandboxPolicy(projectId);
 	const base: SandboxPolicy = projectPolicy ?? {
@@ -230,11 +233,7 @@ export async function resolveTaskPolicy(
  * Enforce tool check: In hard mode, throws SandboxViolationError.
  * In soft mode, records violation and returns. In off mode, skips.
  */
-export async function enforceToolCheck(
-	policy: SandboxPolicy,
-	toolName: string,
-	sessionId?: string,
-): Promise<void> {
+export async function enforceToolCheck(policy: SandboxPolicy, toolName: string, sessionId?: string): Promise<void> {
 	if (policy.enforcementMode === "off") return;
 	const result = checkToolAllowed(policy, toolName);
 	if (result.allowed) return;
@@ -243,7 +242,10 @@ export async function enforceToolCheck(
 		detail: result.reason,
 		timestamp: new Date().toISOString(),
 	};
-	if (sessionId) await recordViolation(sessionId, violation).catch((err) => log.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
+	if (sessionId)
+		await recordViolation(sessionId, violation).catch((err) =>
+			log.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err),
+		);
 	if (policy.enforcementMode === "hard") {
 		throw new SandboxViolationError(violation);
 	}
@@ -271,7 +273,10 @@ export async function enforcePathChecks(
 			timestamp: new Date().toISOString(),
 		};
 		violations.push(violation);
-		if (sessionId) await recordViolation(sessionId, violation).catch((err) => log.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
+		if (sessionId)
+			await recordViolation(sessionId, violation).catch((err) =>
+				log.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err),
+			);
 		if (policy.enforcementMode === "hard") {
 			throw new SandboxViolationError(violation);
 		}
@@ -296,7 +301,10 @@ export async function enforceOutputSizeCheck(
 		detail: result.reason,
 		timestamp: new Date().toISOString(),
 	};
-	if (sessionId) await recordViolation(sessionId, violation).catch((err) => log.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err));
+	if (sessionId)
+		await recordViolation(sessionId, violation).catch((err) =>
+			log.warn("[sandbox-manager] Non-blocking operation failed:", err?.message ?? err),
+		);
 	if (policy.enforcementMode === "hard") {
 		throw new SandboxViolationError(violation);
 	}

@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-	upsertCapabilityGrant,
-	getCapabilityGrants,
-	hasCapability,
 	deleteCapabilityGrant,
+	getCapabilityGrants,
 	getDefaultGrantsForRole,
+	hasCapability,
+	upsertCapabilityGrant,
 } from "../db.js";
 import { execute, query } from "../pg.js";
 

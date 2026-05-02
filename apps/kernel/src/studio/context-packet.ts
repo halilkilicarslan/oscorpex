@@ -8,8 +8,8 @@
 import { estimateTokens } from "@oscorpex/memory-kit";
 import { eventBus } from "./event-bus.js";
 import { memoryProvider } from "./kernel/memory-adapter.js";
-import type { ContextPacketOptions } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { ContextPacketOptions } from "./types.js";
 const log = createLogger("context-packet");
 
 /**

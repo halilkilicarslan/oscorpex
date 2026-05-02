@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { ReleaseDecisionService, NonOverridableGateError, TenantRequiredForProductionReleaseError } from "../release-decision-service.js";
 import { ApprovalService } from "../approval-service.js";
-import { QualityGateService } from "../quality-gate-service.js";
 import { execute, query, queryOne } from "../pg.js";
+import { QualityGateService } from "../quality-gate-service.js";
+import {
+	NonOverridableGateError,
+	ReleaseDecisionService,
+	TenantRequiredForProductionReleaseError,
+} from "../release-decision-service.js";
 
 let dbReady = false;
 try {
@@ -111,7 +115,12 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 
 	it("blocking gate blocks release", async () => {
 		const goal = await createGoal();
-		const rc = await createReleaseCandidate({ tenantId: goal.tenantId!, projectId: goal.projectId, goalId: goal.goalId, suffix: goal.suffix });
+		const rc = await createReleaseCandidate({
+			tenantId: goal.tenantId!,
+			projectId: goal.projectId,
+			goalId: goal.goalId,
+			suffix: goal.suffix,
+		});
 		await seedPassingGateEvaluations(goal);
 		await seedApprovedApproval(goal);
 
@@ -126,7 +135,12 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 			releaseCandidateId: rc.id,
 		});
 
-		const state = await service.recordReleaseDecision({ goalId: goal.goalId, tenantId: goal.tenantId, environment: "production", actor: "release-decision-service-test" });
+		const state = await service.recordReleaseDecision({
+			goalId: goal.goalId,
+			tenantId: goal.tenantId,
+			environment: "production",
+			actor: "release-decision-service-test",
+		});
 		expect(state.allowed).toBe(false);
 		expect(state.blocked).toBe(true);
 		expect(state.blockingReasons.some((r) => r.gateType === "lint")).toBe(true);
@@ -134,10 +148,20 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 
 	it("missing approval blocks release", async () => {
 		const goal = await createGoal();
-		await createReleaseCandidate({ tenantId: goal.tenantId!, projectId: goal.projectId, goalId: goal.goalId, suffix: goal.suffix });
+		await createReleaseCandidate({
+			tenantId: goal.tenantId!,
+			projectId: goal.projectId,
+			goalId: goal.goalId,
+			suffix: goal.suffix,
+		});
 		await seedPassingGateEvaluations(goal);
 
-		const state = await service.recordReleaseDecision({ goalId: goal.goalId, tenantId: goal.tenantId, environment: "production", actor: "release-decision-service-test" });
+		const state = await service.recordReleaseDecision({
+			goalId: goal.goalId,
+			tenantId: goal.tenantId,
+			environment: "production",
+			actor: "release-decision-service-test",
+		});
 		expect(state.allowed).toBe(false);
 		expect(state.blocked).toBe(true);
 		expect(state.blockingReasons.some((r) => r.code === "approval_missing")).toBe(true);
@@ -145,22 +169,42 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 
 	it("quorum satisfied allows release (when gates pass)", async () => {
 		const goal = await createGoal();
-		await createReleaseCandidate({ tenantId: goal.tenantId!, projectId: goal.projectId, goalId: goal.goalId, suffix: goal.suffix });
+		await createReleaseCandidate({
+			tenantId: goal.tenantId!,
+			projectId: goal.projectId,
+			goalId: goal.goalId,
+			suffix: goal.suffix,
+		});
 		await seedPassingGateEvaluations(goal);
 		await seedApprovedApproval(goal);
 
-		const state = await service.recordReleaseDecision({ goalId: goal.goalId, tenantId: goal.tenantId, environment: "production", actor: "release-decision-service-test" });
+		const state = await service.recordReleaseDecision({
+			goalId: goal.goalId,
+			tenantId: goal.tenantId,
+			environment: "production",
+			actor: "release-decision-service-test",
+		});
 		expect(state.allowed).toBe(true);
 		expect(state.blocked).toBe(false);
 	});
 
 	it("append-only decision persistence", async () => {
 		const goal = await createGoal();
-		const rc = await createReleaseCandidate({ tenantId: goal.tenantId!, projectId: goal.projectId, goalId: goal.goalId, suffix: goal.suffix });
+		const rc = await createReleaseCandidate({
+			tenantId: goal.tenantId!,
+			projectId: goal.projectId,
+			goalId: goal.goalId,
+			suffix: goal.suffix,
+		});
 		await seedPassingGateEvaluations(goal);
 		await seedApprovedApproval(goal);
 
-		await service.recordReleaseDecision({ goalId: goal.goalId, tenantId: goal.tenantId, environment: "production", actor: "release-decision-service-test" });
+		await service.recordReleaseDecision({
+			goalId: goal.goalId,
+			tenantId: goal.tenantId,
+			environment: "production",
+			actor: "release-decision-service-test",
+		});
 		await gateService.recordGateEvaluation({
 			goalId: goal.goalId,
 			tenantId: goal.tenantId,
@@ -171,7 +215,12 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 			actor: "release-decision-service-test",
 			releaseCandidateId: rc.id,
 		});
-		await service.recordReleaseDecision({ goalId: goal.goalId, tenantId: goal.tenantId, environment: "production", actor: "release-decision-service-test" });
+		await service.recordReleaseDecision({
+			goalId: goal.goalId,
+			tenantId: goal.tenantId,
+			environment: "production",
+			actor: "release-decision-service-test",
+		});
 
 		const rows = await query<{ id: string }>(
 			"SELECT id FROM release_decisions WHERE release_candidate_id = $1 ORDER BY created_at ASC",
@@ -182,7 +231,12 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 
 	it("manual override removes allowed blocker", async () => {
 		const goal = await createGoal();
-		const rc = await createReleaseCandidate({ tenantId: goal.tenantId!, projectId: goal.projectId, goalId: goal.goalId, suffix: goal.suffix });
+		const rc = await createReleaseCandidate({
+			tenantId: goal.tenantId!,
+			projectId: goal.projectId,
+			goalId: goal.goalId,
+			suffix: goal.suffix,
+		});
 		await seedPassingGateEvaluations(goal);
 		await seedApprovedApproval(goal);
 
@@ -197,7 +251,12 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 			releaseCandidateId: rc.id,
 		});
 
-		const blocked = await service.recordReleaseDecision({ goalId: goal.goalId, tenantId: goal.tenantId, environment: "production", actor: "release-decision-service-test" });
+		const blocked = await service.recordReleaseDecision({
+			goalId: goal.goalId,
+			tenantId: goal.tenantId,
+			environment: "production",
+			actor: "release-decision-service-test",
+		});
 		expect(blocked.allowed).toBe(false);
 
 		await service.applyManualOverride({
@@ -209,13 +268,23 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 			expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
 		});
 
-		const allowed = await service.recordReleaseDecision({ goalId: goal.goalId, tenantId: goal.tenantId, environment: "production", actor: "release-decision-service-test" });
+		const allowed = await service.recordReleaseDecision({
+			goalId: goal.goalId,
+			tenantId: goal.tenantId,
+			environment: "production",
+			actor: "release-decision-service-test",
+		});
 		expect(allowed.allowed).toBe(true);
 	});
 
 	it("hard security failure cannot override", async () => {
 		const goal = await createGoal();
-		const rc = await createReleaseCandidate({ tenantId: goal.tenantId!, projectId: goal.projectId, goalId: goal.goalId, suffix: goal.suffix });
+		const rc = await createReleaseCandidate({
+			tenantId: goal.tenantId!,
+			projectId: goal.projectId,
+			goalId: goal.goalId,
+			suffix: goal.suffix,
+		});
 		await seedPassingGateEvaluations(goal);
 		await seedApprovedApproval(goal);
 
@@ -245,7 +314,12 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 
 	it("rollback trigger persists correctly", async () => {
 		const goal = await createGoal();
-		const rc = await createReleaseCandidate({ tenantId: goal.tenantId!, projectId: goal.projectId, goalId: goal.goalId, suffix: goal.suffix });
+		const rc = await createReleaseCandidate({
+			tenantId: goal.tenantId!,
+			projectId: goal.projectId,
+			goalId: goal.goalId,
+			suffix: goal.suffix,
+		});
 		await seedPassingGateEvaluations(goal);
 		await seedApprovedApproval(goal);
 
@@ -278,16 +352,28 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 			`,
 			[releaseCandidateId, goal.projectId, JSON.stringify([goal.goalId]), randomUUID()],
 		);
-		await expect(service.evaluateReleaseDecision(goal.goalId)).rejects.toBeInstanceOf(TenantRequiredForProductionReleaseError);
+		await expect(service.evaluateReleaseDecision(goal.goalId)).rejects.toBeInstanceOf(
+			TenantRequiredForProductionReleaseError,
+		);
 	});
 
 	it("audit events emitted", async () => {
 		const goal = await createGoal();
-		const rc = await createReleaseCandidate({ tenantId: goal.tenantId!, projectId: goal.projectId, goalId: goal.goalId, suffix: goal.suffix });
+		const rc = await createReleaseCandidate({
+			tenantId: goal.tenantId!,
+			projectId: goal.projectId,
+			goalId: goal.goalId,
+			suffix: goal.suffix,
+		});
 		await seedPassingGateEvaluations(goal);
 		await seedApprovedApproval(goal);
 
-		await service.recordReleaseDecision({ goalId: goal.goalId, tenantId: goal.tenantId, environment: "production", actor: "release-decision-service-test" });
+		await service.recordReleaseDecision({
+			goalId: goal.goalId,
+			tenantId: goal.tenantId,
+			environment: "production",
+			actor: "release-decision-service-test",
+		});
 		await service.triggerRollback({
 			releaseCandidateId: rc.id,
 			triggerType: "deployment_health",
@@ -308,4 +394,3 @@ describe.skipIf(!dbReady)("ReleaseDecisionService", () => {
 		expect(rollbackEvent?.id).toBeTruthy();
 	});
 });
-

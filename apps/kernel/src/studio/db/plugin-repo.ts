@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { execute, query, queryOne } from "../pg.js";
 import { createLogger } from "../logger.js";
+import { execute, query, queryOne } from "../pg.js";
 const log = createLogger("plugin-repo");
 
 // ---------------------------------------------------------------------------

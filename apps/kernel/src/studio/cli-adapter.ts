@@ -4,15 +4,20 @@
 // Types re-exported from @oscorpex/provider-sdk for provider-agnostic use.
 // ---------------------------------------------------------------------------
 
-import { type CLIExecutionResult } from "./cli-runtime.js";
-import { executeWithCLI, isClaudeCliAvailable } from "./cli-runtime.js";
-import type { AgentCliTool } from "./types.js";
-import type { CLIAdapterOptions } from "@oscorpex/provider-sdk";
-import { buildToolGovernanceSection, hasFullToolAccess, checkBinaryCached, checkBinaryAsync } from "@oscorpex/provider-sdk";
-import type { ProviderCapabilities } from "./provider-runtime-cache.js";
 import type { ProviderAdapter } from "@oscorpex/core";
-import { getFeatureFlags } from "./performance-config.js";
+import type { CLIAdapterOptions } from "@oscorpex/provider-sdk";
+import {
+	buildToolGovernanceSection,
+	checkBinaryAsync,
+	checkBinaryCached,
+	hasFullToolAccess,
+} from "@oscorpex/provider-sdk";
+import type { CLIExecutionResult } from "./cli-runtime.js";
+import { executeWithCLI, isClaudeCliAvailable } from "./cli-runtime.js";
 import { createLogger } from "./logger.js";
+import { getFeatureFlags } from "./performance-config.js";
+import type { ProviderCapabilities } from "./provider-runtime-cache.js";
+import type { AgentCliTool } from "./types.js";
 const log = createLogger("cli-adapter");
 
 // Re-export the CLIAdapter interface from provider-sdk for local convenience
@@ -389,7 +394,9 @@ export async function getAdapter(cliTool: AgentCliTool): Promise<CLIAdapter> {
 		);
 	}
 
-	log.warn(`[cli-adapter] DEPRECATED: Using legacy ${adapter.constructor.name} for "${cliTool}" — migrate to provider-registry`);
+	log.warn(
+		`[cli-adapter] DEPRECATED: Using legacy ${adapter.constructor.name} for "${cliTool}" — migrate to provider-registry`,
+	);
 	return adapter;
 }
 

@@ -3,8 +3,8 @@
 // Non-blocking warning on failure.
 // ---------------------------------------------------------------------------
 
-import { providerState } from "../studio/provider-state.js";
 import { createLogger } from "../studio/logger.js";
+import { providerState } from "../studio/provider-state.js";
 
 const log = createLogger("boot:provider-state");
 

@@ -2,9 +2,9 @@
 // Oscorpex — Settings Repository: Project Settings key-value store
 // ---------------------------------------------------------------------------
 
+import { createLogger } from "../logger.js";
 import { execute, getPool, query, queryOne } from "../pg.js";
 import { now } from "./helpers.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("settings-repo");
 
 // ---------------------------------------------------------------------------

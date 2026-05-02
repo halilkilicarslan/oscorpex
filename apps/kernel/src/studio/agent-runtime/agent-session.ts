@@ -12,11 +12,11 @@ import {
 	updateStrategyPattern,
 } from "../db.js";
 import { eventBus } from "../event-bus.js";
+import { createLogger } from "../logger.js";
+import { getBehaviorRoleKey } from "../roles.js";
 import type { AgentObservation, AgentSession, EpisodeOutcome, Task } from "../types.js";
 import { formatBehavioralPrompt, loadBehavioralContext } from "./agent-memory.js";
-import { selectStrategy, type StrategySelection } from "./agent-strategy.js";
-import { getBehaviorRoleKey } from "../roles.js";
-import { createLogger } from "../logger.js";
+import { type StrategySelection, selectStrategy } from "./agent-strategy.js";
 const log = createLogger("agent-session");
 
 // ---------------------------------------------------------------------------
@@ -117,10 +117,7 @@ export async function initSession(
 /**
  * Record an observation step within the session.
  */
-export async function recordStep(
-	sessionId: string,
-	observation: Omit<AgentObservation, "timestamp">,
-): Promise<void> {
+export async function recordStep(sessionId: string, observation: Omit<AgentObservation, "timestamp">): Promise<void> {
 	await addObservation(sessionId, {
 		...observation,
 		timestamp: new Date().toISOString(),
@@ -167,7 +164,9 @@ export async function completeSession(
 	);
 
 	// v8.0: Trigger cross-project learning extraction (non-blocking)
-	triggerLearningExtraction(projectId).catch((err) => log.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
+	triggerLearningExtraction(projectId).catch((err) =>
+		log.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err),
+	);
 }
 
 /**
@@ -211,7 +210,9 @@ export async function failSession(
 	);
 
 	// v8.0: Trigger cross-project learning extraction (non-blocking)
-	triggerLearningExtraction(projectId).catch((err) => log.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
+	triggerLearningExtraction(projectId).catch((err) =>
+		log.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err),
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,27 +229,25 @@ async function triggerLearningExtraction(projectId: string): Promise<void> {
 	const { queryOne: qo } = await import("../pg.js");
 
 	// Count episodes since last extraction
-	const countRow = await qo<{ cnt: number }>(
-		"SELECT COUNT(*) as cnt FROM agent_episodes WHERE project_id = $1",
-		[projectId],
-	);
+	const countRow = await qo<{ cnt: number }>("SELECT COUNT(*) as cnt FROM agent_episodes WHERE project_id = $1", [
+		projectId,
+	]);
 	const currentCount = (countRow?.cnt ?? 0) as number;
 	const lastCount = _lastExtractionCount.get(projectId) ?? 0;
 
 	if (currentCount - lastCount < 5) return; // Not enough new episodes
 
 	// Get tenant_id for the project
-	const projRow = await qo<{ tenant_id: string | null }>(
-		"SELECT tenant_id FROM projects WHERE id = $1",
-		[projectId],
-	);
+	const projRow = await qo<{ tenant_id: string | null }>("SELECT tenant_id FROM projects WHERE id = $1", [projectId]);
 	const tenantId = projRow?.tenant_id ?? projectId; // fallback to projectId for single-tenant
 
 	const patternsCreated = await extractPatternsFromEpisodes(tenantId);
 	_lastExtractionCount.set(projectId, currentCount);
 
 	if (patternsCreated > 0) {
-		await autoPromotePatterns(tenantId).catch((err) => log.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err));
+		await autoPromotePatterns(tenantId).catch((err) =>
+			log.warn("[agent-session] Non-blocking operation failed:", err?.message ?? err),
+		);
 		log.info(`[agent-session] Extracted ${patternsCreated} learning patterns for project ${projectId}`);
 	}
 }

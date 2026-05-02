@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock DB layer
@@ -115,8 +115,12 @@ describe("withTenantTransaction — contract", () => {
 describe("Risk classification via classifyRisk", () => {
 	it("classifies deploy/migration as critical", async () => {
 		const { classifyRisk } = await import("../agent-runtime/agent-constraints.js");
-		expect(classifyRisk({ proposalType: "fix_task", title: "Deploy to production", severity: undefined })).toBe("critical");
-		expect(classifyRisk({ proposalType: "fix_task", title: "Run database migration", severity: undefined })).toBe("critical");
+		expect(classifyRisk({ proposalType: "fix_task", title: "Deploy to production", severity: undefined })).toBe(
+			"critical",
+		);
+		expect(classifyRisk({ proposalType: "fix_task", title: "Run database migration", severity: undefined })).toBe(
+			"critical",
+		);
 	});
 
 	it("classifies tests/docs as low", async () => {
@@ -128,6 +132,8 @@ describe("Risk classification via classifyRisk", () => {
 	it("classifies refactors as high", async () => {
 		const { classifyRisk } = await import("../agent-runtime/agent-constraints.js");
 		// "auth" matches critical pattern, so use a non-security refactor title
-		expect(classifyRisk({ proposalType: "refactor", title: "Refactor utils module", severity: undefined })).toBe("high");
+		expect(classifyRisk({ proposalType: "refactor", title: "Refactor utils module", severity: undefined })).toBe(
+			"high",
+		);
 	});
 });

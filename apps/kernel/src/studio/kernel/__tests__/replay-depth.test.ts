@@ -4,10 +4,10 @@
 // verificationReports, and policyDecisions fields.
 // ---------------------------------------------------------------------------
 
-import { beforeEach, describe, expect, it } from "vitest";
-import { createProject, createPlan, createPhase, createTask, createPipelineRun, execute } from "../../db.js";
-import { createCheckpointSnapshot } from "../../replay-store.js";
 import { randomUUID } from "node:crypto";
+import { beforeEach, describe, expect, it } from "vitest";
+import { createPhase, createPipelineRun, createPlan, createProject, createTask, execute } from "../../db.js";
+import { createCheckpointSnapshot } from "../../replay-store.js";
 
 async function cleanSnapshots() {
 	await execute("DELETE FROM replay_snapshots");
@@ -23,12 +23,37 @@ describe("createCheckpointSnapshot — depth fields", () => {
 	});
 
 	it("populates run field with pipeline status and task counts", async () => {
-		const project = await createProject({ name: "ReplayTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "ReplayTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 		const plan = await createPlan(project.id);
 		const phase = await createPhase({ planId: plan.id, name: "P1", order: 1, dependsOn: [] });
-		await createPipelineRun({ projectId: project.id, status: "running", stagesJson: JSON.stringify([{ order: 0, agents: [] }]) });
-		await createTask({ phaseId: phase.id, title: "T1", description: "", assignedAgent: "a1", complexity: "S", dependsOn: [], branch: "main" });
-		await createTask({ phaseId: phase.id, title: "T2", description: "", assignedAgent: "a2", complexity: "S", dependsOn: [], branch: "main" });
+		await createPipelineRun({
+			projectId: project.id,
+			status: "running",
+			stagesJson: JSON.stringify([{ order: 0, agents: [] }]),
+		});
+		await createTask({
+			phaseId: phase.id,
+			title: "T1",
+			description: "",
+			assignedAgent: "a1",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
+		await createTask({
+			phaseId: phase.id,
+			title: "T2",
+			description: "",
+			assignedAgent: "a2",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
 
 		const snapshot = await createCheckpointSnapshot(project.id, "test-checkpoint", randomUUID);
 
@@ -38,10 +63,23 @@ describe("createCheckpointSnapshot — depth fields", () => {
 	});
 
 	it("collects artifacts from task outputs", async () => {
-		const project = await createProject({ name: "ArtifactTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "ArtifactTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 		const plan = await createPlan(project.id);
 		const phase = await createPhase({ planId: plan.id, name: "P1", order: 1, dependsOn: [] });
-		const task = await createTask({ phaseId: phase.id, title: "Auth task", description: "", assignedAgent: "a1", complexity: "S", dependsOn: [], branch: "main" });
+		const task = await createTask({
+			phaseId: phase.id,
+			title: "Auth task",
+			description: "",
+			assignedAgent: "a1",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
 		await setTaskOutput(task.id, {
 			filesCreated: ["src/auth.ts"],
 			filesModified: ["src/index.ts"],
@@ -55,15 +93,34 @@ describe("createCheckpointSnapshot — depth fields", () => {
 	});
 
 	it("fetches verification reports when available", async () => {
-		const project = await createProject({ name: "VerifyTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "VerifyTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 		const plan = await createPlan(project.id);
 		const phase = await createPhase({ planId: plan.id, name: "P1", order: 1, dependsOn: [] });
-		const task = await createTask({ phaseId: phase.id, title: "Verify task", description: "", assignedAgent: "a1", complexity: "S", dependsOn: [], branch: "main" });
+		const task = await createTask({
+			phaseId: phase.id,
+			title: "Verify task",
+			description: "",
+			assignedAgent: "a1",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
 		await setTaskOutput(task.id, { filesCreated: [], filesModified: [], logs: [] });
 		await execute(
 			`INSERT INTO verification_results (id, task_id, verification_type, status, details, created_at)
 			 VALUES ($1, $2, $3, $4, $5, now())`,
-			[randomUUID(), task.id, "files_exist", "passed", JSON.stringify([{ file: "src/auth.ts", expected: "exist", actual: "found" }])],
+			[
+				randomUUID(),
+				task.id,
+				"files_exist",
+				"passed",
+				JSON.stringify([{ file: "src/auth.ts", expected: "exist", actual: "found" }]),
+			],
 		);
 
 		const snapshot = await createCheckpointSnapshot(project.id, "verify-test", randomUUID);
@@ -73,8 +130,17 @@ describe("createCheckpointSnapshot — depth fields", () => {
 	});
 
 	it("populates stages from pipeline", async () => {
-		const project = await createProject({ name: "StageTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
-		await createPipelineRun({ projectId: project.id, status: "running", stagesJson: JSON.stringify([{ order: 0, name: "Foundation", agents: ["agent-1"] }]) });
+		const project = await createProject({
+			name: "StageTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
+		await createPipelineRun({
+			projectId: project.id,
+			status: "running",
+			stagesJson: JSON.stringify([{ order: 0, name: "Foundation", agents: ["agent-1"] }]),
+		});
 
 		const snapshot = await createCheckpointSnapshot(project.id, "stage-test", randomUUID);
 
@@ -83,7 +149,12 @@ describe("createCheckpointSnapshot — depth fields", () => {
 	});
 
 	it("gracefully handles missing tables (no crash)", async () => {
-		const project = await createProject({ name: "EmptyTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "EmptyTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 
 		const snapshot = await createCheckpointSnapshot(project.id, "empty-test", randomUUID);
 

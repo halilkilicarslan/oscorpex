@@ -294,4 +294,3 @@ export async function insertArtifactAndSupersedePrevious(
 		return mapRow(inserted.rows[0]);
 	});
 }
-

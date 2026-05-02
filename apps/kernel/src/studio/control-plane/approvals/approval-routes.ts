@@ -2,17 +2,17 @@
 // Control Plane — Approval Routes (thin host)
 // ---------------------------------------------------------------------------
 
-import { Hono } from "hono";
 import {
-	requestApproval,
+	type ApprovalKind,
 	approve,
-	reject,
+	escalateApproval,
 	expireStaleApprovals,
 	getApprovalWithEvents,
 	listApprovalsWithSla,
-	escalateApproval,
-	 type ApprovalKind,
+	reject,
+	requestApproval,
 } from "@oscorpex/control-plane";
+import { Hono } from "hono";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-approval-routes");

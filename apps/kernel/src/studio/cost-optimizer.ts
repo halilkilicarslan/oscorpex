@@ -4,10 +4,10 @@
 // balancing cost efficiency against quality (success rate).
 // ---------------------------------------------------------------------------
 
-import { getDefaultRoutingConfig } from "./model-router.js";
 import { getProjectCostBreakdown, listTokenUsage } from "./db.js";
-import type { TaskComplexity } from "./types.js";
 import { createLogger } from "./logger.js";
+import { getDefaultRoutingConfig } from "./model-router.js";
+import type { TaskComplexity } from "./types.js";
 const log = createLogger("cost-optimizer");
 
 // ---------------------------------------------------------------------------
@@ -150,13 +150,12 @@ export class CostOptimizer {
 
 		// Pick the candidate with the best efficiency score meeting quality threshold
 		const minQuality = this._minQualityForComplexity(taskComplexity);
-		const qualified = candidates.filter(
-			(s) => s.taskCount >= MIN_SAMPLE_SIZE && s.successRate >= minQuality,
-		);
+		const qualified = candidates.filter((s) => s.taskCount >= MIN_SAMPLE_SIZE && s.successRate >= minQuality);
 
-		const best = qualified.length > 0
-			? qualified.reduce((a, b) => (a.efficiencyScore > b.efficiencyScore ? a : b))
-			: candidates.reduce((a, b) => (a.efficiencyScore > b.efficiencyScore ? a : b));
+		const best =
+			qualified.length > 0
+				? qualified.reduce((a, b) => (a.efficiencyScore > b.efficiencyScore ? a : b))
+				: candidates.reduce((a, b) => (a.efficiencyScore > b.efficiencyScore ? a : b));
 
 		const confidence = best.taskCount >= MIN_SAMPLE_SIZE ? "high" : best.taskCount > 0 ? "medium" : "low";
 
@@ -191,10 +190,7 @@ export class CostOptimizer {
 	 * - Actionable recommendations
 	 */
 	async getCostInsights(projectId: string): Promise<CostInsights> {
-		const [breakdown, usage] = await Promise.all([
-			getProjectCostBreakdown(projectId),
-			listTokenUsage(projectId),
-		]);
+		const [breakdown, usage] = await Promise.all([getProjectCostBreakdown(projectId), listTokenUsage(projectId)]);
 
 		const modelStats = await this.getModelEfficiency(projectId);
 
@@ -205,9 +201,7 @@ export class CostOptimizer {
 		// Most expensive model by avg cost per task (min 1 task)
 		const withCost = modelStats.filter((s) => s.taskCount > 0);
 		const mostExpensiveModel =
-			withCost.length > 0
-				? withCost.reduce((a, b) => (a.avgCostPerTask > b.avgCostPerTask ? a : b)).model
-				: null;
+			withCost.length > 0 ? withCost.reduce((a, b) => (a.avgCostPerTask > b.avgCostPerTask ? a : b)).model : null;
 
 		// Most efficient model by efficiencyScore (min MIN_SAMPLE_SIZE tasks)
 		const qualified = modelStats.filter((s) => s.taskCount >= MIN_SAMPLE_SIZE);
@@ -229,8 +223,7 @@ export class CostOptimizer {
 			}
 		}
 
-		const potentialSavingsPct =
-			totalCostUsd > 0 ? Math.min(100, (potentialSavingsUsd / totalCostUsd) * 100) : 0;
+		const potentialSavingsPct = totalCostUsd > 0 ? Math.min(100, (potentialSavingsUsd / totalCostUsd) * 100) : 0;
 
 		const recommendations = this._generateRecommendations(modelStats, totalCostUsd, taskCount);
 
@@ -257,12 +250,15 @@ export class CostOptimizer {
 		const usage = await listTokenUsage(projectId);
 
 		// Aggregate raw DB data per model
-		const dbMap = new Map<string, {
-			provider: string;
-			taskCount: number;
-			totalCostUsd: number;
-			totalTokens: number;
-		}>();
+		const dbMap = new Map<
+			string,
+			{
+				provider: string;
+				taskCount: number;
+				totalCostUsd: number;
+				totalTokens: number;
+			}
+		>();
 
 		for (const entry of breakdown) {
 			const key = entry.model;
@@ -302,9 +298,7 @@ export class CostOptimizer {
 		const DEFAULT_SUCCESS_RATE = 0.8;
 
 		// Compute max avgCost across all models (for cost score normalization)
-		const allAvgCosts = [...dbMap.values()].map((v) =>
-			v.taskCount > 0 ? v.totalCostUsd / v.taskCount : 0,
-		);
+		const allAvgCosts = [...dbMap.values()].map((v) => (v.taskCount > 0 ? v.totalCostUsd / v.taskCount : 0));
 		const maxAvgCost = allAvgCosts.length > 0 ? Math.max(...allAvgCosts) : 1;
 
 		const stats: ModelEfficiencyStats[] = [];
@@ -314,9 +308,7 @@ export class CostOptimizer {
 			const avgTokensPerTask = data.taskCount > 0 ? Math.round(data.totalTokens / data.taskCount) : 0;
 
 			const qualityData = qualityMap.get(model);
-			const successRate = qualityData
-				? qualityData.total / qualityData.count
-				: DEFAULT_SUCCESS_RATE;
+			const successRate = qualityData ? qualityData.total / qualityData.count : DEFAULT_SUCCESS_RATE;
 
 			// Cost score: 1.0 = cheapest, 0.0 = most expensive
 			const costScore = maxAvgCost > 0 ? 1 - avgCostPerTask / maxAvgCost : 1;
@@ -362,10 +354,7 @@ export class CostOptimizer {
 	 * The model-router maps: S→Haiku, M/L→Sonnet, XL→Opus.
 	 * For cost optimization we allow one tier down but not more (safety floor).
 	 */
-	private _candidatesForComplexity(
-		complexity: TaskComplexity,
-		stats: ModelEfficiencyStats[],
-	): ModelEfficiencyStats[] {
+	private _candidatesForComplexity(complexity: TaskComplexity, stats: ModelEfficiencyStats[]): ModelEfficiencyStats[] {
 		// Build an allowlist of model name substrings appropriate per tier
 		const allowPatterns: Record<TaskComplexity, string[]> = {
 			S: ["haiku", "gpt-4o-mini", "cursor-small"],
@@ -375,9 +364,7 @@ export class CostOptimizer {
 		};
 
 		const patterns = allowPatterns[complexity] ?? allowPatterns["M"];
-		return stats.filter((s) =>
-			patterns.some((p) => s.model.toLowerCase().includes(p)),
-		);
+		return stats.filter((s) => patterns.some((p) => s.model.toLowerCase().includes(p)));
 	}
 
 	private _buildFallbackRecommendation(
@@ -409,15 +396,13 @@ export class CostOptimizer {
 		if (best.model === defaultModel) {
 			parts.push(`Default model ${best.model} is already the most efficient choice based on historical data.`);
 		} else {
-			parts.push(
-				`Recommending ${best.model} over default ${defaultModel} for ${complexity}-complexity tasks.`,
-			);
+			parts.push(`Recommending ${best.model} over default ${defaultModel} for ${complexity}-complexity tasks.`);
 		}
 
 		if (best.taskCount > 0) {
 			parts.push(
 				`Based on ${best.taskCount} historical task(s): avg cost $${best.avgCostPerTask.toFixed(4)}/task, ` +
-				`success rate ${Math.round(best.successRate * 100)}%, efficiency score ${best.efficiencyScore}.`,
+					`success rate ${Math.round(best.successRate * 100)}%, efficiency score ${best.efficiencyScore}.`,
 			);
 		}
 
@@ -425,7 +410,9 @@ export class CostOptimizer {
 			parts.push(`Potential cost savings: ${savingsPct.toFixed(1)}% vs current default.`);
 		}
 
-		parts.push(`Confidence: ${confidence}${best.taskCount < MIN_SAMPLE_SIZE ? ` (limited sample: ${best.taskCount} task(s))` : ""}.`);
+		parts.push(
+			`Confidence: ${confidence}${best.taskCount < MIN_SAMPLE_SIZE ? ` (limited sample: ${best.taskCount} task(s))` : ""}.`,
+		);
 
 		return parts.join(" ");
 	}
@@ -452,19 +439,17 @@ export class CostOptimizer {
 			if (ratio > 3) {
 				recs.push(
 					`${mostExpensive.model} costs ${ratio.toFixed(1)}x more per task than ${cheapest.model}. ` +
-					`Consider routing simpler tasks to ${cheapest.model}.`,
+						`Consider routing simpler tasks to ${cheapest.model}.`,
 				);
 			}
 		}
 
 		// Check for models with low success rate
-		const lowQuality = modelStats.filter(
-			(s) => s.taskCount >= MIN_SAMPLE_SIZE && s.successRate < 0.6,
-		);
+		const lowQuality = modelStats.filter((s) => s.taskCount >= MIN_SAMPLE_SIZE && s.successRate < 0.6);
 		for (const s of lowQuality) {
 			recs.push(
 				`${s.model} has a low success rate (${Math.round(s.successRate * 100)}%). ` +
-				`Consider upgrading to a higher-capability model for complex tasks.`,
+					`Consider upgrading to a higher-capability model for complex tasks.`,
 			);
 		}
 
@@ -473,7 +458,7 @@ export class CostOptimizer {
 		if (avgCostPerTask > 0.5) {
 			recs.push(
 				`Average cost per task is $${avgCostPerTask.toFixed(4)}. ` +
-				`Enable caching and prefer Haiku/Sonnet for S/M complexity tasks to reduce spend.`,
+					`Enable caching and prefer Haiku/Sonnet for S/M complexity tasks to reduce spend.`,
 			);
 		}
 

@@ -2,7 +2,7 @@
 // Implements the PolicyEngine contract from @oscorpex/core.
 // Delegates evaluation to @oscorpex/policy-kit; DB loading + events stay here.
 
-import type { PolicyEngine, PolicyEvaluationInput, PolicyDecision, PolicyAction } from "@oscorpex/core";
+import type { PolicyAction, PolicyDecision, PolicyEngine, PolicyEvaluationInput } from "@oscorpex/core";
 import { evaluatePolicyRules, parsePolicies } from "@oscorpex/policy-kit";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
@@ -29,11 +29,7 @@ class KernelPolicyEngine implements PolicyEngine {
 		const raw = settingsMap["policy"]?.["rules"];
 		const customRules = parsePolicies(raw);
 
-		const result = evaluatePolicyRules(
-			task as any,
-			settingsMap as Record<string, Record<string, string>>,
-			customRules,
-		);
+		const result = evaluatePolicyRules(task as any, settingsMap as Record<string, Record<string, string>>, customRules);
 
 		let action: PolicyAction = "allow";
 		if (!result.allowed) action = "block";

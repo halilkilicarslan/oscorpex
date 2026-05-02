@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { query, queryOne, execute } from "./db.js";
+import { execute, query, queryOne } from "./db.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("cross-project-learning");
 
@@ -13,11 +13,7 @@ const log = createLogger("cross-project-learning");
 // Types
 // ---------------------------------------------------------------------------
 
-export type LearningType =
-	| "strategy_success"
-	| "execution_sequence"
-	| "failure_signature"
-	| "model_strategy_combo";
+export type LearningType = "strategy_success" | "execution_sequence" | "failure_signature" | "model_strategy_combo";
 
 export interface LearningPattern {
 	id: string;
@@ -75,8 +71,15 @@ export async function upsertLearningPattern(params: {
 		 DO UPDATE SET pattern = $6, sample_count = $7, success_rate = $8, updated_at = now()
 		 RETURNING *`,
 		[
-			id, params.tenantId ?? null, params.learningType, params.taskType, params.agentRole,
-			JSON.stringify(params.pattern), params.sampleCount, params.successRate, params.isGlobal ?? false,
+			id,
+			params.tenantId ?? null,
+			params.learningType,
+			params.taskType,
+			params.agentRole,
+			JSON.stringify(params.pattern),
+			params.sampleCount,
+			params.successRate,
+			params.isGlobal ?? false,
 		],
 	);
 	return rowToPattern(row!);
@@ -99,10 +102,7 @@ export async function getLearningPatterns(
 	return rows.map(rowToPattern);
 }
 
-export async function getGlobalPatterns(
-	learningType: LearningType,
-	limit = 20,
-): Promise<LearningPattern[]> {
+export async function getGlobalPatterns(learningType: LearningType, limit = 20): Promise<LearningPattern[]> {
 	const rows = await query(
 		`SELECT * FROM learning_patterns
 		 WHERE is_global = true AND learning_type = $1

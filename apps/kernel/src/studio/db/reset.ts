@@ -2,8 +2,8 @@
 // Oscorpex — DB Reset: close pool (used by tests)
 // ---------------------------------------------------------------------------
 
-import { closePool } from "../pg.js";
 import { createLogger } from "../logger.js";
+import { closePool } from "../pg.js";
 const log = createLogger("reset");
 
 /** Reset DB connection pool (used by tests). */

@@ -62,7 +62,11 @@ vi.mock("../agent-runtime.js", () => ({
 vi.mock("../agent-runtime/index.js", () => ({
 	initSession: vi.fn().mockResolvedValue({
 		session: { id: "mock-session" },
-		strategySelection: { strategy: { name: "scaffold_then_refine", promptAddendum: "" }, reason: "mock", confidence: 0.5 },
+		strategySelection: {
+			strategy: { name: "scaffold_then_refine", promptAddendum: "" },
+			reason: "mock",
+			confidence: 0.5,
+		},
 		behavioralPrompt: "",
 	}),
 	completeSession: vi.fn().mockResolvedValue(undefined),
@@ -92,7 +96,17 @@ vi.mock("../goal-engine.js", () => ({
 	evaluateGoal: vi.fn().mockResolvedValue(null),
 }));
 vi.mock("../sandbox-manager.js", () => ({
-	resolveTaskPolicy: vi.fn().mockResolvedValue({ id: "default", isolationLevel: "workspace", allowedTools: [], deniedTools: [], filesystemScope: [], networkPolicy: "project_only", maxExecutionTimeMs: 300000, maxOutputSizeBytes: 10485760, elevatedCapabilities: [] }),
+	resolveTaskPolicy: vi.fn().mockResolvedValue({
+		id: "default",
+		isolationLevel: "workspace",
+		allowedTools: [],
+		deniedTools: [],
+		filesystemScope: [],
+		networkPolicy: "project_only",
+		maxExecutionTimeMs: 300000,
+		maxOutputSizeBytes: 10485760,
+		elevatedCapabilities: [],
+	}),
 	startSandboxSession: vi.fn().mockResolvedValue({ id: "mock-sandbox" }),
 	endSandboxSession: vi.fn().mockResolvedValue(undefined),
 	checkToolAllowed: vi.fn().mockReturnValue({ allowed: true, reason: "allowed" }),
@@ -269,7 +283,6 @@ async function runExecutionWithDoneRaceTolerance(projectId: string): Promise<voi
 const E2E_TEST_TIMEOUT_MS = 15_000;
 
 describe.skipIf(!dbReady)("E2E Pipeline", { timeout: E2E_TEST_TIMEOUT_MS }, () => {
-
 	async function cleanupE2EData() {
 		// Keep each test isolated and prevent cumulative DB bloat from slowing down
 		// later tests (main source of intermittent 5s timeouts).
@@ -495,57 +508,65 @@ describe.skipIf(!dbReady)("E2E Pipeline", { timeout: E2E_TEST_TIMEOUT_MS }, () =
 	// ---- Review loop -------------------------------------------------------
 
 	describe("Review Loop", () => {
-		it("should create review task when reviewer exists", async () => {
-			const { project, t1, t2, reviewer } = await setupE2EProject({ withReviewer: true });
+		it(
+			"should create review task when reviewer exists",
+			async () => {
+				const { project, t1, t2, reviewer } = await setupE2EProject({ withReviewer: true });
 
-			// Mock: all CLI calls return APPROVED text
-			getMockExecute().mockResolvedValue({
-				...cliSuccess(["src/index.ts"]),
-				text: "APPROVED: Code looks good",
-			});
+				// Mock: all CLI calls return APPROVED text
+				getMockExecute().mockResolvedValue({
+					...cliSuccess(["src/index.ts"]),
+					text: "APPROVED: Code looks good",
+				});
 
-			await runExecutionWithDoneRaceTolerance(project.id);
+				await runExecutionWithDoneRaceTolerance(project.id);
 
-			await waitUntil(async () => {
+				await waitUntil(async () => {
+					const task1 = await getTask(t1.id);
+					expect(task1?.status).toBe("done");
+				}, E2E_TEST_TIMEOUT_MS);
+
+				const allTasks = await listProjectTasks(project.id);
+				const reviewTasks = allTasks.filter((t) => t.title.startsWith("Code Review: "));
+				expect(reviewTasks.length).toBeGreaterThanOrEqual(1);
+			},
+			E2E_TEST_TIMEOUT_MS,
+		);
+
+		it(
+			"should handle review rejection and trigger revision",
+			async () => {
+				const { project, t1, reviewer } = await setupE2EProject({ withReviewer: true });
+
+				let callCount = 0;
+				getMockExecute().mockImplementation(async () => {
+					callCount++;
+					if (callCount === 1) {
+						// t1 first execution
+						return cliSuccess(["src/index.ts"]);
+					}
+					if (callCount === 2) {
+						// Review rejects
+						return cliReviewRejected();
+					}
+					// All subsequent: task revision succeeds + review approves
+					return { ...cliSuccess(["src/index.ts"]), text: "APPROVED: Looks good now" };
+				});
+
+				await runExecutionWithDoneRaceTolerance(project.id);
+
+				await waitUntil(async () => {
+					const task1 = await getTask(t1.id);
+					expect(["done", "review", "revision", "running", "queued"]).toContain(task1?.status);
+				}, E2E_TEST_TIMEOUT_MS);
+
 				const task1 = await getTask(t1.id);
-				expect(task1?.status).toBe("done");
-			}, E2E_TEST_TIMEOUT_MS);
-
-			const allTasks = await listProjectTasks(project.id);
-			const reviewTasks = allTasks.filter((t) => t.title.startsWith("Code Review: "));
-			expect(reviewTasks.length).toBeGreaterThanOrEqual(1);
-		}, E2E_TEST_TIMEOUT_MS);
-
-		it("should handle review rejection and trigger revision", async () => {
-			const { project, t1, reviewer } = await setupE2EProject({ withReviewer: true });
-
-			let callCount = 0;
-			getMockExecute().mockImplementation(async () => {
-				callCount++;
-				if (callCount === 1) {
-					// t1 first execution
-					return cliSuccess(["src/index.ts"]);
+				if (task1?.status === "done") {
+					expect(task1.revisionCount).toBeGreaterThanOrEqual(1);
 				}
-				if (callCount === 2) {
-					// Review rejects
-					return cliReviewRejected();
-				}
-				// All subsequent: task revision succeeds + review approves
-				return { ...cliSuccess(["src/index.ts"]), text: "APPROVED: Looks good now" };
-			});
-
-			await runExecutionWithDoneRaceTolerance(project.id);
-
-			await waitUntil(async () => {
-				const task1 = await getTask(t1.id);
-				expect(["done", "review", "revision", "running", "queued"]).toContain(task1?.status);
-			}, E2E_TEST_TIMEOUT_MS);
-
-			const task1 = await getTask(t1.id);
-			if (task1?.status === "done") {
-				expect(task1.revisionCount).toBeGreaterThanOrEqual(1);
-			}
-		}, E2E_TEST_TIMEOUT_MS);
+			},
+			E2E_TEST_TIMEOUT_MS,
+		);
 	});
 
 	// ---- Auto-retry on failure ---------------------------------------------
@@ -627,19 +648,23 @@ describe.skipIf(!dbReady)("E2E Pipeline", { timeout: E2E_TEST_TIMEOUT_MS }, () =
 	// ---- Gate validation E2E -----------------------------------------------
 
 	describe("Execution Gates", () => {
-		it("should complete task through verification + test gates", async () => {
-			const { project, t1 } = await setupE2EProject();
+		it(
+			"should complete task through verification + test gates",
+			async () => {
+				const { project, t1 } = await setupE2EProject();
 
-			// CLI succeeds with files
-			getMockExecute().mockResolvedValue(cliSuccess(["src/index.ts"]));
+				// CLI succeeds with files
+				getMockExecute().mockResolvedValue(cliSuccess(["src/index.ts"]));
 
-			await runExecutionWithDoneRaceTolerance(project.id);
-			await waitUntil(async () => {
-				const task1 = await getTask(t1.id);
-				expect(task1?.status).toBe("done");
-			}, E2E_TEST_TIMEOUT_MS);
-			// Verification + test gate mocks both pass, task completes normally
-		}, E2E_TEST_TIMEOUT_MS);
+				await runExecutionWithDoneRaceTolerance(project.id);
+				await waitUntil(async () => {
+					const task1 = await getTask(t1.id);
+					expect(task1?.status).toBe("done");
+				}, E2E_TEST_TIMEOUT_MS);
+				// Verification + test gate mocks both pass, task completes normally
+			},
+			E2E_TEST_TIMEOUT_MS,
+		);
 
 		it("should record session steps during execution", async () => {
 			const { recordStep } = await import("../agent-runtime/index.js");

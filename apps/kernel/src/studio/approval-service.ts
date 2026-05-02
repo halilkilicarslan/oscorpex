@@ -4,8 +4,11 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { eventBus } from "./event-bus.js";
 import {
+	type ApprovalDecisionValue,
+	type ApprovalRequestState,
+	type QualityApprovalDecision,
+	type QualityApprovalRequest,
 	getApprovalRequest,
 	insertApprovalDecision,
 	insertApprovalRequest,
@@ -13,12 +16,9 @@ import {
 	listApprovalRequestsForGoal,
 	listPendingApprovalRequests,
 	updateApprovalRequestState,
-	type ApprovalDecisionValue,
-	type ApprovalRequestState,
-	type QualityApprovalDecision,
-	type QualityApprovalRequest,
 } from "./db/approval-repo.js";
-import { getGoalScope, type QualityGateEnvironment } from "./db/quality-gate-repo.js";
+import { type QualityGateEnvironment, getGoalScope } from "./db/quality-gate-repo.js";
+import { eventBus } from "./event-bus.js";
 
 export type ApprovalType =
 	| "human_approval"
@@ -188,7 +188,10 @@ export class ApprovalService {
 		return this.resolveRequestState(updated.id);
 	}
 
-	async supersedeApprovalRequest(id: string, reason = "superseded by newer approval request"): Promise<ApprovalStateOutput> {
+	async supersedeApprovalRequest(
+		id: string,
+		reason = "superseded by newer approval request",
+	): Promise<ApprovalStateOutput> {
 		const request = await this.assertRequestExists(id);
 		this.assertTransitionAllowed(request.state, "superseded");
 		const now = new Date().toISOString();
@@ -220,7 +223,8 @@ export class ApprovalService {
 		const pending = activeStates.filter((state) => !state.satisfied && !state.blocked && !state.expired);
 		return {
 			goalId,
-			satisfied: activeStates.length > 0 && !blocked && pending.length === 0 && activeStates.every((state) => state.satisfied),
+			satisfied:
+				activeStates.length > 0 && !blocked && pending.length === 0 && activeStates.every((state) => state.satisfied),
 			blocked,
 			states,
 			pending,
@@ -240,7 +244,10 @@ export class ApprovalService {
 		// policy_override_approval, and rollback_approval here.
 	}
 
-	private async recordDecision(input: ApprovalDecisionInput, decisionValue: ApprovalDecisionValue): Promise<ApprovalStateOutput> {
+	private async recordDecision(
+		input: ApprovalDecisionInput,
+		decisionValue: ApprovalDecisionValue,
+	): Promise<ApprovalStateOutput> {
 		const request = await this.assertRequestExists(input.approvalRequestId);
 		const environment = String(request.metadata.environment ?? "production") as QualityGateEnvironment;
 		if (environment === "production" && !request.tenantId) {
@@ -333,7 +340,11 @@ export class ApprovalService {
 		const request = await this.assertRequestExists(id);
 		const nowMs = Date.now();
 		const expiresMs = new Date(request.expiresAt).getTime();
-		if ((request.state === "pending" || request.state === "in-review") && Number.isFinite(expiresMs) && expiresMs <= nowMs) {
+		if (
+			(request.state === "pending" || request.state === "in-review") &&
+			Number.isFinite(expiresMs) &&
+			expiresMs <= nowMs
+		) {
 			await this.expireApprovalRequest(id);
 			const expired = await this.assertRequestExists(id);
 			return this.buildState(expired, await listApprovalDecisions(id));

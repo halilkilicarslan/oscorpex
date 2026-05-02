@@ -10,12 +10,7 @@ const log = createLogger("provider-policy-profiles");
 // Profile type
 // ---------------------------------------------------------------------------
 
-export type ProviderPolicyProfile =
-	| "balanced"
-	| "cheap"
-	| "quality"
-	| "local-first"
-	| "fallback-heavy";
+export type ProviderPolicyProfile = "balanced" | "cheap" | "quality" | "local-first" | "fallback-heavy";
 
 export const VALID_PROFILES: ProviderPolicyProfile[] = [
 	"balanced",
@@ -133,10 +128,7 @@ export interface ProfileModelSelection {
  * Does NOT select the specific model — that is still done by the model router
  * based on tier and cost-awareness.
  */
-export function selectPrimaryProvider(
-	profile: ProviderPolicyProfile,
-	explicitCliTool?: string,
-): ProfileModelSelection {
+export function selectPrimaryProvider(profile: ProviderPolicyProfile, explicitCliTool?: string): ProfileModelSelection {
 	const behavior = getProfileBehavior(profile);
 
 	// If an explicit cliTool is provided, honor it regardless of profile
@@ -180,10 +172,7 @@ function cliToolToProvider(cliTool: string): string {
  * Generates the fallback provider chain for a given profile and primary provider.
  * The primary provider is excluded from fallbacks to avoid duplicates.
  */
-export function getFallbackChain(
-	profile: ProviderPolicyProfile,
-	primaryProvider: string,
-): string[] {
+export function getFallbackChain(profile: ProviderPolicyProfile, primaryProvider: string): string[] {
 	const behavior = getProfileBehavior(profile);
 	const chain = behavior.providerOrder.filter((p) => p !== primaryProvider);
 

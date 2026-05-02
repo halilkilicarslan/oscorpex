@@ -2,11 +2,11 @@
 // Implements the CostReporter contract from @oscorpex/core.
 // Persists cost records to token_usage table and emits cost:recorded events.
 
-import type { CostReporter, CostRecord, ProjectCostSummary, BudgetCheck } from "@oscorpex/core";
 import { randomUUID } from "node:crypto";
-import { execute } from "../pg.js";
+import type { BudgetCheck, CostRecord, CostReporter, ProjectCostSummary } from "@oscorpex/core";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
+import { execute } from "../pg.js";
 const log = createLogger("cost-reporter");
 
 class KernelCostReporter implements CostReporter {

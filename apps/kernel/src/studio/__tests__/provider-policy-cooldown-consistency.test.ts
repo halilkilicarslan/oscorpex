@@ -4,25 +4,25 @@
 // fallback-decision, timeout-policy, and performance-config.
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import {
-	getRetryDecision,
-	isRetryable,
-	evaluateRetry,
-	computeBackoffMs,
-	MAX_AUTO_RETRIES,
-	BASE_BACKOFF_MS,
-} from "../retry-policy.js";
+import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getFallbackSeverity, shouldSkipProvider, sortAdapterChain } from "../fallback-decision.js";
-import { providerState } from "../provider-state.js";
-import { providerRuntimeCache } from "../provider-runtime-cache.js";
 import {
 	getCooldownConfig,
 	getFallbackConfig,
 	getRetryPolicyConfig,
 	getTimeoutPolicyConfig,
 } from "../performance-config.js";
-import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
+import { providerRuntimeCache } from "../provider-runtime-cache.js";
+import { providerState } from "../provider-state.js";
+import {
+	BASE_BACKOFF_MS,
+	MAX_AUTO_RETRIES,
+	computeBackoffMs,
+	evaluateRetry,
+	getRetryDecision,
+	isRetryable,
+} from "../retry-policy.js";
 
 vi.mock("../provider-runtime-cache.js", () => ({
 	providerRuntimeCache: {
@@ -151,14 +151,14 @@ class ProviderStateManagerUnderTest {
 	}
 
 	getEarliestRecoveryMs(): number {
-		let earliest = Infinity;
+		let earliest = Number.POSITIVE_INFINITY;
 		for (const state of this.states.values()) {
 			if (state.cooldownUntil) {
 				const remaining = state.cooldownUntil.getTime() - Date.now();
 				if (remaining > 0 && remaining < earliest) earliest = remaining;
 			}
 		}
-		return earliest === Infinity ? 60_000 : earliest;
+		return earliest === Number.POSITIVE_INFINITY ? 60_000 : earliest;
 	}
 }
 
@@ -438,7 +438,10 @@ describe("E4: composite pipeline — state → skip → retry decision", () => {
 
 		// Step 3: fallback allows
 		const adapter = makeAdapter("claude-code");
-		const skip = await shouldSkipProvider(adapter, { lastFailureProvider: "cursor", lastFailureClassification: "timeout" });
+		const skip = await shouldSkipProvider(adapter, {
+			lastFailureProvider: "cursor",
+			lastFailureClassification: "timeout",
+		});
 		// Should not skip because last failure was on different provider
 		expect(skip.shouldSkip).toBe(false);
 	});

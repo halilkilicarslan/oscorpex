@@ -4,34 +4,34 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { listGraphMutations } from "../db.js";
 import {
-	insertNode,
-	splitTask,
-	addEdge,
-	removeEdge,
-	deferBranch,
-	mergeIntoPhase,
-	getMutationHistory,
-	approveGraphMutationRequest,
-	rejectGraphMutationRequest,
-} from "../graph-coordinator.js";
-import { kernel } from "../kernel/index.js";
-import {
+	approveReplanEvent,
 	evaluateReplan,
 	getReplanEvent,
 	listReplanEvents,
-	approveReplanEvent,
 	rejectReplanEvent,
 } from "../adaptive-replanner.js";
 import {
-	getLearningPatterns,
-	getGlobalPatterns,
 	extractPatternsFromEpisodes,
+	getGlobalPatterns,
+	getLearningPatterns,
 	promoteToGlobal,
 } from "../cross-project-learning.js";
-import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
+import { listGraphMutations } from "../db.js";
+import {
+	addEdge,
+	approveGraphMutationRequest,
+	deferBranch,
+	getMutationHistory,
+	insertNode,
+	mergeIntoPhase,
+	rejectGraphMutationRequest,
+	removeEdge,
+	splitTask,
+} from "../graph-coordinator.js";
+import { kernel } from "../kernel/index.js";
 import { createLogger } from "../logger.js";
+import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
 const log = createLogger("graph-routes");
 
 export const graphRoutes = new Hono();
@@ -64,7 +64,14 @@ graphRoutes.post("/projects/:projectId/graph/insert-node", async (c) => {
 		const body = await c.req.json();
 		const result = await insertNode(
 			{ projectId: c.req.param("projectId"), pipelineRunId: body.pipelineRunId, causedByAgentId: body.agentId },
-			{ phaseId: body.phaseId, title: body.title, description: body.description, assignedAgent: body.assignedAgent, complexity: body.complexity, dependsOn: body.dependsOn },
+			{
+				phaseId: body.phaseId,
+				title: body.title,
+				description: body.description,
+				assignedAgent: body.assignedAgent,
+				complexity: body.complexity,
+				dependsOn: body.dependsOn,
+			},
 		);
 		return c.json(result, 201);
 	} catch (err) {

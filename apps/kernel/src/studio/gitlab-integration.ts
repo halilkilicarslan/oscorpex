@@ -29,7 +29,18 @@ export interface GitLabPipeline {
 	projectId: number;
 	ref: string;
 	sha: string;
-	status: "created" | "waiting_for_resource" | "preparing" | "pending" | "running" | "success" | "failed" | "canceled" | "skipped" | "manual" | "scheduled";
+	status:
+		| "created"
+		| "waiting_for_resource"
+		| "preparing"
+		| "pending"
+		| "running"
+		| "success"
+		| "failed"
+		| "canceled"
+		| "skipped"
+		| "manual"
+		| "scheduled";
 	webUrl: string;
 	createdAt: string;
 	updatedAt: string;
@@ -55,7 +66,7 @@ function mapMR(raw: Record<string, unknown>): GitLabMR {
 	return {
 		id: raw.id as number,
 		iid: raw.iid as number,
-		projectId: (raw.project_id as number),
+		projectId: raw.project_id as number,
 		title: raw.title as string,
 		description: (raw.description as string) ?? "",
 		state: raw.state as GitLabMR["state"],
@@ -79,7 +90,7 @@ function mapMR(raw: Record<string, unknown>): GitLabMR {
 function mapPipeline(raw: Record<string, unknown>): GitLabPipeline {
 	return {
 		id: raw.id as number,
-		projectId: (raw.project_id as number),
+		projectId: raw.project_id as number,
 		ref: raw.ref as string,
 		sha: raw.sha as string,
 		status: raw.status as GitLabPipeline["status"],

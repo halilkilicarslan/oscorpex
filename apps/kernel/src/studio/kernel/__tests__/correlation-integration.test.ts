@@ -3,8 +3,8 @@
 // Tests correlation propagation through auth, replay, and notification routes.
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
+import { describe, expect, it } from "vitest";
 import { correlationMiddleware } from "../../middleware/correlation-middleware.js";
 import { guaranteedCorrelationHeader } from "../../middleware/guaranteed-correlation-header.js";
 import { replayRoutes } from "../../routes/replay-routes.js";

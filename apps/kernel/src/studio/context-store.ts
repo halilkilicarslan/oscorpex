@@ -14,9 +14,9 @@ import {
 	searchChunks,
 	upsertContextSource,
 } from "./db.js";
+import { createLogger } from "./logger.js";
 import { execute } from "./pg.js";
 import type { ContextContentType, ContextSearchOptions, ContextSearchResult, ContextSource } from "./types.js";
-import { createLogger } from "./logger.js";
 const log = createLogger("context-store");
 
 // ---------------------------------------------------------------------------
@@ -389,7 +389,9 @@ export async function searchContext(opts: ContextSearchOptions): Promise<Context
 	}
 
 	// Track search call + hits (non-blocking)
-	recordSearchMetrics(projectId, results.length).catch((err) => log.warn("[context-store] Non-blocking operation failed:", err?.message ?? err));
+	recordSearchMetrics(projectId, results.length).catch((err) =>
+		log.warn("[context-store] Non-blocking operation failed:", err?.message ?? err),
+	);
 
 	return results;
 }

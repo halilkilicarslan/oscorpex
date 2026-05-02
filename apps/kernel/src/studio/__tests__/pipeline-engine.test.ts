@@ -5,6 +5,7 @@
 //  - buildPipeline: stage structure from project agents + dependencies
 // ---------------------------------------------------------------------------
 
+import { buildDAGWaves } from "@oscorpex/task-graph";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
 	createAgentDependency,
@@ -16,7 +17,6 @@ import {
 } from "../db.js";
 import { execute } from "../pg.js";
 import { pipelineEngine } from "../pipeline-engine.js";
-import { buildDAGWaves } from "@oscorpex/task-graph";
 import type { AgentDependency, ProjectAgent } from "../types.js";
 
 // ---- Fixture builders ------------------------------------------------------

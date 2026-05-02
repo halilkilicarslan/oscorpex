@@ -13,8 +13,8 @@
 
 import { sendMessage } from "./agent-messaging.js";
 import { listAgentDependencies } from "./db.js";
-import type { AgentDependency, Task, TaskOutput } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { AgentDependency, Task, TaskOutput } from "./types.js";
 const log = createLogger("edge-hooks");
 
 /** Simple inline doc-detection heuristic for handoff edges. */

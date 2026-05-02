@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { execute, query, queryOne } from "../pg.js";
 import { createLogger } from "../logger.js";
+import { execute, query, queryOne } from "../pg.js";
 const log = createLogger("template-repo");
 
 // ---------------------------------------------------------------------------
@@ -177,10 +177,7 @@ export async function countTemplates(opts: Omit<ListTemplatesOpts, "limit" | "of
 	}
 
 	const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-	const row = await queryOne<{ count: string }>(
-		`SELECT COUNT(*) AS count FROM project_templates ${where}`,
-		params,
-	);
+	const row = await queryOne<{ count: string }>(`SELECT COUNT(*) AS count FROM project_templates ${where}`, params);
 	return Number(row?.count ?? 0);
 }
 
@@ -189,10 +186,7 @@ export async function countTemplates(opts: Omit<ListTemplatesOpts, "limit" | "of
 // ---------------------------------------------------------------------------
 
 export async function getTemplate(id: string): Promise<ProjectTemplate | null> {
-	const row = await queryOne<Record<string, unknown>>(
-		`SELECT * FROM project_templates WHERE id = $1`,
-		[id],
-	);
+	const row = await queryOne<Record<string, unknown>>(`SELECT * FROM project_templates WHERE id = $1`, [id]);
 	return row ? rowToTemplate(row) : null;
 }
 
@@ -205,13 +199,34 @@ export async function updateTemplate(id: string, data: UpdateTemplateData): Prom
 	const params: unknown[] = [];
 	let idx = 1;
 
-	if (data.name !== undefined) { sets.push(`name = $${idx++}`); params.push(data.name); }
-	if (data.description !== undefined) { sets.push(`description = $${idx++}`); params.push(data.description); }
-	if (data.category !== undefined) { sets.push(`category = $${idx++}`); params.push(data.category); }
-	if (data.techStack !== undefined) { sets.push(`tech_stack = $${idx++}`); params.push(JSON.stringify(data.techStack)); }
-	if (data.agentConfig !== undefined) { sets.push(`agent_config = $${idx++}`); params.push(JSON.stringify(data.agentConfig)); }
-	if (data.phases !== undefined) { sets.push(`phases = $${idx++}`); params.push(JSON.stringify(data.phases)); }
-	if (data.isPublic !== undefined) { sets.push(`is_public = $${idx++}`); params.push(data.isPublic); }
+	if (data.name !== undefined) {
+		sets.push(`name = $${idx++}`);
+		params.push(data.name);
+	}
+	if (data.description !== undefined) {
+		sets.push(`description = $${idx++}`);
+		params.push(data.description);
+	}
+	if (data.category !== undefined) {
+		sets.push(`category = $${idx++}`);
+		params.push(data.category);
+	}
+	if (data.techStack !== undefined) {
+		sets.push(`tech_stack = $${idx++}`);
+		params.push(JSON.stringify(data.techStack));
+	}
+	if (data.agentConfig !== undefined) {
+		sets.push(`agent_config = $${idx++}`);
+		params.push(JSON.stringify(data.agentConfig));
+	}
+	if (data.phases !== undefined) {
+		sets.push(`phases = $${idx++}`);
+		params.push(JSON.stringify(data.phases));
+	}
+	if (data.isPublic !== undefined) {
+		sets.push(`is_public = $${idx++}`);
+		params.push(data.isPublic);
+	}
 
 	if (sets.length === 0) return getTemplate(id);
 
@@ -239,10 +254,7 @@ export async function deleteTemplate(id: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function incrementTemplateUsage(id: string): Promise<void> {
-	await execute(
-		`UPDATE project_templates SET usage_count = usage_count + 1, updated_at = now() WHERE id = $1`,
-		[id],
-	);
+	await execute(`UPDATE project_templates SET usage_count = usage_count + 1, updated_at = now() WHERE id = $1`, [id]);
 }
 
 // ---------------------------------------------------------------------------

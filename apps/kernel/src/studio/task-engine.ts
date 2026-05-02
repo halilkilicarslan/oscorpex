@@ -6,6 +6,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { classifyRisk } from "./agent-runtime/agent-constraints.js";
 import { indexTaskOutput } from "./context-sandbox.js";
 import {
 	areAllSubTasksDone,
@@ -17,7 +18,9 @@ import {
 	getProjectSetting,
 	getProjectSettingsMap,
 	getTask,
+	getTasksByIds,
 	listAgentDependencies,
+	listPhases,
 	listProjectAgents,
 	listTasks,
 	releaseTaskClaim,
@@ -29,14 +32,13 @@ import { upsertAgentDailyStat } from "./db.js";
 import { captureTaskDiffs } from "./diff-capture.js";
 import { applyPostCompletionHooks, taskNeedsApprovalFromEdges } from "./edge-hooks.js";
 import { eventBus } from "./event-bus.js";
+import { createLogger } from "./logger.js";
 import { recordAgentStep } from "./memory-bridge.js";
 import { updateWorkingMemory } from "./memory-manager.js";
 import { queryOne } from "./pg.js";
 import { evaluatePolicies } from "./policy-engine.js";
-import { classifyRisk } from "./agent-runtime/agent-constraints.js";
 import { syncDeclaredDependencies } from "./repo-dependency-sync.js";
 import type { Phase, ProjectAgent, Task, TaskOutput } from "./types.js";
-import { createLogger } from "./logger.js";
 
 const log = createLogger("task-engine");
 
@@ -770,9 +772,7 @@ class TaskEngine {
 			},
 		});
 
-		log.info(
-			`[task-engine] Task ${taskId} revision'a gönderildi (döngü ${newRevisionCount}/${MAX_REVISION_CYCLES})`,
-		);
+		log.info(`[task-engine] Task ${taskId} revision'a gönderildi (döngü ${newRevisionCount}/${MAX_REVISION_CYCLES})`);
 
 		return updated;
 	}
@@ -914,8 +914,11 @@ class TaskEngine {
 
 	async failTask(taskId: string, error: string): Promise<Task> {
 		const task = await this.requireTask(taskId);
+		if (!["running", "assigned", "waiting_approval"].includes(task.status)) {
+			throw new Error(`Task ${taskId} cannot be failed from status: ${task.status}`);
+		}
 		if (task.status !== "running") {
-			throw new Error(`Task ${taskId} is not running (status: ${task.status})`);
+			log.warn(`[task-engine] Failing task "${task.title}" from non-running status: ${task.status}`);
 		}
 
 		const projectId = await this.getProjectIdForTask(task);
@@ -1033,9 +1036,15 @@ class TaskEngine {
 
 	async getReadyTasks(phaseId: string): Promise<Task[]> {
 		const tasks = await listTasks(phaseId);
+		const queued = tasks.filter((t) => t.status === "queued");
+		if (queued.length === 0) return [];
+
+		// Batch-fetch all dependency tasks in a single query (eliminates N+1)
+		const allDepIds = new Set(queued.flatMap((t) => t.dependsOn));
+		const depMap = allDepIds.size > 0 ? await getTasksByIds([...allDepIds]) : new Map<string, Task>();
+
 		const ready: Task[] = [];
-		for (const task of tasks) {
-			if (task.status !== "queued") continue;
+		for (const task of queued) {
 			if (task.dependsOn.length === 0) {
 				ready.push(task);
 				continue;
@@ -1043,16 +1052,11 @@ class TaskEngine {
 
 			const isReviewTask = task.title.startsWith("Code Review: ");
 
-			let allDepsDone = true;
-			for (const depId of task.dependsOn) {
-				const dep = await getTask(depId);
-				// Review tasks can start when original task is in 'review' status
-				const depSatisfied = dep?.status === "done" || (isReviewTask && dep?.status === "review");
-				if (!depSatisfied) {
-					allDepsDone = false;
-					break;
-				}
-			}
+			// Review tasks can start when original task is in 'review' status
+			const allDepsDone = task.dependsOn.every((depId) => {
+				const dep = depMap.get(depId);
+				return dep?.status === "done" || (isReviewTask && dep?.status === "review");
+			});
 			if (allDepsDone) ready.push(task);
 		}
 		return ready;
@@ -1289,7 +1293,6 @@ class TaskEngine {
 		return projectId;
 	}
 
-
 	// --- v8.0: Approval timeout check ---
 
 	/**
@@ -1298,15 +1301,19 @@ class TaskEngine {
 	 * Should be called periodically (e.g., every 15 minutes via setInterval).
 	 */
 	async checkApprovalTimeouts(projectId: string): Promise<{ warned: string[]; expired: string[] }> {
-		const timeoutHours = Number(
-			(await getProjectSetting(projectId, "approval", "timeout_hours")) ?? 24,
-		);
+		const timeoutHours = Number((await getProjectSetting(projectId, "approval", "timeout_hours")) ?? 24);
 		const timeoutMs = timeoutHours * 3600_000;
 		const warnMs = timeoutMs * 0.8;
 		const now = Date.now();
 
-		const tasks = await listTasks(projectId);
-		const waiting = tasks.filter((t) => t.status === "waiting_approval");
+		// BUG-001 fix: listTasks expects phaseId, not projectId.
+		// Resolve all phases for this project and collect tasks across them.
+		const plan = await getLatestPlan(projectId);
+		if (!plan) return { warned: [], expired: [] };
+		const phases = await listPhases(plan.id);
+		const allTasks = (await Promise.all(phases.map((ph) => listTasks(ph.id)))).flat();
+
+		const waiting = allTasks.filter((t) => t.status === "waiting_approval");
 
 		const warned: string[] = [];
 		const expired: string[] = [];

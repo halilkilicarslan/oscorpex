@@ -23,8 +23,8 @@ import {
 	resetStaleJobs,
 	updateJobStatus,
 } from "./db/job-repo.js";
-import { execute } from "./pg.js";
 import { createLogger } from "./logger.js";
+import { execute } from "./pg.js";
 const log = createLogger("job-queue");
 
 export type { Job, JobStatus };

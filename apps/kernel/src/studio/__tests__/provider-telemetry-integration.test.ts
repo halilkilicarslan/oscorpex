@@ -276,10 +276,14 @@ describe("Execution Engine Provider Telemetry", () => {
 						resolve();
 					}, 5_000);
 					if (opts.signal) {
-						(opts.signal as AbortSignal).addEventListener("abort", () => {
-							clearTimeout(timer);
-							reject(new Error("aborted"));
-						}, { once: true });
+						(opts.signal as AbortSignal).addEventListener(
+							"abort",
+							() => {
+								clearTimeout(timer);
+								reject(new Error("aborted"));
+							},
+							{ once: true },
+						);
 					}
 				});
 				return {

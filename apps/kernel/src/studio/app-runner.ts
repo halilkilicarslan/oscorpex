@@ -13,9 +13,9 @@ import { type ChildProcess, execFileSync, execSync, spawn } from "child_process"
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getDbConnectionInfo, provisionDatabase } from "./db-provisioner.js";
+import { createLogger } from "./logger.js";
 import { analyzeProject, generateStudioConfig, writeEnvFile } from "./runtime-analyzer.js";
 import type { DetectedService, RuntimeRequirements } from "./runtime-analyzer.js";
-import { createLogger } from "./logger.js";
 const log = createLogger("app-runner");
 
 // ---------------------------------------------------------------------------

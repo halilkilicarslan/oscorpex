@@ -1,8 +1,8 @@
 // @oscorpex/kernel — Run repository
 // DB layer for the canonical Run entity.
 
-import { query, queryOne, execute } from "../pg.js";
-import type { Run, RunStatus, RunMode } from "@oscorpex/core";
+import type { Run, RunMode, RunStatus } from "@oscorpex/core";
+import { execute, query, queryOne } from "../pg.js";
 
 function rowToRun(row: Record<string, unknown>): Run {
 	return {
@@ -39,10 +39,7 @@ export async function createRun(run: Run): Promise<Run> {
 }
 
 export async function getRun(id: string): Promise<Run | null> {
-	const row = await queryOne<Record<string, unknown>>(
-		`SELECT * FROM runs WHERE id = $1`,
-		[id],
-	);
+	const row = await queryOne<Record<string, unknown>>(`SELECT * FROM runs WHERE id = $1`, [id]);
 	return row ? rowToRun(row) : null;
 }
 
@@ -51,14 +48,38 @@ export async function updateRun(id: string, partial: Partial<Run>): Promise<Run>
 	const values: unknown[] = [];
 	let idx = 1;
 
-	if (partial.projectId !== undefined) { sets.push(`project_id = $${idx++}`); values.push(partial.projectId); }
-	if (partial.goal !== undefined) { sets.push(`goal = $${idx++}`); values.push(partial.goal); }
-	if (partial.mode !== undefined) { sets.push(`mode = $${idx++}`); values.push(partial.mode); }
-	if (partial.status !== undefined) { sets.push(`status = $${idx++}`); values.push(partial.status); }
-	if (partial.currentStageId !== undefined) { sets.push(`current_stage_id = $${idx++}`); values.push(partial.currentStageId); }
-	if (partial.startedAt !== undefined) { sets.push(`started_at = $${idx++}`); values.push(partial.startedAt); }
-	if (partial.completedAt !== undefined) { sets.push(`completed_at = $${idx++}`); values.push(partial.completedAt); }
-	if (partial.metadata !== undefined) { sets.push(`metadata = $${idx++}`); values.push(JSON.stringify(partial.metadata)); }
+	if (partial.projectId !== undefined) {
+		sets.push(`project_id = $${idx++}`);
+		values.push(partial.projectId);
+	}
+	if (partial.goal !== undefined) {
+		sets.push(`goal = $${idx++}`);
+		values.push(partial.goal);
+	}
+	if (partial.mode !== undefined) {
+		sets.push(`mode = $${idx++}`);
+		values.push(partial.mode);
+	}
+	if (partial.status !== undefined) {
+		sets.push(`status = $${idx++}`);
+		values.push(partial.status);
+	}
+	if (partial.currentStageId !== undefined) {
+		sets.push(`current_stage_id = $${idx++}`);
+		values.push(partial.currentStageId);
+	}
+	if (partial.startedAt !== undefined) {
+		sets.push(`started_at = $${idx++}`);
+		values.push(partial.startedAt);
+	}
+	if (partial.completedAt !== undefined) {
+		sets.push(`completed_at = $${idx++}`);
+		values.push(partial.completedAt);
+	}
+	if (partial.metadata !== undefined) {
+		sets.push(`metadata = $${idx++}`);
+		values.push(JSON.stringify(partial.metadata));
+	}
 
 	if (sets.length === 0) {
 		const existing = await getRun(id);
@@ -74,20 +95,37 @@ export async function updateRun(id: string, partial: Partial<Run>): Promise<Run>
 	return updated;
 }
 
-export async function listRuns(filter: { projectId?: string; status?: string; limit?: number; offset?: number } = {}): Promise<Run[]> {
+export async function listRuns(
+	filter: { projectId?: string; status?: string; limit?: number; offset?: number } = {},
+): Promise<Run[]> {
 	const conditions: string[] = [];
 	const values: unknown[] = [];
 	let idx = 1;
 
-	if (filter.projectId) { conditions.push(`project_id = $${idx++}`); values.push(filter.projectId); }
-	if (filter.status) { conditions.push(`status = $${idx++}`); values.push(filter.status); }
+	if (filter.projectId) {
+		conditions.push(`project_id = $${idx++}`);
+		values.push(filter.projectId);
+	}
+	if (filter.status) {
+		conditions.push(`status = $${idx++}`);
+		values.push(filter.status);
+	}
 
 	const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-	const limit = filter.limit ? `LIMIT ${filter.limit}` : "";
-	const offset = filter.offset ? `OFFSET ${filter.offset}` : "";
+
+	let limitClause = "";
+	if (filter.limit != null) {
+		limitClause = `LIMIT $${idx++}`;
+		values.push(Number(filter.limit));
+	}
+	let offsetClause = "";
+	if (filter.offset != null) {
+		offsetClause = `OFFSET $${idx++}`;
+		values.push(Number(filter.offset));
+	}
 
 	const rows = await query<Record<string, unknown>>(
-		`SELECT * FROM runs ${where} ORDER BY created_at DESC ${limit} ${offset}`,
+		`SELECT * FROM runs ${where} ORDER BY created_at DESC ${limitClause} ${offsetClause}`,
 		values,
 	);
 	return rows.map(rowToRun);

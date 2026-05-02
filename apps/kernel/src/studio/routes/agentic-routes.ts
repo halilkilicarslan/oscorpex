@@ -4,39 +4,39 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import {
-	listAgentSessions,
-	getAgentSession,
-	getRecentEpisodes,
-	getFailureEpisodes,
-	getBestStrategies,
-	getStrategiesForRole,
-	listStrategies,
-	getUnreadMessages,
-	getProtocolMessage,
-	getTaskMessages,
-	listProposals,
-	getProposal,
-	approveProposal,
-	rejectProposal,
-	markMessageActioned,
-	getTask,
-	listApprovalRules,
-	createApprovalRule,
-	upsertCapabilityGrant,
-	getCapabilityGrants,
-	hasCapability,
-	deleteCapabilityGrant,
-	getDefaultGrantsForRole,
-} from "../db.js";
-import { proposeTask } from "../agent-runtime/task-injection.js";
-import { classifyRisk, canAutoApprove } from "../agent-runtime/agent-constraints.js";
-import { loadBehavioralContext, formatBehavioralPrompt } from "../agent-runtime/agent-memory.js";
+import { canAutoApprove, classifyRisk } from "../agent-runtime/agent-constraints.js";
+import { formatBehavioralPrompt, loadBehavioralContext } from "../agent-runtime/agent-memory.js";
 import { BUILTIN_STRATEGIES } from "../agent-runtime/agent-strategy.js";
+import { proposeTask } from "../agent-runtime/task-injection.js";
 import { getAgenticMetrics } from "../agentic-metrics.js";
-import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
+import {
+	approveProposal,
+	createApprovalRule,
+	deleteCapabilityGrant,
+	getAgentSession,
+	getBestStrategies,
+	getCapabilityGrants,
+	getDefaultGrantsForRole,
+	getFailureEpisodes,
+	getProposal,
+	getProtocolMessage,
+	getRecentEpisodes,
+	getStrategiesForRole,
+	getTask,
+	getTaskMessages,
+	getUnreadMessages,
+	hasCapability,
+	listAgentSessions,
+	listApprovalRules,
+	listProposals,
+	listStrategies,
+	markMessageActioned,
+	rejectProposal,
+	upsertCapabilityGrant,
+} from "../db.js";
 import { kernel } from "../kernel/index.js";
 import { createLogger } from "../logger.js";
+import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
 const log = createLogger("agentic-routes");
 
 export const agenticRoutes = new Hono();
@@ -220,7 +220,9 @@ agenticRoutes.post("/proposals/:proposalId/approve", async (c) => {
 			if (task) {
 				const ready = await kernel.getReadyTasks(task.phaseId);
 				if (ready.some((candidate) => candidate.id === task.id)) {
-					kernel.executeTask(result.proposal.projectId, task as any).catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
+					kernel
+						.executeTask(result.proposal.projectId, task as any)
+						.catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
 				}
 			}
 		}
@@ -242,7 +244,9 @@ agenticRoutes.post("/protocol-messages/:messageId/actioned", async (c) => {
 			const hasOpenBlockers = remaining.some(
 				(msg) =>
 					msg.id !== message.id &&
-					(msg.messageType === "blocker_alert" || msg.messageType === "request_info" || msg.messageType === "dependency_warning") &&
+					(msg.messageType === "blocker_alert" ||
+						msg.messageType === "request_info" ||
+						msg.messageType === "dependency_warning") &&
 					msg.status !== "actioned" &&
 					msg.status !== "dismissed",
 			);
@@ -254,7 +258,9 @@ agenticRoutes.post("/protocol-messages/:messageId/actioned", async (c) => {
 				if (refreshed) {
 					const ready = await kernel.getReadyTasks(refreshed.phaseId);
 					if (ready.some((candidate) => candidate.id === refreshed.id)) {
-						kernel.executeTask(message.projectId, refreshed as any).catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
+						kernel
+							.executeTask(message.projectId, refreshed as any)
+							.catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
 					}
 				}
 			}

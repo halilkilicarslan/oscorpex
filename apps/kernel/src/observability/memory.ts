@@ -10,7 +10,14 @@ import { Hono } from "hono";
 export const memoryRoutes = new Hono();
 
 memoryRoutes.get("/memory/stats", async (c) => {
-	return c.json({ archived: true, totalConversations: 0, totalMessages: 0, totalSteps: 0, byAgent: [], totalWorkflows: 0 });
+	return c.json({
+		archived: true,
+		totalConversations: 0,
+		totalMessages: 0,
+		totalSteps: 0,
+		byAgent: [],
+		totalWorkflows: 0,
+	});
 });
 
 memoryRoutes.get("/memory/conversations", async (c) => {

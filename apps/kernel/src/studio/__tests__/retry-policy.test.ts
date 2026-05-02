@@ -4,13 +4,13 @@
 
 import { describe, expect, it } from "vitest";
 import {
-	getRetryDecision,
-	isRetryable,
+	BASE_BACKOFF_MS,
+	MAX_AUTO_RETRIES,
+	buildRetryTelemetry,
 	computeBackoffMs,
 	evaluateRetry,
-	MAX_AUTO_RETRIES,
-	BASE_BACKOFF_MS,
-	buildRetryTelemetry,
+	getRetryDecision,
+	isRetryable,
 } from "../retry-policy.js";
 
 const isTestEnv = process.env.VITEST === "true";

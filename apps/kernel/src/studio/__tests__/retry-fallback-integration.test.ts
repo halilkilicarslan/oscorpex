@@ -2,22 +2,18 @@
 // Tests — Retry / Timeout / Fallback Wiring Integration (TASK 5.4)
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import {
-	evaluateRetry,
-	isRetryable,
-	getRetryDecision,
-	computeBackoffMs,
-	MAX_AUTO_RETRIES,
-	BASE_BACKOFF_MS,
-} from "../retry-policy.js";
-import {
-	shouldSkipProvider,
-	sortAdapterChain,
-	getFallbackSeverity,
-} from "../fallback-decision.js";
-import { providerState } from "../provider-state.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getFallbackSeverity, shouldSkipProvider, sortAdapterChain } from "../fallback-decision.js";
 import { providerRuntimeCache } from "../provider-runtime-cache.js";
+import { providerState } from "../provider-state.js";
+import {
+	BASE_BACKOFF_MS,
+	MAX_AUTO_RETRIES,
+	computeBackoffMs,
+	evaluateRetry,
+	getRetryDecision,
+	isRetryable,
+} from "../retry-policy.js";
 
 vi.mock("../provider-state.js", () => ({
 	providerState: {
@@ -114,12 +110,7 @@ describe("INTEGRATION: unavailable → cooldown + fallback", () => {
 // ---------------------------------------------------------------------------
 
 describe("INTEGRATION: non-retryable → immediate fail", () => {
-	const nonRetryable = [
-		"spawn_failure",
-		"unavailable",
-		"rate_limited",
-		"tool_restriction_unsupported",
-	] as const;
+	const nonRetryable = ["spawn_failure", "unavailable", "rate_limited", "tool_restriction_unsupported"] as const;
 
 	for (const classification of nonRetryable) {
 		it(`${classification} triggers fallback, never retry`, () => {

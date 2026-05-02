@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { wsCluster } from "../ws-cluster.js";
 import { createLogger } from "../logger.js";
+import { wsCluster } from "../ws-cluster.js";
 const log = createLogger("cluster-routes");
 
 const router = new Hono();

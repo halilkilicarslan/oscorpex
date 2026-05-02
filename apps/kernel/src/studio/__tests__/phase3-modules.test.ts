@@ -78,21 +78,21 @@ vi.mock("../event-bus.js", () => ({
 	},
 }));
 
+import { getTask } from "../db.js";
 // ---------------------------------------------------------------------------
 // Graph Coordinator
 // ---------------------------------------------------------------------------
 import {
-	insertNode,
-	splitTask,
+	GraphInvariantError,
 	addEdge,
-	removeEdge,
+	approveGraphMutationRequest,
 	deferBranch,
+	insertNode,
 	mergeIntoPhase,
 	proposeGraphMutation,
-	approveGraphMutationRequest,
-	GraphInvariantError,
+	removeEdge,
+	splitTask,
 } from "../graph-coordinator.js";
-import { getTask } from "../db.js";
 
 describe("Graph Coordinator", () => {
 	const ctx = { projectId: "proj-1", pipelineRunId: "run-1", causedByAgentId: "agent-1" };
@@ -169,9 +169,7 @@ describe("Graph Coordinator", () => {
 		const result = await mergeIntoPhase(ctx, {
 			sourcePhaseId: "phase-1",
 			targetPhaseId: "phase-2",
-			tasks: [
-				{ title: "Fix from phase 1", description: "Bug found", assignedAgent: "backend_dev" },
-			],
+			tasks: [{ title: "Fix from phase 1", description: "Bug found", assignedAgent: "backend_dev" }],
 		});
 		expect(result.success).toBe(true);
 		expect(result.mutationType).toBe("merge_into_phase");
@@ -202,12 +200,7 @@ describe("Graph Coordinator", () => {
 // ---------------------------------------------------------------------------
 // Goal Engine
 // ---------------------------------------------------------------------------
-import {
-	formatGoalPrompt,
-	ensureGoalForTask,
-	validateCriteriaFromOutput,
-	type ExecutionGoal,
-} from "../goal-engine.js";
+import { type ExecutionGoal, ensureGoalForTask, formatGoalPrompt, validateCriteriaFromOutput } from "../goal-engine.js";
 
 describe("Goal Engine", () => {
 	const mockGoal: ExecutionGoal = {
@@ -217,11 +210,7 @@ describe("Goal Engine", () => {
 		definition: {
 			goal: "Implement Google OAuth login",
 			constraints: ["must use existing auth layer", "must not break email login"],
-			successCriteria: [
-				"user can log in with Google",
-				"tests pass for auth module",
-				"frontend handles auth errors",
-			],
+			successCriteria: ["user can log in with Google", "tests pass for auth module", "frontend handles auth errors"],
 		},
 		status: "active",
 		criteriaResults: [],
@@ -319,12 +308,7 @@ describe("Goal Engine", () => {
 // ---------------------------------------------------------------------------
 // Sandbox Manager
 // ---------------------------------------------------------------------------
-import {
-	checkToolAllowed,
-	checkPathAllowed,
-	checkOutputSize,
-	type SandboxPolicy,
-} from "../sandbox-manager.js";
+import { type SandboxPolicy, checkOutputSize, checkPathAllowed, checkToolAllowed } from "../sandbox-manager.js";
 
 describe("Sandbox Manager", () => {
 	const defaultPolicy: SandboxPolicy = {
@@ -392,9 +376,9 @@ describe("Sandbox Manager", () => {
 // ---------------------------------------------------------------------------
 // Adaptive Replanner
 // ---------------------------------------------------------------------------
-import { shouldReplan, evaluateReplan, approveReplanEvent, type ReplanTrigger } from "../adaptive-replanner.js";
+import { type ReplanTrigger, approveReplanEvent, evaluateReplan, shouldReplan } from "../adaptive-replanner.js";
+import { getLatestPlan, getProjectSetting, listPhases, listProjectTasks, queryOne } from "../db.js";
 import { eventBus } from "../event-bus.js";
-import { queryOne, getProjectSetting, getLatestPlan, listPhases, listProjectTasks } from "../db.js";
 
 describe("Adaptive Replanner", () => {
 	beforeEach(() => {
@@ -442,9 +426,9 @@ describe("Adaptive Replanner", () => {
 		]);
 		// 5 queued out of 10 total → queueRatio = 0.5 > 0.4
 		vi.mocked(listProjectTasks).mockResolvedValueOnce([
-			...Array.from({ length: 5 }, (_, i) => ({ id: `q-${i}`, phaseId: "phase-2", status: "queued" } as any)),
-			...Array.from({ length: 3 }, (_, i) => ({ id: `d-${i}`, phaseId: "phase-2", status: "done" } as any)),
-			...Array.from({ length: 2 }, (_, i) => ({ id: `r-${i}`, phaseId: "phase-2", status: "running" } as any)),
+			...Array.from({ length: 5 }, (_, i) => ({ id: `q-${i}`, phaseId: "phase-2", status: "queued" }) as any),
+			...Array.from({ length: 3 }, (_, i) => ({ id: `d-${i}`, phaseId: "phase-2", status: "done" }) as any),
+			...Array.from({ length: 2 }, (_, i) => ({ id: `r-${i}`, phaseId: "phase-2", status: "running" }) as any),
 		]);
 		vi.mocked(queryOne).mockResolvedValueOnce(null);
 
@@ -460,9 +444,7 @@ describe("Adaptive Replanner", () => {
 		vi.mocked(listPhases).mockResolvedValueOnce([
 			{ id: "phase-1", name: "Deploy", status: "running", tasks: [], order: 1, dependsOn: [] } as any,
 		]);
-		vi.mocked(listProjectTasks).mockResolvedValueOnce([
-			{ id: "t-1", phaseId: "phase-1", status: "queued" } as any,
-		]);
+		vi.mocked(listProjectTasks).mockResolvedValueOnce([{ id: "t-1", phaseId: "phase-1", status: "queued" } as any]);
 		vi.mocked(queryOne).mockResolvedValueOnce(null);
 
 		const result = await evaluateReplan({ projectId: "proj-1", trigger: "repeated_provider_failure" });

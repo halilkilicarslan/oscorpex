@@ -27,10 +27,10 @@ const mockQueryOne = vi.mocked(queryOne);
 import type { Context } from "hono";
 import {
 	getTenantContext,
+	isTenantIsolationEnabled,
+	requireTenantContext,
 	verifyProjectAccess,
 	withTenantFilter,
-	requireTenantContext,
-	isTenantIsolationEnabled,
 } from "../auth/tenant-context.js";
 
 // ---------------------------------------------------------------------------

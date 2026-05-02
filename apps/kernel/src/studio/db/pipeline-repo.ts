@@ -4,10 +4,10 @@
 
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne, withTransaction } from "../pg.js";
 import type { AgentRun, PipelineRun } from "../types.js";
 import { now, rowToAgentRun, rowToPipelineRun } from "./helpers.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("pipeline-repo");
 
 // ---------------------------------------------------------------------------
@@ -105,7 +105,10 @@ export async function updatePipelineRun(
  */
 export async function mutatePipelineState(
 	projectId: string,
-	updater: (run: PipelineRun, client: pg.PoolClient) => Promise<Partial<Pick<PipelineRun, "currentStage" | "status" | "stagesJson" | "startedAt" | "completedAt">>>,
+	updater: (
+		run: PipelineRun,
+		client: pg.PoolClient,
+	) => Promise<Partial<Pick<PipelineRun, "currentStage" | "status" | "stagesJson" | "startedAt" | "completedAt">>>,
 ): Promise<PipelineRun> {
 	return withTransaction(async (client) => {
 		const run = await getPipelineRunForUpdate(client, projectId);
@@ -141,10 +144,7 @@ export async function mutatePipelineState(
 		if (fields.length > 0) {
 			fields.push(`version = version + 1`);
 			values.push(projectId);
-			await client.query(
-				`UPDATE pipeline_runs SET ${fields.join(", ")} WHERE project_id = $${idx}`,
-				values,
-			);
+			await client.query(`UPDATE pipeline_runs SET ${fields.join(", ")} WHERE project_id = $${idx}`, values);
 		}
 
 		const result = await client.query("SELECT * FROM pipeline_runs WHERE project_id = $1", [projectId]);

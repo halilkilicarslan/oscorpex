@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { createPhase, createTask, getLatestPlan, getWorkItem, listProjectAgents, updateWorkItem } from "./db.js";
+import { createLogger } from "./logger.js";
 import type {
 	Phase,
 	ProjectAgent,
@@ -16,7 +17,6 @@ import type {
 	WorkItemPriority,
 	WorkItemType,
 } from "./types.js";
-import { createLogger } from "./logger.js";
 const log = createLogger("work-item-planner");
 
 const BACKLOG_PHASE_NAME = "Backlog";

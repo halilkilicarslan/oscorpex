@@ -5,10 +5,10 @@
 // ---------------------------------------------------------------------------
 
 import type { Context, Next } from "hono";
-import { authMiddleware } from "./auth-middleware.js";
-import { requireTenantContext } from "./tenant-context.js";
-import { isPublicRoute, isKnownRoute, getRoutePermission } from "./route-permissions.js";
 import { createLogger } from "../logger.js";
+import { authMiddleware } from "./auth-middleware.js";
+import { getRoutePermission, isKnownRoute, isPublicRoute } from "./route-permissions.js";
+import { requireTenantContext } from "./tenant-context.js";
 
 const log = createLogger("access-guard");
 
@@ -29,9 +29,7 @@ const log = createLogger("access-guard");
  */
 export async function accessGuard(c: Context, next: Next): Promise<void | Response> {
 	const originalPath = c.req.path;
-	const path = originalPath.startsWith("/api/studio")
-		? originalPath.slice("/api/studio".length) || "/"
-		: originalPath;
+	const path = originalPath.startsWith("/api/studio") ? originalPath.slice("/api/studio".length) || "/" : originalPath;
 	const method = c.req.method;
 
 	// 1. Public routes — no auth required
@@ -62,7 +60,7 @@ export async function accessGuard(c: Context, next: Next): Promise<void | Respon
 		if (rbacResult) {
 			log.warn(
 				`[access-guard] Permission denied: ${method} ${originalPath} requires ${routePermission} ` +
-				`(user=${c.get("userId") ?? "unknown"}, tenant=${c.get("tenantId") ?? "none"})`,
+					`(user=${c.get("userId") ?? "unknown"}, tenant=${c.get("tenantId") ?? "none"})`,
 			);
 			return rbacResult;
 		}
@@ -72,8 +70,8 @@ export async function accessGuard(c: Context, next: Next): Promise<void | Respon
 	if (method !== "GET" && method !== "HEAD") {
 		log.info(
 			`[access-guard] Allowed: ${method} ${originalPath} ` +
-			`(user=${c.get("userId") ?? "unknown"}, tenant=${c.get("tenantId") ?? "none"}, ` +
-			`permission=${routePermission ?? "auth-only"})`,
+				`(user=${c.get("userId") ?? "unknown"}, tenant=${c.get("tenantId") ?? "none"}, ` +
+				`permission=${routePermission ?? "auth-only"})`,
 		);
 	}
 

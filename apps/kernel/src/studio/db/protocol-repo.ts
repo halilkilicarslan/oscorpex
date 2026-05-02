@@ -3,9 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
 import type { AgentProtocolMessage, ProtocolMessageStatus, ProtocolMessageType } from "../types.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("protocol-repo");
 
 // ---------------------------------------------------------------------------
@@ -20,7 +20,7 @@ function rowToMessage(row: any): AgentProtocolMessage {
 		toAgentId: row.to_agent_id ?? undefined,
 		relatedTaskId: row.related_task_id ?? undefined,
 		messageType: row.message_type as ProtocolMessageType,
-		payload: typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload ?? {},
+		payload: typeof row.payload === "string" ? JSON.parse(row.payload) : (row.payload ?? {}),
 		status: row.status as ProtocolMessageStatus,
 		createdAt: row.created_at?.toISOString?.() ?? row.created_at,
 	};
@@ -71,10 +71,7 @@ export async function getUnreadMessages(
 }
 
 /** Get messages related to a specific task */
-export async function getTaskMessages(
-	projectId: string,
-	taskId: string,
-): Promise<AgentProtocolMessage[]> {
+export async function getTaskMessages(projectId: string, taskId: string): Promise<AgentProtocolMessage[]> {
 	const rows = await query<any>(
 		`SELECT * FROM agent_protocol_messages
 		 WHERE project_id = $1 AND related_task_id = $2
@@ -88,10 +85,7 @@ export async function getTaskMessages(
 export async function markMessagesRead(messageIds: string[]): Promise<void> {
 	if (messageIds.length === 0) return;
 	const placeholders = messageIds.map((_, i) => `$${i + 1}`).join(", ");
-	await execute(
-		`UPDATE agent_protocol_messages SET status = 'read' WHERE id IN (${placeholders})`,
-		messageIds,
-	);
+	await execute(`UPDATE agent_protocol_messages SET status = 'read' WHERE id IN (${placeholders})`, messageIds);
 }
 
 /** Mark a message as actioned */
@@ -100,10 +94,7 @@ export async function markMessageActioned(id: string): Promise<void> {
 }
 
 /** List all protocol messages for a project */
-export async function listProtocolMessages(
-	projectId: string,
-	limit = 50,
-): Promise<AgentProtocolMessage[]> {
+export async function listProtocolMessages(projectId: string, limit = 50): Promise<AgentProtocolMessage[]> {
 	const rows = await query<any>(
 		`SELECT * FROM agent_protocol_messages WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2`,
 		[projectId, limit],

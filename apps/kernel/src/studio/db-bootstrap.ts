@@ -8,8 +8,8 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getPool } from "./pg.js";
 import { createLogger } from "./logger.js";
+import { getPool } from "./pg.js";
 const log = createLogger("db-bootstrap");
 
 export async function applyDbBootstrap(): Promise<void> {

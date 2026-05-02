@@ -6,4 +6,3 @@ export async function ensureProjectTeamInitialized(c: Context, projectId: string
 	if (agents.length > 0) return null;
 	return c.json({ error: "team not initialized" }, 422);
 }
-

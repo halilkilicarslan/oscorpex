@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { getLatestPlan, getProject, getProjectCostSummary, listEvents, listProjectTasks } from "./db.js";
-import type { Project, ProjectPlan, StudioEvent, Task } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { Project, ProjectPlan, StudioEvent, Task } from "./types.js";
 const log = createLogger("report-generator");
 
 // ---------------------------------------------------------------------------

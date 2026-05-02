@@ -208,10 +208,14 @@ export class AdaptiveConcurrencyController {
 
 		if (failureRate > FAILURE_RATE_THRESHOLD) {
 			newMax = Math.max(MIN_MAX, currentMax - 1);
-			log.info(`[adaptive-concurrency] Reducing concurrency: ${currentMax} → ${newMax} (failureRate=${failureRate.toFixed(2)})`);
+			log.info(
+				`[adaptive-concurrency] Reducing concurrency: ${currentMax} → ${newMax} (failureRate=${failureRate.toFixed(2)})`,
+			);
 		} else if (queueDepth > QUEUE_DEPTH_THRESHOLD && currentMax < ABSOLUTE_MAX && failureRate < 0.2) {
 			newMax = Math.min(ABSOLUTE_MAX, currentMax + 1);
-			log.info(`[adaptive-concurrency] Increasing concurrency: ${currentMax} → ${newMax} (queueDepth=${queueDepth}, failureRate=${failureRate.toFixed(2)})`);
+			log.info(
+				`[adaptive-concurrency] Increasing concurrency: ${currentMax} → ${newMax} (queueDepth=${queueDepth}, failureRate=${failureRate.toFixed(2)})`,
+			);
 		}
 
 		this.semaphore.maxConcurrency = newMax;

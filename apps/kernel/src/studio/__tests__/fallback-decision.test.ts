@@ -2,12 +2,12 @@
 // Tests — Fallback Decision Motor (TASK 5)
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	getFallbackSeverity,
+	markProviderUnavailable,
 	shouldSkipProvider,
 	sortAdapterChain,
-	markProviderUnavailable,
-	getFallbackSeverity,
 } from "../fallback-decision.js";
 import { providerRuntimeCache } from "../provider-runtime-cache.js";
 import { providerState } from "../provider-state.js";
@@ -30,15 +30,17 @@ function makeAdapter(name: string, caps?: Record<string, unknown>) {
 	return {
 		name,
 		isAvailable: vi.fn().mockResolvedValue(true),
-		capabilities: vi.fn().mockResolvedValue(caps ?? {
-			supportedModels: ["model-1"],
-			supportsToolRestriction: true,
-			supportsStreaming: false,
-			supportsResume: false,
-			supportsCancel: true,
-			supportsStructuredOutput: false,
-			supportsSandboxHinting: true,
-		}),
+		capabilities: vi.fn().mockResolvedValue(
+			caps ?? {
+				supportedModels: ["model-1"],
+				supportsToolRestriction: true,
+				supportsStreaming: false,
+				supportsResume: false,
+				supportsCancel: true,
+				supportsStructuredOutput: false,
+				supportsSandboxHinting: true,
+			},
+		),
 		execute: vi.fn(),
 	};
 }
@@ -152,11 +154,7 @@ describe("shouldSkipProvider", () => {
 
 describe("sortAdapterChain", () => {
 	it("places available provider with high success rate first", () => {
-		const adapters = [
-			makeAdapter("codex"),
-			makeAdapter("claude-code"),
-			makeAdapter("cursor"),
-		];
+		const adapters = [makeAdapter("codex"), makeAdapter("claude-code"), makeAdapter("cursor")];
 		vi.mocked(providerState.isAvailable).mockImplementation((name: string) => name !== "cursor");
 
 		const sorted = sortAdapterChain(adapters, (id) => {

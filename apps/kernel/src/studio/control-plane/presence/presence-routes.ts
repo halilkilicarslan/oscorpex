@@ -2,15 +2,15 @@
 // Control Plane — Presence Routes (thin host)
 // ---------------------------------------------------------------------------
 
-import { Hono } from "hono";
 import {
-	listPresence,
+	type PresenceState,
 	computePresenceState,
 	getAgentHeartbeats,
 	getProviderHeartbeats,
+	listPresence,
 	recordHeartbeat,
-	 type PresenceState,
 } from "@oscorpex/control-plane";
+import { Hono } from "hono";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-presence-routes");

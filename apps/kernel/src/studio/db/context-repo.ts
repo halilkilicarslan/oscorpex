@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
 import type {
 	ContextChunk,
@@ -12,7 +13,6 @@ import type {
 	ContextSource,
 } from "../types.js";
 import { now, rowToContextChunk, rowToContextSource } from "./helpers.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("context-repo");
 
 // ---------------------------------------------------------------------------

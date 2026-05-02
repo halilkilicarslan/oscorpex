@@ -11,10 +11,10 @@ import {
 	getWorkItemsPaginated,
 	updateWorkItem,
 } from "../db.js";
-import type { WorkItemPriority, WorkItemSource, WorkItemStatus, WorkItemType } from "../types.js";
-import { planWorkItem } from "../work-item-planner.js";
 import { kernel } from "../kernel/index.js";
 import { createLogger } from "../logger.js";
+import type { WorkItemPriority, WorkItemSource, WorkItemStatus, WorkItemType } from "../types.js";
+import { planWorkItem } from "../work-item-planner.js";
 const log = createLogger("work-item-routes");
 
 export const workItemRoutes = new Hono();

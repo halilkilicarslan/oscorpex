@@ -81,9 +81,7 @@ describe("createTemplate", () => {
 	it("throws when insert returns no row", async () => {
 		mockQueryOne.mockResolvedValueOnce(null);
 
-		await expect(
-			createTemplate({ name: "Broken Template" }),
-		).rejects.toThrow("template insert returned no row");
+		await expect(createTemplate({ name: "Broken Template" })).rejects.toThrow("template insert returned no row");
 	});
 
 	it("uses default values when optional fields omitted", async () => {
@@ -91,10 +89,7 @@ describe("createTemplate", () => {
 
 		await createTemplate({ name: "Minimal" });
 
-		expect(mockQueryOne).toHaveBeenCalledWith(
-			expect.any(String),
-			expect.arrayContaining(["fullstack"]),
-		);
+		expect(mockQueryOne).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(["fullstack"]));
 	});
 });
 
@@ -132,10 +127,7 @@ describe("listTemplates", () => {
 
 		await listTemplates({ search: "react" });
 
-		expect(mockQuery).toHaveBeenCalledWith(
-			expect.stringContaining("ILIKE"),
-			expect.arrayContaining(["%react%"]),
-		);
+		expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining("ILIKE"), expect.arrayContaining(["%react%"]));
 	});
 
 	it("applies both category and search filters", async () => {
@@ -173,10 +165,7 @@ describe("countTemplates", () => {
 
 		const count = await countTemplates();
 
-		expect(mockQueryOne).toHaveBeenCalledWith(
-			expect.stringContaining("COUNT(*)"),
-			[],
-		);
+		expect(mockQueryOne).toHaveBeenCalledWith(expect.stringContaining("COUNT(*)"), []);
 		expect(count).toBe(7);
 	});
 
@@ -197,10 +186,7 @@ describe("getTemplate", () => {
 
 		const result = await getTemplate("tpl-1");
 
-		expect(mockQueryOne).toHaveBeenCalledWith(
-			expect.stringContaining("WHERE id = $1"),
-			["tpl-1"],
-		);
+		expect(mockQueryOne).toHaveBeenCalledWith(expect.stringContaining("WHERE id = $1"), ["tpl-1"]);
 		expect(result).not.toBeNull();
 		expect(result?.id).toBe("tpl-1");
 		expect(result?.isPublic).toBe(true);
@@ -254,10 +240,7 @@ describe("updateTemplate", () => {
 		await updateTemplate("tpl-1", {});
 
 		// Should call getTemplate's query
-		expect(mockQueryOne).toHaveBeenCalledWith(
-			expect.stringContaining("WHERE id = $1"),
-			["tpl-1"],
-		);
+		expect(mockQueryOne).toHaveBeenCalledWith(expect.stringContaining("WHERE id = $1"), ["tpl-1"]);
 	});
 });
 
@@ -271,10 +254,7 @@ describe("deleteTemplate", () => {
 
 		await deleteTemplate("tpl-1");
 
-		expect(mockExecute).toHaveBeenCalledWith(
-			expect.stringContaining("DELETE FROM project_templates"),
-			["tpl-1"],
-		);
+		expect(mockExecute).toHaveBeenCalledWith(expect.stringContaining("DELETE FROM project_templates"), ["tpl-1"]);
 	});
 });
 
@@ -288,10 +268,7 @@ describe("incrementTemplateUsage", () => {
 
 		await incrementTemplateUsage("tpl-1");
 
-		expect(mockExecute).toHaveBeenCalledWith(
-			expect.stringContaining("usage_count = usage_count + 1"),
-			["tpl-1"],
-		);
+		expect(mockExecute).toHaveBeenCalledWith(expect.stringContaining("usage_count = usage_count + 1"), ["tpl-1"]);
 	});
 });
 
@@ -305,10 +282,7 @@ describe("rateTemplate", () => {
 
 		await rateTemplate("tpl-1", 4.5);
 
-		expect(mockExecute).toHaveBeenCalledWith(
-			expect.stringContaining("rating ="),
-			[4.5, "tpl-1"],
-		);
+		expect(mockExecute).toHaveBeenCalledWith(expect.stringContaining("rating ="), [4.5, "tpl-1"]);
 	});
 
 	it("passes rating and id as params in correct order", async () => {

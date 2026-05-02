@@ -8,8 +8,9 @@ import { createHmac } from "node:crypto";
 import { insertWebhookDelivery, listWebhooksForEvent } from "./db.js";
 import type { Webhook } from "./db.js";
 import { eventBus } from "./event-bus.js";
-import type { EventType, StudioEvent } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { EventType, StudioEvent } from "./types.js";
+import { validateWebhookUrl } from "./utils/url-validator.js";
 const log = createLogger("webhook-sender");
 
 // ---------------------------------------------------------------------------
@@ -271,7 +272,7 @@ class WebhookSender {
 
 		if (webhooks.length === 0) return;
 
-const payload = event.payload as Record<string, unknown>;
+		const payload = event.payload as Record<string, unknown>;
 
 		// Tüm webhook'ları paralel gönder — Promise.allSettled ile hata izolasyonu
 		await Promise.allSettled(
@@ -315,12 +316,15 @@ const payload = event.payload as Record<string, unknown>;
 			"Content-Type": "application/json",
 			"X-Webhook-Event": eventType,
 		};
-		if (webhook.secret) {
-			// Secret'ı loglamıyoruz — sadece imzayı ekliyoruz
-			headers["X-Webhook-Secret"] = webhook.secret;
-		}
 		if (signature) {
 			headers["X-Webhook-Signature"] = signature;
+		}
+
+		// SSRF protection: validate webhook URL before sending
+		const urlCheck = validateWebhookUrl(webhook.url);
+		if (!urlCheck.valid) {
+			log.warn({ url: webhook.url, reason: urlCheck.reason }, "[webhook] SSRF blocked");
+			return { success: false, durationMs: 0, responseBody: `Webhook URL blocked: ${urlCheck.reason}` };
 		}
 
 		const controller = new AbortController();
@@ -391,7 +395,9 @@ const payload = event.payload as Record<string, unknown>;
 			});
 		} catch (logErr) {
 			// Log hatası ana akışı engellemez
-			log.warn("[webhook-sender] Teslimat kaydedilemedi: " + (logErr instanceof Error ? logErr.message : String(logErr)));
+			log.warn(
+				"[webhook-sender] Teslimat kaydedilemedi: " + (logErr instanceof Error ? logErr.message : String(logErr)),
+			);
 		}
 
 		if (result.success) {

@@ -3,10 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
 import type { Phase, PhaseStatus, PlanStatus, Project, ProjectPlan } from "../types.js";
 import { now, rowToPhase, rowToProject, rowToTask } from "./helpers.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("project-repo");
 
 // ---------------------------------------------------------------------------

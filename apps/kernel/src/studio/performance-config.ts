@@ -67,7 +67,10 @@ export function getFeatureFlags(): PerformanceFeatureFlags {
 		) as unknown as PerformanceFeatureFlags;
 	}
 
-	const tokens = raw.split(",").map((s) => s.trim()).filter(Boolean);
+	const tokens = raw
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean);
 	const isDenyList = tokens[0]!.startsWith("-");
 
 	if (isDenyList) {
@@ -121,9 +124,7 @@ export function getRetryPolicyConfig(): RetryPolicyConfig {
 	const isTestEnv = process.env.VITEST === "true";
 	return {
 		maxAutoRetries: Math.max(0, Number(process.env.OSCORPEX_MAX_AUTO_RETRIES) || 3),
-		baseBackoffMs: isTestEnv
-			? 0
-			: Math.max(0, Number(process.env.OSCORPEX_BASE_BACKOFF_MS) || 5_000),
+		baseBackoffMs: isTestEnv ? 0 : Math.max(0, Number(process.env.OSCORPEX_BASE_BACKOFF_MS) || 5_000),
 		maxBackoffMs: Math.max(0, Number(process.env.OSCORPEX_MAX_BACKOFF_MS) || 60_000),
 	};
 }
@@ -303,9 +304,19 @@ export function logPerformanceConfig(): void {
 	const snap = getPerformanceConfigSnapshot();
 	log.info("[performance-config] Active performance configuration:");
 	log.info(`  features: ${JSON.stringify(snap.features)}`);
-	log.info(`  adaptiveConcurrency: defaultMax=${snap.adaptiveConcurrency.defaultMax}, interval=${snap.adaptiveConcurrency.adjustmentIntervalMs}ms`);
-	log.info(`  retryPolicy: maxRetries=${snap.retryPolicy.maxAutoRetries}, baseBackoff=${snap.retryPolicy.baseBackoffMs}ms`);
-	log.info(`  timeoutPolicy: S=${snap.timeoutPolicy.complexityBaseMs.S}ms, M=${snap.timeoutPolicy.complexityBaseMs.M}ms, L=${snap.timeoutPolicy.complexityBaseMs.L}ms, XL=${snap.timeoutPolicy.complexityBaseMs.XL}ms`);
-	log.info(`  cooldown: unavailable=${snap.cooldown.durationsMs.unavailable}ms, spawn_failure=${snap.cooldown.durationsMs.spawn_failure}ms`);
-	log.info(`  dbPool: min=${snap.dbPool.minConnections}, max=${snap.dbPool.maxConnections}, idleTimeout=${snap.dbPool.idleTimeoutMs}ms, acquireTimeout=${snap.dbPool.acquireTimeoutMs}ms`);
+	log.info(
+		`  adaptiveConcurrency: defaultMax=${snap.adaptiveConcurrency.defaultMax}, interval=${snap.adaptiveConcurrency.adjustmentIntervalMs}ms`,
+	);
+	log.info(
+		`  retryPolicy: maxRetries=${snap.retryPolicy.maxAutoRetries}, baseBackoff=${snap.retryPolicy.baseBackoffMs}ms`,
+	);
+	log.info(
+		`  timeoutPolicy: S=${snap.timeoutPolicy.complexityBaseMs.S}ms, M=${snap.timeoutPolicy.complexityBaseMs.M}ms, L=${snap.timeoutPolicy.complexityBaseMs.L}ms, XL=${snap.timeoutPolicy.complexityBaseMs.XL}ms`,
+	);
+	log.info(
+		`  cooldown: unavailable=${snap.cooldown.durationsMs.unavailable}ms, spawn_failure=${snap.cooldown.durationsMs.spawn_failure}ms`,
+	);
+	log.info(
+		`  dbPool: min=${snap.dbPool.minConnections}, max=${snap.dbPool.maxConnections}, idleTimeout=${snap.dbPool.idleTimeoutMs}ms, acquireTimeout=${snap.dbPool.acquireTimeoutMs}ms`,
+	);
 }

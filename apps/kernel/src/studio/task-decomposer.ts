@@ -12,9 +12,9 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { getAIModelWithFallback } from "./ai-provider-factory.js";
 import { createTask, getProject, listProjectAgents } from "./db.js";
+import { createLogger } from "./logger.js";
 import { execute } from "./pg.js";
 import type { Project, Task, TaskComplexity } from "./types.js";
-import { createLogger } from "./logger.js";
 const log = createLogger("task-decomposer");
 
 // ---------------------------------------------------------------------------
@@ -267,7 +267,8 @@ async function aiDecompose(project: Project, parentTask: Task): Promise<AISubTas
 		return subTasks;
 	} catch (err) {
 		log.warn(
-			`[task-decomposer] AI decomposition failed for "${parentTask.title}", will fall back to heuristic: ` + (err instanceof Error ? err.message : String(err)),
+			`[task-decomposer] AI decomposition failed for "${parentTask.title}", will fall back to heuristic: ` +
+				(err instanceof Error ? err.message : String(err)),
 		);
 		return null;
 	}

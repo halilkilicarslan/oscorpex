@@ -17,10 +17,11 @@ import {
 	buildDAGStages,
 	buildDAGWaves,
 	buildLinearStages,
-	findReviewerAgentId,
 	findDevAgentId,
+	findReviewerAgentId,
 } from "@oscorpex/task-graph";
 import type { DependencyEdge, GraphAgent, PlanPhase, PlanTask, StagePlan } from "@oscorpex/task-graph";
+import { evaluateReplan } from "./adaptive-replanner.js";
 import {
 	createPipelineRun,
 	getLatestPlan,
@@ -43,9 +44,9 @@ import { executionEngine } from "./execution-engine.js";
 import { gitManager } from "./git-manager.js";
 import { GitHubIntegration } from "./github-integration.js";
 import { transitionProject } from "./lifecycle-manager.js";
+import { createLogger } from "./logger.js";
 import { decrypt, isEncrypted } from "./secret-vault.js";
 import { taskEngine } from "./task-engine.js";
-import { evaluateReplan } from "./adaptive-replanner.js";
 import type {
 	AgentDependency,
 	Phase,
@@ -55,7 +56,6 @@ import type {
 	ProjectAgent,
 	Task,
 } from "./types.js";
-import { createLogger } from "./logger.js";
 
 const log = createLogger("pipeline-engine");
 
@@ -75,7 +75,14 @@ function now(): string {
 }
 
 /** Convert PipelineRun (DB row) to PipelineState (runtime model) */
-function runToState(run: { projectId: string; stagesJson: string; currentStage: number; status: PipelineStatus; startedAt?: string; completedAt?: string }): PipelineState {
+function runToState(run: {
+	projectId: string;
+	stagesJson: string;
+	currentStage: number;
+	status: PipelineStatus;
+	startedAt?: string;
+	completedAt?: string;
+}): PipelineState {
 	return {
 		projectId: run.projectId,
 		stages: JSON.parse(run.stagesJson) as PipelineStage[],
@@ -132,6 +139,10 @@ async function getState(projectId: string): Promise<PipelineState | null> {
 class PipelineEngine {
 	// Guard: registerTaskHook() idempotent olmalı (boot.ts + module-level çağrı)
 	private taskHookRegistered = false;
+
+	// Debounce map: prevents concurrent advanceStage calls for the same project
+	// When multiple tasks complete near-simultaneously, only one advanceStage runs
+	private _advancePending = new Map<string, NodeJS.Timeout>();
 
 	// -------------------------------------------------------------------------
 	// Pipeline inşası
@@ -381,8 +392,12 @@ class PipelineEngine {
 				});
 			} else {
 				// Conflict varsa main'e geri dön
-				log.warn(`[pipeline-engine] Merge conflict tespit edildi: ${branchName} → main` + " " + String(result.conflicts));
-				await gitManager.checkout(project.repoPath, "main").catch((err) => log.warn("[pipeline-engine] Non-blocking operation failed:", err?.message ?? err));
+				log.warn(
+					`[pipeline-engine] Merge conflict tespit edildi: ${branchName} → main` + " " + String(result.conflicts),
+				);
+				await gitManager
+					.checkout(project.repoPath, "main")
+					.catch((err) => log.warn("[pipeline-engine] Non-blocking operation failed:", err?.message ?? err));
 			}
 		} catch (err) {
 			log.warn(`[pipeline-engine] Branch merge atlandı: ${branchName}` + " " + String(err));
@@ -507,10 +522,21 @@ class PipelineEngine {
 	 */
 	async advanceStage(projectId: string): Promise<PipelineState> {
 		// Always read from DB for correctness (cache is just performance)
+		// Use withTransaction + SELECT FOR UPDATE to prevent concurrent advanceStage race conditions
 		const state = await loadState(projectId);
 		if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
 
 		if (state.status === "paused" || state.status === "completed" || state.status === "failed") {
+			return state;
+		}
+
+		// Acquire row-level lock to prevent concurrent advanceStage from double-advancing
+		const lockedRun = await queryOne(
+			`SELECT id FROM pipeline_runs WHERE project_id = $1 AND status = 'running' FOR UPDATE SKIP LOCKED`,
+			[projectId],
+		);
+		if (!lockedRun) {
+			log.info(`[pipeline-engine] advanceStage skipped — could not acquire lock (project=${projectId})`);
 			return state;
 		}
 
@@ -805,6 +831,23 @@ class PipelineEngine {
 	// TaskEngine entegrasyonu — görev tamamlama hook'u
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Debounced advanceStage — coalesces rapid-fire task completions into a single advance call.
+	 * Prevents DB deadlock when multiple tasks complete near-simultaneously.
+	 */
+	private debouncedAdvance(projectId: string): void {
+		const existing = this._advancePending.get(projectId);
+		if (existing) clearTimeout(existing);
+
+		const timer = setTimeout(() => {
+			this._advancePending.delete(projectId);
+			this.advanceStage(projectId).catch((err) => {
+				log.error(`[pipeline-engine] advanceStage hatası (proje=${projectId}):` + " " + String(err));
+			});
+		}, 200);
+		this._advancePending.set(projectId, timer);
+	}
+
 	registerTaskHook(): void {
 		if (this.taskHookRegistered) return;
 		this.taskHookRegistered = true;
@@ -813,11 +856,7 @@ class PipelineEngine {
 			getPipelineRun(projectId)
 				.then(async (run) => {
 					if (run && run.status === "running") {
-						try {
-							await this.advanceStage(projectId);
-						} catch (err) {
-							log.error(`[pipeline-engine] advanceStage hatası (proje=${projectId}):` + " " + String(err));
-						}
+						this.debouncedAdvance(projectId);
 						return;
 					}
 
@@ -829,10 +868,12 @@ class PipelineEngine {
 									`[pipeline-engine] Task tamamlandı ama pipeline başlatılmamış; otomatik başlatılıyor (proje=${projectId})`,
 								);
 								await this.startPipeline(projectId);
-								await this.advanceStage(projectId);
+								this.debouncedAdvance(projectId);
 							}
 						} catch (err) {
-							log.error(`[pipeline-engine] otomatik pipeline başlatma hatası (proje=${projectId}):` + " " + String(err));
+							log.error(
+								`[pipeline-engine] otomatik pipeline başlatma hatası (proje=${projectId}):` + " " + String(err),
+							);
 						}
 					}
 				})

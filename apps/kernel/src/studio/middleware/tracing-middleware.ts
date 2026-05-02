@@ -5,8 +5,8 @@
 // ---------------------------------------------------------------------------
 
 import type { MiddlewareHandler } from "hono";
-import { tracer } from "../telemetry.js";
 import { createLogger } from "../logger.js";
+import { tracer } from "../telemetry.js";
 const log = createLogger("tracing-middleware");
 
 /**

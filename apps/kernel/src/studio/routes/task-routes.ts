@@ -4,8 +4,9 @@
 
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { containerManager } from "../container-manager.js";
 import { agentRuntime } from "../agent-runtime.js";
+import { containerManager } from "../container-manager.js";
+import { withCorrelation } from "../correlation-context.js";
 import {
 	appendTaskLogs,
 	countProjectTasks,
@@ -19,9 +20,8 @@ import {
 } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { kernel } from "../kernel/index.js";
-import { withCorrelation } from "../correlation-context.js";
-import { ensureProjectTeamInitialized } from "./team-init-guard.js";
 import { createLogger } from "../logger.js";
+import { ensureProjectTeamInitialized } from "./team-init-guard.js";
 const log = createLogger("task-routes");
 
 export const taskRoutes = new Hono();

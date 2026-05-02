@@ -4,18 +4,14 @@
 // checks, and produces a structured resolution result.
 // ---------------------------------------------------------------------------
 
-import { getAdapterChain } from "./cli-adapter.js";
-import {
-	shouldSkipProvider,
-	sortAdapterChain,
-	markProviderUnavailable,
-} from "./fallback-decision.js";
-import { providerState } from "./provider-state.js";
-import { providerRuntimeCache } from "./provider-runtime-cache.js";
 import type { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
-import { createLogger } from "./logger.js";
+import { getAdapterChain } from "./cli-adapter.js";
 import type { CLIAdapter } from "./cli-adapter.js";
+import { markProviderUnavailable, shouldSkipProvider, sortAdapterChain } from "./fallback-decision.js";
+import { createLogger } from "./logger.js";
+import { providerRuntimeCache } from "./provider-runtime-cache.js";
+import { providerState } from "./provider-state.js";
 import type { AgentCliTool } from "./types.js";
 
 const log = createLogger("provider-resolver");

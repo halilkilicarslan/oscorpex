@@ -3,8 +3,8 @@
 // Connection pool visibility and health monitoring.
 // ---------------------------------------------------------------------------
 
-import { getPool } from "./pg.js";
 import { createLogger } from "./logger.js";
+import { getPool } from "./pg.js";
 const log = createLogger("db-pool-metrics");
 
 // ---------------------------------------------------------------------------

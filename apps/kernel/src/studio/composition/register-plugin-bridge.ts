@@ -4,9 +4,9 @@
 // ---------------------------------------------------------------------------
 
 import { eventBus } from "../event-bus.js";
+import { createLogger } from "../logger.js";
 import { notifyPlugins, pluginRegistry } from "../plugin-registry.js";
 import type { EventType } from "../types.js";
-import { createLogger } from "../logger.js";
 
 const log = createLogger("composition:plugin-bridge");
 

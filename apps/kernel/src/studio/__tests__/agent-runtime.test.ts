@@ -69,14 +69,20 @@ vi.mock("../event-bus.js", () => ({
 	},
 }));
 
+import { canAutoApprove, checkConstraints, classifyRisk } from "../agent-runtime/agent-constraints.js";
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
-import { loadBehavioralContext, formatBehavioralPrompt } from "../agent-runtime/agent-memory.js";
-import { selectStrategy, BUILTIN_STRATEGIES } from "../agent-runtime/agent-strategy.js";
-import { initSession, recordStep, completeSession, failSession } from "../agent-runtime/agent-session.js";
-import { loadProtocolContext, requestInfo, signalBlocker, handoffArtifact, acknowledgeMessages } from "../agent-runtime/agent-protocol.js";
-import { classifyRisk, checkConstraints, canAutoApprove } from "../agent-runtime/agent-constraints.js";
+import { formatBehavioralPrompt, loadBehavioralContext } from "../agent-runtime/agent-memory.js";
+import {
+	acknowledgeMessages,
+	handoffArtifact,
+	loadProtocolContext,
+	requestInfo,
+	signalBlocker,
+} from "../agent-runtime/agent-protocol.js";
+import { completeSession, failSession, initSession, recordStep } from "../agent-runtime/agent-session.js";
+import { BUILTIN_STRATEGIES, selectStrategy } from "../agent-runtime/agent-strategy.js";
 import { proposeTask } from "../agent-runtime/task-injection.js";
 import { getUnreadMessages } from "../db.js";
 
@@ -207,7 +213,9 @@ describe("Agent Session", () => {
 		const task = { id: "t1", title: "Test", complexity: "S" } as any;
 		await failSession("session-1", "proj-1", "agent-1", "backend_dev", task, "timeout");
 		expect(updateAgentSession).toHaveBeenCalledWith("session-1", expect.objectContaining({ status: "failed" }));
-		expect(recordEpisode).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failure", failureReason: "timeout" }));
+		expect(recordEpisode).toHaveBeenCalledWith(
+			expect.objectContaining({ outcome: "failure", failureReason: "timeout" }),
+		);
 	});
 
 	it("should record multiple steps with correct observation types", async () => {
@@ -220,10 +228,26 @@ describe("Agent Session", () => {
 		await recordStep("session-1", { step: 4, type: "decision_made", summary: "Test gate: passed (12 tests)" });
 
 		expect(addObservation).toHaveBeenCalledTimes(4);
-		expect(addObservation).toHaveBeenNthCalledWith(1, "session-1", expect.objectContaining({ step: 1, type: "action_executed" }));
-		expect(addObservation).toHaveBeenNthCalledWith(2, "session-1", expect.objectContaining({ step: 2, type: "result_inspected" }));
-		expect(addObservation).toHaveBeenNthCalledWith(3, "session-1", expect.objectContaining({ step: 3, type: "decision_made" }));
-		expect(addObservation).toHaveBeenNthCalledWith(4, "session-1", expect.objectContaining({ step: 4, type: "decision_made" }));
+		expect(addObservation).toHaveBeenNthCalledWith(
+			1,
+			"session-1",
+			expect.objectContaining({ step: 1, type: "action_executed" }),
+		);
+		expect(addObservation).toHaveBeenNthCalledWith(
+			2,
+			"session-1",
+			expect.objectContaining({ step: 2, type: "result_inspected" }),
+		);
+		expect(addObservation).toHaveBeenNthCalledWith(
+			3,
+			"session-1",
+			expect.objectContaining({ step: 3, type: "decision_made" }),
+		);
+		expect(addObservation).toHaveBeenNthCalledWith(
+			4,
+			"session-1",
+			expect.objectContaining({ step: 4, type: "decision_made" }),
+		);
 	});
 
 	it("should auto-assign timestamp to recorded steps", async () => {
@@ -336,24 +360,40 @@ describe("Agent Constraints", () => {
 	});
 
 	it("should classify medium-risk tasks (refactor/dependency)", () => {
-		expect(classifyRisk({ proposalType: "refactor", title: "Refactor utils module", severity: undefined })).toBe("high");
+		expect(classifyRisk({ proposalType: "refactor", title: "Refactor utils module", severity: undefined })).toBe(
+			"high",
+		);
 		expect(classifyRisk({ proposalType: "refactor", title: "Upgrade package deps", severity: undefined })).toBe("high");
 	});
 
 	it("should classify high/critical-risk tasks", () => {
-		expect(classifyRisk({ proposalType: "sub_task", title: "Add migration for schema change", severity: undefined })).toBe("critical");
-		expect(classifyRisk({ proposalType: "sub_task", title: "Deploy to production", severity: undefined })).toBe("critical");
-		expect(classifyRisk({ proposalType: "sub_task", title: "Delete users table", severity: "critical" })).toBe("critical");
+		expect(
+			classifyRisk({ proposalType: "sub_task", title: "Add migration for schema change", severity: undefined }),
+		).toBe("critical");
+		expect(classifyRisk({ proposalType: "sub_task", title: "Deploy to production", severity: undefined })).toBe(
+			"critical",
+		);
+		expect(classifyRisk({ proposalType: "sub_task", title: "Delete users table", severity: "critical" })).toBe(
+			"critical",
+		);
 	});
 
 	it("should auto-approve low-risk proposals", async () => {
-		const result = await canAutoApprove("proj-1", { proposalType: "test_task", title: "Add test for login", severity: undefined });
+		const result = await canAutoApprove("proj-1", {
+			proposalType: "test_task",
+			title: "Add test for login",
+			severity: undefined,
+		});
 		expect(result.autoApprove).toBe(true);
 		expect(result.riskLevel).toBe("low");
 	});
 
 	it("should require approval for medium+ risk", async () => {
-		const result = await canAutoApprove("proj-1", { proposalType: "sub_task", title: "Implement payment gateway", severity: undefined });
+		const result = await canAutoApprove("proj-1", {
+			proposalType: "sub_task",
+			title: "Implement payment gateway",
+			severity: undefined,
+		});
 		expect(result.autoApprove).toBe(false);
 		expect(result.riskLevel).toBe("medium");
 	});

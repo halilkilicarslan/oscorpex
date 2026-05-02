@@ -4,10 +4,10 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { tracer } from "../telemetry.js";
 import { executionEngine } from "../execution-engine.js";
-import { buildPerformanceBaseline } from "../performance-metrics.js";
 import { createLogger } from "../logger.js";
+import { buildPerformanceBaseline } from "../performance-metrics.js";
+import { tracer } from "../telemetry.js";
 const log = createLogger("telemetry-routes");
 
 const router = new Hono();
@@ -122,9 +122,7 @@ router.get("/providers/records", (c) => {
 	let records = executionEngine.telemetry.getRecentRecords(limit);
 
 	if (providerFilter) {
-		records = records.filter(
-			(r) => (r.finalProvider ?? r.primaryProvider) === providerFilter,
-		);
+		records = records.filter((r) => (r.finalProvider ?? r.primaryProvider) === providerFilter);
 	}
 	if (successFilter === "true") {
 		records = records.filter((r) => r.success === true);
@@ -163,9 +161,8 @@ router.get("/providers/queue-wait", (c) => {
 	}));
 
 	const queueWaits = withQueueWait.map((r) => r.queueWaitMs).filter((v) => v > 0);
-	const avgQueueWait = queueWaits.length > 0
-		? Math.round(queueWaits.reduce((a, b) => a + b, 0) / queueWaits.length)
-		: 0;
+	const avgQueueWait =
+		queueWaits.length > 0 ? Math.round(queueWaits.reduce((a, b) => a + b, 0) / queueWaits.length) : 0;
 	const maxQueueWait = queueWaits.length > 0 ? Math.max(...queueWaits) : 0;
 
 	return c.json({
@@ -189,7 +186,9 @@ router.get("/concurrency", (c) => {
 	// Access private controller via type assertion for debug endpoint
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const engine = executionEngine as any;
-	const controller = engine._concurrencyController as import("../adaptive-concurrency.js").AdaptiveConcurrencyController | undefined;
+	const controller = engine._concurrencyController as
+		| import("../adaptive-concurrency.js").AdaptiveConcurrencyController
+		| undefined;
 
 	if (!controller) {
 		return c.json({ error: "Adaptive concurrency controller not available" }, 503);
@@ -215,7 +214,9 @@ router.get("/cache", (c) => {
 	const stats = providerRuntimeCache.getStats();
 	const availabilityEntries = Array.from(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(providerRuntimeCache as any).availability.entries() as Iterable<[string, { providerId: string; available: boolean; expiresAt: number; source: string }]>,
+		(providerRuntimeCache as any).availability.entries() as Iterable<
+			[string, { providerId: string; available: boolean; expiresAt: number; source: string }]
+		>,
 	).map(([id, e]) => ({
 		providerId: id,
 		available: e.available,

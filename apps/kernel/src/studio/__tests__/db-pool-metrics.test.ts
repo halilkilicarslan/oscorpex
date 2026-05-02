@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
-import { getDbPoolSnapshot, checkPoolHealth } from "../db-pool-metrics.js";
+import { checkPoolHealth, getDbPoolSnapshot } from "../db-pool-metrics.js";
 
 describe("getDbPoolSnapshot", () => {
 	it("returns a snapshot with expected shape", () => {

@@ -2,11 +2,8 @@
 // Control Plane — Policy Surface Routes (thin host)
 // ---------------------------------------------------------------------------
 
+import { getGlobalPolicySummary, getProjectPolicySummary } from "@oscorpex/control-plane";
 import { Hono } from "hono";
-import {
-	getProjectPolicySummary,
-	getGlobalPolicySummary,
-} from "@oscorpex/control-plane";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-policy-routes");

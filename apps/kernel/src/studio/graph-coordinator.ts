@@ -7,19 +7,19 @@
 import { randomUUID } from "node:crypto";
 import {
 	createTask,
+	getGraphMutation,
 	getPipelineRun,
 	getTask,
-	updateTask,
+	listGraphMutations,
 	listProjectTasks,
 	recordGraphMutation,
-	getGraphMutation,
 	updateGraphMutation,
-	listGraphMutations,
+	updateTask,
 } from "./db.js";
-import { eventBus } from "./event-bus.js";
 import type { GraphMutationType } from "./db/graph-mutation-repo.js";
-import type { Task } from "./types.js";
+import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
+import type { Task } from "./types.js";
 
 const log = createLogger("graph-coordinator");
 
@@ -136,7 +136,10 @@ function registerSplitCompletionListener(parentTaskId: string, childIds: string[
 	unsubFailed = eventBus.on("task:failed", checkPropagation);
 }
 
-async function applyAddEdge(params: { fromTaskId: string; toTaskId: string }, projectId: string): Promise<{ fromTaskId: string; toTaskId: string }> {
+async function applyAddEdge(
+	params: { fromTaskId: string; toTaskId: string },
+	projectId: string,
+): Promise<{ fromTaskId: string; toTaskId: string }> {
 	await validateAddEdge(params.fromTaskId, params.toTaskId, projectId);
 
 	const toTask = await getTask(params.toTaskId);
@@ -149,7 +152,10 @@ async function applyAddEdge(params: { fromTaskId: string; toTaskId: string }, pr
 	return params;
 }
 
-async function applyRemoveEdge(params: { fromTaskId: string; toTaskId: string }): Promise<{ fromTaskId: string; toTaskId: string }> {
+async function applyRemoveEdge(params: { fromTaskId: string; toTaskId: string }): Promise<{
+	fromTaskId: string;
+	toTaskId: string;
+}> {
 	const toTask = await getTask(params.toTaskId);
 	if (!toTask) throw new Error(`Task ${params.toTaskId} not found`);
 
@@ -159,7 +165,10 @@ async function applyRemoveEdge(params: { fromTaskId: string; toTaskId: string })
 	return params;
 }
 
-async function applyDeferBranch(projectId: string, params: { phaseId: string; reason: string }): Promise<{ deferredIds: string[]; reason: string }> {
+async function applyDeferBranch(
+	projectId: string,
+	params: { phaseId: string; reason: string },
+): Promise<{ deferredIds: string[]; reason: string }> {
 	const tasks = await listProjectTasks(projectId);
 	const phaseTasks = tasks.filter((t) => t.phaseId === params.phaseId && t.status === "queued");
 	const deferredIds: string[] = [];
@@ -437,7 +446,11 @@ export async function mergeIntoPhase(
 		pipelineRunId: ctx.pipelineRunId,
 		causedByAgentId: ctx.causedByAgentId,
 		mutationType: "merge_into_phase",
-		payload: { sourcePhaseId: params.sourcePhaseId, targetPhaseId: params.targetPhaseId, createdTaskIds: detail.createdIds },
+		payload: {
+			sourcePhaseId: params.sourcePhaseId,
+			targetPhaseId: params.targetPhaseId,
+			createdTaskIds: detail.createdIds,
+		},
 		status: "applied",
 		appliedAt: new Date().toISOString(),
 	});
@@ -446,7 +459,11 @@ export async function mergeIntoPhase(
 		projectId: ctx.projectId,
 		type: "graph:mutation_applied",
 		agentId: ctx.causedByAgentId,
-		payload: { mutationType: "merge_into_phase", targetPhaseId: params.targetPhaseId, taskCount: detail.createdIds.length },
+		payload: {
+			mutationType: "merge_into_phase",
+			targetPhaseId: params.targetPhaseId,
+			taskCount: detail.createdIds.length,
+		},
 	});
 
 	return { success: true, mutationType: "merge_into_phase", mutationId: mutation.id, detail };
@@ -483,10 +500,7 @@ export async function proposeGraphMutation(params: {
 	return { mutationId: mutation.id };
 }
 
-export async function approveGraphMutationRequest(
-	mutationId: string,
-	approvedBy: string,
-): Promise<MutationResult> {
+export async function approveGraphMutationRequest(mutationId: string, approvedBy: string): Promise<MutationResult> {
 	const mutation = await getGraphMutation(mutationId);
 	if (!mutation) throw new Error(`Graph mutation ${mutationId} not found`);
 	if (mutation.status !== "pending") {
@@ -542,7 +556,9 @@ export async function approveGraphMutationRequest(
 	});
 
 	const { executionEngine } = await import("./execution-engine.js");
-	executionEngine.startProjectExecution(mutation.projectId).catch((err) => log.warn("[graph-coordinator] Non-blocking operation failed:", err?.message ?? err));
+	executionEngine
+		.startProjectExecution(mutation.projectId)
+		.catch((err) => log.warn("[graph-coordinator] Non-blocking operation failed:", err?.message ?? err));
 
 	return { success: true, mutationType: mutation.mutationType, mutationId: mutation.id, detail };
 }

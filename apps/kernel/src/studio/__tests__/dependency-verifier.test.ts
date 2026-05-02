@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { verifyDeclaredDependencies } from "../dependency-verifier.js";
 
@@ -47,10 +47,7 @@ export const TodoItem = () => <Button><Trash2 /></Button>;
 
 	it("fails when touched files import undeclared external packages", () => {
 		const repo = createTempRepo();
-		writeFileSync(
-			join(repo, "package.json"),
-			JSON.stringify({ dependencies: { react: "^19.0.0" } }),
-		);
+		writeFileSync(join(repo, "package.json"), JSON.stringify({ dependencies: { react: "^19.0.0" } }));
 		mkdirSync(join(repo, "src", "components"), { recursive: true });
 		writeFileSync(
 			join(repo, "src", "components", "todo-item.tsx"),

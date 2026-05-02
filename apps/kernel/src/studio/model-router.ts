@@ -5,14 +5,14 @@
 // ---------------------------------------------------------------------------
 
 import { getProjectSettings } from "./db.js";
-import type { AgentCliTool, Task } from "./types.js";
 import { createLogger } from "./logger.js";
 import {
+	type ProviderPolicyProfile,
+	getProfileBehavior,
 	normalizeProviderPolicyProfile,
 	selectPrimaryProvider,
-	getProfileBehavior,
-	type ProviderPolicyProfile,
 } from "./provider-policy-profiles.js";
+import type { AgentCliTool, Task } from "./types.js";
 const log = createLogger("model-router");
 
 // ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
 	"claude-opus-4-6": 200_000,
 	"gpt-4o": 128_000,
 	"gpt-4o-mini": 128_000,
-	"o3": 200_000,
+	o3: 200_000,
 	"cursor-small": 128_000,
 	"cursor-large": 200_000,
 };
@@ -112,7 +112,7 @@ const MODEL_COST_SCORES: Record<string, number> = {
 	"gemini-1.5-pro": 5,
 	"claude-sonnet-4-6": 6,
 	"cursor-large": 6,
-	"o3": 8,
+	o3: 8,
 	"claude-opus-4-6": 10,
 };
 
@@ -193,7 +193,7 @@ export async function resolveModel(
 		priorFailures?: number;
 		reviewRejections?: number;
 		riskLevel?: string;
-	cliTool?: AgentCliTool | string;
+		cliTool?: AgentCliTool | string;
 		profile?: ProviderPolicyProfile;
 	},
 ): Promise<ResolvedModel> {
@@ -246,8 +246,7 @@ export async function resolveModel(
 	const resolvedCliTool = primary.cliTool;
 
 	// Profile-aware cost selection
-	const allowDowngrade =
-		behavior.allowCostDowngrade && behavior.downgradeTiers.includes(tier);
+	const allowDowngrade = behavior.allowCostDowngrade && behavior.downgradeTiers.includes(tier);
 	const effectivePriorFailures = behavior.preserveQualityOnFailure ? priorFailures : 0;
 
 	if (resolvedCliTool === "codex") {

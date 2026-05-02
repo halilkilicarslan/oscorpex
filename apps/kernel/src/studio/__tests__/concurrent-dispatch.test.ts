@@ -4,8 +4,8 @@
 // DB-backed — skips if database unavailable.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, beforeAll } from "vitest";
-import { claimTask, releaseTaskClaim, createTask, getTask } from "../db.js";
+import { beforeAll, describe, expect, it } from "vitest";
+import { claimTask, createTask, getTask, releaseTaskClaim } from "../db.js";
 import { execute, query } from "../pg.js";
 
 let dbReady = false;
@@ -60,10 +60,7 @@ describe.skipIf(!dbReady)("Concurrent Dispatch — SKIP LOCKED", () => {
 		});
 
 		// Two workers race to claim the same task
-		const [claim1, claim2] = await Promise.all([
-			claimTask(task.id, "worker-1"),
-			claimTask(task.id, "worker-2"),
-		]);
+		const [claim1, claim2] = await Promise.all([claimTask(task.id, "worker-1"), claimTask(task.id, "worker-2")]);
 
 		// Exactly one should succeed, the other gets null
 		const claims = [claim1, claim2].filter(Boolean);
@@ -125,18 +122,27 @@ describe.skipIf(!dbReady)("Concurrent Dispatch — SKIP LOCKED", () => {
 
 	it("multiple tasks can be claimed independently by different workers", async () => {
 		const t1 = await createTask({
-			phaseId: PHASE_ID, title: "Task A", description: "a", assignedAgent: "backend_dev",
-			complexity: "S", dependsOn: [], branch: "main", projectId: PROJECT_ID,
+			phaseId: PHASE_ID,
+			title: "Task A",
+			description: "a",
+			assignedAgent: "backend_dev",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+			projectId: PROJECT_ID,
 		});
 		const t2 = await createTask({
-			phaseId: PHASE_ID, title: "Task B", description: "b", assignedAgent: "frontend_dev",
-			complexity: "S", dependsOn: [], branch: "main", projectId: PROJECT_ID,
+			phaseId: PHASE_ID,
+			title: "Task B",
+			description: "b",
+			assignedAgent: "frontend_dev",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+			projectId: PROJECT_ID,
 		});
 
-		const [c1, c2] = await Promise.all([
-			claimTask(t1.id, "worker-1"),
-			claimTask(t2.id, "worker-2"),
-		]);
+		const [c1, c2] = await Promise.all([claimTask(t1.id, "worker-1"), claimTask(t2.id, "worker-2")]);
 
 		expect(c1).not.toBeNull();
 		expect(c2).not.toBeNull();

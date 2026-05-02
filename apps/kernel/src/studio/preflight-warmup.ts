@@ -3,9 +3,9 @@
 // Startup health checks and cold-start telemetry tracking.
 // ---------------------------------------------------------------------------
 
-import { providerRuntimeCache } from "./provider-runtime-cache.js";
-import { getPreflightConfig } from "./performance-config.js";
 import { createLogger } from "./logger.js";
+import { getPreflightConfig } from "./performance-config.js";
+import { providerRuntimeCache } from "./provider-runtime-cache.js";
 const log = createLogger("preflight-warmup");
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './index.css';
 import Layout from './components/Layout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { PlannerChatProvider } from './contexts/PlannerChatContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -52,10 +53,11 @@ function LoadingSpinner() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <PlannerChatProvider>
-          <Suspense fallback={<LoadingSpinner />}>
-            <Routes>
+      <ErrorBoundary>
+        <AuthProvider>
+          <PlannerChatProvider>
+            <Suspense fallback={<LoadingSpinner />}>
+              <Routes>
               {/* Auth pages — no layout */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
@@ -163,10 +165,11 @@ createRoot(document.getElementById('root')!).render(
                   }
                 />
               </Route>
-            </Routes>
-          </Suspense>
-        </PlannerChatProvider>
-      </AuthProvider>
+              </Routes>
+            </Suspense>
+          </PlannerChatProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   </StrictMode>,
 );

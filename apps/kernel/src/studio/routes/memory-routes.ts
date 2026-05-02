@@ -5,8 +5,8 @@
 
 import { Hono } from "hono";
 import { deleteMemoryFact, getContextSnapshot, getMemoryFacts, getProject, upsertMemoryFact } from "../db.js";
-import { getProjectContext, updateWorkingMemory } from "../memory-manager.js";
 import { createLogger } from "../logger.js";
+import { getProjectContext, updateWorkingMemory } from "../memory-manager.js";
 const log = createLogger("memory-routes");
 
 export const memoryRoutes = new Hono();

@@ -5,57 +5,57 @@
 // No behavioral changes — all calls delegate to the same singletons.
 
 import type {
+	BudgetCheck,
+	ContextPacket,
+	ContextPacketOptions,
+	Task as CoreTask,
+	TaskOutput as CoreTaskOutput,
+	TaskStatus as CoreTaskStatus,
+	CostRecord,
+	CostReporter,
+	EventPublisher,
 	HookContext,
 	HookPhase,
-	HookRegistry,
 	HookRegistration,
+	HookRegistry,
 	HookResult,
-	EventPublisher,
-	RunStore,
-	TaskStore,
-	ProviderAdapter,
-	VerificationRunner,
-	PolicyEngine as PolicyEngineContract,
-	CostReporter,
 	MemoryProvider,
-	ReplayStore,
-	Scheduler,
-	TaskGraph as TaskGraphContract,
 	OscorpexKernel as OscorpexKernelContract,
+	PipelineState,
+	PipelineStatus,
+	PolicyDecision,
+	PolicyEngine as PolicyEngineContract,
+	PolicyEvaluationInput,
+	ProjectCostSummary,
+	ProjectStatus,
+	ProviderAdapter,
+	ProviderExecutionInput,
+	ProviderExecutionResult,
+	ReplaySnapshot,
+	ReplayStore,
 	Run,
 	RunMode,
 	RunStatus,
-	TaskOutput as CoreTaskOutput,
-	PipelineState,
-	PipelineStatus,
-	ProjectStatus,
-	ProviderExecutionInput,
-	ProviderExecutionResult,
+	RunStore,
+	Scheduler,
+	TaskGraph as TaskGraphContract,
+	TaskStore,
 	VerificationInput,
 	VerificationReport,
 	VerificationResult,
-	PolicyDecision,
-	PolicyEvaluationInput,
-	CostRecord,
-	ProjectCostSummary,
-	BudgetCheck,
-	ContextPacketOptions,
-	ContextPacket,
-	ReplaySnapshot,
-	Task as CoreTask,
-	TaskStatus as CoreTaskStatus,
+	VerificationRunner,
 } from "@oscorpex/core";
-import { hookRegistry, runHooks } from "./hook-registry.js";
 import { eventBus } from "../event-bus.js";
-import { taskEngine } from "../task-engine.js";
-import { pipelineEngine } from "../pipeline-engine.js";
 import { executionEngine } from "../execution-engine.js";
+import { pipelineEngine } from "../pipeline-engine.js";
 import { replayStore } from "../replay-store.js";
-import { verificationRunner } from "./verification-adapter.js";
-import { policyEngine } from "./policy-adapter.js";
+import { taskEngine } from "../task-engine.js";
 import { costReporter } from "./cost-adapter.js";
-import { providerRegistry } from "./provider-registry.js";
+import { hookRegistry, runHooks } from "./hook-registry.js";
 import { memoryProvider } from "./memory-adapter.js";
+import { policyEngine } from "./policy-adapter.js";
+import { providerRegistry } from "./provider-registry.js";
+import { verificationRunner } from "./verification-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Adapter wrappers — kernel singletons behind contract interfaces
@@ -156,7 +156,10 @@ class KernelTaskGraph implements TaskGraphContract {
 	}
 	async getExecutionOrder(projectId: string): Promise<string[]> {
 		const waves = await this.buildWaves(projectId);
-		return waves.flat().map((s: any) => s.agents?.[0]?.id).filter(Boolean);
+		return waves
+			.flat()
+			.map((s: any) => s.agents?.[0]?.id)
+			.filter(Boolean);
 	}
 }
 
@@ -204,7 +207,11 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 			createdAt: new Date().toISOString(),
 		};
 		const created = await this.runs.create(run);
-		eventBus.emit({ projectId: input.projectId, type: "run:created", payload: { runId: created.id, goal: input.goal, mode: input.mode } });
+		eventBus.emit({
+			projectId: input.projectId,
+			type: "run:created",
+			payload: { runId: created.id, goal: input.goal, mode: input.mode },
+		});
 		return created;
 	}
 
@@ -216,7 +223,8 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		const run = await this.runs.get(runId);
 		if (!run) throw new Error(`Run ${runId} not found`);
 		const { canTransitionRun } = await import("@oscorpex/core");
-		if (!canTransitionRun(run.status, "running")) throw new Error(`Cannot transition run ${runId} from ${run.status} to running`);
+		if (!canTransitionRun(run.status, "running"))
+			throw new Error(`Cannot transition run ${runId} from ${run.status} to running`);
 		const updated = await this.runs.update(runId, { status: "running", startedAt: new Date().toISOString() });
 		eventBus.emit({ projectId: run.projectId, type: "run:started", payload: { runId } });
 		return updated;
@@ -226,7 +234,8 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		const run = await this.runs.get(runId);
 		if (!run) throw new Error(`Run ${runId} not found`);
 		const { canTransitionRun } = await import("@oscorpex/core");
-		if (!canTransitionRun(run.status, "paused")) throw new Error(`Cannot transition run ${runId} from ${run.status} to paused`);
+		if (!canTransitionRun(run.status, "paused"))
+			throw new Error(`Cannot transition run ${runId} from ${run.status} to paused`);
 		const updated = await this.runs.update(runId, { status: "paused" });
 		eventBus.emit({ projectId: run.projectId, type: "run:paused", payload: { runId } });
 		return updated;
@@ -236,7 +245,8 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		const run = await this.runs.get(runId);
 		if (!run) throw new Error(`Run ${runId} not found`);
 		const { canTransitionRun } = await import("@oscorpex/core");
-		if (!canTransitionRun(run.status, "running")) throw new Error(`Cannot transition run ${runId} from ${run.status} to running`);
+		if (!canTransitionRun(run.status, "running"))
+			throw new Error(`Cannot transition run ${runId} from ${run.status} to running`);
 		const updated = await this.runs.update(runId, { status: "running" });
 		eventBus.emit({ projectId: run.projectId, type: "run:resumed", payload: { runId } });
 		return updated;
@@ -246,7 +256,8 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		const run = await this.runs.get(runId);
 		if (!run) throw new Error(`Run ${runId} not found`);
 		const { canTransitionRun } = await import("@oscorpex/core");
-		if (!canTransitionRun(run.status, "failed")) throw new Error(`Cannot transition run ${runId} from ${run.status} to failed`);
+		if (!canTransitionRun(run.status, "failed"))
+			throw new Error(`Cannot transition run ${runId} from ${run.status} to failed`);
 		const updated = await this.runs.update(runId, { status: "failed", completedAt: new Date().toISOString() });
 		eventBus.emit({ projectId: run.projectId, type: "run:failed", payload: { runId, reason } });
 		return updated;
@@ -256,7 +267,8 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		const run = await this.runs.get(runId);
 		if (!run) throw new Error(`Run ${runId} not found`);
 		const { canTransitionRun } = await import("@oscorpex/core");
-		if (!canTransitionRun(run.status, "completed")) throw new Error(`Cannot transition run ${runId} from ${run.status} to completed`);
+		if (!canTransitionRun(run.status, "completed"))
+			throw new Error(`Cannot transition run ${runId} from ${run.status} to completed`);
 		const updated = await this.runs.update(runId, { status: "completed", completedAt: new Date().toISOString() });
 		eventBus.emit({ projectId: run.projectId, type: "run:completed", payload: { runId } });
 		return updated;
@@ -328,8 +340,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			const retryableRunningState =
-				message.includes("duplicate key value violates unique constraint") ||
-				message.includes("already exists");
+				message.includes("duplicate key value violates unique constraint") || message.includes("already exists");
 			if (!retryableRunningState) {
 				throw err;
 			}

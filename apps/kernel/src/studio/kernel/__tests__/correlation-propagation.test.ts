@@ -4,12 +4,12 @@
 // and event bus carry-through.
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { correlationMiddleware } from "../../middleware/correlation-middleware.js";
-import { createLogger } from "../../logger.js";
+import { describe, expect, it } from "vitest";
 import { getCurrentCorrelationId, hasCorrelationContext, withCorrelation } from "../../correlation-context.js";
 import { eventBus } from "../../event-bus.js";
+import { createLogger } from "../../logger.js";
+import { correlationMiddleware } from "../../middleware/correlation-middleware.js";
 
 describe("Correlation ID Middleware", () => {
 	it("reads x-correlation-id from request header and sets it on response", async () => {

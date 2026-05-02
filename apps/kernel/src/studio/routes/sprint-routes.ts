@@ -5,6 +5,7 @@
 
 import { Hono } from "hono";
 import { getProject, getWorkItems } from "../db.js";
+import { createLogger } from "../logger.js";
 import {
 	calculateBurndown,
 	calculateSprintVelocity,
@@ -16,7 +17,6 @@ import {
 	getSprintsByProject,
 	startSprint,
 } from "../sprint-manager.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("sprint-routes");
 
 export const sprintRoutes = new Hono();

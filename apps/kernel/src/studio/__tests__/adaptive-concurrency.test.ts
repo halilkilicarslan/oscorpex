@@ -2,14 +2,14 @@
 // Tests — Adaptive Concurrency (TASK 8)
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	ABSOLUTE_MAX,
+	AdaptiveConcurrencyController,
 	AdaptiveSemaphore,
 	ConcurrencyTracker,
-	AdaptiveConcurrencyController,
 	DEFAULT_MAX,
 	MIN_MAX,
-	ABSOLUTE_MAX,
 } from "../adaptive-concurrency.js";
 
 describe("AdaptiveSemaphore", () => {

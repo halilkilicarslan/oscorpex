@@ -4,7 +4,13 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { countUnread, deleteNotification, listNotifications, markAllNotificationsAsRead, markNotificationAsRead } from "../db.js";
+import {
+	countUnread,
+	deleteNotification,
+	listNotifications,
+	markAllNotificationsAsRead,
+	markNotificationAsRead,
+} from "../db.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("notification-routes");
 

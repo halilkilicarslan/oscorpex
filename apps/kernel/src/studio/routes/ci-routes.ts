@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { createCITracking, getCITrackings } from "../db.js";
 import { ciTracker } from "../ci-tracker.js";
+import { createCITracking, getCITrackings } from "../db.js";
 import type { CIProvider } from "../db.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("ci-routes");

@@ -5,8 +5,8 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { type SharedStateProvider, sharedState } from "./shared-state.js";
 import { createLogger } from "./logger.js";
+import { type SharedStateProvider, sharedState } from "./shared-state.js";
 const log = createLogger("ws-cluster");
 
 // ---------------------------------------------------------------------------

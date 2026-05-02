@@ -3,9 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
 import type { AgentEpisode, AgentStrategyPattern, EpisodeOutcome } from "../types.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("episode-repo");
 
 // ---------------------------------------------------------------------------
@@ -89,11 +89,7 @@ export async function getRecentEpisodes(
 }
 
 /** Get failure episodes to build avoidance context */
-export async function getFailureEpisodes(
-	projectId: string,
-	agentId: string,
-	limit = 5,
-): Promise<AgentEpisode[]> {
+export async function getFailureEpisodes(projectId: string, agentId: string, limit = 5): Promise<AgentEpisode[]> {
 	const rows = await query<any>(
 		`SELECT * FROM agent_episodes
 		 WHERE project_id = $1 AND agent_id = $2 AND outcome = 'failure'

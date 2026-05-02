@@ -3,7 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it, vi } from "vitest";
-import { resolveTaskTimeoutMs, getTimeoutConfig, getTimeoutWarningMs, TIMEOUT_WARNING_THRESHOLD } from "../timeout-policy.js";
+import {
+	TIMEOUT_WARNING_THRESHOLD,
+	getTimeoutConfig,
+	getTimeoutWarningMs,
+	resolveTaskTimeoutMs,
+} from "../timeout-policy.js";
 
 vi.mock("../db.js", () => ({
 	getProjectSetting: vi.fn().mockResolvedValue(undefined),

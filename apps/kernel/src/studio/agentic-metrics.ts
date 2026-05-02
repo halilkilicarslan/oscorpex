@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { query, queryOne } from "./db.js";
-import { canonicalizeAgentRole } from "./roles.js";
 import { createLogger } from "./logger.js";
+import { canonicalizeAgentRole } from "./roles.js";
 const log = createLogger("agentic-metrics");
 
 export interface AgenticMetrics {
@@ -107,7 +107,9 @@ async function getVerificationFailureRate(projectId: string): Promise<number> {
 	return Math.round((Number(row?.failed ?? 0) / total) * 10000) / 100;
 }
 
-async function getStrategySuccessRates(projectId: string): Promise<Array<{ strategy: string; taskType: string; successRate: number; samples: number }>> {
+async function getStrategySuccessRates(
+	projectId: string,
+): Promise<Array<{ strategy: string; taskType: string; successRate: number; samples: number }>> {
 	const rows = await query(
 		`SELECT strategy, task_type,
 			COUNT(*) AS samples,
@@ -140,7 +142,9 @@ async function getAvgRetriesBeforeCompletion(projectId: string): Promise<number>
 	return Math.round(Number(row?.avg_retries ?? 0) * 100) / 100;
 }
 
-async function getReviewRejectionByRole(projectId: string): Promise<Array<{ agentRole: string; rejections: number; total: number; rate: number }>> {
+async function getReviewRejectionByRole(
+	projectId: string,
+): Promise<Array<{ agentRole: string; rejections: number; total: number; rate: number }>> {
 	const rows = await query(
 		`SELECT pa.role AS agent_role,
 			COUNT(*) FILTER (WHERE e.type = 'task:review_rejected') AS rejections,
@@ -160,7 +164,9 @@ async function getReviewRejectionByRole(projectId: string): Promise<Array<{ agen
 	}));
 }
 
-async function getInjectedTaskVolume(projectId: string): Promise<{ total: number; humanApproved: number; autoApproved: number; pending: number; rejected: number }> {
+async function getInjectedTaskVolume(
+	projectId: string,
+): Promise<{ total: number; humanApproved: number; autoApproved: number; pending: number; rejected: number }> {
 	const row = await queryOne(
 		`SELECT
 			COUNT(*) AS total,
@@ -200,7 +206,9 @@ async function getGraphMutationStats(projectId: string): Promise<{ total: number
 	return { total, byType };
 }
 
-async function getReplanTriggerFrequency(projectId: string): Promise<{ total: number; byTrigger: Record<string, number>; byStatus: Record<string, number> }> {
+async function getReplanTriggerFrequency(
+	projectId: string,
+): Promise<{ total: number; byTrigger: Record<string, number>; byStatus: Record<string, number> }> {
 	const rows = await query(
 		`SELECT trigger, status, COUNT(*) AS cnt
 		 FROM replan_events
@@ -223,7 +231,9 @@ async function getReplanTriggerFrequency(projectId: string): Promise<{ total: nu
 	return { total, byTrigger, byStatus };
 }
 
-async function getDegradedProviderDuration(projectId: string): Promise<Array<{ provider: string; totalMs: number; incidents: number }>> {
+async function getDegradedProviderDuration(
+	projectId: string,
+): Promise<Array<{ provider: string; totalMs: number; incidents: number }>> {
 	const rows = await query(
 		`SELECT payload::jsonb->>'provider' AS provider,
 			COUNT(*) AS incidents,
@@ -241,7 +251,9 @@ async function getDegradedProviderDuration(projectId: string): Promise<Array<{ p
 	}));
 }
 
-async function getFailureClassification(projectId: string): Promise<{ transientFailures: number; terminalFailures: number; retryExhausted: number }> {
+async function getFailureClassification(
+	projectId: string,
+): Promise<{ transientFailures: number; terminalFailures: number; retryExhausted: number }> {
 	const row = await queryOne(
 		`SELECT
 			COUNT(*) FILTER (WHERE type = 'task:transient_failure') AS transient,

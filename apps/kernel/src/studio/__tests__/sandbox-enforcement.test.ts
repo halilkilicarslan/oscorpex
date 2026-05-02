@@ -1,14 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-	checkToolAllowed,
-	checkPathAllowed,
-	checkOutputSize,
-	SandboxViolationError,
-	enforceToolCheck,
-	enforcePathChecks,
-	enforceOutputSizeCheck,
-	type SandboxPolicy,
 	type EnforcementMode,
+	type SandboxPolicy,
+	SandboxViolationError,
+	checkOutputSize,
+	checkPathAllowed,
+	checkToolAllowed,
+	enforceOutputSizeCheck,
+	enforcePathChecks,
+	enforceToolCheck,
 } from "../sandbox-manager.js";
 
 // ---------------------------------------------------------------------------
@@ -124,9 +124,7 @@ describe("enforceToolCheck", () => {
 describe("enforcePathChecks", () => {
 	it("throws SandboxViolationError in hard mode for path outside scope", async () => {
 		const policy = makePolicy({ enforcementMode: "hard", filesystemScope: ["/tmp/repo"] });
-		await expect(
-			enforcePathChecks(policy, ["/etc/passwd"]),
-		).rejects.toThrow(SandboxViolationError);
+		await expect(enforcePathChecks(policy, ["/etc/passwd"])).rejects.toThrow(SandboxViolationError);
 	});
 
 	it("returns violations in soft mode without throwing", async () => {

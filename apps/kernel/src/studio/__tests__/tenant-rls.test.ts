@@ -4,7 +4,7 @@
 // DB-backed — skips if database unavailable or RLS not enabled.
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, beforeAll } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { execute, query, queryOne, setTenantContext, withTransaction } from "../pg.js";
 
 let dbReady = false;

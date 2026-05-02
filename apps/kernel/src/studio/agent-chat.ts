@@ -6,8 +6,8 @@
 import { generateText } from "ai";
 import { getAIModelWithFallback } from "./ai-provider-factory.js";
 import { getProject, getProjectAgent, insertChatMessage } from "./db.js";
-import type { ProjectAgent } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { ProjectAgent } from "./types.js";
 const log = createLogger("agent-chat");
 
 // ---------------------------------------------------------------------------

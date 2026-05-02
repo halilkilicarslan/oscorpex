@@ -5,8 +5,11 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { eventBus } from "./event-bus.js";
 import {
+	type QualityGateEnvironment,
+	type QualityGateEvaluation,
+	type QualityGateOutcome,
+	type QualityGatePolicy,
 	findQualityGatePolicy,
 	getGoalScope,
 	getLatestQualityGateEvaluation,
@@ -14,11 +17,8 @@ import {
 	insertQualityGateEvaluation,
 	listLatestQualityGateEvaluations,
 	listRequiredQualityGates,
-	type QualityGateEnvironment,
-	type QualityGateEvaluation,
-	type QualityGateOutcome,
-	type QualityGatePolicy,
 } from "./db/quality-gate-repo.js";
+import { eventBus } from "./event-bus.js";
 
 export type { QualityGateEnvironment, QualityGateOutcome, QualityGateEvaluation, QualityGatePolicy };
 
@@ -190,15 +190,18 @@ export class QualityGateService {
 		});
 		const evaluation = await getLatestQualityGateEvaluation({ goalId, gateType, environment });
 		if (!gate) {
-			return { gate: null, evaluation: evaluation ?? null, state: "missing", blocking: true, reason: "required gate policy missing" };
+			return {
+				gate: null,
+				evaluation: evaluation ?? null,
+				state: "missing",
+				blocking: true,
+				reason: "required gate policy missing",
+			};
 		}
 		return this.resolveStateForGate(gate, evaluation);
 	}
 
-	async getBlockingGates(
-		goalId: string,
-		environment: QualityGateEnvironment = "production",
-	): Promise<BlockingGate[]> {
+	async getBlockingGates(goalId: string, environment: QualityGateEnvironment = "production"): Promise<BlockingGate[]> {
 		const summary = await this.calculateReleaseReadiness(goalId, environment, false);
 		return summary.blockingGates;
 	}
@@ -334,7 +337,8 @@ export class QualityGateService {
 		if (evaluation.outcome === "passed") {
 			return { gate, evaluation, state: "passed", blocking: false, reason: evaluation.reason };
 		}
-		const blocksRelease = gate.required && gate.blocking && (evaluation.outcome === "failed" || evaluation.outcome === "blocked");
+		const blocksRelease =
+			gate.required && gate.blocking && (evaluation.outcome === "failed" || evaluation.outcome === "blocked");
 		if (
 			blocksRelease &&
 			gate.overrideAllowed &&

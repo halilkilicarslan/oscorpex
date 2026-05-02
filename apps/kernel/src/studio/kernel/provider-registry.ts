@@ -3,13 +3,10 @@
 // Integrates telemetry for fallback timeline, latency, cancel audit, and failure
 // classification (EPIC 3 — Provider Observability).
 
-import type { ProviderExecutionInput, ProviderExecutionResult, ProviderAdapter } from "@oscorpex/core";
-import {
-	ProviderTelemetryCollector,
-	classifyProviderError,
-} from "@oscorpex/provider-sdk";
-import { createLogger } from "../logger.js";
+import type { ProviderAdapter, ProviderExecutionInput, ProviderExecutionResult } from "@oscorpex/core";
+import { ProviderTelemetryCollector, classifyProviderError } from "@oscorpex/provider-sdk";
 import { ClaudeCodeAdapter, CodexAdapter, CursorAdapter, GeminiAdapter, OllamaAdapter } from "../adapters/index.js";
+import { createLogger } from "../logger.js";
 
 const log = createLogger("provider-registry");
 
@@ -135,10 +132,7 @@ export class ProviderRegistry {
 		}
 
 		// All providers exhausted — record degraded mode
-		this.telemetry.recordDegraded(
-			telemetryRecord,
-			`All providers exhausted: ${chain.join(" → ")}`,
-		);
+		this.telemetry.recordDegraded(telemetryRecord, `All providers exhausted: ${chain.join(" → ")}`);
 		this.telemetry.finishExecution(telemetryRecord, null, lastError);
 		throw lastError ?? new Error("All providers exhausted — no provider available.");
 	}

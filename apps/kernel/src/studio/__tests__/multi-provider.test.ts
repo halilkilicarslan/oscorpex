@@ -2,8 +2,8 @@
 // Tests — Multi-Provider Execution + Fallback Chain (M4)
 // ---------------------------------------------------------------------------
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { healthCache } from "@oscorpex/provider-sdk";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock child_process for CodexAdapter tests

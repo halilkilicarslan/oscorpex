@@ -3,11 +3,11 @@
 // Branch management, commits, merges, file tree, diffs
 // ---------------------------------------------------------------------------
 
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { join, normalize, relative } from "node:path";
+import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join, normalize, relative, sep } from "node:path";
 import { type SimpleGit, simpleGit } from "simple-git";
-import type { FileTreeNode, GitLogEntry, GitStatus, MergeResult } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { FileTreeNode, GitLogEntry, GitStatus, MergeResult } from "./types.js";
 const log = createLogger("git-manager");
 
 class GitManager {
@@ -250,9 +250,18 @@ class GitManager {
 	async getFileContent(projectPath: string, filePath: string): Promise<string> {
 		const fullPath = join(projectPath, filePath);
 
-		// Security: prevent path traversal
-		if (!fullPath.startsWith(projectPath)) {
-			throw new Error("Invalid file path");
+		// Security: resolve symlinks to prevent path traversal via symlink chains
+		const realProjectPath = await realpath(projectPath);
+		let realFullPath: string;
+		try {
+			realFullPath = await realpath(fullPath);
+		} catch {
+			const dir = dirname(fullPath);
+			const realDir = await realpath(dir);
+			realFullPath = join(realDir, basename(fullPath));
+		}
+		if (!realFullPath.startsWith(realProjectPath + sep)) {
+			throw new Error("Invalid file path — traversal detected");
 		}
 
 		return readFile(fullPath, "utf-8");
@@ -260,12 +269,24 @@ class GitManager {
 
 	async writeFileContent(projectPath: string, filePath: string, content: string): Promise<void> {
 		const fullPath = join(projectPath, filePath);
-		if (!fullPath.startsWith(projectPath)) {
-			throw new Error("Invalid file path");
-		}
-		const { writeFile, mkdir } = await import("node:fs/promises");
-		const { dirname } = await import("node:path");
+
+		// Ensure parent directory exists before realpath check
 		await mkdir(dirname(fullPath), { recursive: true });
+
+		// Security: resolve symlinks to prevent path traversal via symlink chains
+		const realProjectPath = await realpath(projectPath);
+		let realFullPath: string;
+		try {
+			realFullPath = await realpath(fullPath);
+		} catch {
+			const dir = dirname(fullPath);
+			const realDir = await realpath(dir);
+			realFullPath = join(realDir, basename(fullPath));
+		}
+		if (!realFullPath.startsWith(realProjectPath + sep)) {
+			throw new Error("Invalid file path — traversal detected");
+		}
+
 		await writeFile(fullPath, content, "utf-8");
 	}
 

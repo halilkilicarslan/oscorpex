@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ApprovalService } from "../approval-service.js";
-import { QualityGateService } from "../quality-gate-service.js";
-import { ReleaseDecisionService, NonOverridableGateError } from "../release-decision-service.js";
 import { artifactReferenceService } from "../artifact-reference-service.js";
 import { execute, query, queryOne } from "../pg.js";
+import { QualityGateService } from "../quality-gate-service.js";
+import { NonOverridableGateError, ReleaseDecisionService } from "../release-decision-service.js";
 
 let dbReady = false;
 try {
@@ -28,7 +28,11 @@ async function createGoal() {
 	const projectId = `project-${suffix}`;
 	const goalId = `goal-${suffix}`;
 
-	await execute("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)", [tenantId, `Tenant ${suffix}`, `tenant-${suffix}`]);
+	await execute("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)", [
+		tenantId,
+		`Tenant ${suffix}`,
+		`tenant-${suffix}`,
+	]);
 	await execute(
 		"INSERT INTO projects (id, name, description, status, tech_stack, repo_path, tenant_id, created_at, updated_at) VALUES ($1, $2, '', 'planning', '[]', '', $3, now(), now())",
 		[projectId, `Project ${suffix}`, tenantId],
@@ -215,11 +219,19 @@ describe.skipIf(!dbReady)("H2-I Release Flow Integration", () => {
 
 		const withActor = auditRows.some((row) => {
 			const payload = JSON.parse(row.payload ?? "{}") as Record<string, unknown>;
-			return typeof payload.actorId === "string" || typeof payload.verifiedBy === "string" || typeof payload.evaluatedBy === "string";
+			return (
+				typeof payload.actorId === "string" ||
+				typeof payload.verifiedBy === "string" ||
+				typeof payload.evaluatedBy === "string"
+			);
 		});
 		const withReason = auditRows.some((row) => {
 			const payload = JSON.parse(row.payload ?? "{}") as Record<string, unknown>;
-			return typeof payload.reason === "string" || typeof payload.decisionReason === "string" || typeof payload.reasonSummary === "string";
+			return (
+				typeof payload.reason === "string" ||
+				typeof payload.decisionReason === "string" ||
+				typeof payload.reasonSummary === "string"
+			);
 		});
 		expect(withActor).toBe(true);
 		expect(withReason).toBe(true);

@@ -6,19 +6,19 @@
 
 import { randomUUID } from "node:crypto";
 import {
+	createTask,
+	execute,
 	getLatestPlan,
+	getProjectSetting,
 	listPhases,
 	listProjectTasks,
-	getProjectSetting,
-	createTask,
-	updateTask,
 	query,
 	queryOne,
-	execute,
+	updateTask,
 } from "./db.js";
 import { eventBus } from "./event-bus.js";
-import type { Task } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { Task } from "./types.js";
 const log = createLogger("adaptive-replanner");
 
 // ---------------------------------------------------------------------------
@@ -93,10 +93,10 @@ export async function recordReplanEvent(params: {
 }
 
 export async function listReplanEvents(projectId: string, limit = 20): Promise<ReplanResult[]> {
-	const rows = await query(
-		`SELECT * FROM replan_events WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2`,
-		[projectId, limit],
-	);
+	const rows = await query(`SELECT * FROM replan_events WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2`, [
+		projectId,
+		limit,
+	]);
 	return rows.map((r) => ({
 		id: r.id as string,
 		projectId: r.project_id as string,
@@ -481,8 +481,7 @@ export async function evaluateReplan(ctx: ReplanContext): Promise<ReplanResult |
 			log.info(`[adaptive-replanner] Queue normalized — auto-closed ${closed} triage task(s)`);
 		}
 	}
-	const canAddQueueTriage =
-		!futurePhase ? false : !(await hasOpenQueueTriageTask(ctx.projectId, futurePhase.id));
+	const canAddQueueTriage = !futurePhase ? false : !(await hasOpenQueueTriageTask(ctx.projectId, futurePhase.id));
 	const patches = generatePatches(snapshot, ctx.trigger, { canAddQueueTriage });
 
 	if (patches.length === 0) return null;

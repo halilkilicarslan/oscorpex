@@ -5,19 +5,19 @@
 // loading from DB and emitting events (kernel layer).
 // ---------------------------------------------------------------------------
 
-import { getProjectSettingsMap } from "./db.js";
-import { eventBus } from "./event-bus.js";
-import type { PolicyRule, Task } from "./types.js";
 import {
+	BUILTIN_RULE_LARGE_APPROVAL,
+	BUILTIN_RULE_MAX_COST,
+	BUILTIN_RULE_MULTI_REVIEWER,
 	evaluateBuiltinRule,
 	evaluateCustomCondition,
-	parsePolicies,
 	evaluatePolicyRules,
-	BUILTIN_RULE_MAX_COST,
-	BUILTIN_RULE_LARGE_APPROVAL,
-	BUILTIN_RULE_MULTI_REVIEWER,
+	parsePolicies,
 } from "@oscorpex/policy-kit";
+import { getProjectSettingsMap } from "./db.js";
+import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
+import type { PolicyRule, Task } from "./types.js";
 const log = createLogger("policy-engine");
 
 // Re-export for backward compatibility

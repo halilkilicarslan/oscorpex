@@ -8,14 +8,14 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { AuthVariables } from "../auth/auth-middleware.js";
+import { authMiddleware } from "../auth/auth-middleware.js";
 import { signJwt } from "../auth/jwt.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
-import { authMiddleware } from "../auth/auth-middleware.js";
 import { requirePermission } from "../auth/rbac.js";
 import { logTenantActivity } from "../auth/tenant-context.js";
 import { createApiKey, listApiKeys, revokeApiKey } from "../db/tenant-repo.js";
-import { execute, query, queryOne } from "../pg.js";
 import { createLogger } from "../logger.js";
+import { execute, query, queryOne } from "../pg.js";
 const log = createLogger("auth-routes");
 
 const router = new Hono<{ Variables: AuthVariables }>();

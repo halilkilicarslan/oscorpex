@@ -4,8 +4,8 @@
 
 import { getLatestPlan, getProject, listProjectAgents } from "./db.js";
 import { getContextSnapshot, getMemoryFacts, upsertContextSnapshot, upsertMemoryFact } from "./db.js";
-import type { MemoryFact, ProjectContextSnapshot } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { MemoryFact, ProjectContextSnapshot } from "./types.js";
 const log = createLogger("memory-manager");
 
 // ---------------------------------------------------------------------------

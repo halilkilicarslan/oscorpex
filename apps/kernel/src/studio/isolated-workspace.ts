@@ -7,19 +7,11 @@
 import { cp, lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, normalize, relative, resolve, sep } from "node:path";
-import type { SandboxPolicy } from "./sandbox-manager.js";
 import { createLogger } from "./logger.js";
+import type { SandboxPolicy } from "./sandbox-manager.js";
 const log = createLogger("isolated-workspace");
 
-const COPY_EXCLUDES = new Set([
-	"node_modules",
-	"dist",
-	"build",
-	".next",
-	".turbo",
-	".oscorpex",
-	"coverage",
-]);
+const COPY_EXCLUDES = new Set(["node_modules", "dist", "build", ".next", ".turbo", ".oscorpex", "coverage"]);
 
 export interface IsolatedWorkspace {
 	readonly isolated: boolean;

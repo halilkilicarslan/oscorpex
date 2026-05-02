@@ -3,10 +3,19 @@
 // Verifies restoreFromSnapshot can replay task and pipeline state.
 // ---------------------------------------------------------------------------
 
-import { beforeEach, describe, expect, it } from "vitest";
-import { createProject, createPlan, createPhase, createTask, createPipelineRun, execute, getTask, getPipelineRun } from "../../db.js";
-import { createCheckpointSnapshot, restoreFromSnapshot } from "../../replay-store.js";
 import { randomUUID } from "node:crypto";
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+	createPhase,
+	createPipelineRun,
+	createPlan,
+	createProject,
+	createTask,
+	execute,
+	getPipelineRun,
+	getTask,
+} from "../../db.js";
+import { createCheckpointSnapshot, restoreFromSnapshot } from "../../replay-store.js";
 
 async function cleanSnapshots() {
 	await execute("DELETE FROM replay_snapshots");
@@ -22,10 +31,23 @@ describe("restoreFromSnapshot", () => {
 	});
 
 	it("dryRun reports what would change without mutating", async () => {
-		const project = await createProject({ name: "RestoreTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "RestoreTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 		const plan = await createPlan(project.id);
 		const phase = await createPhase({ planId: plan.id, name: "P1", order: 1, dependsOn: [] });
-		const task = await createTask({ phaseId: phase.id, title: "T1", description: "", assignedAgent: "a1", complexity: "S", dependsOn: [], branch: "main" });
+		const task = await createTask({
+			phaseId: phase.id,
+			title: "T1",
+			description: "",
+			assignedAgent: "a1",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
 		await createPipelineRun({ projectId: project.id, status: "running", stagesJson: JSON.stringify([{ order: 0 }]) });
 		await setTaskStatus(task.id, "done");
 
@@ -46,10 +68,23 @@ describe("restoreFromSnapshot", () => {
 	});
 
 	it("non-dryRun actually restores task status", async () => {
-		const project = await createProject({ name: "RestoreReal", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "RestoreReal",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 		const plan = await createPlan(project.id);
 		const phase = await createPhase({ planId: plan.id, name: "P1", order: 1, dependsOn: [] });
-		const task = await createTask({ phaseId: phase.id, title: "T2", description: "", assignedAgent: "a1", complexity: "S", dependsOn: [], branch: "main" });
+		const task = await createTask({
+			phaseId: phase.id,
+			title: "T2",
+			description: "",
+			assignedAgent: "a1",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
 		await createPipelineRun({ projectId: project.id, status: "running", stagesJson: JSON.stringify([{ order: 0 }]) });
 		await setTaskStatus(task.id, "failed");
 
@@ -70,16 +105,37 @@ describe("restoreFromSnapshot", () => {
 	});
 
 	it("restores pipeline stages", async () => {
-		const project = await createProject({ name: "RestorePipe", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "RestorePipe",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 		const plan = await createPlan(project.id);
 		const phase = await createPhase({ planId: plan.id, name: "P1", order: 1, dependsOn: [] });
-		await createTask({ phaseId: phase.id, title: "T3", description: "", assignedAgent: "a1", complexity: "S", dependsOn: [], branch: "main" });
-		await createPipelineRun({ projectId: project.id, status: "running", stagesJson: JSON.stringify([{ order: 0, name: "Old" }]) });
+		await createTask({
+			phaseId: phase.id,
+			title: "T3",
+			description: "",
+			assignedAgent: "a1",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
+		await createPipelineRun({
+			projectId: project.id,
+			status: "running",
+			stagesJson: JSON.stringify([{ order: 0, name: "Old" }]),
+		});
 
 		const snapshot = await createCheckpointSnapshot(project.id, "checkpoint-3", randomUUID);
 
 		// Mutate pipeline
-		await createPipelineRun({ projectId: project.id, status: "failed", stagesJson: JSON.stringify([{ order: 0, name: "New" }]) });
+		await createPipelineRun({
+			projectId: project.id,
+			status: "failed",
+			stagesJson: JSON.stringify([{ order: 0, name: "New" }]),
+		});
 
 		await restoreFromSnapshot(snapshot, { dryRun: false });
 

@@ -8,6 +8,7 @@
 
 import pg from "pg";
 import { createLogger } from "./logger.js";
+import { getDbPoolConfig } from "./performance-config.js";
 const log = createLogger("pg");
 
 const { Pool } = pg;
@@ -20,11 +21,13 @@ let _pool: pg.Pool | null = null;
  */
 export function getPool(): pg.Pool {
 	if (!_pool) {
+		const poolCfg = getDbPoolConfig();
 		_pool = new Pool({
 			connectionString: process.env.DATABASE_URL || "postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex",
-			max: 20,
-			idleTimeoutMillis: 30_000,
-			connectionTimeoutMillis: 5_000,
+			min: poolCfg.minConnections,
+			max: poolCfg.maxConnections,
+			idleTimeoutMillis: poolCfg.idleTimeoutMs,
+			connectionTimeoutMillis: poolCfg.acquireTimeoutMs,
 		});
 
 		_pool.on("error", (err) => {

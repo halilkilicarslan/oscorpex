@@ -5,14 +5,14 @@
 // Extracted from execution-engine.ts for single-responsibility.
 // ---------------------------------------------------------------------------
 
-import { compactCrossAgentContext } from "./context-sandbox.js";
-import { buildRAGContext, formatRAGContext } from "./context-builder.js";
-import { buildResumeSnapshot, formatResumeSnapshot } from "./context-session.js";
-import { buildPolicyPromptSection, getDefaultPolicy } from "./command-policy.js";
-import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
-import type { Project, Task } from "./types.js";
+import { buildPolicyPromptSection, getDefaultPolicy } from "./command-policy.js";
+import { buildRAGContext, formatRAGContext } from "./context-builder.js";
+import { compactCrossAgentContext } from "./context-sandbox.js";
+import { buildResumeSnapshot, formatResumeSnapshot } from "./context-session.js";
 import { createLogger } from "./logger.js";
+import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
+import type { Project, Task } from "./types.js";
 const log = createLogger("prompt-builder");
 
 // ---------------------------------------------------------------------------

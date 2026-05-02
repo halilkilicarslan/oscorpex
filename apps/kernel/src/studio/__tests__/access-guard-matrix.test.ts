@@ -2,7 +2,7 @@
 // Access Guard — Route Permission Matrix Tests
 // ---------------------------------------------------------------------------
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { accessGuard } from "../auth/access-guard.js";
 
 function makeCtx(opts: {
@@ -20,7 +20,9 @@ function makeCtx(opts: {
 			method: opts.method ?? "GET",
 			header: (_name: string) => "",
 		},
-		set: (key: string, value: unknown) => { store[key] = value; },
+		set: (key: string, value: unknown) => {
+			store[key] = value;
+		},
 		get: (key: string) => {
 			if (key === "authType") return opts.authType ?? null;
 			if (key === "userId") return opts.userId ?? null;
@@ -41,7 +43,14 @@ describe("accessGuard — route permission matrix", () => {
 	});
 
 	it("denies unknown route (default deny)", async () => {
-		const c = makeCtx({ path: "/unknown/mystery", method: "GET", authType: "jwt", userId: "u1", userRole: "owner", tenantId: "t1" });
+		const c = makeCtx({
+			path: "/unknown/mystery",
+			method: "GET",
+			authType: "jwt",
+			userId: "u1",
+			userRole: "owner",
+			tenantId: "t1",
+		});
 		const next = vi.fn();
 		const result = await accessGuard(c, next);
 		expect(next).not.toHaveBeenCalled();

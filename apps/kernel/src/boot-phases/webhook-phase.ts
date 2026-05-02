@@ -3,8 +3,8 @@
 // Non-blocking warning on failure.
 // ---------------------------------------------------------------------------
 
-import { webhookSender } from "../studio/webhook-sender.js";
 import { createLogger } from "../studio/logger.js";
+import { webhookSender } from "../studio/webhook-sender.js";
 
 const log = createLogger("boot:webhook");
 

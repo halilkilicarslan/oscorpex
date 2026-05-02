@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
-import { getTaskCategory, sortTasksByFairness, groupTasksByLane } from "../task-scheduler.js";
+import { getTaskCategory, groupTasksByLane, sortTasksByFairness } from "../task-scheduler.js";
 import type { Task } from "../types.js";
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -46,10 +46,7 @@ describe("getTaskCategory", () => {
 
 describe("sortTasksByFairness", () => {
 	it("places short tasks before long tasks", () => {
-		const tasks = [
-			makeTask({ id: "t-long", complexity: "XL" }),
-			makeTask({ id: "t-short", complexity: "S" }),
-		];
+		const tasks = [makeTask({ id: "t-long", complexity: "XL" }), makeTask({ id: "t-short", complexity: "S" })];
 		const sorted = sortTasksByFairness(tasks);
 		expect(sorted[0]!.id).toBe("t-short");
 		expect(sorted[1]!.id).toBe("t-long");
@@ -112,7 +109,9 @@ describe("starvation prevention (TASK 4.3)", () => {
 	it("short tasks are never blocked behind 100 long tasks", () => {
 		const tasks: Task[] = [];
 		for (let i = 0; i < 100; i++) {
-			tasks.push(makeTask({ id: `long-${i}`, complexity: "XL", createdAt: new Date(Date.now() - 1000 - i).toISOString() }));
+			tasks.push(
+				makeTask({ id: `long-${i}`, complexity: "XL", createdAt: new Date(Date.now() - 1000 - i).toISOString() }),
+			);
 		}
 		tasks.push(makeTask({ id: "short-0", complexity: "S", createdAt: new Date().toISOString() }));
 

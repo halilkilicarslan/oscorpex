@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, getPool, query } from "../pg.js";
 import type {
 	AgentCapability,
@@ -13,7 +14,6 @@ import type {
 	DependencyType,
 } from "../types.js";
 import { rowToCapability, rowToDependency } from "./helpers.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("dependency-repo");
 
 // ---------------------------------------------------------------------------

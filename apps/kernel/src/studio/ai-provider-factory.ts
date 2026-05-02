@@ -7,11 +7,11 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI, openai } from "@ai-sdk/openai";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
+import { calculateCost } from "@oscorpex/provider-sdk";
 import { CliLanguageModel, defaultModelForCliTool } from "./cli-language-model.js";
 import { getDefaultProvider, getFallbackChain, getRawProviderApiKey } from "./db.js";
-import type { AIProvider } from "./types.js";
-import { calculateCost } from "@oscorpex/provider-sdk";
 import { createLogger } from "./logger.js";
+import type { AIProvider } from "./types.js";
 const log = createLogger("ai-provider-factory");
 
 export async function getAIModel(): Promise<LanguageModelV3> {

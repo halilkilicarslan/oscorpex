@@ -3,10 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne } from "../pg.js";
 import type { CostBreakdownEntry, ProjectCostSummary, TokenUsage } from "../types.js";
 import { getProjectSettingsMap } from "./settings-repo.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("analytics-repo");
 
 // ---------------------------------------------------------------------------
@@ -196,9 +196,10 @@ export async function getProjectCostBreakdown(projectId: string): Promise<CostBr
 	}));
 }
 
-export async function listTokenUsage(projectId: string): Promise<TokenUsage[]> {
-	const rows = await query<any>("SELECT * FROM token_usage WHERE project_id = $1 ORDER BY created_at DESC", [
+export async function listTokenUsage(projectId: string, limit = 1000): Promise<TokenUsage[]> {
+	const rows = await query<any>("SELECT * FROM token_usage WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2", [
 		projectId,
+		limit,
 	]);
 	return rows.map((r: any) => ({
 		id: r.id,

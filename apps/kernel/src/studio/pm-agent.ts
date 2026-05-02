@@ -20,16 +20,16 @@ import {
 } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { gitManager } from "./git-manager.js";
+import { ensureGoalForTask } from "./goal-engine.js";
 import {
 	appendPhaseToPlan as incAppendPhase,
 	appendTaskToPhase as incAppendTask,
 	replanUnfinishedTasks as incReplan,
 } from "./incremental-planner.js";
-import { execute, queryOne } from "./pg.js";
-import type { TaskComplexity } from "./types.js";
-import { canonicalizeAgentRole, roleMatches } from "./roles.js";
-import { ensureGoalForTask } from "./goal-engine.js";
 import { createLogger } from "./logger.js";
+import { execute, queryOne } from "./pg.js";
+import { canonicalizeAgentRole, roleMatches } from "./roles.js";
+import type { TaskComplexity } from "./types.js";
 const log = createLogger("pm-agent");
 
 // ---------------------------------------------------------------------------
@@ -376,7 +376,10 @@ const phaseSchema = z.object({
 				.int()
 				.optional()
 				.describe("Estimated lines of code to change (S: 1-20, M: 20-80, L: 80-200)"),
-			constraints: z.array(z.string()).default([]).describe("Optional execution constraints for goal-driven validation"),
+			constraints: z
+				.array(z.string())
+				.default([])
+				.describe("Optional execution constraints for goal-driven validation"),
 			successCriteria: z
 				.array(z.string())
 				.default([])

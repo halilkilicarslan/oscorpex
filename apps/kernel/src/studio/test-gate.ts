@@ -8,9 +8,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { getProjectSetting, saveTestResult } from "./db.js";
-import type { Task, TaskOutput } from "./types.js";
-import { canonicalizeAgentRole, getBehaviorRoleKey } from "./roles.js";
 import { createLogger } from "./logger.js";
+import { canonicalizeAgentRole, getBehaviorRoleKey } from "./roles.js";
+import type { Task, TaskOutput } from "./types.js";
 const log = createLogger("test-gate");
 
 // ---------------------------------------------------------------------------
@@ -33,14 +33,7 @@ export interface TestGateResult {
 // Policy resolution
 // ---------------------------------------------------------------------------
 
-const CODE_AGENT_ROLES = new Set([
-	"frontend-dev",
-	"backend-dev",
-	"fullstack-dev",
-	"tech-lead",
-	"devops",
-	"coder",
-]);
+const CODE_AGENT_ROLES = new Set(["frontend-dev", "backend-dev", "fullstack-dev", "tech-lead", "devops", "coder"]);
 
 function isBootstrapTask(task: Task): boolean {
 	const text = `${task.title} ${task.description}`.toLowerCase();
@@ -66,11 +59,7 @@ function isBootstrapTask(task: Task): boolean {
  * - Review tasks → skip
  * - Non-code tasks (integration-test, run-app) → skip
  */
-export async function resolveTestPolicy(
-	projectId: string,
-	task: Task,
-	agentRole?: string,
-): Promise<TestPolicy> {
+export async function resolveTestPolicy(projectId: string, task: Task, agentRole?: string): Promise<TestPolicy> {
 	if (task.testExpectation === "none") return "skip";
 	if (task.testExpectation === "optional") return "optional";
 	if (task.testExpectation === "required") return "required";
@@ -158,12 +147,7 @@ function parseTestCounts(output: string): { passed: number; failed: number; tota
 
 function isTestAuthoringTask(task: Task): boolean {
 	const text = `${task.title} ${task.description}`.toLowerCase();
-	return (
-		text.includes("test") ||
-		text.includes("spec") ||
-		text.includes("vitest") ||
-		text.includes("jest")
-	);
+	return text.includes("test") || text.includes("spec") || text.includes("vitest") || text.includes("jest");
 }
 
 function isNoTestsDiscoveredOutput(output: string): boolean {
@@ -198,9 +182,7 @@ function firstMeaningfulOutputLine(output: string): string | undefined {
 		.map((line) => line.trim())
 		.filter((line) => line.length > 0);
 
-	return lines.find((line) =>
-		!/^(>|\$|npm|pnpm|yarn|vitest|jest|\u001b|\s*$)/i.test(line),
-	);
+	return lines.find((line) => !/^(>|\$|npm|pnpm|yarn|vitest|jest|\u001b|\s*$)/i.test(line));
 }
 
 // ---------------------------------------------------------------------------
@@ -260,10 +242,7 @@ export async function runTestGate(
 
 	const counts = parseTestCounts(rawOutput);
 	const noTestsDiscovered = counts.total === 0 && isNoTestsDiscoveredOutput(rawOutput);
-	const isRequiredTestAuthoringNoTests =
-		policy === "required" &&
-		counts.total === 0 &&
-		isTestAuthoringTask(task);
+	const isRequiredTestAuthoringNoTests = policy === "required" && counts.total === 0 && isTestAuthoringTask(task);
 
 	if (policy === "required" && noTestsDiscovered && isTestAuthoringTask(task)) {
 		return {

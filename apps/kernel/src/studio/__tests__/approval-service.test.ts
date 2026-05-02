@@ -47,12 +47,14 @@ async function createGoal(options: { tenant?: boolean } = {}) {
 	return { tenantId, projectId, goalId, suffix };
 }
 
-async function createRequest(options: {
-	tenant?: boolean;
-	requiredQuorum?: number;
-	expiresAt?: string;
-	approvalType?: string;
-} = {}) {
+async function createRequest(
+	options: {
+		tenant?: boolean;
+		requiredQuorum?: number;
+		expiresAt?: string;
+		approvalType?: string;
+	} = {},
+) {
 	const goal = await createGoal({ tenant: options.tenant });
 	const request = await service.createApprovalRequest({
 		goalId: goal.goalId,

@@ -4,34 +4,34 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { eventBus } from "./event-bus.js";
-import { approvalService, type ApprovalValidityOutput } from "./approval-service.js";
+import { type ApprovalValidityOutput, approvalService } from "./approval-service.js";
 import {
-	qualityGateService,
-	type ReleaseReadinessSummary,
-	TenantRequiredForProductionError as TenantRequiredForProductionGateError,
-} from "./quality-gate-service.js";
-import {
-	getGoalScope,
-	findQualityGatePolicy,
 	type GoalScope,
 	type QualityGateEnvironment,
 	type QualityGateEvaluation,
+	findQualityGatePolicy,
+	getGoalScope,
 	getQualityGateEvaluationById,
 } from "./db/quality-gate-repo.js";
 import {
+	type ReleaseCandidate,
+	type ReleaseDecisionRow,
+	type ReleaseRollbackTrigger,
 	createReleaseCandidate,
 	getLatestReleaseCandidateForGoal,
 	getLatestReleaseDecisionForCandidate,
 	getReleaseCandidateById,
-	insertReleaseDecision,
 	insertOverrideActionActive,
+	insertReleaseDecision,
 	insertRollbackTrigger,
 	listActiveRollbackTriggersForCandidate,
-	type ReleaseCandidate,
-	type ReleaseDecisionRow,
-	type ReleaseRollbackTrigger,
 } from "./db/release-decision-repo.js";
+import { eventBus } from "./event-bus.js";
+import {
+	type ReleaseReadinessSummary,
+	TenantRequiredForProductionError as TenantRequiredForProductionGateError,
+	qualityGateService,
+} from "./quality-gate-service.js";
 
 export interface ReleaseDecisionInput {
 	goalId: string;
@@ -301,9 +301,7 @@ export class ReleaseDecisionService {
 			}
 		}
 
-		const requiresOverride = (gates?.blockingGates ?? []).some(
-			(g) => g.gate?.overrideAllowed && !g.overridden,
-		);
+		const requiresOverride = (gates?.blockingGates ?? []).some((g) => g.gate?.overrideAllowed && !g.overridden);
 
 		const gatesAreBlocking = this.isGateSummaryBlocking(gates);
 
@@ -323,15 +321,11 @@ export class ReleaseDecisionService {
 			decision,
 			allowed,
 			blockedReasons: blockingReasons as unknown as Record<string, unknown>[],
-			requiredApprovals: approvals
-				? approvals.pending.map((state) => state.request.approvalClass)
-				: [],
+			requiredApprovals: approvals ? approvals.pending.map((state) => state.request.approvalClass) : [],
 			requiredArtifacts: [],
 			gateEvaluationIds: this.collectGateEvaluationIds(gates),
 			approvalRequestIds: approvals ? approvals.states.map((state) => state.request.id) : [],
-			approvalDecisionIds: approvals
-				? approvals.states.flatMap((state) => state.decisions.map((d) => d.id))
-				: [],
+			approvalDecisionIds: approvals ? approvals.states.flatMap((state) => state.decisions.map((d) => d.id)) : [],
 			overrideActionIds: [],
 			rollbackTriggerIds: rollbackTriggers.map((trigger) => trigger.id),
 			rollbackAction: rollbackRequired ? "automatic_required" : "none",
@@ -472,7 +466,8 @@ export class ReleaseDecisionService {
 		});
 		if (!policy) throw new Error(`quality gate policy not found for ${gateType} in ${environment}`);
 		if (!policy.overrideAllowed) throw new NonOverridableGateError(gateType);
-		if (!policy.overrideRoles?.length) throw new InvalidOverrideInputError("overrideRoles not configured for gate policy");
+		if (!policy.overrideRoles?.length)
+			throw new InvalidOverrideInputError("overrideRoles not configured for gate policy");
 		if (!input.actorRoles.some((role) => policy.overrideRoles.includes(role))) {
 			throw new InvalidOverrideInputError("actor lacks required override role");
 		}
@@ -643,7 +638,9 @@ export class ReleaseDecisionService {
 		if (hardFailGateTypes.has(gateType)) throw new NonOverridableGateError(gateType);
 
 		if (gateType === "security_scan") {
-			const severity = String((evaluation.details as any)?.severity ?? (evaluation.details as any)?.findingSeverity ?? "");
+			const severity = String(
+				(evaluation.details as any)?.severity ?? (evaluation.details as any)?.findingSeverity ?? "",
+			);
 			const normalized = severity.toLowerCase();
 			const isHardOrUnknown = normalized === "high" || normalized === "critical" || normalized === "";
 			if (evaluation.outcome === "failed" || evaluation.outcome === "blocked") {
@@ -665,4 +662,3 @@ export class ReleaseDecisionService {
 }
 
 export const releaseDecisionService = new ReleaseDecisionService();
-

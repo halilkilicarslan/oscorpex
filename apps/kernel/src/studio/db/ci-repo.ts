@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { execute, query, queryOne } from "../pg.js";
 import { createLogger } from "../logger.js";
+import { execute, query, queryOne } from "../pg.js";
 const log = createLogger("ci-repo");
 
 // ---------------------------------------------------------------------------
@@ -137,10 +137,7 @@ export async function getCITrackings(projectId: string): Promise<CITracking[]> {
 // ---------------------------------------------------------------------------
 
 export async function getCITracking(id: string): Promise<CITracking | null> {
-	const row = await queryOne<Record<string, unknown>>(
-		`SELECT * FROM ci_trackings WHERE id = $1`,
-		[id],
-	);
+	const row = await queryOne<Record<string, unknown>>(`SELECT * FROM ci_trackings WHERE id = $1`, [id]);
 	return row ? rowToCITracking(row) : null;
 }
 

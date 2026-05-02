@@ -74,12 +74,16 @@ describe("FINAL INTEGRATION: All 8 closure tasks acceptance", () => {
 
 	it("Task 7: VoltAgent boundary docs removed", async () => {
 		const fs = await import("node:fs");
-		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/docs/voltagent-boundary.md")).toBe(false);
+		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/docs/voltagent-boundary.md")).toBe(
+			false,
+		);
 	});
 
 	it("Task 8: Smoke checklist script exists", async () => {
 		const fs = await import("node:fs");
-		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/scripts/smoke-checklist.sh")).toBe(true);
+		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/scripts/smoke-checklist.sh")).toBe(
+			true,
+		);
 	});
 });
 
@@ -137,6 +141,8 @@ describe("EPIC 5 — VoltAgent Removed (IT-16..IT-17)", () => {
 
 	it("IT-17: VoltAgent boundary docs removed", async () => {
 		const fs = await import("node:fs");
-		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/docs/voltagent-boundary.md")).toBe(false);
+		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/docs/voltagent-boundary.md")).toBe(
+			false,
+		);
 	});
 });

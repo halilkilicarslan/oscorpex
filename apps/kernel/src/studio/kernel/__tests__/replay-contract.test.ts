@@ -3,13 +3,13 @@
 // Verifies DbReplayStore roundtrips, column isolation, and fallback behavior.
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, beforeAll } from "vitest";
+import type { ReplaySnapshot } from "@oscorpex/core";
+import { beforeAll, describe, expect, it } from "vitest";
 import { execute, queryOne } from "../../pg.js";
 import { replayStore } from "../../replay-store.js";
-import type { ReplaySnapshot } from "@oscorpex/core";
 import { buildReplaySnapshot } from "./replay-fixtures.js";
 
-	describe("DbReplayStore contract", () => {
+describe("DbReplayStore contract", () => {
 	beforeAll(async () => {
 		await execute("DELETE FROM replay_snapshots WHERE run_id = 'contract-run'");
 		// Ensure columns are nullable for fallback test
@@ -29,7 +29,17 @@ import { buildReplaySnapshot } from "./replay-fixtures.js";
 			tasks: [],
 			artifacts: [],
 			policyDecisions: [
-				{ runId: "contract-run", agentId: "a1", agentName: "Alice", action: "allow", allowed: true, reasons: [], violations: [], policyVersion: "1.0", createdAt: new Date().toISOString() },
+				{
+					runId: "contract-run",
+					agentId: "a1",
+					agentName: "Alice",
+					action: "allow",
+					allowed: true,
+					reasons: [],
+					violations: [],
+					policyVersion: "1.0",
+					createdAt: new Date().toISOString(),
+				},
 			],
 			verificationReports: [
 				{ runId: "contract-run", taskId: "t1", passed: true, checks: [], createdAt: new Date().toISOString() },
@@ -65,7 +75,19 @@ import { buildReplaySnapshot } from "./replay-fixtures.js";
 			stages: [],
 			tasks: [],
 			artifacts: [],
-			policyDecisions: [{ runId: "contract-run", agentId: "a2", agentName: "Bob", action: "warn", allowed: false, reasons: ["risky"], violations: ["risky"], policyVersion: "1.0", createdAt: new Date().toISOString() }],
+			policyDecisions: [
+				{
+					runId: "contract-run",
+					agentId: "a2",
+					agentName: "Bob",
+					action: "warn",
+					allowed: false,
+					reasons: ["risky"],
+					violations: ["risky"],
+					policyVersion: "1.0",
+					createdAt: new Date().toISOString(),
+				},
+			],
 			verificationReports: [],
 		};
 

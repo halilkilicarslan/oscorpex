@@ -2345,3 +2345,12 @@ CREATE TABLE IF NOT EXISTS operator_flags (
   reason        TEXT NOT NULL DEFAULT '',
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---------------------------------------------------------------------------
+-- Performance indexes (Phase 2 — 2026-05-02)
+-- ---------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_tasks_phase_status ON tasks(phase_id, status);
+CREATE INDEX IF NOT EXISTS idx_tasks_project_status ON tasks(project_id, status);
+CREATE INDEX IF NOT EXISTS idx_token_usage_project_created ON token_usage(project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_project_type_ts ON events(project_id, type, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_project_status ON agent_sessions(project_id, status);

@@ -2,20 +2,20 @@
 // Tests — Performance Configuration (TASK 15)
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-	getFeatureFlags,
+	type PerformanceFeatureFlags,
 	getAdaptiveConcurrencyConfig,
+	getCooldownConfig,
+	getDbPoolConfig,
+	getFallbackConfig,
+	getFeatureFlags,
+	getHealthCacheConfig,
+	getPerformanceConfigSnapshot,
+	getPreflightConfig,
 	getRetryPolicyConfig,
 	getTimeoutPolicyConfig,
-	getCooldownConfig,
-	getFallbackConfig,
-	getHealthCacheConfig,
-	getPreflightConfig,
-	getDbPoolConfig,
-	getPerformanceConfigSnapshot,
 	logPerformanceConfig,
-	type PerformanceFeatureFlags,
 } from "../performance-config.js";
 
 // Helper to safely mutate env vars during tests

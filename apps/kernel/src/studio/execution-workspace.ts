@@ -4,9 +4,9 @@
 // resolveWorkspace() picks the right strategy based on sandbox policy.
 // ---------------------------------------------------------------------------
 
-import type { SandboxPolicy } from "./sandbox-manager.js";
-import { prepareIsolatedWorkspace, type IsolatedWorkspace } from "./isolated-workspace.js";
+import { type IsolatedWorkspace, prepareIsolatedWorkspace } from "./isolated-workspace.js";
 import { createLogger } from "./logger.js";
+import type { SandboxPolicy } from "./sandbox-manager.js";
 const log = createLogger("execution-workspace");
 
 // ---------------------------------------------------------------------------

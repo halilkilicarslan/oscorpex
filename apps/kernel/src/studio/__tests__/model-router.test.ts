@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
-import { resolveModel, getDefaultRoutingConfig } from "../model-router.js";
+import { getDefaultRoutingConfig, resolveModel } from "../model-router.js";
 
 function makeTask(overrides: Record<string, unknown> = {}): import("../types.js").Task {
 	return {

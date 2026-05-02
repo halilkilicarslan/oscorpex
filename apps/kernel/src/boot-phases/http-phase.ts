@@ -3,8 +3,8 @@
 // Builds the Hono app, mounts routes, and starts the HTTP server.
 // ---------------------------------------------------------------------------
 
-import { Hono } from "hono";
 import { serve } from "@hono/node-server";
+import { Hono } from "hono";
 import { observabilityRoutes } from "../observability-routes.js";
 import { authRoutes, studioRoutes } from "../studio/index.js";
 import { createLogger } from "../studio/logger.js";

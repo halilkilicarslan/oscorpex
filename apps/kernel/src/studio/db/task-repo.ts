@@ -3,10 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../logger.js";
 import { execute, query, queryOne, withTransaction } from "../pg.js";
 import type { Task, TaskOutput } from "../types.js";
 import { rowToTask } from "./helpers.js";
-import { createLogger } from "../logger.js";
 const log = createLogger("task-repo");
 const CLAIM_STALE_INTERVAL_SECONDS = 120;
 
@@ -95,6 +95,18 @@ export async function createTask(
 export async function getTask(id: string): Promise<Task | undefined> {
 	const row = await queryOne<any>("SELECT * FROM tasks WHERE id = $1", [id]);
 	return row ? rowToTask(row) : undefined;
+}
+
+/** Batch-fetch tasks by IDs — returns a Map for O(1) lookup */
+export async function getTasksByIds(ids: string[]): Promise<Map<string, Task>> {
+	if (ids.length === 0) return new Map();
+	const rows = await query<Record<string, unknown>>(`SELECT * FROM tasks WHERE id = ANY($1)`, [ids]);
+	const map = new Map<string, Task>();
+	for (const row of rows) {
+		const task = rowToTask(row);
+		map.set(task.id, task);
+	}
+	return map;
 }
 
 export async function listTasks(phaseId: string): Promise<Task[]> {
@@ -346,11 +358,7 @@ export async function reclaimStaleQueuedClaimsForProject(
  * Claim multiple queued tasks at once for batch dispatch.
  * Uses SKIP LOCKED to avoid contention with concurrent workers.
  */
-export async function claimReadyTasks(
-	phaseId: string,
-	claimedBy: string,
-	limit: number,
-): Promise<Task[]> {
+export async function claimReadyTasks(phaseId: string, claimedBy: string, limit: number): Promise<Task[]> {
 	return withTransaction(async (client) => {
 		const lockResult = await client.query(
 			`SELECT id FROM tasks
@@ -440,19 +448,19 @@ export async function moveTaskToPhase(taskId: string, newPhaseId: string): Promi
 
 /**
  * Append log lines to a task's output.logs without replacing other output fields.
- * Safe to call from streaming contexts — reads current state then writes atomically.
+ * Atomic JSONB append — no read-modify-write, no race condition under concurrent callers.
  */
 export async function appendTaskLogs(taskId: string, logs: string[]): Promise<void> {
 	if (logs.length === 0) return;
-	const task = await getTask(taskId);
-	if (!task) return;
-
-	const currentOutput: TaskOutput = task.output ?? {
-		filesCreated: [],
-		filesModified: [],
-		logs: [],
-	};
-	currentOutput.logs.push(...logs);
-
-	await execute("UPDATE tasks SET output = $1 WHERE id = $2", [JSON.stringify(currentOutput), taskId]);
+	// jsonb_set atomically splices the new log entries into the existing array.
+	// COALESCE ensures a well-formed default when output is NULL.
+	// The || operator concatenates jsonb arrays server-side — no JS read required.
+	await execute(
+		`UPDATE tasks SET output = jsonb_set(
+			COALESCE(output::jsonb, '{"filesCreated":[],"filesModified":[],"logs":[]}'::jsonb),
+			'{logs}',
+			COALESCE(output::jsonb -> 'logs', '[]'::jsonb) || $1::jsonb
+		) WHERE id = $2`,
+		[JSON.stringify(logs), taskId],
+	);
 }

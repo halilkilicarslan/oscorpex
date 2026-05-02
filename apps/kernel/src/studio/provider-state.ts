@@ -3,13 +3,13 @@
 // Tracks rate-limit and failure state per CLI adapter (claude-code, codex, cursor).
 // ---------------------------------------------------------------------------
 
-import type { AgentCliTool } from "./types.js";
-import { eventBus } from "./event-bus.js";
-import { query, execute as pgExec } from "./pg.js";
-import { providerRuntimeCache } from "./provider-runtime-cache.js";
 import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
-import { getCooldownConfig } from "./performance-config.js";
+import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
+import { getCooldownConfig } from "./performance-config.js";
+import { execute as pgExec, query } from "./pg.js";
+import { providerRuntimeCache } from "./provider-runtime-cache.js";
+import type { AgentCliTool } from "./types.js";
 const log = createLogger("provider-state");
 
 // ---------------------------------------------------------------------------
@@ -113,7 +113,9 @@ class ProviderStateManager {
 			state.cooldownUntil = null;
 			state.consecutiveFailures = 0;
 			state.lastSuccess = new Date();
-			this.persistToDb().catch((err) => log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
+			this.persistToDb().catch((err) =>
+				log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err),
+			);
 		}
 	}
 
@@ -139,7 +141,9 @@ class ProviderStateManager {
 		if (state.consecutiveFailures >= 3) {
 			this.markCooldown(adapter, "cli_error", 120_000);
 		} else {
-			this.persistToDb().catch((err) => log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
+			this.persistToDb().catch((err) =>
+				log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err),
+			);
 		}
 	}
 
@@ -175,7 +179,7 @@ class ProviderStateManager {
 
 	/** Get the earliest cooldown expiry across all providers (for retry scheduling) */
 	getEarliestRecoveryMs(): number {
-		let earliest = Infinity;
+		let earliest = Number.POSITIVE_INFINITY;
 		for (const state of this.states.values()) {
 			if (state.cooldownUntil) {
 				const remaining = state.cooldownUntil.getTime() - Date.now();
@@ -184,7 +188,7 @@ class ProviderStateManager {
 				}
 			}
 		}
-		return earliest === Infinity ? 60_000 : earliest;
+		return earliest === Number.POSITIVE_INFINITY ? 60_000 : earliest;
 	}
 
 	// --- v8.0: Persistence —  survive process restarts ---

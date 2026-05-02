@@ -6,8 +6,8 @@
 import { Hono } from "hono";
 import { requirePermission } from "../auth/rbac.js";
 import { deletePlugin, getPlugin, getPluginExecutions, listPlugins, updatePlugin } from "../db.js";
-import { pluginRegistry } from "../plugin-registry.js";
 import { createLogger } from "../logger.js";
+import { pluginRegistry } from "../plugin-registry.js";
 const log = createLogger("plugin-routes");
 
 const router = new Hono();

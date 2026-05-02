@@ -2,14 +2,14 @@
 // Control Plane — Registry Routes (thin host)
 // ---------------------------------------------------------------------------
 
-import { Hono } from "hono";
 import {
-	listRegistryAgents,
-	listRegistryProviders,
 	getRegistryProvider,
 	getRegistryState,
 	listProviderCapabilities,
+	listRegistryAgents,
+	listRegistryProviders,
 } from "@oscorpex/control-plane";
+import { Hono } from "hono";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-registry-routes");

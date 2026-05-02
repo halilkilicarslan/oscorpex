@@ -3,10 +3,10 @@
 // Verifies recovery and verification modes produce meaningful prompts.
 // ---------------------------------------------------------------------------
 
-import { beforeEach, describe, expect, it } from "vitest";
-import { createProject, createPlan, createPhase, createTask, execute } from "../../db.js";
-import { memoryProvider } from "../memory-adapter.js";
 import { randomUUID } from "node:crypto";
+import { beforeEach, describe, expect, it } from "vitest";
+import { createPhase, createPlan, createProject, createTask, execute } from "../../db.js";
+import { memoryProvider } from "../memory-adapter.js";
 
 async function setTaskStatus(taskId: string, status: string, error?: string, output?: string): Promise<void> {
 	await execute("UPDATE tasks SET status = $1, error = $2, output = $3 WHERE id = $4", [
@@ -19,10 +19,23 @@ async function setTaskStatus(taskId: string, status: string, error?: string, out
 
 describe("KernelMemoryProvider — recovery mode", () => {
 	it("includes error and retry context", async () => {
-		const project = await createProject({ name: "RecoveryTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "RecoveryTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 		const plan = await createPlan(project.id);
 		const phase = await createPhase({ planId: plan.id, name: "P1", order: 1, dependsOn: [] });
-		const task = await createTask({ phaseId: phase.id, title: "Failing task", description: "should fix auth", assignedAgent: "a1", complexity: "S", dependsOn: [], branch: "main" });
+		const task = await createTask({
+			phaseId: phase.id,
+			title: "Failing task",
+			description: "should fix auth",
+			assignedAgent: "a1",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
 		await setTaskStatus(task.id, "failed", "TypeError: Cannot read property 'token' of undefined");
 
 		const packet = await memoryProvider.buildContextPacket({
@@ -39,10 +52,23 @@ describe("KernelMemoryProvider — recovery mode", () => {
 	});
 
 	it("includes previous output when available", async () => {
-		const project = await createProject({ name: "RecoveryOutTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "RecoveryOutTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 		const plan = await createPlan(project.id);
 		const phase = await createPhase({ planId: plan.id, name: "P1", order: 1, dependsOn: [] });
-		const task = await createTask({ phaseId: phase.id, title: "Out task", description: "desc", assignedAgent: "a1", complexity: "S", dependsOn: [], branch: "main" });
+		const task = await createTask({
+			phaseId: phase.id,
+			title: "Out task",
+			description: "desc",
+			assignedAgent: "a1",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
 		await setTaskStatus(
 			task.id,
 			"failed",
@@ -63,10 +89,23 @@ describe("KernelMemoryProvider — recovery mode", () => {
 
 describe("KernelMemoryProvider — verification mode", () => {
 	it("includes changed files and test results", async () => {
-		const project = await createProject({ name: "VerifyTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "VerifyTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 		const plan = await createPlan(project.id);
 		const phase = await createPhase({ planId: plan.id, name: "P1", order: 1, dependsOn: [] });
-		const task = await createTask({ phaseId: phase.id, title: "Verify task", description: "implement auth with acceptance criteria: user can login", assignedAgent: "a1", complexity: "S", dependsOn: [], branch: "main" });
+		const task = await createTask({
+			phaseId: phase.id,
+			title: "Verify task",
+			description: "implement auth with acceptance criteria: user can login",
+			assignedAgent: "a1",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
 		await setTaskStatus(
 			task.id,
 			"done",
@@ -93,10 +132,23 @@ describe("KernelMemoryProvider — verification mode", () => {
 	});
 
 	it("includes verification results from DB", async () => {
-		const project = await createProject({ name: "VerifyDBTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "VerifyDBTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 		const plan = await createPlan(project.id);
 		const phase = await createPhase({ planId: plan.id, name: "P1", order: 1, dependsOn: [] });
-		const task = await createTask({ phaseId: phase.id, title: "V task", description: "desc", assignedAgent: "a1", complexity: "S", dependsOn: [], branch: "main" });
+		const task = await createTask({
+			phaseId: phase.id,
+			title: "V task",
+			description: "desc",
+			assignedAgent: "a1",
+			complexity: "S",
+			dependsOn: [],
+			branch: "main",
+		});
 		await setTaskStatus(task.id, "done", undefined, JSON.stringify({ filesCreated: [], filesModified: [], logs: [] }));
 		await execute(
 			`INSERT INTO verification_results (id, task_id, verification_type, status, details, created_at)
@@ -117,7 +169,12 @@ describe("KernelMemoryProvider — verification mode", () => {
 
 describe("KernelMemoryProvider — existing modes still work", () => {
 	it("planner mode produces a prompt", async () => {
-		const project = await createProject({ name: "PlannerTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "PlannerTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 
 		const packet = await memoryProvider.buildContextPacket({
 			projectId: project.id,
@@ -130,10 +187,15 @@ describe("KernelMemoryProvider — existing modes still work", () => {
 	});
 
 	it("execution mode requires taskId", async () => {
-		const project = await createProject({ name: "ExecTest", description: "test", techStack: ["node"], repoPath: "/tmp/test" });
+		const project = await createProject({
+			name: "ExecTest",
+			description: "test",
+			techStack: ["node"],
+			repoPath: "/tmp/test",
+		});
 
-		await expect(
-			memoryProvider.buildContextPacket({ projectId: project.id, mode: "execution" }),
-		).rejects.toThrow("taskId is required");
+		await expect(memoryProvider.buildContextPacket({ projectId: project.id, mode: "execution" })).rejects.toThrow(
+			"taskId is required",
+		);
 	});
 });
