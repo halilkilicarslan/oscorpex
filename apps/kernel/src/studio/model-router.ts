@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
-// Oscorpex — Model Router (v3.4)
-// Routes tasks to appropriate AI models based on complexity, failure history,
-// and project-level routing configuration stored in project_settings.
+// Oscorpex — Model Router (v4.0)
+// Public API shim — all heavy logic lives in providers/.
+//
+// Backward-compatible: all original exports are preserved.
 // ---------------------------------------------------------------------------
 
 import { getProjectSettings } from "./db.js";
@@ -12,7 +13,20 @@ import {
 	normalizeProviderPolicyProfile,
 	selectPrimaryProvider,
 } from "./provider-policy-profiles.js";
+import {
+	getDefaultRoutingConfig,
+	getModelContextLimit,
+	type Tier,
+	TIERS,
+} from "./providers/provider-model-catalog.js";
+import {
+	effortForTier,
+	resolveEscalatedTier,
+	resolveNonAnthropicProvider,
+	selectCostAwareModel,
+} from "./providers/provider-routing-service.js";
 import type { AgentCliTool, Task } from "./types.js";
+
 const log = createLogger("model-router");
 
 // ---------------------------------------------------------------------------
@@ -28,148 +42,12 @@ export interface ResolvedModel {
 	selectedProfile?: ProviderPolicyProfile;
 }
 
-// Complexity tiers in order — used for escalation arithmetic
-const TIERS = ["S", "M", "L", "XL"] as const;
-type Tier = (typeof TIERS)[number];
-
 // ---------------------------------------------------------------------------
-// Model context window limits (tokens)
+// Re-exports — keep callers that previously imported from model-router working
 // ---------------------------------------------------------------------------
 
-const MODEL_CONTEXT_LIMITS: Record<string, number> = {
-	"claude-haiku-4-5-20251001": 200_000,
-	"claude-sonnet-4-6": 200_000,
-	"claude-opus-4-6": 200_000,
-	"gpt-4o": 128_000,
-	"gpt-4o-mini": 128_000,
-	o3: 200_000,
-	"cursor-small": 128_000,
-	"cursor-large": 200_000,
-};
-
-const DEFAULT_CONTEXT_LIMIT = 200_000;
-
-/**
- * Returns the context window limit (in tokens) for a given model.
- * Used by prompt-budget to enforce model-aware truncation.
- */
-export function getModelContextLimit(model: string): number {
-	return MODEL_CONTEXT_LIMITS[model] ?? DEFAULT_CONTEXT_LIMIT;
-}
-
-// ---------------------------------------------------------------------------
-// Default routing config
-// ---------------------------------------------------------------------------
-
-/**
- * Returns the default S/M/L/XL → model mapping.
- * These are the Anthropic models preferred per tier:
- *   S  → Haiku  (fast, cheap — small scoped tasks)
- *   M  → Sonnet (balanced — most implementation tasks)
- *   L  → Sonnet (heavier — complex multi-file tasks)
- *   XL → Opus   (highest quality — architectural / high-risk tasks)
- */
-export function getDefaultRoutingConfig(): Record<string, string> {
-	return {
-		S: "claude-haiku-4-5-20251001",
-		M: "claude-sonnet-4-6",
-		L: "claude-sonnet-4-6",
-		XL: "claude-opus-4-6",
-	};
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-function tierIndex(tier: Tier): number {
-	return TIERS.indexOf(tier);
-}
-
-function bumpTier(tier: Tier, steps = 1): Tier {
-	const idx = Math.min(tierIndex(tier) + steps, TIERS.length - 1);
-	return TIERS[idx];
-}
-
-function effortForTier(tier: Tier): ResolvedModel["effort"] {
-	if (tier === "S") return "low";
-	if (tier === "XL") return "high";
-	return "medium";
-}
-
-// ---------------------------------------------------------------------------
-// Cost-aware selection (TASK 11)
-// ---------------------------------------------------------------------------
-
-/** Relative cost score — higher = more expensive */
-const MODEL_COST_SCORES: Record<string, number> = {
-	"gpt-4o-mini": 1,
-	"gemini-1.5-flash": 1,
-	"gemini-2.0-flash": 1,
-	"claude-haiku-4-5-20251001": 2,
-	"cursor-small": 2,
-	"gpt-4o": 5,
-	"gemini-1.5-pro": 5,
-	"claude-sonnet-4-6": 6,
-	"cursor-large": 6,
-	o3: 8,
-	"claude-opus-4-6": 10,
-};
-
-/** Models available per provider, sorted by cost ascending */
-const PROVIDER_MODELS_BY_COST: Record<string, string[]> = {
-	anthropic: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"],
-	openai: ["gpt-4o-mini", "gpt-4o", "o3"],
-	cursor: ["cursor-small", "cursor-large"],
-	gemini: ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
-	ollama: ["llama3.2", "codellama", "mistral", "phi4"],
-};
-
-function getCostScore(model: string): number {
-	return MODEL_COST_SCORES[model] ?? 5;
-}
-
-/**
- * For low-risk tasks, attempts to select a cheaper model within the same provider.
- * Returns the cheapest model that still meets the tier requirement.
- */
-function selectCostAwareModel(
-	provider: string,
-	tier: Tier,
-	baseModel: string,
-	priorFailures: number,
-	allowDowngrade = true,
-): { model: string; reason: string } {
-	const models = PROVIDER_MODELS_BY_COST[provider] ?? [baseModel];
-	const baseScore = getCostScore(baseModel);
-
-	// If there were prior failures, don't downgrade — stick with base model
-	if (priorFailures > 0) {
-		return { model: baseModel, reason: `quality_preserve (priorFailures=${priorFailures})` };
-	}
-
-	// If profile disallows downgrade for this tier, skip cost optimization
-	if (!allowDowngrade) {
-		return { model: baseModel, reason: `quality_first (downgrade_disabled, tier=${tier})` };
-	}
-
-	// High tier tasks don't get downgraded unless profile explicitly allows
-	if (tier === "L" || tier === "XL") {
-		return { model: baseModel, reason: `quality_first (tier=${tier})` };
-	}
-
-	// For S/M tiers with no failures, prefer cheapest available model
-	const cheapest = models[0];
-	if (cheapest && cheapest !== baseModel) {
-		const saved = baseScore - getCostScore(cheapest);
-		return {
-			model: cheapest,
-			reason: `cost_optimize (saved=${saved}pts, tier=${tier})`,
-		};
-	}
-
-	return { model: baseModel, reason: `default (no cheaper alternative)` };
-}
+export { getDefaultRoutingConfig, getModelContextLimit, TIERS, type Tier };
+export { effortForTier, selectCostAwareModel };
 
 // ---------------------------------------------------------------------------
 // Main entry point
@@ -183,8 +61,9 @@ function selectCostAwareModel(
  *  2. Start from the task's complexity tier.
  *  3. Escalate one tier if priorFailures > 0.
  *  4. Escalate one additional tier if reviewRejections > 1.
- *  5. Look up the final tier in the routing config.
- *  6. Return { provider, model, effort }.
+ *  5. Force at least L for high/critical risk level.
+ *  6. Select model via cost-aware logic for the resolved provider + tier.
+ *  7. Return { provider, model, effort }.
  */
 export async function resolveModel(
 	task: Task,
@@ -216,28 +95,13 @@ export async function resolveModel(
 	const routingConfig = { ...getDefaultRoutingConfig(), ...configOverrides };
 
 	// 2. Determine base tier from task complexity
-	let tier: Tier = (task.complexity as Tier) ?? "M";
-	if (!TIERS.includes(tier)) {
-		tier = "M"; // safe fallback for unknown values
+	let baseTier: Tier = (task.complexity as Tier) ?? "M";
+	if (!TIERS.includes(baseTier)) {
+		baseTier = "M"; // safe fallback for unknown values
 	}
 
-	// 3. Escalate for prior failures (one tier up)
-	if (priorFailures > 0) {
-		tier = bumpTier(tier);
-	}
-
-	// 4. Escalate for repeated review rejections (one tier up)
-	if (reviewRejections > 1) {
-		tier = bumpTier(tier);
-	}
-
-	// 5. Risk-level override: "high" or "critical" risk bumps to at least L
-	if (riskLevel === "high" || riskLevel === "critical") {
-		const lIdx = tierIndex("L");
-		if (tierIndex(tier) < lIdx) {
-			tier = "L";
-		}
-	}
+	// 3-5. Apply escalation rules (failures / rejections / risk)
+	const { tier } = resolveEscalatedTier({ baseTier, priorFailures, reviewRejections, riskLevel });
 
 	const effort = effortForTier(tier);
 
@@ -245,84 +109,42 @@ export async function resolveModel(
 	const primary = selectPrimaryProvider(resolvedProfile, cliTool);
 	const resolvedCliTool = primary.cliTool;
 
-	// Profile-aware cost selection
+	// Profile-aware cost selection flags
 	const allowDowngrade = behavior.allowCostDowngrade && behavior.downgradeTiers.includes(tier);
 	const effectivePriorFailures = behavior.preserveQualityOnFailure ? priorFailures : 0;
 
-	if (resolvedCliTool === "codex") {
-		const codexModels: Record<Tier, string> = { S: "gpt-4o-mini", M: "gpt-4o", L: "o3", XL: "o3" };
-		const baseModel = codexModels[tier] ?? "gpt-4o";
-		const { model, reason } = selectCostAwareModel("openai", tier, baseModel, effectivePriorFailures, allowDowngrade);
-		return {
-			provider: "openai",
-			model,
-			effort,
-			cliTool: resolvedCliTool,
-			decisionReason: `${reason} | profile=${resolvedProfile}`,
-			selectedProfile: resolvedProfile,
-		};
-	}
+	// 7. Resolve non-Anthropic providers
+	const nonAnthropic = resolveNonAnthropicProvider({
+		cliTool: resolvedCliTool,
+		tier,
+		priorFailures: effectivePriorFailures,
+		allowDowngrade,
+	});
 
-	if (resolvedCliTool === "cursor") {
-		const cursorModels: Record<Tier, string> = {
-			S: "cursor-small",
-			M: "cursor-small",
-			L: "cursor-large",
-			XL: "cursor-large",
-		};
-		const baseModel = cursorModels[tier] ?? "cursor-small";
-		const { model, reason } = selectCostAwareModel("cursor", tier, baseModel, effectivePriorFailures, allowDowngrade);
-		return {
-			provider: "cursor",
-			model,
-			effort,
-			cliTool: resolvedCliTool,
-			decisionReason: `${reason} | profile=${resolvedProfile}`,
-			selectedProfile: resolvedProfile,
-		};
-	}
+	if (nonAnthropic !== null) {
+		const decisionReason = nonAnthropic.isLocalFree
+			? `local_free | profile=${resolvedProfile}`
+			: `${nonAnthropic.reason} | profile=${resolvedProfile}`;
 
-	if (resolvedCliTool === "gemini") {
-		const geminiModels: Record<Tier, string> = {
-			S: "gemini-1.5-flash",
-			M: "gemini-1.5-flash",
-			L: "gemini-1.5-pro",
-			XL: "gemini-1.5-pro",
-		};
-		const baseModel = geminiModels[tier] ?? "gemini-1.5-flash";
-		const { model, reason } = selectCostAwareModel("gemini", tier, baseModel, effectivePriorFailures, allowDowngrade);
 		return {
-			provider: "gemini",
-			model,
+			provider: nonAnthropic.provider,
+			model: nonAnthropic.model,
 			effort,
 			cliTool: resolvedCliTool,
-			decisionReason: `${reason} | profile=${resolvedProfile}`,
-			selectedProfile: resolvedProfile,
-		};
-	}
-
-	if (resolvedCliTool === "ollama") {
-		const ollamaModels: Record<Tier, string> = {
-			S: "llama3.2",
-			M: "llama3.2",
-			L: "codellama",
-			XL: "codellama",
-		};
-		const baseModel = ollamaModels[tier] ?? "llama3.2";
-		// Ollama is free — no cost optimization needed
-		return {
-			provider: "ollama",
-			model: baseModel,
-			effort,
-			cliTool: resolvedCliTool,
-			decisionReason: `local_free | profile=${resolvedProfile}`,
+			decisionReason,
 			selectedProfile: resolvedProfile,
 		};
 	}
 
 	// Default: anthropic / claude-code
 	const baseModel = routingConfig[tier] ?? routingConfig["M"] ?? "claude-sonnet-4-6";
-	const { model, reason } = selectCostAwareModel("anthropic", tier, baseModel, effectivePriorFailures, allowDowngrade);
+	const { model, reason } = selectCostAwareModel({
+		provider: "anthropic",
+		tier,
+		baseModel,
+		priorFailures: effectivePriorFailures,
+		allowDowngrade,
+	});
 	log.info(`[model-router] ${task.id} → ${model} (${reason}, profile=${resolvedProfile})`);
 	return {
 		provider: "anthropic",
