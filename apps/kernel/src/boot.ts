@@ -85,6 +85,20 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 	registerNotificationBridge();
 	log.info("[boot] Application composition wired");
 
+	// Phase 9.6: Service registry — register core singletons for DI/test isolation
+	{
+		const { registerService } = await import("./studio/service-registry.js");
+		const { executionEngine } = await import("./studio/execution-engine.js");
+		const { taskEngine } = await import("./studio/task-engine.js");
+		const { pipelineEngine } = await import("./studio/pipeline-engine.js");
+		const { eventBus } = await import("./studio/event-bus.js");
+		registerService("executionEngine", executionEngine);
+		registerService("taskEngine", taskEngine);
+		registerService("pipelineEngine", pipelineEngine);
+		registerService("eventBus", eventBus);
+		log.info("[boot] Service registry populated (4 services)");
+	}
+
 	// Phase 10: Build Hono app + HTTP server
 	const { app, server } = httpPhase(port);
 
