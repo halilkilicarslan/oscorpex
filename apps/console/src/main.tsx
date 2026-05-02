@@ -160,7 +160,7 @@ createRoot(document.getElementById('root')!).render(
                   }
                 />
                 <Route
-                  path="/studio/projects/:projectId/tasks/:taskId/inspector"
+                  path="/studio/:projectId/tasks/:taskId/inspector"
                   element={
                     <TaskSessionInspectorPage />
                   }

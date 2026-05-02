@@ -12,9 +12,10 @@ const log = createLogger("inspector-repo");
 
 export async function getTaskForInspector(taskId: string): Promise<Record<string, unknown> | undefined> {
 	const row = await queryOne<any>(
-		`SELECT t.*, p.project_id
+		`SELECT t.*, pp.project_id
 		 FROM tasks t
 		 JOIN phases p ON t.phase_id = p.id
+		 JOIN project_plans pp ON p.plan_id = pp.id
 		 WHERE t.id = $1`,
 		[taskId],
 	);
