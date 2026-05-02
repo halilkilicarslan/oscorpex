@@ -12,6 +12,7 @@ vi.mock('../lib/studio-api/auth', () => ({
 }));
 
 import * as authApi from '../lib/studio-api/auth';
+import { StudioApiError } from '../lib/studio-api/base';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
@@ -397,7 +398,7 @@ describe('AuthContext', () => {
 
 	it('invalid stored token clears auth state', async () => {
 		localStorageMock.setItem('oscorpex_token', 'bad-token');
-		vi.mocked(authApi.fetchCurrentUser).mockRejectedValue(new Error('Not authenticated'));
+		vi.mocked(authApi.fetchCurrentUser).mockRejectedValue(new StudioApiError('Not authenticated', 401));
 
 		render(
 			<MemoryRouter>

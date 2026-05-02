@@ -23,6 +23,11 @@ vi.mock('../lib/studio-api', () => ({
   fetchPresetAgents: vi.fn().mockResolvedValue([]),
   streamTeamArchitectChat: vi.fn().mockReturnValue(() => {}),
   roleLabel: vi.fn((role: string) => role),
+  // 5-step wizard API calls
+  saveProjectScopeDraft: vi.fn().mockResolvedValue(undefined),
+  approveProjectScope: vi.fn().mockResolvedValue(undefined),
+  recommendProjectTeam: vi.fn().mockResolvedValue({ decision: 'auto', reasoning: 'test' }),
+  applyProjectTeam: vi.fn().mockResolvedValue(undefined),
 }));
 
 // window.confirm'i mockla
@@ -237,18 +242,18 @@ describe('StudioHomePage — proje olusturma modali', () => {
     expect(screen.queryByPlaceholderText(/Counter App/)).not.toBeInTheDocument();
   });
 
-  it('Step 1 "Continue to Team" butonu isim girilmeden disabled olmali', async () => {
+  it('Step 1 "Create Shell" butonu isim girilmeden disabled olmali', async () => {
     const user = userEvent.setup();
     renderSayfa();
 
     await waitFor(() => screen.getByText('New Project'));
     await user.click(screen.getByText('New Project'));
 
-    const continueBtn = screen.getByRole('button', { name: 'Continue to Team' });
-    expect(continueBtn).toBeDisabled();
+    const createShellBtn = screen.getByRole('button', { name: 'Create Shell' });
+    expect(createShellBtn).toBeDisabled();
   });
 
-  it('isim girildikten sonra "Continue to Team" butonu aktif olmali', async () => {
+  it('isim girildikten sonra "Create Shell" butonu aktif olmali', async () => {
     const user = userEvent.setup();
     renderSayfa();
 
@@ -258,11 +263,11 @@ describe('StudioHomePage — proje olusturma modali', () => {
     const nameInput = screen.getByPlaceholderText(/Counter App/);
     await user.type(nameInput, 'Benim Projem');
 
-    const continueBtn = screen.getByRole('button', { name: 'Continue to Team' });
-    expect(continueBtn).not.toBeDisabled();
+    const createShellBtn = screen.getByRole('button', { name: 'Create Shell' });
+    expect(createShellBtn).not.toBeDisabled();
   });
 
-  it('Step 2 de "Create Project" butonuyla API cagrisi yapilmali', async () => {
+  it('Step 1 "Create Shell" butonuyla createProject API cagrisi yapilmali', async () => {
     const user = userEvent.setup();
     const yeniProje: Project = { ...ORNEK_PROJELER[0], id: 'proj-yeni', name: 'Benim Projem' };
     vi.mocked(studioApi.createProject).mockResolvedValue(yeniProje);
@@ -278,15 +283,8 @@ describe('StudioHomePage — proje olusturma modali', () => {
     const nameInput = screen.getByPlaceholderText(/Counter App/);
     await user.type(nameInput, 'Benim Projem');
 
-    // Step 2 ye ilerle
-    await user.click(screen.getByRole('button', { name: 'Continue to Team' }));
-
-    // Step 2: modal footer'daki Create Project butonunu bul ve tikla
-    await waitFor(() => screen.getAllByRole('button', { name: 'Create Project' }));
-    const createBtns = screen.getAllByRole('button', { name: 'Create Project' });
-    // Footer butonu: Cancel'in yanındaki
-    const modalCreateBtn = createBtns.find(btn => btn.closest('.border-t'));
-    await user.click(modalCreateBtn ?? createBtns[createBtns.length - 1]);
+    // Step 1: Create Shell butonu ile proje olustur
+    await user.click(screen.getByRole('button', { name: 'Create Shell' }));
 
     await waitFor(() => {
       expect(studioApi.createProject).toHaveBeenCalledWith(
@@ -295,34 +293,14 @@ describe('StudioHomePage — proje olusturma modali', () => {
     });
   });
 
-  it('takim sablonu secildiginde step 2 de template gosterilmeli', async () => {
+  it('Step 1 de isim alaninin placeholder icermesi', async () => {
     const user = userEvent.setup();
-    const sablon: TeamTemplate = {
-      id: 'tmpl-1',
-      name: 'Full Stack Takim',
-      description: 'Frontend ve backend ajanlar',
-      roles: ['Frontend Dev', 'Backend Dev', 'QA'],
-      dependencies: [],
-      createdAt: '2026-01-01T00:00:00Z',
-    };
-    vi.mocked(studioApi.fetchTeamTemplates).mockResolvedValue([sablon]);
     renderSayfa();
 
     await waitFor(() => screen.getByText('New Project'));
     await user.click(screen.getByText('New Project'));
 
-    // İsim girip step 2 ye ilerle
-    const nameInput = screen.getByPlaceholderText(/Counter App/);
-    await user.type(nameInput, 'Test');
-    await user.click(screen.getByRole('button', { name: 'Continue to Team' }));
-
-    // Step 2: "Ben seçeceğim" butonuyla manuel moda geç — template'ler orada
-    await waitFor(() => screen.getByText(/seçeceğim/i));
-    await user.click(screen.getByText(/seçeceğim/i));
-
-    await waitFor(() => {
-      expect(screen.getAllByText('Full Stack Takim').length).toBeGreaterThanOrEqual(1);
-    });
+    expect(screen.getByPlaceholderText(/Counter App/)).toBeInTheDocument();
   });
 });
 
