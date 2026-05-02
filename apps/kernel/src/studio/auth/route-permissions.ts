@@ -283,6 +283,7 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 
 	// CLI usage
 	{ pattern: "/cli-usage", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/cli-usage/", permission: "projects:read", methods: ["GET"] },
 
 	// Platform-wide endpoints
 	{ pattern: "/platform/stats", permission: "projects:read", methods: ["GET"] },
@@ -320,27 +321,51 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	// Control Plane
 	{ pattern: "/summary", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/registry", permission: "control-plane:read", methods: ["GET"] },
+	{ pattern: "/registry/", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/registry", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/registry/", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/presence", permission: "control-plane:read", methods: ["GET"] },
+	{ pattern: "/presence/", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/presence", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/presence/", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/approvals", permission: "control-plane:read", methods: ["GET"] },
+	{ pattern: "/approvals/", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/approvals", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/approvals/", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/audit", permission: "audit:read", methods: ["GET"] },
+	{ pattern: "/audit/", permission: "audit:read", methods: ["GET"] },
 	{ pattern: "/audit", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/audit/", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/usage-cost", permission: "billing:read", methods: ["GET"] },
+	{ pattern: "/usage-cost/", permission: "billing:read", methods: ["GET"] },
 	{ pattern: "/incidents", permission: "control-plane:read", methods: ["GET"] },
+	{ pattern: "/incidents/", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/incidents", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/incidents/", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/projections", permission: "control-plane:read", methods: ["GET"] },
+	{ pattern: "/projections/", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/projections", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/projections/", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{
 		pattern: "/operator-actions",
 		permission: "control-plane:operate",
 		methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
 	},
+	{
+		pattern: "/operator-actions/",
+		permission: "control-plane:operate",
+		methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+	},
 	{ pattern: "/policy", permission: "control-plane:read", methods: ["GET"] },
+	{ pattern: "/policy/", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/policy", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/policy/", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/provider-ops", permission: "control-plane:operate", methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/provider-ops/", permission: "control-plane:operate", methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/queue-health", permission: "control-plane:read", methods: ["GET"] },
+
+	// Top-level SSE event stream
+	{ pattern: "/events/stream", permission: "projects:read", methods: ["GET"] },
 ];
 
 // ---------------------------------------------------------------------------
