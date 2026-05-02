@@ -89,6 +89,7 @@ export async function getWorkItems(
 		status?: WorkItemStatus;
 		sprintId?: string;
 		source?: WorkItemSource;
+		sourceTaskId?: string;
 	},
 ): Promise<WorkItem[]> {
 	const conditions: string[] = ["project_id = $1"];
@@ -114,6 +115,10 @@ export async function getWorkItems(
 	if (filters?.source !== undefined) {
 		conditions.push(`source = $${idx++}`);
 		values.push(filters.source);
+	}
+	if (filters?.sourceTaskId !== undefined) {
+		conditions.push(`source_task_id = $${idx++}`);
+		values.push(filters.sourceTaskId);
 	}
 
 	const rows = await query<any>(

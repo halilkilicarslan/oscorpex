@@ -373,19 +373,22 @@ export class TaskLifecycle {
 			payload: { title: task.title, error },
 		});
 
-		// v3.2: Auto-create defect work item on task failure
+		// v3.2: Auto-create defect work item on task failure (dedup: skip if one already exists for this task)
 		try {
-			const { createWorkItem } = await import("../db/work-item-repo.js");
-			await createWorkItem({
-				projectId,
-				type: "defect",
-				title: `Task failed: ${task.title}`,
-				description: `Task "${task.title}" failed with error: ${error?.slice(0, 500) ?? "unknown"}`,
-				priority: "high",
-				source: "runtime",
-				sourceTaskId: taskId,
-				sourceAgentId: task.assignedAgentId,
-			});
+			const { createWorkItem, getWorkItems } = await import("../db/work-item-repo.js");
+			const existing = await getWorkItems(projectId, { sourceTaskId: taskId, status: "open" });
+			if (existing.length === 0) {
+				await createWorkItem({
+					projectId,
+					type: "defect",
+					title: `Task failed: ${task.title}`,
+					description: `Task "${task.title}" failed with error: ${error?.slice(0, 500) ?? "unknown"}`,
+					priority: "high",
+					source: "runtime",
+					sourceTaskId: taskId,
+					sourceAgentId: task.assignedAgentId,
+				});
+			}
 		} catch (err) {
 			log.warn("[task-lifecycle] Auto work-item creation failed:" + " " + String(err));
 		}

@@ -154,19 +154,22 @@ export class TaskReviewManager {
 			},
 		});
 
-		// v3.2: Auto-create bug work item when review loop can't converge
+		// v3.2: Auto-create bug work item when review loop can't converge (dedup by sourceTaskId)
 		try {
-			const { createWorkItem } = await import("../db/work-item-repo.js");
-			await createWorkItem({
-				projectId,
-				type: "bug",
-				title: `Review escalation: ${task.title}`,
-				description: `Task "${task.title}" could not pass review within ${MAX_REVISION_CYCLES} cycles. Last reviewer feedback: ${feedback?.slice(0, 500) ?? "N/A"}`,
-				priority: "high",
-				source: "review",
-				sourceTaskId: taskId,
-				sourceAgentId: task.assignedAgentId,
-			});
+			const { createWorkItem, getWorkItems } = await import("../db/work-item-repo.js");
+			const existing = await getWorkItems(projectId, { sourceTaskId: taskId, status: "open" });
+			if (existing.length === 0) {
+				await createWorkItem({
+					projectId,
+					type: "bug",
+					title: `Review escalation: ${task.title}`,
+					description: `Task "${task.title}" could not pass review within ${MAX_REVISION_CYCLES} cycles. Last reviewer feedback: ${feedback?.slice(0, 500) ?? "N/A"}`,
+					priority: "high",
+					source: "review",
+					sourceTaskId: taskId,
+					sourceAgentId: task.assignedAgentId,
+				});
+			}
 		} catch (err) {
 			log.warn("[task-review-manager] Auto work-item creation on escalation failed:" + " " + String(err));
 		}
