@@ -105,11 +105,11 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
 	}, [load, loadAutoStartStatus]);
 
 	useEffect(() => {
-		if (isWsActive) return;
+		// Poll every 5s as fallback — WS may silently fail in dev
 		const interval = setInterval(() => {
 			load();
 			loadAutoStartStatus();
-		}, 15000);
+		}, isWsActive ? 15000 : 5000);
 		return () => clearInterval(interval);
 	}, [isWsActive, load, loadAutoStartStatus]);
 
