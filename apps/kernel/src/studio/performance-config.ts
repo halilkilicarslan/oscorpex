@@ -25,7 +25,7 @@ export interface PerformanceFeatureFlags {
 	timeoutPolicy: boolean;
 	queueWaitTelemetry: boolean;
 	/** Allow fallback to legacy CLI adapters when native registry adapter is missing.
-	 *  Default: true (backward compat). Set to false to enforce registry-only. */
+	 *  Default: false. Set to true only for explicit legacy compatibility runs. */
 	legacyCliAdapter: boolean;
 }
 
@@ -41,7 +41,7 @@ const ALL_FEATURES_ENABLED: PerformanceFeatureFlags = {
 	providerCooldown: true,
 	timeoutPolicy: true,
 	queueWaitTelemetry: true,
-	legacyCliAdapter: true,
+	legacyCliAdapter: false,
 };
 
 /**

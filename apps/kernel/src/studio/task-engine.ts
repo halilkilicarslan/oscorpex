@@ -7,10 +7,10 @@
 import { getTask } from "./db.js";
 import { getProjectIdForTaskViaJoin } from "./db.js";
 import { createLogger } from "./logger.js";
-import { TaskApprovalManager } from "./task-approval-manager.js";
-import { TaskLifecycle } from "./task-lifecycle.js";
-import { TaskReviewManager } from "./task-review-manager.js";
-import { PhaseProgressTracker } from "./phase-progress-tracker.js";
+import { TaskApprovalManager } from "./task/approval-service.js";
+import { PhaseProgressTracker } from "./task/task-progress-service.js";
+import { TaskReviewManager } from "./task/review-loop-service.js";
+import { TaskLifecycle } from "./task/task-lifecycle-service.js";
 import type { Phase, Task, TaskOutput } from "./types.js";
 
 const log = createLogger("task-engine");

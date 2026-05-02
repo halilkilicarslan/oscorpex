@@ -8,14 +8,15 @@ import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import { AdaptiveConcurrencyController, AdaptiveSemaphore, ConcurrencyTracker } from "./adaptive-concurrency.js";
 import { claimTask, releaseTaskClaim } from "./db.js";
 import { createLogger } from "./logger.js";
-import { ExecutionRecovery, runStartupRecoveryWithRetry } from "./execution-recovery.js";
-import { TaskDispatcher } from "./task-dispatcher.js";
-import { TaskExecutor, computeQueueWaitMs } from "./task-executor.js";
+import { TaskDispatcher } from "./execution/dispatch-coordinator.js";
+import { ExecutionRecovery, runStartupRecoveryWithRetry } from "./execution/execution-recovery.js";
+import { ExecutionWatchdog } from "./execution/execution-watchdog.js";
+import { TaskExecutor } from "./execution/task-executor.js";
 import { taskEngine } from "./task-engine.js";
 import type { Task } from "./types.js";
 
 // Re-export helpers consumed by other modules
-export { computeQueueWaitMs } from "./task-executor.js";
+export { computeQueueWaitMs } from "./execution/queue-wait.js";
 
 const log = createLogger("execution-engine");
 
@@ -46,6 +47,7 @@ class ExecutionEngine {
 	private executor: TaskExecutor;
 	private dispatcher: TaskDispatcher;
 	private recovery: ExecutionRecovery;
+	private watchdog: ExecutionWatchdog;
 
 	constructor() {
 		// Ready-task dispatch is handled explicitly at the end of task execution.
@@ -86,14 +88,8 @@ class ExecutionEngine {
 			(projectId) => this.startProjectExecution(projectId),
 		);
 
-		// Self-healing watchdog:
-		// If pipeline is running but no active execution is visible while ready tasks exist,
-		// trigger a dispatch kick to recover from missed event/race windows.
-		setInterval(() => {
-			this.dispatcher.runDispatchWatchdog().catch((err) => {
-				log.warn("[execution-engine] Dispatch watchdog failed (non-blocking):" + " " + String(err));
-			});
-		}, 15_000);
+		this.watchdog = new ExecutionWatchdog(() => this.dispatcher.runDispatchWatchdog());
+		this.watchdog.start();
 	}
 
 	// -------------------------------------------------------------------------
@@ -280,7 +276,7 @@ export const executionEngine = new ExecutionEngine();
 if (process.env.VITEST !== "true") {
 	// Access recovery module through the engine's internal recovery instance.
 	// We bind recoverStuckTasks so the deadlock-retry wrapper can call it directly.
-	const _engine = executionEngine as unknown as { recovery: import("./execution-recovery.js").ExecutionRecovery };
+	const _engine = executionEngine as unknown as { recovery: import("./execution/execution-recovery.js").ExecutionRecovery };
 	runStartupRecoveryWithRetry(_engine.recovery).catch((err) => {
 		log.error("[execution-engine] Startup recovery failed:" + " " + String(err));
 	});

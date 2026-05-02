@@ -31,10 +31,22 @@ import {
 	recordProviderFallback,
 	startProviderTelemetry,
 } from "../provider-telemetry.js";
-import { isRateLimitError } from "../task-executor.js";
 import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
 
 const log = createLogger("provider-execution-service");
+
+const RATE_LIMIT_PATTERNS = [
+	/you['']ve hit your limit/i,
+	/rate limit/i,
+	/resets?\s+\d{1,2}[:.]\d{2}\s*(am|pm)/i,
+	/too many requests/i,
+	/429/,
+	/quota exceeded/i,
+];
+
+function isRateLimitError(message: string): boolean {
+	return RATE_LIMIT_PATTERNS.some((rx) => rx.test(message));
+}
 
 // ---------------------------------------------------------------------------
 // Input / Output types

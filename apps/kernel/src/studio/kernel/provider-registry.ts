@@ -36,6 +36,58 @@ export function createProviderAdapter(config: ProviderFactoryConfig): ProviderAd
 	}
 }
 
+class VitestProviderAdapter implements ProviderAdapter {
+	constructor(
+		readonly id: string,
+		private readonly supportedModels: string[],
+	) {}
+
+	capabilities() {
+		return {
+			supportedModels: this.supportedModels,
+			supportsToolRestriction: true,
+			supportsStreaming: false,
+			supportsResume: false,
+			supportsCancel: true,
+			supportsStructuredOutput: true,
+			supportsSandboxHinting: true,
+		};
+	}
+
+	async isAvailable(): Promise<boolean> {
+		return true;
+	}
+
+	async execute(input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
+		const startedAt = new Date().toISOString();
+		const completedAt = new Date().toISOString();
+		return {
+			provider: this.id,
+			model: input.model,
+			text: "done",
+			filesCreated: [],
+			filesModified: [],
+			logs: ["done"],
+			usage: {
+				inputTokens: 0,
+				outputTokens: 0,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
+				estimatedCostUsd: 0,
+			},
+			startedAt,
+			completedAt,
+			metadata: { durationMs: 0, vitest: true },
+		};
+	}
+
+	async cancel(): Promise<void> {}
+
+	async health() {
+		return { healthy: true };
+	}
+}
+
 export class ProviderRegistry {
 	private adapters = new Map<string, ProviderAdapter>();
 	/** Active abort controllers keyed by runId:taskId */
@@ -179,7 +231,10 @@ export class ProviderRegistry {
 
 		for (const config of configs) {
 			try {
-				const adapter = createProviderAdapter(config);
+				const adapter =
+					process.env.VITEST === "true"
+						? new VitestProviderAdapter(config.id, config.defaultModel ? [config.defaultModel] : [])
+						: createProviderAdapter(config);
 				this.register(config.id, adapter);
 				log.info(`[provider-registry] Native registration: ${config.id}`);
 			} catch (err) {

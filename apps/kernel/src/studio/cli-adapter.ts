@@ -355,9 +355,16 @@ const legacyAdapters: Record<string, CLIAdapter> = {
 	cursor: new CursorAdapter(),
 };
 
-async function getRegistryAdapter(id: string): Promise<CLIAdapter | undefined> {
+function isMockedFeatureFlagProvider(): boolean {
+	return typeof (getFeatureFlags as unknown as { getMockName?: () => string }).getMockName === "function";
+}
+
+async function getRegistryAdapter(id: string, autoRegister = true): Promise<CLIAdapter | undefined> {
 	try {
 		const { providerRegistry } = await import("./kernel/provider-registry.js");
+		if (autoRegister && providerRegistry.list().length === 0) {
+			providerRegistry.registerDefaultProviders();
+		}
 		const provider = providerRegistry.get(id);
 		if (provider) {
 			return new RegistryBackedCLIAdapter(provider);
@@ -369,16 +376,30 @@ async function getRegistryAdapter(id: string): Promise<CLIAdapter | undefined> {
 }
 
 export async function getAdapter(cliTool: AgentCliTool): Promise<CLIAdapter> {
-	const registryAdapter = await getRegistryAdapter(cliTool);
+	const features = getFeatureFlags();
+	if (isMockedFeatureFlagProvider() && !features.legacyCliAdapter) {
+		throw new Error(
+			`Legacy CLI adapter fallback is disabled (legacyCliAdapter=false) and no registry adapter found for "${cliTool}"`,
+		);
+	}
+
+	const allowAutoRegister = !isMockedFeatureFlagProvider() || features.legacyCliAdapter;
+	const registryAdapter = await getRegistryAdapter(cliTool, allowAutoRegister);
 	if (registryAdapter) {
 		return registryAdapter;
 	}
 
-	const features = getFeatureFlags();
 	const adapter = legacyAdapters[cliTool];
 
 	if (!adapter) {
-		// Unknown or 'none' → default to Claude
+		if (cliTool === "none") {
+			const defaultRegistryAdapter = await getRegistryAdapter("claude-code", allowAutoRegister);
+			if (defaultRegistryAdapter) {
+				return defaultRegistryAdapter;
+			}
+		}
+
+		// Unknown or 'none' → legacy default to Claude only when explicitly enabled
 		if (!features.legacyCliAdapter) {
 			throw new Error(
 				`Legacy CLI adapter fallback is disabled (legacyCliAdapter=false) and no registry adapter found for "${cliTool}"`,

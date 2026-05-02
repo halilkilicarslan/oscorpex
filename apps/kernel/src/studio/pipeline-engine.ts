@@ -38,8 +38,10 @@ import { eventBus } from "./event-bus.js";
 import { executionEngine } from "./execution-engine.js";
 import { createLogger } from "./logger.js";
 import { transitionProject } from "./lifecycle-manager.js";
-import { PipelineBranchManager } from "./pipeline-branch-manager.js";
-import { PipelineStateManager, runToState } from "./pipeline-state-manager.js";
+import { canAdvance } from "./pipeline/replan-gate.js";
+import { decideStageAdvance } from "./pipeline/stage-advance-service.js";
+import { PipelineBranchManager } from "./pipeline/vcs-phase-hooks.js";
+import { PipelineStateManager, runToState } from "./pipeline/pipeline-state-service.js";
 import { taskEngine } from "./task-engine.js";
 import type {
 	AgentDependency,
@@ -347,13 +349,13 @@ class PipelineEngine {
 		}
 
 		// Block advance if there's a pending replan awaiting approval
-		const pendingReplan = await this.stateManager.getPendingReplan(projectId);
-		if (pendingReplan) {
-			log.info(`[pipeline-engine] advanceStage blocked — pending replan ${pendingReplan.id} awaiting approval`);
+		const replanGate = await canAdvance(projectId);
+		if (!replanGate.allowed) {
+			log.info(`[pipeline-engine] advanceStage blocked — pending replan ${replanGate.replanEventId} awaiting approval`);
 			eventBus.emit({
 				projectId,
 				type: "plan:replanned",
-				payload: { awaiting_approval: true, replanEventId: pendingReplan.id },
+				payload: { awaiting_approval: true, replanEventId: replanGate.replanEventId },
 			});
 			return state;
 		}
@@ -371,12 +373,10 @@ class PipelineEngine {
 
 		const statuses = await Promise.all(freshTaskIds.map((id) => this.stateManager.getTaskStatus(id)));
 
-		const anyFailed = statuses.some((s) => s === "failed");
-		const allDone = statuses.every((s) => s === "done");
-
-		if (anyFailed) {
+		const decision = decideStageAdvance(statuses);
+		if (decision === "failed") {
 			await this.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
-		} else if (allDone) {
+		} else if (decision === "completed") {
 			await this.completeStage(projectId, currentIndex);
 		}
 
