@@ -44,7 +44,7 @@ describe("accessGuard — SSE requests", () => {
 	it("denies SSE to unknown routes even when auth is disabled", async () => {
 		// Unknown route → default deny regardless of auth mode
 		delete process.env.OSCORPEX_AUTH_ENABLED;
-		const c = makeCtx({ path: "/api/studio/events/stream", accept: "text/event-stream" });
+		const c = makeCtx({ path: "/api/studio/nonexistent/stream", accept: "text/event-stream" });
 		const next = vi.fn();
 		const result = await accessGuard(c, next);
 		expect(next).not.toHaveBeenCalled();
