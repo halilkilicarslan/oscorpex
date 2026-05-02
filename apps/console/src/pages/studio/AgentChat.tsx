@@ -26,7 +26,7 @@ export default function AgentChat({ projectId, agentId, agentName }: Props) {
   const load = useCallback(() => {
     httpGet<{ messages?: ChatMessage[] } | ChatMessage[]>(`/api/studio/projects/${projectId}/agents/${agentId}/chat`)
       .then((data) => setMessages(Array.isArray(data) ? data : (data.messages ?? [])))
-      .catch(() => {})
+      .catch((err) => console.error("[AgentChat] Failed to load messages:", err))
       .finally(() => setLoading(false));
   }, [projectId, agentId]);
 

@@ -55,11 +55,11 @@ export default function AgentFormModal({ mode, agent, projectId, onClose, onSave
 				setProviders(p);
 				setModelGroups(getModelsFromProviders(p));
 			})
-			.catch(() => {});
+			.catch((err) => console.error("[AgentFormModal] Failed to load providers:", err));
 	}, []);
 
 	useEffect(() => {
-		fetchAvatars(gender).then(setAvatarOptions).catch(() => {});
+		fetchAvatars(gender).then(setAvatarOptions).catch((err) => console.error("[AgentFormModal] Failed to load avatars:", err));
 	}, [gender]);
 
 	void providers;

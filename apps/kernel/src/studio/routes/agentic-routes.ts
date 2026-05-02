@@ -37,6 +37,7 @@ import {
 import { kernel } from "../kernel/index.js";
 import { createLogger } from "../logger.js";
 import { canonicalizeAgentRole, getBehaviorRoleKey } from "../roles.js";
+import type { CapabilityToken, ProposalStatus } from "../types.js";
 const log = createLogger("agentic-routes");
 
 export const agenticRoutes = new Hono();
@@ -172,8 +173,8 @@ agenticRoutes.get("/projects/:projectId/tasks/:taskId/protocol-messages", async 
 
 agenticRoutes.get("/projects/:projectId/proposals", async (c) => {
 	try {
-		const status = c.req.query("status");
-		const proposals = await listProposals(c.req.param("projectId"), status as any);
+		const status = c.req.query("status") as ProposalStatus | undefined;
+		const proposals = await listProposals(c.req.param("projectId"), status);
 		return c.json(proposals);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
@@ -212,8 +213,8 @@ agenticRoutes.post("/projects/:projectId/proposals", async (c) => {
 
 agenticRoutes.post("/proposals/:proposalId/approve", async (c) => {
 	try {
-		const body = await c.req.json().catch(() => ({}));
-		const result = await approveProposal(c.req.param("proposalId"), (body as any).approvedBy ?? "human");
+		const body = (await c.req.json().catch(() => ({}))) as { approvedBy?: string };
+		const result = await approveProposal(c.req.param("proposalId"), body.approvedBy ?? "human");
 		if (!result) return c.json({ error: "Proposal not found" }, 404);
 		if (result.taskId) {
 			const task = await getTask(result.taskId);
@@ -221,7 +222,8 @@ agenticRoutes.post("/proposals/:proposalId/approve", async (c) => {
 				const ready = await kernel.getReadyTasks(task.phaseId);
 				if (ready.some((candidate) => candidate.id === task.id)) {
 					kernel
-						.executeTask(result.proposal.projectId, task as any)
+						// kernel Task is structurally compatible with CoreTask at the boundary
+						.executeTask(result.proposal.projectId, task as unknown as import("@oscorpex/core").Task)
 						.catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
 				}
 			}
@@ -259,7 +261,8 @@ agenticRoutes.post("/protocol-messages/:messageId/actioned", async (c) => {
 					const ready = await kernel.getReadyTasks(refreshed.phaseId);
 					if (ready.some((candidate) => candidate.id === refreshed.id)) {
 						kernel
-							.executeTask(message.projectId, refreshed as any)
+							// kernel Task is structurally compatible with CoreTask at the boundary
+							.executeTask(message.projectId, refreshed as unknown as import("@oscorpex/core").Task)
 							.catch((err) => log.warn("[agentic-routes] Non-blocking operation failed:", err?.message ?? err));
 					}
 				}
@@ -348,7 +351,7 @@ agenticRoutes.get("/projects/:projectId/capability-grants", async (c) => {
 agenticRoutes.get("/projects/:projectId/capability-grants/:agentRole/check/:capability", async (c) => {
 	try {
 		const { projectId, agentRole, capability } = c.req.param();
-		const granted = await hasCapability(projectId, agentRole, capability as any);
+		const granted = await hasCapability(projectId, agentRole, capability as CapabilityToken);
 		return c.json({ capability, agentRole, granted });
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
@@ -383,7 +386,7 @@ agenticRoutes.put("/projects/:projectId/capability-grants", async (c) => {
 agenticRoutes.delete("/projects/:projectId/capability-grants/:agentRole/:capability", async (c) => {
 	try {
 		const { projectId, agentRole, capability } = c.req.param();
-		const deleted = await deleteCapabilityGrant(projectId, agentRole, capability as any);
+		const deleted = await deleteCapabilityGrant(projectId, agentRole, capability as CapabilityToken);
 		if (!deleted) return c.json({ error: "Grant not found" }, 404);
 		return c.json({ deleted: true });
 	} catch (err) {

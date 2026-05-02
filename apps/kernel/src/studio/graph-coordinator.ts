@@ -512,25 +512,32 @@ export async function approveGraphMutationRequest(mutationId: string, approvedBy
 		};
 	}
 
+	// mutation.payload is Record<string,unknown> from DB — cast via unknown to the narrower param types
+	type InsertNodeParams = Parameters<typeof applyInsertNode>[1];
+	type SplitTaskParams = Parameters<typeof applySplitTask>[1];
+	type EdgeParams = Parameters<typeof applyAddEdge>[0];
+	type DeferBranchParams = Parameters<typeof applyDeferBranch>[1];
+	type MergeIntoPhaseParams = Parameters<typeof applyMergeIntoPhase>[1];
+
 	let detail: Record<string, unknown>;
 	switch (mutation.mutationType) {
 		case "insert_node":
-			detail = await applyInsertNode(mutation.projectId, mutation.payload as any);
+			detail = await applyInsertNode(mutation.projectId, mutation.payload as unknown as InsertNodeParams);
 			break;
 		case "split_task":
-			detail = await applySplitTask(mutation.projectId, mutation.payload as any);
+			detail = await applySplitTask(mutation.projectId, mutation.payload as unknown as SplitTaskParams);
 			break;
 		case "add_edge":
-			detail = await applyAddEdge(mutation.payload as any, mutation.projectId);
+			detail = await applyAddEdge(mutation.payload as unknown as EdgeParams, mutation.projectId);
 			break;
 		case "remove_edge":
-			detail = await applyRemoveEdge(mutation.payload as any);
+			detail = await applyRemoveEdge(mutation.payload as unknown as EdgeParams);
 			break;
 		case "defer_branch":
-			detail = await applyDeferBranch(mutation.projectId, mutation.payload as any);
+			detail = await applyDeferBranch(mutation.projectId, mutation.payload as unknown as DeferBranchParams);
 			break;
 		case "merge_into_phase":
-			detail = await applyMergeIntoPhase(mutation.projectId, mutation.payload as any);
+			detail = await applyMergeIntoPhase(mutation.projectId, mutation.payload as unknown as MergeIntoPhaseParams);
 			break;
 		default:
 			throw new Error(`Unsupported pending graph mutation type: ${mutation.mutationType}`);

@@ -198,7 +198,7 @@ export function PlannerChatProvider({ children }: { children: ReactNode }) {
             .then((p) => {
               if (p) update(projectId, { plan: p });
             })
-            .catch(() => {});
+            .catch((err) => console.error("[PlannerChatContext] Failed to refresh plan after send:", err));
         },
         (err) => {
           const errorMsg: ChatMessage = {

@@ -13,7 +13,7 @@ export default function EmptyTeamState({ projectId, onTeamCreated, onAddAgent }:
 	const [applying, setApplying] = useState(false);
 
 	useEffect(() => {
-		fetchTeamTemplates().then(setTemplates).catch(() => {});
+		fetchTeamTemplates().then(setTemplates).catch((err) => console.error("[EmptyTeamState] Failed to load templates:", err));
 	}, []);
 
 	const applyTemplate = async (templateId: string) => {

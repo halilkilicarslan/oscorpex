@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { query, queryOne } from "../pg.js";
+import { execute, query, queryOne } from "../pg.js";
 
 export type QualityGateEnvironment = "dev" | "staging" | "production";
 export type QualityGateOutcome = "passed" | "failed" | "warning" | "blocked";
@@ -393,4 +393,36 @@ export async function hasActiveQualityGateOverride(input: {
 		[input.evaluationId, input.tenantId],
 	);
 	return Boolean(row);
+}
+
+// ---------------------------------------------------------------------------
+// Verification Results — task-level artifact verification records
+// ---------------------------------------------------------------------------
+
+export interface VerificationResultRow {
+	id: string;
+	taskId: string;
+	verificationType: string;
+	status: "passed" | "failed";
+	details: Record<string, unknown>;
+	createdAt: string;
+}
+
+export async function recordVerificationResult(data: {
+	taskId: string;
+	verificationType: string;
+	passed: boolean;
+	details?: Record<string, unknown>;
+}): Promise<void> {
+	await execute(
+		`INSERT INTO verification_results (id, task_id, verification_type, status, details, created_at)
+		 VALUES ($1, $2, $3, $4, $5, now())`,
+		[
+			randomUUID(),
+			data.taskId,
+			data.verificationType,
+			data.passed ? "passed" : "failed",
+			JSON.stringify(data.details ?? {}),
+		],
+	);
 }

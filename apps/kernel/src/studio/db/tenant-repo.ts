@@ -180,3 +180,64 @@ export async function listApiKeys(tenantId: string): Promise<ApiKeyRecord[]> {
 export async function revokeApiKey(id: string): Promise<void> {
 	await execute("DELETE FROM api_keys WHERE id = $1", [id]);
 }
+
+// ---------------------------------------------------------------------------
+// Auth helpers — convenience wrappers used by auth-routes
+// (avoids direct pg access in route files)
+// ---------------------------------------------------------------------------
+
+export async function createTenantWithOwner(params: {
+	tenantId: string;
+	tenantName: string;
+	tenantSlug: string;
+	userId: string;
+	email: string;
+	passwordHash: string;
+	displayName: string;
+}): Promise<void> {
+	await execute("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)", [
+		params.tenantId,
+		params.tenantName,
+		params.tenantSlug,
+	]);
+	await execute("INSERT INTO users (id, email, password_hash, display_name, tenant_id) VALUES ($1, $2, $3, $4, $5)", [
+		params.userId,
+		params.email,
+		params.passwordHash,
+		params.displayName,
+		params.tenantId,
+	]);
+	await execute("INSERT INTO user_roles (user_id, tenant_id, role) VALUES ($1, $2, $3)", [
+		params.userId,
+		params.tenantId,
+		"owner",
+	]);
+}
+
+export async function listTenantUsers(
+	tenantId: string,
+): Promise<Array<{ id: string; email: string; displayName: string; role: string | null }>> {
+	const rows = await query<Record<string, unknown>>(
+		`SELECT u.id, u.email, u.display_name, ur.role
+		 FROM users u
+		 LEFT JOIN user_roles ur ON u.id = ur.user_id AND ur.tenant_id = \$1
+		 WHERE u.tenant_id = \$1
+		 ORDER BY u.created_at ASC`,
+		[tenantId],
+	);
+	return rows.map((r) => ({
+		id: r.id as string,
+		email: r.email as string,
+		displayName: r.display_name as string,
+		role: (r.role as string) ?? null,
+	}));
+}
+
+export async function upsertUserRole(userId: string, tenantId: string, role: string): Promise<void> {
+	await execute(
+		`INSERT INTO user_roles (user_id, tenant_id, role)
+		 VALUES (\$1, \$2, \$3)
+		 ON CONFLICT (user_id, tenant_id) DO UPDATE SET role = \$3`,
+		[userId, tenantId, role],
+	);
+}

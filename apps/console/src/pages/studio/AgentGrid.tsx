@@ -50,7 +50,7 @@ export default function AgentGrid({ projectId }: { projectId: string }) {
           return next;
         });
       })
-      .catch(() => {})
+      .catch((err) => console.error("[AgentGrid] Failed to load agents:", err))
       .finally(() => setLoading(false));
   }, [projectId]);
 

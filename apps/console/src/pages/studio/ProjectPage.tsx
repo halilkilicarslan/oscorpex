@@ -150,7 +150,7 @@ export default function ProjectPage() {
 					setPlannerProviders(providersResult.value);
 				}
 			})
-			.catch(() => {});
+			.catch((err) => console.error("[ProjectPage] Failed to load config/providers:", err));
 	}, [projectId]);
 
 	useEffect(() => {
@@ -179,7 +179,7 @@ export default function ProjectPage() {
 
 	const refreshAppStatus = useCallback(() => {
 		if (!projectId) return;
-		fetchAppStatus(projectId).then(setAppStatus).catch(() => {});
+		fetchAppStatus(projectId).then(setAppStatus).catch((err) => console.error("[ProjectPage] Failed to load app status:", err));
 	}, [projectId]);
 
 	const { isWsActive: isAppStatusWsActive } = useWsEventRefresh(

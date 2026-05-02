@@ -6,7 +6,6 @@
 // handles persistence (DB) and event emission (kernel layer).
 // ---------------------------------------------------------------------------
 
-import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import {
@@ -17,10 +16,9 @@ import {
 	verifyFilesModified,
 	verifyOutputNonEmpty,
 } from "@oscorpex/verification-kit";
-import { getProjectSetting } from "./db.js";
+import { getProjectSetting, recordVerificationResult } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
-import { execute } from "./pg.js";
 import type { TaskOutput } from "./types.js";
 const log = createLogger("output-verifier");
 
@@ -39,11 +37,12 @@ export interface OutputVerificationReport {
 // ---------------------------------------------------------------------------
 
 async function persistResult(taskId: string, result: VerificationResult): Promise<void> {
-	await execute(
-		`INSERT INTO verification_results (id, task_id, verification_type, status, details, created_at)
-		 VALUES ($1, $2, $3, $4, $5, now())`,
-		[randomUUID(), taskId, result.type, result.passed ? "passed" : "failed", JSON.stringify(result.details)],
-	);
+	await recordVerificationResult({
+		taskId,
+		verificationType: result.type,
+		passed: result.passed,
+		details: result.details as unknown as Record<string, unknown>,
+	});
 }
 
 // ---------------------------------------------------------------------------

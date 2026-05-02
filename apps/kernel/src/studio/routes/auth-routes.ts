@@ -13,9 +13,18 @@ import { signJwt } from "../auth/jwt.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { requirePermission } from "../auth/rbac.js";
 import { logTenantActivity } from "../auth/tenant-context.js";
-import { createApiKey, listApiKeys, revokeApiKey } from "../db/tenant-repo.js";
+import {
+	createApiKey,
+	createTenantWithOwner,
+	getUser,
+	getUserByEmail,
+	getUserRole,
+	listApiKeys,
+	listTenantUsers,
+	revokeApiKey,
+	upsertUserRole,
+} from "../db.js";
 import { createLogger } from "../logger.js";
-import { execute, query, queryOne } from "../pg.js";
 const log = createLogger("auth-routes");
 
 const router = new Hono<{ Variables: AuthVariables }>();
@@ -45,12 +54,12 @@ router.post("/register", async (c) => {
 		}
 
 		// Email uniqueness check
-		const existing = await queryOne("SELECT id FROM users WHERE email = $1", [email]);
+		const existing = await getUserByEmail(email);
 		if (existing) {
 			return c.json({ error: "Email already registered" }, 409);
 		}
 
-		// Create tenant
+		// Create tenant + user + owner role atomically via repo
 		const tenantId = randomUUID();
 		const slugBase = email
 			.split("@")[0]
@@ -58,28 +67,19 @@ router.post("/register", async (c) => {
 			.toLowerCase();
 		const tenantSlug = `${slugBase}-${tenantId.slice(0, 4)}`;
 		const resolvedTenantName = tenantName ?? `${displayName ?? email}'s Workspace`;
-
-		await execute("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)", [
-			tenantId,
-			resolvedTenantName,
-			tenantSlug,
-		]);
-
-		// Create user
 		const userId = randomUUID();
 		const passwordHash = hashPassword(password);
 		const resolvedDisplayName = displayName ?? "";
 
-		await execute("INSERT INTO users (id, email, password_hash, display_name, tenant_id) VALUES ($1, $2, $3, $4, $5)", [
+		await createTenantWithOwner({
+			tenantId,
+			tenantName: resolvedTenantName,
+			tenantSlug,
 			userId,
 			email,
 			passwordHash,
-			resolvedDisplayName,
-			tenantId,
-		]);
-
-		// Assign owner role
-		await execute("INSERT INTO user_roles (user_id, tenant_id, role) VALUES ($1, $2, $3)", [userId, tenantId, "owner"]);
+			displayName: resolvedDisplayName,
+		});
 
 		const token = signJwt({ sub: userId, email, tenantId, role: "owner" });
 
@@ -111,32 +111,22 @@ router.post("/login", async (c) => {
 			return c.json({ error: "Email and password required" }, 400);
 		}
 
-		const user = await queryOne<{
-			id: string;
-			email: string;
-			password_hash: string;
-			display_name: string;
-			tenant_id: string;
-		}>("SELECT id, email, password_hash, display_name, tenant_id FROM users WHERE email = $1", [email]);
+		const user = await getUserByEmail(email);
 
-		if (!user || !verifyPassword(password, user.password_hash)) {
+		if (!user || !verifyPassword(password, user.passwordHash)) {
 			return c.json({ error: "Invalid credentials" }, 401);
 		}
 
-		const roleRow = await queryOne<{ role: string }>(
-			"SELECT role FROM user_roles WHERE user_id = $1 AND tenant_id = $2",
-			[user.id, user.tenant_id],
-		);
-		const role = roleRow?.role ?? "viewer";
+		const role = (await getUserRole(user.id, user.tenantId ?? "")) ?? "viewer";
 
-		const token = signJwt({ sub: user.id, email: user.email, tenantId: user.tenant_id, role });
+		const token = signJwt({ sub: user.id, email: user.email, tenantId: user.tenantId ?? "", role });
 		return c.json({
 			token,
 			user: {
 				id: user.id,
 				email: user.email,
-				displayName: user.display_name,
-				tenantId: user.tenant_id,
+				displayName: user.displayName,
+				tenantId: user.tenantId,
 				role,
 			},
 		});
@@ -163,28 +153,20 @@ router.get("/me", async (c) => {
 	}
 
 	try {
-		const user = await queryOne<{
-			id: string;
-			email: string;
-			display_name: string;
-			tenant_id: string;
-		}>("SELECT id, email, display_name, tenant_id FROM users WHERE id = $1", [userId]);
+		const user = await getUser(userId);
 
 		if (!user) {
 			return c.json({ error: "User not found" }, 404);
 		}
 
-		const roleRow = await queryOne<{ role: string }>(
-			"SELECT role FROM user_roles WHERE user_id = $1 AND tenant_id = $2",
-			[user.id, user.tenant_id],
-		);
+		const role = (await getUserRole(user.id, user.tenantId ?? "")) ?? "viewer";
 
 		return c.json({
 			id: user.id,
 			email: user.email,
-			displayName: user.display_name,
-			tenantId: user.tenant_id,
-			role: roleRow?.role ?? "viewer",
+			displayName: user.displayName,
+			tenantId: user.tenantId,
+			role,
 		});
 	} catch (err) {
 		log.error("[auth] me error:" + " " + String(err));
@@ -201,22 +183,8 @@ router.get("/users", requirePermission("users:read"), async (c) => {
 		const tid = (c as any).get("tenantId") as string | undefined;
 		if (!tid) return c.json({ error: "Tenant context required" }, 400);
 
-		const rows = await query<Record<string, unknown>>(
-			`SELECT u.id, u.email, u.display_name, ur.role
-			 FROM users u
-			 LEFT JOIN user_roles ur ON u.id = ur.user_id AND ur.tenant_id = $1
-			 WHERE u.tenant_id = $1
-			 ORDER BY u.created_at ASC`,
-			[tid],
-		);
-		return c.json(
-			rows.map((r) => ({
-				id: r.id,
-				email: r.email,
-				displayName: r.display_name,
-				role: r.role ?? null,
-			})),
-		);
+		const users = await listTenantUsers(tid);
+		return c.json(users);
 	} catch (err) {
 		log.error("[auth] users list error:" + " " + String(err));
 		return c.json({ error: "Internal server error" }, 500);
@@ -245,12 +213,7 @@ router.patch("/users/:id/role", async (c) => {
 			return c.json({ error: "Invalid role" }, 400);
 		}
 
-		await execute(
-			`INSERT INTO user_roles (user_id, tenant_id, role)
-			 VALUES ($1, $2, $3)
-			 ON CONFLICT (user_id, tenant_id) DO UPDATE SET role = $3`,
-			[userId, tid, role],
-		);
+		await upsertUserRole(userId, tid, role);
 
 		// M6.4: Audit log — non-blocking
 		const callerId = ctx.get("userId") as string | undefined;

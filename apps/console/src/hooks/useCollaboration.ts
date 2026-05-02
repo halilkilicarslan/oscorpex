@@ -172,7 +172,7 @@ export function useCollaboration(projectId: string, user: CollaborationUser): Us
 			if (refreshRef.current) clearInterval(refreshRef.current);
 			// Leave — fire and forget (cleanup must be sync-safe)
 			if (joinedRef.current) {
-				leaveProject({ projectId, userId: user.userId }).catch(() => {});
+				leaveProject({ projectId, userId: user.userId }).catch(() => { /* optional: cleanup call, failure is non-critical */ });
 				joinedRef.current = false;
 			}
 		};

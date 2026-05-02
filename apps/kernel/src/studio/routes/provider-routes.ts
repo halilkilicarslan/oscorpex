@@ -19,6 +19,7 @@ import {
 import { createLogger } from "../logger.js";
 import { isAnyPlannerCLIAvailable, listPlannerCLIProviders } from "../planner-cli.js";
 import { providerState } from "../provider-state.js";
+import type { AIProviderType, ProviderCliTool } from "../types.js";
 const log = createLogger("provider-routes");
 
 export const providerRoutes = new Hono();
@@ -74,12 +75,12 @@ providerRoutes.post("/providers", async (c) => {
 
 	const provider = await createProvider({
 		name: body.name.trim(),
-		type: (body.type ?? "openai") as any,
+		type: (body.type ?? "openai") as AIProviderType,
 		apiKey: body.apiKey ?? "",
 		baseUrl: body.baseUrl ?? "",
 		model: body.model ?? "",
 		isActive: body.isActive !== false,
-		cliTool: body.cliTool as any,
+		cliTool: body.cliTool as ProviderCliTool | undefined,
 	});
 
 	return c.json(provider, 201);
@@ -132,12 +133,12 @@ providerRoutes.put("/providers/:id", async (c) => {
 
 	const provider = await updateProvider(c.req.param("id"), {
 		name: body.name,
-		type: body.type as any,
+		type: body.type as AIProviderType | undefined,
 		apiKey: body.apiKey,
 		baseUrl: body.baseUrl,
 		model: body.model,
 		isActive: body.isActive,
-		cliTool: body.cliTool as any,
+		cliTool: body.cliTool as ProviderCliTool | undefined,
 	});
 
 	if (!provider) return c.json({ error: "Provider not found" }, 404);
@@ -179,10 +180,10 @@ providerRoutes.post("/providers/:id/test", async (c) => {
 			return c.json({ valid: true, message: "Connection successful" });
 		}
 
-		const errorBody = await res.json().catch(() => ({}));
+		const errorBody = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
 		return c.json({
 			valid: false,
-			message: (errorBody as any)?.error?.message ?? `HTTP ${res.status}`,
+			message: errorBody?.error?.message ?? `HTTP ${res.status}`,
 		});
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : "Connection failed";

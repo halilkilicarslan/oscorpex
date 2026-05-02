@@ -63,17 +63,19 @@ import { verificationRunner } from "./verification-adapter.js";
 
 class KernelEventPublisher implements EventPublisher {
 	async publish<TPayload>(event: import("@oscorpex/core").BaseEvent<string, TPayload>): Promise<void> {
-		eventBus.emit(event as any);
+		// BaseEvent has a superset of fields vs StudioEvent's Omit shape — cast via unknown
+		eventBus.emit(event as unknown as import("../types.js").StudioEvent);
 	}
 	publishTransient<TPayload>(event: import("@oscorpex/core").BaseEvent<string, TPayload>): void {
-		eventBus.emitTransient(event as any);
+		eventBus.emitTransient(event as unknown as import("../types.js").StudioEvent);
 	}
 }
 
 class KernelTaskStore implements TaskStore {
 	async create(task: CoreTask): Promise<CoreTask> {
 		const { createTask } = await import("../db.js");
-		const result = await createTask(task as any);
+		// CoreTask and kernel Task are structurally compatible at the DB boundary
+		const result = await createTask(task as unknown as import("../types.js").Task);
 		return result as unknown as CoreTask;
 	}
 	async get(id: string): Promise<CoreTask | null> {
@@ -83,7 +85,7 @@ class KernelTaskStore implements TaskStore {
 	}
 	async update(id: string, partial: Partial<CoreTask>): Promise<CoreTask> {
 		const { updateTask } = await import("../db.js");
-		return (await updateTask(id, partial as any)) as unknown as CoreTask;
+		return (await updateTask(id, partial as unknown as Partial<import("../types.js").Task>)) as unknown as CoreTask;
 	}
 	async list(filter: import("@oscorpex/core").TaskListFilter): Promise<CoreTask[]> {
 		const { listProjectTasks } = await import("../db.js");
@@ -138,7 +140,11 @@ class KernelTaskGraph implements TaskGraphContract {
 		const agents = await listProjectAgents(projectId);
 		const deps = await listAgentDependencies(projectId);
 		const { buildDAGWaves } = await import("@oscorpex/task-graph");
-		const waveIds = buildDAGWaves(agents as any, deps as any);
+		// ProjectAgent satisfies GraphAgent and AgentDependency satisfies DependencyEdge structurally
+		const waveIds = buildDAGWaves(
+			agents as unknown as import("@oscorpex/task-graph").GraphAgent[],
+			deps as unknown as import("@oscorpex/task-graph").DependencyEdge[],
+		);
 		// Map agent ID waves to empty PipelineStage shells (order only)
 		return waveIds.map((wave, idx) =>
 			wave.map((agentId) => ({
@@ -156,10 +162,13 @@ class KernelTaskGraph implements TaskGraphContract {
 	}
 	async getExecutionOrder(projectId: string): Promise<string[]> {
 		const waves = await this.buildWaves(projectId);
-		return waves
-			.flat()
-			.map((s: any) => s.agents?.[0]?.id)
-			.filter(Boolean);
+		return (
+			waves
+				.flat()
+				// agents is typed as unknown in the core contract — extract id via narrowing
+				.map((s: import("@oscorpex/core").PipelineStage) => (s.agents as Array<{ id?: string }>)?.[0]?.id)
+				.filter((id): id is string => id !== undefined)
+		);
 	}
 }
 
@@ -291,7 +300,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 	}
 
 	async completeTask(taskId: string, output?: CoreTaskOutput): Promise<CoreTask> {
-		const result = await taskEngine.completeTask(taskId, output as any);
+		const result = await taskEngine.completeTask(taskId, output as unknown as import("../types.js").TaskOutput);
 		await runHooks("after_task_complete", { runId: "", taskId: result.id, projectId: "" });
 		return result as unknown as CoreTask;
 	}
@@ -328,7 +337,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 	}
 
 	async executeTask(projectId: string, task: CoreTask): Promise<void> {
-		executionEngine.executeTask(projectId, task as any).catch((err) => {
+		executionEngine.executeTask(projectId, task as unknown as import("../types.js").Task).catch((err) => {
 			// eslint-disable-next-line no-console
 			console.warn("[kernel] executeTask background error:", err?.message ?? err);
 		});
@@ -402,7 +411,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 
 	async listGoals(projectId: string, status?: string): Promise<any[]> {
 		const { listGoals } = await import("../goal-engine.js");
-		return listGoals(projectId, status as any);
+		return listGoals(projectId, status as import("../goal-engine.js").GoalStatus | undefined);
 	}
 
 	async getGoal(goalId: string): Promise<any | null> {

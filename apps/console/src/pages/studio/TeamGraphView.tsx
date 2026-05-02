@@ -145,8 +145,8 @@ export default function TeamGraphView({
   } | null>(null);
 
   useEffect(() => {
-    fetchProjectAgents(projectId).then(setAgents).catch(() => {});
-    fetchProjectDependencies(projectId).then(setDeps).catch(() => {});
+    fetchProjectAgents(projectId).then(setAgents).catch((err) => console.error("[TeamGraphView] Failed to load agents:", err));
+    fetchProjectDependencies(projectId).then(setDeps).catch((err) => console.error("[TeamGraphView] Failed to load dependencies:", err));
   }, [projectId]);
 
   // Agent/deps verisi değiştiğinde node/edge listelerini yeniden hesapla.

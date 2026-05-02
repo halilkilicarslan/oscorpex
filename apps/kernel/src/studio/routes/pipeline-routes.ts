@@ -7,7 +7,7 @@ import { requirePermission } from "../auth/rbac.js";
 import { getLatestPlan, getProject, getTask, listPhases, listProjectAgents, listTasks } from "../db.js";
 import { kernel } from "../kernel/index.js";
 import { createLogger } from "../logger.js";
-import type { Task } from "../types.js";
+import type { PipelineStage, PipelineState, Task } from "../types.js";
 import { ensureProjectTeamInitialized } from "./team-init-guard.js";
 const log = createLogger("pipeline-routes");
 
@@ -42,7 +42,7 @@ pipelineRoutes.get("/projects/:id/pipeline/status", async (c) => {
 		return c.json({ error: "Bu proje için pipeline kaydı bulunamadı" }, 404);
 	}
 
-	const pipelineState = enriched.pipelineState;
+	const pipelineState = enriched.pipelineState as PipelineState | null;
 	if (pipelineState?.stages) {
 		const plan = await getLatestPlan(projectId);
 		const allTasks: Task[] = [];
@@ -54,7 +54,7 @@ pipelineRoutes.get("/projects/:id/pipeline/status", async (c) => {
 			}
 		}
 
-		const reviewTasksToRelocate: { task: any; fromStageIdx: number }[] = [];
+		const reviewTasksToRelocate: { task: Task; fromStageIdx: number }[] = [];
 		for (let si = 0; si < pipelineState.stages.length; si++) {
 			const stage = pipelineState.stages[si];
 			if (!stage.tasks) continue;
@@ -64,7 +64,7 @@ pipelineRoutes.get("/projects/:id/pipeline/status", async (c) => {
 					stage.tasks[i] = { ...stage.tasks[i], ...fresh };
 					if (fresh.title.startsWith("Code Review: ") && fresh.dependsOn?.length > 0) {
 						const depId = fresh.dependsOn[0];
-						const depInThisStage = stage.tasks.some((t: any) => t.id === depId);
+						const depInThisStage = stage.tasks.some((t) => t.id === depId);
 						if (!depInThisStage) {
 							reviewTasksToRelocate.push({
 								task: stage.tasks[i],
@@ -81,24 +81,24 @@ pipelineRoutes.get("/projects/:id/pipeline/status", async (c) => {
 
 		for (const { task, fromStageIdx } of reviewTasksToRelocate) {
 			const depId = task.dependsOn[0];
-			const targetStageIdx = pipelineState.stages.findIndex((s: any) =>
-				(s.tasks ?? []).some((t: any) => t.id === depId),
+			const targetStageIdx = pipelineState.stages.findIndex((s: PipelineStage) =>
+				(s.tasks ?? []).some((t) => t.id === depId),
 			);
 			if (targetStageIdx >= 0 && targetStageIdx !== fromStageIdx) {
 				pipelineState.stages[fromStageIdx].tasks = pipelineState.stages[fromStageIdx].tasks.filter(
-					(t: any) => t.id !== task.id,
+					(t) => t.id !== task.id,
 				);
 				const targetStage = pipelineState.stages[targetStageIdx];
 				targetStage.tasks.push(task);
 				const reviewerAgent = agentById.get(task.assignedAgent ?? task.assignedAgentId);
-				if (reviewerAgent && !targetStage.agents.some((a: any) => a.id === reviewerAgent.id)) {
-					targetStage.agents.push(reviewerAgent as any);
+				if (reviewerAgent && !targetStage.agents.some((a) => a.id === reviewerAgent.id)) {
+					targetStage.agents.push(reviewerAgent);
 				}
 			}
 		}
 
 		const existingTaskIds = new Set(
-			pipelineState.stages.flatMap((s: { tasks?: { id: string }[] }) => (s.tasks ?? []).map((t) => t.id)),
+			pipelineState.stages.flatMap((s: PipelineStage) => (s.tasks ?? []).map((t) => t.id)),
 		);
 		for (const task of allTasks) {
 			if (existingTaskIds.has(task.id)) continue;
@@ -106,13 +106,15 @@ pipelineRoutes.get("/projects/:id/pipeline/status", async (c) => {
 			const isReviewTask = task.title.startsWith("Code Review: ") && task.dependsOn.length > 0;
 			if (isReviewTask) {
 				const depId = task.dependsOn[0];
-				const targetStage = pipelineState.stages.find((s: any) => (s.tasks ?? []).some((t: any) => t.id === depId));
+				const targetStage = pipelineState.stages.find((s: PipelineStage) =>
+					(s.tasks ?? []).some((t) => t.id === depId),
+				);
 				if (targetStage) {
 					if (!targetStage.tasks) targetStage.tasks = [];
-					targetStage.tasks.push(task as any);
+					targetStage.tasks.push(task);
 					const reviewerAgent = agentById.get(task.assignedAgent ?? task.assignedAgentId);
-					if (reviewerAgent && !targetStage.agents.some((a: any) => a.id === reviewerAgent.id)) {
-						targetStage.agents.push(reviewerAgent as any);
+					if (reviewerAgent && !targetStage.agents.some((a) => a.id === reviewerAgent.id)) {
+						targetStage.agents.push(reviewerAgent);
 					}
 					continue;
 				}
@@ -122,7 +124,7 @@ pipelineRoutes.get("/projects/:id/pipeline/status", async (c) => {
 			if (!assignedId) continue;
 			for (const stage of pipelineState.stages) {
 				const match = stage.agents.some(
-					(a: any) =>
+					(a) =>
 						a.id === assignedId ||
 						a.sourceAgentId === assignedId ||
 						a.name.toLowerCase() === assignedId.toLowerCase() ||
@@ -130,7 +132,7 @@ pipelineRoutes.get("/projects/:id/pipeline/status", async (c) => {
 				);
 				if (match) {
 					if (!stage.tasks) stage.tasks = [];
-					stage.tasks.push(task as any);
+					stage.tasks.push(task);
 					break;
 				}
 			}

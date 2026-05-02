@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '../types';
 import ToolCallCard from './ToolCallCard';
@@ -12,7 +13,7 @@ function formatTimestamp(date: Date): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function MessageBubble({ message, compact }: MessageBubbleProps) {
+const MessageBubble = memo(function MessageBubble({ message, compact }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
   if (isUser) {
@@ -62,4 +63,6 @@ export default function MessageBubble({ message, compact }: MessageBubbleProps) 
       </span>
     </div>
   );
-}
+});
+
+export default MessageBubble;

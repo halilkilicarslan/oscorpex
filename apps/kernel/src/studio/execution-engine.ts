@@ -55,7 +55,8 @@ import { runLintFix } from "./lint-runner.js";
 import { createLogger } from "./logger.js";
 import { resolveModel } from "./model-router.js";
 // test-gate imported via execution-gates.ts
-import { queryOne as pgQueryOne } from "./pg.js";
+// Direct pg access: tightly coupled to module logic — raw COUNT aggregates with no repo equivalent
+import { query as pgQuery, queryOne as pgQueryOne } from "./pg.js";
 import { markExecutionStarted } from "./preflight-warmup.js";
 import { PROMPT_LIMITS, capText, enforcePromptBudget } from "./prompt-budget.js";
 import { buildTaskPrompt, defaultSystemPrompt } from "./prompt-builder.js";
@@ -264,6 +265,24 @@ class ExecutionEngine {
 		}, 15_000);
 	}
 
+	/**
+	 * Consolidated query: fetch all running projects with their active phase IDs in one shot.
+	 * Replaces N+1 pattern of listProjects → getPipelineRun → getLatestPlan → listPhases.
+	 */
+	private async getRunningProjectPhases(): Promise<Array<{ projectId: string; phaseId: string }>> {
+		const rows = await pgQuery<{ project_id: string; phase_id: string }>(
+			`SELECT p.id AS project_id, ph.id AS phase_id
+			 FROM projects p
+			 JOIN pipeline_runs pr ON pr.project_id = p.id AND pr.status = 'running'
+			 JOIN project_plans pp ON pp.project_id = p.id AND pp.status = 'approved'
+			 JOIN phases ph ON ph.plan_id = pp.id AND ph.status IN ('running', 'queued')
+			 WHERE p.status = 'running'
+			 ORDER BY p.id, ph."order"`,
+			[],
+		);
+		return rows.map((r) => ({ projectId: r.project_id, phaseId: r.phase_id }));
+	}
+
 	private async runDispatchWatchdog(): Promise<void> {
 		if (this._dispatchWatchdogRunning) return;
 		this._dispatchWatchdogRunning = true;
@@ -271,41 +290,44 @@ class ExecutionEngine {
 			// If engine is actively working, watchdog should stay passive.
 			if (this._semaphore.activeCount > 0 || this._semaphore.pendingCount > 0) return;
 
-			const projects = await listProjects();
+			const projectPhases = await this.getRunningProjectPhases();
+			if (projectPhases.length === 0) return;
+
+			// Group phases by project
+			const byProject = new Map<string, string[]>();
+			for (const { projectId, phaseId } of projectPhases) {
+				const phases = byProject.get(projectId) ?? [];
+				phases.push(phaseId);
+				byProject.set(projectId, phases);
+			}
+
 			const now = Date.now();
-			for (const project of projects) {
-				if (project.status !== "running") continue;
-
-				const run = await getPipelineRun(project.id);
-				if (!run || run.status !== "running") continue;
-
-				const plan = await getLatestPlan(project.id);
-				if (!plan || plan.status !== "approved") continue;
-
-				const phases = await listPhases(plan.id);
-				const runningPhases = phases.filter((phase) => phase.status === "running");
-				if (runningPhases.length === 0) continue;
-
-				let hasReadyTask = false;
-				for (const phase of runningPhases) {
-					const ready = await taskEngine.getReadyTasks(phase.id);
-					if (ready.length > 0) {
-						hasReadyTask = true;
-						break;
-					}
-				}
-				if (!hasReadyTask) continue;
-
-				const lastKick = this._lastWatchdogKickByProject.get(project.id) ?? 0;
+			for (const [projectId, phaseIds] of byProject) {
+				const lastKick = this._lastWatchdogKickByProject.get(projectId) ?? 0;
 				// Cooldown to avoid dispatch thrash loops when a project keeps flapping.
 				if (now - lastKick < 20_000) continue;
 
-				this._lastWatchdogKickByProject.set(project.id, now);
-				log.warn(`[execution-engine] Watchdog kick: restarting dispatch for project "${project.name}"`);
-				this.startProjectExecution(project.id).catch((err) => {
-					log.warn("[execution-engine] Non-blocking operation failed:" + " " + String(err?.message ?? err));
-				});
+				let hasReadyTask = false;
+				for (const phaseId of phaseIds) {
+					const readyTasks = await taskEngine.getReadyTasks(phaseId);
+					if (readyTasks.length > 0) {
+						hasReadyTask = true;
+						const sorted = sortTasksByFairness(readyTasks);
+						for (const task of sorted) {
+							this.executeTask(projectId, task).catch((err) =>
+								log.warn(`[execution-engine] Non-blocking operation failed: ${err?.message ?? err}`),
+							);
+						}
+					}
+				}
+
+				if (hasReadyTask) {
+					this._lastWatchdogKickByProject.set(projectId, now);
+					log.warn(`[execution-engine] Watchdog kick: dispatching ready tasks for project "${projectId}"`);
+				}
 			}
+		} catch (err) {
+			log.error(`[execution-engine] Dispatch watchdog error: ${String(err)}`);
 		} finally {
 			this._dispatchWatchdogRunning = false;
 		}

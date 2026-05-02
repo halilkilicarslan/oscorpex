@@ -27,6 +27,7 @@ import {
 	replanUnfinishedTasks as incReplan,
 } from "./incremental-planner.js";
 import { createLogger } from "./logger.js";
+// Direct pg access: tightly coupled to module logic — JSON array UPDATEs and count queries with no repo equivalent
 import { execute, queryOne } from "./pg.js";
 import { canonicalizeAgentRole, roleMatches } from "./roles.js";
 import type { TaskComplexity } from "./types.js";

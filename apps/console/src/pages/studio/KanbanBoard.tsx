@@ -64,7 +64,7 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
 				setOffset(PAGE_SIZE);
 				setHasMore(result.data.length < result.total);
 			})
-			.catch(() => {})
+			.catch((err) => console.error("[KanbanBoard] Failed to load tasks:", err))
 			.finally(() => setLoading(false));
 	}, [projectId]);
 
@@ -86,7 +86,7 @@ export default function KanbanBoard({ projectId }: { projectId: string }) {
 	const loadAutoStartStatus = useCallback(() => {
 		fetchAutoStartStatus(projectId)
 			.then(setAutoStartStatus)
-			.catch(() => {});
+			.catch((err) => console.error("[KanbanBoard] Failed to load auto-start status:", err));
 	}, [projectId]);
 
 	const { isWsActive } = useWsEventRefresh(

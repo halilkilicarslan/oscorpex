@@ -56,7 +56,7 @@ export default function ChatPanel({ onClose, initialAgent }: ChatPanelProps) {
           setSelectedAgent(data[0]);
         }
       })
-      .catch(() => {});
+      .catch((err) => console.error("[ChatPanel] Failed to load agents:", err));
   }, []);
 
   useEffect(() => {

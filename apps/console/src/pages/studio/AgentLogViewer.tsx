@@ -174,7 +174,7 @@ export default function AgentLogViewer({ projectId }: { projectId: string }) {
           setSelectedAgent(data[0].id);
         }
       })
-      .catch(() => {})
+      .catch((err) => console.error("[AgentLogViewer] Failed to load agents:", err))
       .finally(() => setLoading(false));
   }, [projectId]);
 

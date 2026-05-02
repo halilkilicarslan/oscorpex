@@ -11,6 +11,7 @@
 import { createHash } from "node:crypto";
 import type { Context, Next } from "hono";
 import { createLogger } from "../logger.js";
+// Direct pg access: setTenantContext is a pg-session-level function with no db-repo equivalent
 import { queryOne, setTenantContext } from "../pg.js";
 import { verifyJwt } from "./jwt.js";
 const log = createLogger("auth-middleware");

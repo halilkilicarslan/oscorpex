@@ -35,6 +35,7 @@ import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
 import { recordAgentStep } from "./memory-bridge.js";
 import { updateWorkingMemory } from "./memory-manager.js";
+// Direct pg access: tightly coupled to module logic — COALESCE JOIN with no repo equivalent
 import { queryOne } from "./pg.js";
 import { evaluatePolicies } from "./policy-engine.js";
 import { syncDeclaredDependencies } from "./repo-dependency-sync.js";

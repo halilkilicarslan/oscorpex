@@ -53,13 +53,13 @@ export default function LivePreview({
         apiDetectedOnce.current = true;
         setViewMode('api');
       }
-    }).catch(() => {});
+    }).catch((err) => console.error("[LivePreview] API-only detection failed:", err));
   }, [canProbeProxy, appStatus.running, projectId]);
 
   const handleSwitchService = async (serviceName: string) => {
     setSelectedService(serviceName);
     // Backend proxy hedefini değiştir
-    await switchPreviewService(projectId, serviceName).catch(() => {});
+    await switchPreviewService(projectId, serviceName).catch((err) => console.error("[LivePreview] Switch service failed:", err));
     // API-only state'i resetle — yeni service'te tekrar algılansın
     apiDetectedOnce.current = false;
     setIsApiOnly(false);
@@ -73,7 +73,7 @@ export default function LivePreview({
           setViewMode('api');
         }
         apiDetectedOnce.current = true;
-      }).catch(() => {});
+      }).catch((err) => console.error("[LivePreview] API-only re-detection failed:", err));
     }, 500);
   };
 

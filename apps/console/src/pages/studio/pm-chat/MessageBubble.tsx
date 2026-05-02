@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Bot, User, AlertCircle } from 'lucide-react';
 import type { ChatMessage } from "../../../lib/studio-api";
 
@@ -5,7 +6,7 @@ interface MessageBubbleProps {
 	message: ChatMessage;
 }
 
-export default function MessageBubble({ message }: MessageBubbleProps) {
+const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProps) {
 	const isUser = message.role === 'user';
 	const isError = message.id.startsWith('error-');
 
@@ -37,4 +38,6 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
 			</div>
 		</div>
 	);
-}
+});
+
+export default MessageBubble;

@@ -86,6 +86,10 @@ class WebSocketManager {
 	private projectUnsubscribers = new Map<string, () => void>();
 	/** projectId -> aktif client sayısı */
 	private projectRefCounts = new Map<string, number>();
+	/** Batching: 50ms penceresi içinde biriken mesajlar (projectId -> mesaj listesi) */
+	private _pendingBroadcasts = new Map<string, Array<{ type: string; payload: unknown }>>();
+	/** Batching: proje başına zamanlayıcı (projectId -> timer handle) */
+	private _flushTimers = new Map<string, NodeJS.Timeout>();
 
 	constructor() {
 		// noServer: true — HTTP upgrade'ini kendimiz yöneteceğiz
@@ -110,12 +114,56 @@ class WebSocketManager {
 	/**
 	 * Belirli bir projeye abone olan tüm client'lara mesaj gönderir.
 	 * event-bus dışından (örn. agent-runtime) da kullanılabilir.
+	 *
+	 * Mesajlar 50ms'lik bir pencere içinde veya batch 20 mesaja ulaştığında
+	 * toplu (batch) olarak gönderilir. Tek mesajlar JSON objesi, çoklu mesajlar
+	 * JSON dizisi olarak serileştirilir.
 	 */
 	broadcastToProject(projectId: string, message: WSMessage): void {
-		const data = JSON.stringify(message);
+		// Mesajı bekleyen listeye ekle
+		let pending = this._pendingBroadcasts.get(projectId);
+		if (!pending) {
+			pending = [];
+			this._pendingBroadcasts.set(projectId, pending);
+		}
+		pending.push({ type: message.type, payload: message });
+
+		// 20 mesaja ulaşıldığında hemen gönder
+		if (pending.length >= 20) {
+			this._flushProject(projectId);
+			return;
+		}
+
+		// Henüz zamanlayıcı yoksa 50ms'lik flush timer başlat
+		if (!this._flushTimers.has(projectId)) {
+			const timer = setTimeout(() => this._flushProject(projectId), 50);
+			this._flushTimers.set(projectId, timer);
+		}
+	}
+
+	/**
+	 * Proje için bekleyen mesaj batch'ini gönderir ve zamanlayıcıyı temizler.
+	 */
+	private _flushProject(projectId: string): void {
+		const timer = this._flushTimers.get(projectId);
+		if (timer) clearTimeout(timer);
+		this._flushTimers.delete(projectId);
+
+		const messages = this._pendingBroadcasts.get(projectId);
+		this._pendingBroadcasts.delete(projectId);
+		if (!messages || messages.length === 0) return;
+
+		// Tek mesajsa doğrudan obje, birden fazlaysa dizi olarak gönder
+		const data =
+			messages.length === 1 ? JSON.stringify(messages[0].payload) : JSON.stringify(messages.map((m) => m.payload));
+
 		for (const [ws, record] of this.clients) {
 			if (record.subscriptions.has(projectId) && ws.readyState === WebSocket.OPEN) {
-				ws.send(data);
+				try {
+					ws.send(data);
+				} catch {
+					// Gönderme hatası — yoksay
+				}
 			}
 		}
 	}

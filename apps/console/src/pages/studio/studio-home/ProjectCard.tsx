@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { memo, useState, useEffect } from 'react';
 import {
 	Trash2,
 	Play,
@@ -52,7 +52,7 @@ export function StatusBadge({ status }: { status: Project['status'] }) {
 // Project card
 // ---------------------------------------------------------------------------
 
-export function ProjectCard({
+export const ProjectCard = memo(function ProjectCard({
 	project,
 	onOpen,
 	onDelete,
@@ -65,8 +65,8 @@ export function ProjectCard({
 	const [analytics, setAnalytics] = useState<ProjectAnalytics | null>(null);
 
 	useEffect(() => {
-		fetchProjectAgents(project.id).then(setAgents).catch(() => {});
-		fetchProjectAnalytics(project.id).then(setAnalytics).catch(() => {});
+		fetchProjectAgents(project.id).then(setAgents).catch((err) => console.error("[ProjectCard] Failed to load agents:", err));
+		fetchProjectAnalytics(project.id).then(setAnalytics).catch((err) => console.error("[ProjectCard] Failed to load analytics:", err));
 	}, [project.id]);
 
 	const completionPct =
@@ -189,4 +189,4 @@ export function ProjectCard({
 			</div>
 		</div>
 	);
-}
+});

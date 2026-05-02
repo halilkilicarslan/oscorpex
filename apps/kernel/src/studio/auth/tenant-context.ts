@@ -6,6 +6,7 @@
 
 import type { Context } from "hono";
 import { createLogger } from "../logger.js";
+// Direct pg access: tightly coupled to module logic — needs raw tenant_id column not in Project type
 import { queryOne } from "../pg.js";
 import type { EventType } from "../types.js";
 const log = createLogger("tenant-context");
