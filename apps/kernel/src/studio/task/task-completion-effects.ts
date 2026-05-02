@@ -4,7 +4,7 @@
 // All operations are fire-and-forget (.catch() logged, never thrown).
 // ---------------------------------------------------------------------------
 
-import { getProject, listProjectAgents, upsertAgentDailyStat } from "../db.js";
+import { getProject, listProjectAgents, listTokenUsageForTask, upsertAgentDailyStat } from "../db.js";
 import { applyPostCompletionHooks } from "../edge-hooks.js";
 import { createLogger } from "../logger.js";
 import { recordAgentStep } from "../memory-bridge.js";
@@ -59,16 +59,32 @@ export function fireTaskCompletionEffects(
 				});
 			}
 
-			// v4.1: Update agent daily stats
+			// v4.1: Update agent daily stats (with token/cost from token_usage)
 			const today = new Date().toISOString().slice(0, 10);
 			const agentId = task.assignedAgentId || task.assignedAgent;
-			const taskTimeMs = task.startedAt ? Date.now() - new Date(task.startedAt).getTime() : 0;
-			upsertAgentDailyStat(projectId, agentId, today, {
-				tasksCompleted: 1,
-				avgTaskTimeMs: taskTimeMs,
-			}).catch((err) => {
-				log.warn("[task-completion-effects] upsertAgentDailyStat failed:" + " " + String(err));
-			});
+			if (!agentId) {
+				log.warn("[task-completion-effects] No agentId for task " + taskId + " — skipping daily stat");
+			} else {
+				const taskTimeMs = task.startedAt ? Date.now() - new Date(task.startedAt).getTime() : 0;
+				listTokenUsageForTask(taskId)
+					.then((usageRows) => {
+						let tokensUsed = 0;
+						let costUsd = 0;
+						for (const r of usageRows) {
+							tokensUsed += Number((r as any).total_tokens ?? 0);
+							costUsd += Number((r as any).cost_usd ?? 0);
+						}
+						return upsertAgentDailyStat(projectId, agentId, today, {
+							tasksCompleted: 1,
+							avgTaskTimeMs: taskTimeMs,
+							tokensUsed,
+							costUsd,
+						});
+					})
+					.catch((err) => {
+						log.warn("[task-completion-effects] upsertAgentDailyStat failed:" + " " + String(err));
+					});
+			}
 
 			// v4.2: Record to memory tables for Memory page
 			if (proj) {
