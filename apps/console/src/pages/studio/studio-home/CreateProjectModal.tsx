@@ -345,6 +345,7 @@ export function CreateProjectModal({
 	const [architectRecommendation, setArchitectRecommendation] = useState<TeamArchitectRecommendation | null>(null);
 	const [architectError, setArchitectError] = useState<string | null>(null);
 	const [pendingQuestions, setPendingQuestions] = useState<IntakeQuestion[]>([]);
+	const [questionAnswers, setQuestionAnswers] = useState<Record<string, string[]>>({});
 	const [createdProject, setCreatedProject] = useState<Project | null>(null);
 	const [scopeApproved, setScopeApproved] = useState(false);
 	const [backendRecommendation, setBackendRecommendation] = useState<{
@@ -422,12 +423,13 @@ export function CreateProjectModal({
 		techPreference,
 	};
 
-	const sendPMMessage = (content: string) => {
+	const sendPMMessage = (content: string, opts?: { hidden?: boolean }) => {
 		const text = content.trim();
 		if (!text || architectStreaming || !createdProject) return;
 
-		const nextMessages: ArchitectMessage[] = [...architectMessages, { role: 'user', content: text }];
-		setArchitectMessages(nextMessages);
+		if (!opts?.hidden) {
+			setArchitectMessages((prev) => [...prev, { role: 'user', content: text }]);
+		}
 		setArchitectStreaming(true);
 		setArchitectStreamText('');
 		setArchitectError(null);
@@ -536,9 +538,9 @@ export function CreateProjectModal({
 		if (step !== 2 || architectMessages.length > 0 || architectStreaming || !createdProject) return;
 		const desc = description.trim();
 		const hasTech = techPreference.length > 0;
-		const techInfo = hasTech ? `\nKullanıcının teknoloji tercihi: ${techPreference.join(', ')}` : '';
-		const prompt = `Yeni proje intake:\nProje adı: ${name}\nAçıklama: ${desc}${techInfo}\n\nLütfen projeyi anlamak için kullanıcıya sorular sor. İlk mesajda takım önerme — önce projeyi anla.`;
-		sendPMMessage(prompt);
+		const techInfo = hasTech ? `\nTech preference: ${techPreference.join(', ')}` : '';
+		const prompt = `New project intake:\nProject name: ${name}\nDescription: ${desc}${techInfo}\n\nAsk the user questions to understand the project. Do NOT recommend a team yet — first understand the scope. Always respond in Turkish.`;
+		sendPMMessage(prompt, { hidden: true });
 	}, [step, createdProject]);
 
 	const handleCreateShell = async () => {
@@ -793,44 +795,93 @@ export function CreateProjectModal({
 										{pendingQuestions.length > 0 && !architectStreaming && (
 											<div className="space-y-3 mt-3">
 												<div className="text-[11px] font-medium text-[#a3a3a3]">Soruları yanıtlayın:</div>
-												{pendingQuestions.map((q) => (
-													<div key={q.id} className="rounded-xl border border-[#262626] bg-[#090909] px-4 py-3">
-														<div className="text-[12px] text-[#e5e5e5] mb-2">{q.question}</div>
-														{q.options && q.options.length > 0 ? (
-															<div className="space-y-1.5">
-																{q.options.map((opt, oi) => (
-																	<button
-																		key={oi}
-																		type="button"
-																		onClick={async () => {
-																			await answerIntakeQuestion(createdProject!.id, q.id, opt);
-																			setPendingQuestions((prev) => prev.filter((pq) => pq.id !== q.id));
-																			sendPMMessage(opt);
-																		}}
-																		className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-[#a3a3a3] border border-[#262626] hover:border-[#22c55e] hover:text-[#22c55e] transition-colors"
-																	>
-																		{opt}
-																	</button>
-																))}
-															</div>
-														) : (
-															<input
-																type="text"
-																placeholder="Cevabınızı yazın..."
-																className="w-full px-3 py-2 bg-[#080808] border border-[#262626] rounded-lg text-[12px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
-																onKeyDown={async (e) => {
-																	if (e.key === 'Enter') {
-																		const val = (e.target as HTMLInputElement).value.trim();
-																		if (!val) return;
-																		await answerIntakeQuestion(createdProject!.id, q.id, val);
-																		setPendingQuestions((prev) => prev.filter((pq) => pq.id !== q.id));
-																		sendPMMessage(val);
+												{pendingQuestions.map((q) => {
+													const selectedOpts = questionAnswers[q.id] ?? [];
+													return (
+														<div key={q.id} className="rounded-xl border border-[#262626] bg-[#090909] px-4 py-3">
+															<div className="text-[12px] text-[#e5e5e5] mb-2">{q.question}</div>
+															{q.options && q.options.length > 0 ? (
+																<div className="space-y-1.5">
+																	{q.options.map((opt, oi) => {
+																		const isSelected = selectedOpts.includes(opt);
+																		return (
+																			<button
+																				key={oi}
+																				type="button"
+																				onClick={() => {
+																					setQuestionAnswers((prev) => {
+																						const current = prev[q.id] ?? [];
+																						const next = isSelected
+																							? current.filter((s) => s !== opt)
+																							: [...current, opt];
+																						return { ...prev, [q.id]: next };
+																					});
+																				}}
+																				className={`w-full text-left px-3 py-2 rounded-lg text-[12px] border transition-colors flex items-center justify-between gap-2 ${
+																					isSelected
+																						? 'border-[#22c55e] text-[#22c55e] bg-[#22c55e]/5'
+																						: 'text-[#a3a3a3] border-[#262626] hover:border-[#22c55e] hover:text-[#22c55e]'
+																				}`}
+																			>
+																				<span>{opt}</span>
+																				{isSelected && (
+																					<svg className="shrink-0 w-3.5 h-3.5 text-[#22c55e]" viewBox="0 0 14 14" fill="none">
+																						<path d="M2 7l4 4 6-6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+																					</svg>
+																				)}
+																			</button>
+																		);
+																	})}
+																</div>
+															) : (
+																<input
+																	type="text"
+																	placeholder="Cevabınızı yazın..."
+																	className="w-full px-3 py-2 bg-[#080808] border border-[#262626] rounded-lg text-[12px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
+																	value={selectedOpts[0] ?? ''}
+																	onChange={(e) => {
+																		const val = e.target.value;
+																		setQuestionAnswers((prev) => ({
+																			...prev,
+																			[q.id]: val ? [val] : [],
+																		}));
+																	}}
+																/>
+															)}
+														</div>
+													);
+												})}
+												{/* Batch submit button */}
+												{(() => {
+													const answeredCount = pendingQuestions.filter(
+														(q) => (questionAnswers[q.id] ?? []).length > 0,
+													).length;
+													const total = pendingQuestions.length;
+													return (
+														<button
+															type="button"
+															disabled={answeredCount === 0}
+															onClick={async () => {
+																const lines: string[] = [];
+																for (const q of pendingQuestions) {
+																	const answers = questionAnswers[q.id] ?? [];
+																	if (answers.length > 0) {
+																		await answerIntakeQuestion(createdProject!.id, q.id, answers.join(', '));
+																		lines.push(`${q.question}: ${answers.join(', ')}`);
 																	}
-																}}
-															/>
-														)}
-													</div>
-												))}
+																}
+																setPendingQuestions([]);
+																setQuestionAnswers({});
+																if (lines.length > 0) {
+																	sendPMMessage(lines.join('\n'));
+																}
+															}}
+															className="w-full mt-1 px-4 py-2.5 rounded-xl text-[12px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+														>
+															Cevapları Gönder ({answeredCount}/{total})
+														</button>
+													);
+												})()}
 											</div>
 										)}
 										{architectError && (
