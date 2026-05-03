@@ -729,21 +729,6 @@ export function CreateProjectModal({
 											</div>
 
 											<div>
-												<label className="text-[12px] text-[#a3a3a3] font-medium block mb-2">Proje Tipi</label>
-												<select
-													value={projectType}
-													onChange={(e) => setProjectType(e.target.value)}
-													className="w-full px-4 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[14px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none transition-colors"
-												>
-													{PROJECT_TYPE_OPTIONS.map((option) => (
-														<option key={option.value} value={option.value}>
-															{option.label} — {option.hint}
-														</option>
-													))}
-												</select>
-											</div>
-
-											<div>
 												<label className="text-[12px] text-[#a3a3a3] font-medium block mb-2">Ne yapmak istiyorsunuz?</label>
 												<textarea
 													value={description}
