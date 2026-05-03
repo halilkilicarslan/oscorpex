@@ -18,6 +18,10 @@ import {
 	type TeamTemplate,
 	type CustomTeamTemplate,
 	type TeamArchitectIntake,
+	fetchIntakeQuestions,
+	answerIntakeQuestion,
+	skipIntakeQuestion,
+	type IntakeQuestion,
 } from '../../../lib/studio-api';
 import { streamPMChat } from '../../../lib/studio-api/chat';
 import { API, json } from '../../../lib/studio-api/base';
@@ -340,6 +344,7 @@ export function CreateProjectModal({
 	const [architectStreamText, setArchitectStreamText] = useState('');
 	const [architectRecommendation, setArchitectRecommendation] = useState<TeamArchitectRecommendation | null>(null);
 	const [architectError, setArchitectError] = useState<string | null>(null);
+	const [pendingQuestions, setPendingQuestions] = useState<IntakeQuestion[]>([]);
 	const [createdProject, setCreatedProject] = useState<Project | null>(null);
 	const [scopeApproved, setScopeApproved] = useState(false);
 	const [backendRecommendation, setBackendRecommendation] = useState<{
@@ -466,6 +471,13 @@ export function CreateProjectModal({
 							setTeamConfirmed(false);
 						}
 					} catch {}
+				}
+
+				// Fetch intake questions (backend parses askuser-json and persists them)
+				if (createdProject) {
+					fetchIntakeQuestions(createdProject.id, 'pending')
+						.then(setPendingQuestions)
+						.catch(() => {});
 				}
 			},
 			(err) => {
@@ -767,7 +779,7 @@ export function CreateProjectModal({
 											{architectMessages.map((message, index) => {
 												const displayContent =
 													message.role === 'assistant'
-														? message.content.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').replace(/```scope-json\s*\n[\s\S]*?\n```/g, '').trim()
+														? message.content.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').replace(/```scope-json\s*\n[\s\S]*?\n```/g, '').replace(/```askuser-json\s*\n[\s\S]*?\n```/g, '').trim()
 														: message.content;
 												if (!displayContent) return null;
 												return (
@@ -787,11 +799,55 @@ export function CreateProjectModal({
 											{architectStreaming && (
 												<div className="flex justify-start">
 													<div className="max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-6 bg-[#151515] border border-[#262626] text-[#d4d4d8] whitespace-pre-wrap">
-														{architectStreamText.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').replace(/```scope-json\s*\n[\s\S]*?\n```/g, '').trim() || 'Thinking...'}
+														{architectStreamText.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').replace(/```scope-json\s*\n[\s\S]*?\n```/g, '').replace(/```askuser-json\s*\n[\s\S]*?\n```/g, '').trim() || 'Thinking...'}
 													</div>
 												</div>
 											)}
 										</div>
+										{/* Intake Question Cards */}
+										{pendingQuestions.length > 0 && !architectStreaming && (
+											<div className="space-y-3 mt-3">
+												<div className="text-[11px] font-medium text-[#a3a3a3]">Soruları yanıtlayın:</div>
+												{pendingQuestions.map((q) => (
+													<div key={q.id} className="rounded-xl border border-[#262626] bg-[#090909] px-4 py-3">
+														<div className="text-[12px] text-[#e5e5e5] mb-2">{q.question}</div>
+														{q.options && q.options.length > 0 ? (
+															<div className="space-y-1.5">
+																{q.options.map((opt, oi) => (
+																	<button
+																		key={oi}
+																		type="button"
+																		onClick={async () => {
+																			await answerIntakeQuestion(createdProject!.id, q.id, opt);
+																			setPendingQuestions((prev) => prev.filter((pq) => pq.id !== q.id));
+																			sendPMMessage(opt);
+																		}}
+																		className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-[#a3a3a3] border border-[#262626] hover:border-[#22c55e] hover:text-[#22c55e] transition-colors"
+																	>
+																		{opt}
+																	</button>
+																))}
+															</div>
+														) : (
+															<input
+																type="text"
+																placeholder="Cevabınızı yazın..."
+																className="w-full px-3 py-2 bg-[#080808] border border-[#262626] rounded-lg text-[12px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
+																onKeyDown={async (e) => {
+																	if (e.key === 'Enter') {
+																		const val = (e.target as HTMLInputElement).value.trim();
+																		if (!val) return;
+																		await answerIntakeQuestion(createdProject!.id, q.id, val);
+																		setPendingQuestions((prev) => prev.filter((pq) => pq.id !== q.id));
+																		sendPMMessage(val);
+																	}
+																}}
+															/>
+														)}
+													</div>
+												))}
+											</div>
+										)}
 										{architectError && (
 											<div className="mt-3 rounded-xl border border-[#7f1d1d] bg-[#450a0a]/30 px-3 py-2 text-[11px] text-[#fca5a5]">
 												{architectError}
