@@ -276,7 +276,7 @@ export class TaskExecutor {
 			await enforceSandboxPreExecution(sandboxPolicy, allowedTools, sandboxSessionId);
 
 			// v3.4 + M4: Model routing — complexity + prior failures + review rejections + provider-native models.
-			const primaryCliTool: AgentCliTool = agent.cliTool ?? "claude-code";
+			const primaryCliTool: AgentCliTool = agent.cliTool && agent.cliTool !== "none" ? agent.cliTool : "claude-code";
 			let routedModel: string = agent.model ?? "sonnet";
 			try {
 				const resolved = await resolveModel(task, {
