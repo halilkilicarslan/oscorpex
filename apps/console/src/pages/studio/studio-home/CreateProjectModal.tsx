@@ -592,6 +592,20 @@ export function CreateProjectModal({
 		if (!createdProject) return;
 		setLoading(true);
 		try {
+			// Save scope draft first (use PM scope data if available, otherwise description)
+			const scopeData = architectRecommendation?.decision === 'scope-ready' ? architectRecommendation : null;
+			await saveProjectScopeDraft(createdProject.id, {
+				problemStatement: (scopeData as any)?.problemStatement || description.trim(),
+				goals: (scopeData as any)?.goals ?? [],
+				nonGoals: [],
+				constraints: (scopeData as any)?.constraints ?? [],
+				risks: [],
+				acceptanceCriteria: [],
+				validationPlan: [],
+				requiredCapabilities: (scopeData as any)?.techPreferences ?? techPreference,
+				recommendedTeamRoles: selectedTeam?.roles ?? [],
+				status: 'ready_for_review',
+			});
 			await approveProjectScope(createdProject.id);
 			setScopeApproved(true);
 			const recommendationResult = await recommendProjectTeam(createdProject.id);

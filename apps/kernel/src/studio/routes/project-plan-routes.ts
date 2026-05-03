@@ -202,8 +202,8 @@ projectPlanRoutes.post("/projects/:id/scope/approve", requirePermission("project
 		return c.json({ error: "scope draft is required before approval" }, 422);
 	}
 	const scope = existing;
-	if (!scope.problemStatement || scope.problemStatement.trim().length < 20) {
-		return c.json({ error: "Problem statement en az 20 karakter olmalıdır" }, 400);
+	if (!scope.problemStatement || scope.problemStatement.trim().length < 10) {
+		return c.json({ error: "Problem statement en az 10 karakter olmalıdır" }, 400);
 	}
 	const actor = (c as any).get("userId") as string | undefined;
 	await setProjectSettings(
