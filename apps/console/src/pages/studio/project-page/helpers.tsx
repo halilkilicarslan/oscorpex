@@ -36,7 +36,6 @@ export type Tab =
 	| 'settings'
 	| 'backlog'
 	| 'sprint'
-	| 'ceremonies'
 	| 'report'
 	| 'agentic';
 
@@ -54,8 +53,7 @@ export const STATIC_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = 
 	{ id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
 	{ id: 'backlog', label: 'Backlog', icon: <Package size={16} /> },
 	{ id: 'sprint', label: 'Sprint', icon: <CalendarDays size={16} /> },
-	{ id: 'ceremonies', label: 'Ceremonies', icon: <Users2 size={16} /> },
-	{ id: 'report', label: 'Report', icon: <FileBarChart size={16} /> },
+{ id: 'report', label: 'Report', icon: <FileBarChart size={16} /> },
 	{ id: 'agentic', label: 'Agentic', icon: <Cpu size={16} /> },
 ];
 

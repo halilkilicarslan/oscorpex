@@ -175,7 +175,7 @@ studio.route("/", artifactRoutes);
 
 // YAGNI-deferred: marketplace, cluster, collaboration
 // Re-enable when needed.
-studio.route("/", ceremonyRoutes);
+// studio.route("/", ceremonyRoutes); // YAGNI-deferred: ceremony tab removed
 // studio.route("/cluster", clusterRoutes);
 // studio.route("/collaboration", collaborationRoutes);
 // studio.route("/marketplace", marketplaceRoutes);

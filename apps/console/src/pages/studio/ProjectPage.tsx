@@ -54,7 +54,6 @@ const AgentLogViewer = lazy(() => import('./AgentLogViewer'));
 const LivePreview = lazy(() => import('./LivePreview'));
 const BacklogBoard = lazy(() => import('./BacklogBoard'));
 const SprintBoard = lazy(() => import('./SprintBoard'));
-const CeremonyPanel = lazy(() => import('./CeremonyPanel'));
 const ProjectReport = lazy(() => import('./ProjectReport'));
 const AgenticPanel = lazy(() => import('./AgenticPanel'));
 
@@ -370,11 +369,6 @@ export default function ProjectPage() {
 				{activeTab === 'sprint' && !requiresTeamSetup && (
 					<Suspense fallback={<TabLoader />}>
 						<SprintBoard projectId={project.id} />
-					</Suspense>
-				)}
-				{activeTab === 'ceremonies' && !requiresTeamSetup && (
-					<Suspense fallback={<TabLoader />}>
-						<CeremonyPanel projectId={project.id} />
 					</Suspense>
 				)}
 				{activeTab === 'report' && !requiresTeamSetup && (
