@@ -473,6 +473,7 @@ export function CreateProjectModal({
 				setArchitectStreamText('');
 				setArchitectError(err.message);
 			},
+			{ mode: 'intake' },
 		);
 	};
 
