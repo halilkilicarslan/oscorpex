@@ -119,14 +119,14 @@ projectChatRoutes.post("/projects/:id/chat", async (c) => {
 	const pendingIntake = allIntakeQuestions.filter((q) => q.status === "pending");
 
 	const agents = await listProjectAgents(projectId);
-	const deps = await listAgentDependencies(projectId);
+	const deps = mode === "intake" ? [] : await listAgentDependencies(projectId);
 	const reviewTargetIds = new Set(deps.filter((d) => d.type === "review").map((d) => d.toAgentId));
 	const plannerAgents = agents.filter((a) => a.role === "product-owner" || a.role === "pm");
-	if (plannerAgents.length === 0) {
+	if (plannerAgents.length === 0 && mode !== "intake") {
 		return c.json({ error: "Project has no planner agent configured." }, 400);
 	}
 	const pmAgentIds = new Set(plannerAgents.map((a) => a.id));
-	const plannerAgent = plannerAgents[0];
+	const plannerAgent = plannerAgents[0] ?? { name: "PM Assistant", role: "product-owner", personality: "Friendly project manager", skills: [], systemPrompt: "" };
 
 	const teamInfo = agents
 		.map((a) => {
