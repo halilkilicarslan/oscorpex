@@ -265,15 +265,73 @@ export function TeamRosterPreview({
 function PlanPreviewEmbed({ projectId, onApproved }: { projectId: string; onApproved: () => void }) {
 	const [plan, setPlan] = useState<any>(null);
 	const [loading, setLoading] = useState(true);
+	const [generating, setGenerating] = useState(false);
+	const [genText, setGenText] = useState('');
+	const triggered = useState(false)[0]; // prevent double trigger
+	const triggeredRef = useState({ current: false })[0];
 
-	useEffect(() => {
+	const fetchPlan = () => {
 		json(`${API}/projects/${projectId}/plan`)
 			.then((data: any) => { setPlan(data); setLoading(false); })
 			.catch(() => setLoading(false));
+	};
+
+	const triggerPlanGeneration = () => {
+		if (triggeredRef.current) return;
+		triggeredRef.current = true;
+		setGenerating(true);
+		setGenText('');
+		let accumulated = '';
+		streamPMChat(
+			projectId,
+			'Create a project plan based on the approved scope. Use the createProjectPlan tool.',
+			'claude-code',
+			'',
+			null,
+			(chunk) => { accumulated += chunk; setGenText(accumulated); },
+			() => { setGenerating(false); setGenText(''); fetchPlan(); },
+			(err) => { setGenerating(false); setGenText(`Hata: ${err.message}`); },
+		);
+	};
+
+	useEffect(() => {
+		json(`${API}/projects/${projectId}/plan`)
+			.then((data: any) => {
+				if (data && data.phases && data.phases.length > 0) {
+					setPlan(data);
+					setLoading(false);
+				} else {
+					setLoading(false);
+					triggerPlanGeneration();
+				}
+			})
+			.catch(() => { setLoading(false); triggerPlanGeneration(); });
 	}, [projectId]);
 
-	if (loading) return <div className="text-center py-8 text-[#525252]">Plan yükleniyor...</div>;
-	if (!plan) return <div className="text-center py-8 text-[#737373]">Plan henüz oluşturulmadı. PM ile sohbet ederek plan oluşturun.</div>;
+	if (loading) return <div className="text-center py-8 text-[#525252]">Plan kontrol ediliyor...</div>;
+	if (generating) return (
+		<div className="space-y-3 py-4">
+			<div className="flex items-center gap-2 text-[#737373]">
+				<span className="flex gap-1">
+					<span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '0ms'}} />
+					<span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '150ms'}} />
+					<span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '300ms'}} />
+				</span>
+				<span className="text-[12px]">PM plan oluşturuyor...</span>
+			</div>
+			{genText && (
+				<pre className="max-h-40 overflow-auto rounded-xl bg-[#090909] border border-[#262626] p-3 text-[11px] text-[#737373] whitespace-pre-wrap">
+					{genText.replace(/```[\s\S]*?```/g, '').trim().slice(-500)}
+				</pre>
+			)}
+		</div>
+	);
+	if (!plan) return (
+		<div className="text-center py-8 space-y-3">
+			<p className="text-[#737373] text-[13px]">Plan oluşturulamadı</p>
+			<button type="button" onClick={() => { triggeredRef.current = false; triggerPlanGeneration(); }} className="text-[12px] text-[#22c55e] hover:underline">Tekrar dene</button>
+		</div>
+	);
 
 	return (
 		<div className="space-y-4">
