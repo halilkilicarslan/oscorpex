@@ -189,7 +189,7 @@ export default function PMChat({
 	return (
 		<div className="flex flex-col h-full">
 			<div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4">
-				{messages.length === 0 && !streaming && (
+				{messages.length === 0 && !streaming && !plan && (
 					<div className="flex-1 flex flex-col items-center justify-center text-center py-12">
 						<div className="w-12 h-12 rounded-2xl bg-[#22c55e]/10 flex items-center justify-center mb-3">
 							<Bot size={24} className="text-[#22c55e]" />
