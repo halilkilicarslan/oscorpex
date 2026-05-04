@@ -23,11 +23,11 @@ const AdminSettingsPage = lazy(() => import('./pages/studio/AdminSettingsPage'))
 const PlatformDashboard = lazy(() => import('./pages/studio/PlatformDashboard'));
 const InsightDashboard = lazy(() => import('./pages/studio/InsightDashboard'));
 const LogsPage = lazy(() => import('./pages/LogsPage'));
-const PromptsPage = lazy(() => import('./pages/PromptsPage'));
+const PromptsPage = lazy(() => import('./pages/prompts/PromptsPage'));
 const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const FeedbacksPage = lazy(() => import('./pages/FeedbacksPage'));
-const TriggersPage = lazy(() => import('./pages/TriggersPage'));
-const RagPage = lazy(() => import('./pages/RagPage'));
+const TriggersPage = lazy(() => import('./pages/triggers/TriggersPage'));
+const RagPage = lazy(() => import('./pages/rag/RagPage'));
 const ControlPlanePage = lazy(() => import('./pages/studio/ControlPlanePage'));
 const QualityGatesDashboardPage = lazy(() => import('./pages/studio/QualityGatesDashboardPage'));
 const ApprovalQueuePage = lazy(() => import('./pages/studio/ApprovalQueuePage'));
