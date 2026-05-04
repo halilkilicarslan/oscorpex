@@ -8,6 +8,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "../logger.js";
+import { decrypt, encrypt } from "./credential-vault.js";
 
 const log = createLogger("cli-usage:oauth");
 
@@ -22,7 +23,9 @@ export const CLAUDE_OAUTH_CLIENT_ID = process.env.CLAUDE_OAUTH_CLIENT_ID ?? "9d1
 const CLAUDE_OAUTH_SCOPES = "user:profile user:inference user:sessions:claude_code";
 const OAUTH_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 min before expiry
 
-export let cachedCredentials: { creds: ClaudeOAuthCredentials; loadedAt: number } | null = null;
+// Credentials are stored as AES-256-GCM encrypted JSON — never as plaintext in memory.
+// The per-process key lives only in `credential-vault.ts` and is regenerated on restart.
+let cachedCredentials: { encrypted: string; loadedAt: number } | null = null;
 const CREDENTIAL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
 
 function loadJSONFile(path: string): Record<string, unknown> | null {
@@ -34,10 +37,28 @@ function loadJSONFile(path: string): Record<string, unknown> | null {
 	}
 }
 
+/** Stores credentials encrypted in the module-level cache and emits an audit log entry. */
+function cacheCredentials(creds: ClaudeOAuthCredentials): void {
+	cachedCredentials = { encrypted: encrypt(JSON.stringify(creds)), loadedAt: Date.now() };
+	log.info("[oauth] Credentials cached (encrypted)");
+}
+
+/** Reads and decrypts credentials from the module-level cache. Returns null on decryption failure. */
+function readCachedCredentials(): ClaudeOAuthCredentials | null {
+	if (!cachedCredentials) return null;
+	try {
+		return JSON.parse(decrypt(cachedCredentials.encrypted)) as ClaudeOAuthCredentials;
+	} catch (err) {
+		log.warn({ err }, "[oauth] Failed to decrypt cached credentials — evicting cache");
+		cachedCredentials = null;
+		return null;
+	}
+}
+
 export function loadClaudeOAuthCredentials(): ClaudeOAuthCredentials | null {
 	// Cache check
 	if (cachedCredentials && Date.now() - cachedCredentials.loadedAt < CREDENTIAL_CACHE_TTL_MS) {
-		return cachedCredentials.creds;
+		return readCachedCredentials();
 	}
 
 	// 1. File: ~/.claude/.credentials.json
@@ -52,7 +73,7 @@ export function loadClaudeOAuthCredentials(): ClaudeOAuthCredentials | null {
 				expiresAt: typeof oauth.expiresAt === "number" ? oauth.expiresAt : undefined,
 				subscriptionType: oauth.subscriptionType as string | undefined,
 			};
-			cachedCredentials = { creds, loadedAt: Date.now() };
+			cacheCredentials(creds);
 			return creds;
 		}
 	}
@@ -74,7 +95,7 @@ export function loadClaudeOAuthCredentials(): ClaudeOAuthCredentials | null {
 						expiresAt: typeof oauth.expiresAt === "number" ? oauth.expiresAt : undefined,
 						subscriptionType: oauth.subscriptionType as string | undefined,
 					};
-					cachedCredentials = { creds, loadedAt: Date.now() };
+					cacheCredentials(creds);
 					return creds;
 				}
 			}
@@ -87,7 +108,7 @@ export function loadClaudeOAuthCredentials(): ClaudeOAuthCredentials | null {
 	const envToken = process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
 	if (envToken) {
 		const creds: ClaudeOAuthCredentials = { accessToken: envToken };
-		cachedCredentials = { creds, loadedAt: Date.now() };
+		cacheCredentials(creds);
 		return creds;
 	}
 
@@ -114,7 +135,7 @@ export async function refreshClaudeOAuthToken(creds: ClaudeOAuthCredentials): Pr
 			signal: AbortSignal.timeout(15_000),
 		});
 		if (!res.ok) {
-			cachedCredentials = null;
+			cachedCredentials = null; // evict stale entry on auth failure
 			return null;
 		}
 		const body = (await res.json()) as Record<string, unknown>;
@@ -144,10 +165,10 @@ export async function refreshClaudeOAuthToken(creds: ClaudeOAuthCredentials): Pr
 			}
 		}
 
-		cachedCredentials = { creds: updated, loadedAt: Date.now() };
+		cacheCredentials(updated);
 		return updated;
 	} catch {
-		cachedCredentials = null;
+		cachedCredentials = null; // evict on unexpected error
 		return null;
 	}
 }
