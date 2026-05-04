@@ -7,10 +7,15 @@ interface MessageBubbleProps {
 }
 
 const JSON_BLOCK_RE = /```(?:askuser-json|plan-json|scope-json|team-json)[\s\S]*?```/g;
+const SYSTEM_PROMPT_RE = /^(New project intake:|Create a project plan|Yeni proje intake:)/;
 
 const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProps) {
 	const isUser = message.role === 'user';
 	const isError = message.id.startsWith('error-');
+
+	// Hide system-generated prompts from display
+	if (isUser && SYSTEM_PROMPT_RE.test(message.content)) return null;
+
 	const displayContent = isUser ? message.content : message.content.replace(JSON_BLOCK_RE, '').trim();
 
 	if (!displayContent && !isError) return null;

@@ -102,10 +102,13 @@ projectChatRoutes.post("/projects/:id/chat", async (c) => {
 			? body.effort
 			: selectedProviderInfo.defaultEffort;
 
-	await insertChatMessage({ projectId, role: "user", content: userMessage });
-	recordChatToMemory(projectId, project.name, "user", userMessage).catch((err) =>
-		log.warn("[project-chat-routes] Non-blocking operation failed:", err?.message ?? err),
-	);
+	// In intake mode, don't persist system-generated prompts to chat history
+	if (mode !== "intake") {
+		await insertChatMessage({ projectId, role: "user", content: userMessage });
+		recordChatToMemory(projectId, project.name, "user", userMessage).catch((err) =>
+			log.warn("[project-chat-routes] Non-blocking operation failed:", err?.message ?? err),
+		);
+	}
 
 	const history = await listChatMessages(projectId);
 	const settingsMap = await getProjectSettingsMap(projectId);
@@ -331,7 +334,7 @@ ${
 									}
 								}
 
-								if (fullText) {
+								if (fullText && mode !== "intake") {
 									await insertChatMessage({
 										projectId,
 										role: "assistant",
