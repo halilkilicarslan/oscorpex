@@ -784,7 +784,7 @@ interface ClaudeOAuthCredentials {
 	subscriptionType?: string;
 }
 
-const CLAUDE_OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+const CLAUDE_OAUTH_CLIENT_ID = process.env.CLAUDE_OAUTH_CLIENT_ID ?? "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const CLAUDE_OAUTH_SCOPES = "user:profile user:inference user:sessions:claude_code";
 const OAUTH_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 min before expiry
 

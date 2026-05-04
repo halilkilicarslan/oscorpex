@@ -305,14 +305,18 @@ export function useStudioWebSocket(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // projectId değiştiğinde mevcut subscription'ı güncelle
+  // projectId değiştiğinde eski aboneliği iptal et, yenisine abone ol
+  const prevProjectIdRef = useRef(projectId);
   useEffect(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    // Eski projenin aboneliğini iptal et ve yeni projeye abone ol
-    // (Ref önceki değeri tutmak için ek bir ref gerektirir; basit tutmak için reconnect)
+    const prev = prevProjectIdRef.current;
+    if (prev && prev !== projectId) {
+      ws.send(JSON.stringify({ type: 'unsubscribe', projectId: prev }));
+    }
     ws.send(JSON.stringify({ type: 'subscribe', projectId }));
+    prevProjectIdRef.current = projectId;
   }, [projectId]);
 
   return { connectionState, lastEvent, send, connect, disconnect };

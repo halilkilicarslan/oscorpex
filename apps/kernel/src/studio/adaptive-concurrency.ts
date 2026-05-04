@@ -74,6 +74,10 @@ export class AdaptiveSemaphore {
 			this.current++;
 			return;
 		}
+		// Reject if queue is too deep to prevent unbounded memory growth
+		if (this.queue.length >= this.max * 10) {
+			throw new Error(`Semaphore queue full (${this.queue.length} waiting, max ${this.max})`);
+		}
 		return new Promise<void>((resolve) => this.queue.push(resolve));
 	}
 

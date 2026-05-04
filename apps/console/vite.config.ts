@@ -19,6 +19,16 @@ export default defineConfig(({ mode }) => {
         '@oscorpex/control-plane': '/Users/iamhk/development/personal/oscorpex/packages/control-plane/src/index.ts',
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-recharts': ['recharts'],
+          },
+        },
+      },
+    },
     server: {
       port: 5161,
       proxy: {

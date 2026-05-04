@@ -474,7 +474,15 @@ function startService(repoPath: string, config: ServiceConfig, onLog: (msg: stri
 	return new Promise((resolve, reject) => {
 		const servicePath = config.path.startsWith("/") ? config.path : join(repoPath, config.path);
 		const command = config.command.replace(/\$\{PORT\}/g, String(config.port));
-		const readyPattern = new RegExp(config.readyPattern, "i");
+		// Validate readyPattern to prevent ReDoS from untrusted .studio.json
+		let readyPattern: RegExp;
+		try {
+			if (config.readyPattern.length > 200) throw new Error("Pattern too long");
+			readyPattern = new RegExp(config.readyPattern, "i");
+		} catch {
+			readyPattern = /ready|listening|started/i;
+			onLog(`[app-runner] Invalid readyPattern "${config.readyPattern.slice(0, 50)}", using default`);
+		}
 
 		onLog(`[app-runner] Starting ${config.name}: ${command} (port ${config.port})`);
 

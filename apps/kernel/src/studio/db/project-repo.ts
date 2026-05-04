@@ -62,18 +62,20 @@ export async function listProjectsPaginated(
 	offset: number,
 	tenantId?: string | null,
 ): Promise<[Project[], number]> {
+	// Single query with COUNT(*) OVER() window function eliminates the extra COUNT roundtrip
 	if (tenantId) {
-		const countRow = await queryOne<any>("SELECT COUNT(*) AS cnt FROM projects WHERE tenant_id = $1", [tenantId]);
-		const total = Number(countRow?.cnt ?? 0);
 		const rows = await query<any>(
-			"SELECT * FROM projects WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+			"SELECT *, COUNT(*) OVER() AS _total FROM projects WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
 			[tenantId, limit, offset],
 		);
+		const total = Number(rows[0]?._total ?? 0);
 		return [rows.map(rowToProject), total];
 	}
-	const countRow = await queryOne<any>("SELECT COUNT(*) AS cnt FROM projects");
-	const total = Number(countRow?.cnt ?? 0);
-	const rows = await query<any>("SELECT * FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2", [limit, offset]);
+	const rows = await query<any>(
+		"SELECT *, COUNT(*) OVER() AS _total FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+		[limit, offset],
+	);
+	const total = Number(rows[0]?._total ?? 0);
 	return [rows.map(rowToProject), total];
 }
 

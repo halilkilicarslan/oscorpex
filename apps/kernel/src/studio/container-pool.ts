@@ -487,7 +487,7 @@ class ContainerPool {
 
 	private nextPort(): number {
 		const usedPorts = new Set([...this.containers.values()].map((c) => c.port));
-		let port = BASE_PORT;
+		let port = this.portCounter;
 		while (usedPorts.has(port)) port++;
 		this.portCounter = port + 1;
 		return port;
