@@ -223,8 +223,10 @@ export async function listTokenUsage(projectId: string, limit = 1000): Promise<T
 // ---------------------------------------------------------------------------
 
 export async function getProjectAnalytics(projectId: string) {
-	const taskStats = await queryOne<any>(
-		`
+	// Run all 5 independent queries in parallel instead of sequentially
+	const [taskStats, failEventRow, rejectEventRow, agentTaskRows, avgRow, pipelineRow] = await Promise.all([
+		queryOne<any>(
+			`
     SELECT
       COUNT(*)                                           AS total,
       SUM(CASE WHEN t.status = 'done'    THEN 1 ELSE 0 END) AS completed,
@@ -235,26 +237,18 @@ export async function getProjectAnalytics(projectId: string) {
     JOIN project_plans pp ON pp.id = ph.plan_id
     WHERE pp.project_id = $1
   `,
-		[projectId],
-	);
-
-	// Failure count from events table — survives retries/requeues
-	const failEventRow = await queryOne<any>(
-		`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:failed'`,
-		[projectId],
-	);
-	const totalFailures = Number.parseInt(failEventRow?.cnt ?? "0", 10);
-
-	// Review rejection count from events table
-	const rejectEventRow = await queryOne<any>(
-		`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:review_rejected'`,
-		[projectId],
-	);
-	const totalReviewRejections = Number.parseInt(rejectEventRow?.cnt ?? "0", 10);
-
-	// Match tasks to project agents by: project_agent ID, source_agent_id, or role
-	const agentTaskRows = await query<any>(
-		`
+			[projectId],
+		),
+		queryOne<any>(
+			`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:failed'`,
+			[projectId],
+		),
+		queryOne<any>(
+			`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:review_rejected'`,
+			[projectId],
+		),
+		query<any>(
+			`
     SELECT
       pa.id AS agent_id, pa.name AS agent_name,
       COUNT(t.id) AS total,
@@ -267,11 +261,10 @@ export async function getProjectAnalytics(projectId: string) {
     WHERE pp.project_id = $1
     GROUP BY pa.id, pa.name
   `,
-		[projectId],
-	);
-
-	const avgRow = await queryOne<any>(
-		`
+			[projectId],
+		),
+		queryOne<any>(
+			`
     SELECT AVG(
       EXTRACT(EPOCH FROM (t.completed_at::timestamptz - t.started_at::timestamptz)) * 1000
     ) AS avg_ms
@@ -281,17 +274,20 @@ export async function getProjectAnalytics(projectId: string) {
     WHERE pp.project_id = $1
       AND t.started_at IS NOT NULL AND t.completed_at IS NOT NULL AND t.status = 'done'
   `,
-		[projectId],
-	);
-
-	const pipelineRow = await queryOne<any>(
-		`
+			[projectId],
+		),
+		queryOne<any>(
+			`
     SELECT COUNT(*) AS run_count,
       SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS successes
     FROM pipeline_runs WHERE project_id = $1
   `,
-		[projectId],
-	);
+			[projectId],
+		),
+	]);
+
+	const totalFailures = Number.parseInt(failEventRow?.cnt ?? "0", 10);
+	const totalReviewRejections = Number.parseInt(rejectEventRow?.cnt ?? "0", 10);
 
 	// Deduplicate by agent name (multiple project_agents may match same tasks)
 	const agentMap = new Map<string, any>();

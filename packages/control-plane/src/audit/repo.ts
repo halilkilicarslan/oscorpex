@@ -94,3 +94,13 @@ export async function listSecurityEvents(filters?: {
 	const limit = filters?.limit ?? 100;
 	return query<SecurityEventRow>(`SELECT * FROM security_events ${where} ORDER BY created_at DESC LIMIT ${limit}`, params);
 }
+
+/** Purge old audit and security events to prevent unbounded table growth */
+export async function purgeOldAuditData(retentionDays = 90): Promise<{ auditEvents: number; securityEvents: number }> {
+	const interval = `${retentionDays} days`;
+	const [a, s] = await Promise.all([
+		execute(`DELETE FROM audit_events WHERE created_at < now() - $1::interval`, [interval]),
+		execute(`DELETE FROM security_events WHERE created_at < now() - $1::interval`, [interval]),
+	]);
+	return { auditEvents: a.rowCount, securityEvents: s.rowCount };
+}

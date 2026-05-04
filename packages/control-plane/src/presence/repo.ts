@@ -88,6 +88,15 @@ export async function listRuntimeHeartbeats(agentId?: string, providerId?: strin
 	return query<RuntimeHeartbeatRow>("SELECT * FROM runtime_heartbeats ORDER BY recorded_at DESC LIMIT 100");
 }
 
+/** Purge heartbeats older than given interval to prevent unbounded table growth */
+export async function purgeOldHeartbeats(retentionDays = 7): Promise<number> {
+	const result = await execute(
+		`DELETE FROM runtime_heartbeats WHERE recorded_at < now() - ($1 || ' days')::interval`,
+		[retentionDays],
+	);
+	return result.rowCount;
+}
+
 export async function getLatestHeartbeat(agentId?: string, providerId?: string): Promise<RuntimeHeartbeatRow | undefined> {
 	if (agentId) {
 		return queryOne<RuntimeHeartbeatRow>(
