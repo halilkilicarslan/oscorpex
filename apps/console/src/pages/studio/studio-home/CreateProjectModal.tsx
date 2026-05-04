@@ -838,7 +838,7 @@ export function CreateProjectModal({
 											{architectMessages.map((message, index) => {
 												const displayContent =
 													message.role === 'assistant'
-														? message.content.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').replace(/```scope-json\s*\n[\s\S]*?\n```/g, '').replace(/```askuser-json\s*\n[\s\S]*?\n```/g, '').trim()
+														? message.content.replace(/```(?:team-json|scope-json|askuser-json|plan-json)[\s\S]*?```/g, '').trim()
 														: message.content;
 												if (!displayContent) return null;
 												return (
@@ -858,7 +858,7 @@ export function CreateProjectModal({
 											{architectStreaming && (
 												<div className="flex justify-start">
 													<div className="max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-6 bg-[#151515] border border-[#262626] text-[#d4d4d8] whitespace-pre-wrap">
-														{architectStreamText.replace(/```team-json\s*\n[\s\S]*?\n```/g, '').replace(/```scope-json\s*\n[\s\S]*?\n```/g, '').replace(/```askuser-json\s*\n[\s\S]*?\n```/g, '').trim() || (<span className="inline-flex items-center gap-1.5 text-[#737373]"><span className="flex gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '0ms'}} /><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '150ms'}} /><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '300ms'}} /></span>PM düşünüyor</span>)}
+														{architectStreamText.replace(/```(?:team-json|scope-json|askuser-json|plan-json)[\s\S]*?```/g, '').trim() || (<span className="inline-flex items-center gap-1.5 text-[#737373]"><span className="flex gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '0ms'}} /><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '150ms'}} /><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '300ms'}} /></span>PM düşünüyor</span>)}
 													</div>
 												</div>
 											)}

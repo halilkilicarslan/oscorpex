@@ -32,7 +32,7 @@ const MessageBubble = memo(function MessageBubble({ message, compact }: MessageB
   }
 
   const cleanContent = message.content
-    .replace(/```(?:askuser-json|plan-json|scope-json|team-json)\s*\n[\s\S]*?\n```/g, '')
+    .replace(/```(?:askuser-json|plan-json|scope-json|team-json)[\s\S]*?```/g, '')
     .trim();
   const hasContent = cleanContent.length > 0;
   const isStreaming = message.isStreaming === true;

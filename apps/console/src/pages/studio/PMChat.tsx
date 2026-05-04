@@ -217,7 +217,7 @@ export default function PMChat({
 					<MessageBubble key={msg.id} message={msg} />
 				))}
 
-				{streaming && <StreamingBubble text={streamText.replace(/```(?:askuser-json|plan-json|scope-json|team-json)\s*\n[\s\S]*?\n```/g, '').trim()} />}
+				{streaming && <StreamingBubble text={streamText.replace(/```(?:askuser-json|plan-json|scope-json|team-json)[\s\S]*?```/g, '').trim()} />}
 
 				{pendingQuestions.length > 0 && !streaming && (
 					<div className="mt-1 flex flex-col gap-3">
