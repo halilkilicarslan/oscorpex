@@ -31,9 +31,14 @@ const MessageBubble = memo(function MessageBubble({ message, compact }: MessageB
     );
   }
 
-  const hasContent = message.content.length > 0;
+  const cleanContent = message.content
+    .replace(/```(?:askuser-json|plan-json|scope-json|team-json)\s*\n[\s\S]*?\n```/g, '')
+    .trim();
+  const hasContent = cleanContent.length > 0;
   const isStreaming = message.isStreaming === true;
   const showDots = isStreaming && !hasContent;
+
+  if (!hasContent && !showDots && (!message.toolCalls || message.toolCalls.length === 0)) return null;
 
   return (
     <div className="flex flex-col items-start gap-1 w-full">
@@ -52,7 +57,7 @@ const MessageBubble = memo(function MessageBubble({ message, compact }: MessageB
               <StreamingDots />
             ) : (
               <div className="chat-markdown">
-                <ReactMarkdown>{message.content}</ReactMarkdown>
+                <ReactMarkdown>{cleanContent}</ReactMarkdown>
               </div>
             )}
           </div>

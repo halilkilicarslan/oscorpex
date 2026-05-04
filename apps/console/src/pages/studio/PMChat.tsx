@@ -40,6 +40,7 @@ export default function PMChat({
 	const { messages, plan, streaming, streamText, loaded } = chat;
 	const [input, setInput] = useState('');
 	const [pipelineToast, setPipelineToast] = useState<PipelineToastState>(null);
+	const [planCollapsed, setPlanCollapsed] = useState(false);
 	const [pendingQuestions, setPendingQuestions] = useState<IntakeQuestion[]>([]);
 	const [intakeBusy, setIntakeBusy] = useState(false);
 	const bottomRef = useRef<HTMLDivElement>(null);
@@ -216,7 +217,7 @@ export default function PMChat({
 					<MessageBubble key={msg.id} message={msg} />
 				))}
 
-				{streaming && <StreamingBubble text={streamText} />}
+				{streaming && <StreamingBubble text={streamText.replace(/```(?:askuser-json|plan-json|scope-json|team-json)\s*\n[\s\S]*?\n```/g, '').trim()} />}
 
 				{pendingQuestions.length > 0 && !streaming && (
 					<div className="mt-1 flex flex-col gap-3">
@@ -252,7 +253,19 @@ export default function PMChat({
 
 				{plan && (
 					<div className="mt-2">
-						<PlanPreview plan={plan} projectId={projectId} onApprove={handleApprove} onReject={handleReject} />
+						<button
+							type="button"
+							onClick={() => setPlanCollapsed((prev) => !prev)}
+							className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl border border-[#262626] bg-[#0d0d0d] text-[12px] font-medium text-[#a3a3a3] hover:text-[#fafafa] transition-colors"
+						>
+							<span>Plan Önizleme ({plan.phases?.length ?? 0} faz, {plan.phases?.reduce((s: number, p: any) => s + (p.tasks?.length ?? 0), 0) ?? 0} görev)</span>
+							<span className="text-[10px]">{planCollapsed ? '▼ Göster' : '▲ Gizle'}</span>
+						</button>
+						{!planCollapsed && (
+							<div className="mt-2">
+								<PlanPreview plan={plan} projectId={projectId} onApprove={handleApprove} onReject={handleReject} />
+							</div>
+						)}
 					</div>
 				)}
 
