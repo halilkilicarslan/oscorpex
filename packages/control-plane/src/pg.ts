@@ -9,6 +9,11 @@ const { Pool } = pg;
 
 let _pool: pg.Pool | null = null;
 
+/** Inject an external pool to share connections with the kernel — avoids dual pool overhead */
+export function initPool(pool: pg.Pool): void {
+	_pool = pool;
+}
+
 export function getPool(): pg.Pool {
 	if (!_pool) {
 		_pool = new Pool({

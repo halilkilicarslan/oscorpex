@@ -381,6 +381,39 @@ export function rowToContextChunk(row: any): ContextChunk {
 }
 
 // ---------------------------------------------------------------------------
+// Safe UPDATE builder — validates column names against a whitelist
+// ---------------------------------------------------------------------------
+
+/**
+ * Build parameterized SET clause from data object, validating column names against a static whitelist.
+ * Prevents SQL injection via dynamic column names even if data keys come from external input.
+ *
+ * @returns { fields, values, nextIdx } or null if no valid fields to update
+ */
+export function buildUpdateFields<T extends Record<string, unknown>>(
+	data: Partial<T>,
+	allowedColumns: Record<string, string>, // camelCase key → snake_case column
+	startIdx = 1,
+): { fields: string[]; values: unknown[]; nextIdx: number } | null {
+	const fields: string[] = [];
+	const values: unknown[] = [];
+	let idx = startIdx;
+
+	for (const [key, value] of Object.entries(data)) {
+		if (value === undefined) continue;
+		const column = allowedColumns[key];
+		if (!column) {
+			log.warn(`[db] buildUpdateFields: rejected unknown column key "${key}"`);
+			continue;
+		}
+		fields.push(`${column} = $${idx++}`);
+		values.push(value);
+	}
+
+	return fields.length > 0 ? { fields, values, nextIdx: idx } : null;
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 

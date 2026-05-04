@@ -33,5 +33,5 @@ export * from "./policy/index.js";
 // Shared
 export * from "./shared/index.js";
 
-// PG helpers
-export { query, queryOne, execute, getPool } from "./pg.js";
+// Pool injection — kernel calls initPool() at boot to share its connection pool
+export { initPool } from "./pg.js";
