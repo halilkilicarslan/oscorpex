@@ -9,7 +9,7 @@ import {
 	getLatestPlan,
 	getTask,
 	listPhases,
-	listProjects,
+	listProjectsByStatus,
 	listProjectTasks,
 	releaseTaskClaim,
 	updatePhaseStatus,
@@ -35,9 +35,8 @@ export class ExecutionRecovery {
 	 * yeniden başlatır. Bu sayede yarıda kalmış görevler yeniden çalıştırılır.
 	 */
 	async recoverStuckTasks(): Promise<void> {
-		const projects = await listProjects();
+		const projects = await listProjectsByStatus("running");
 		for (const project of projects) {
-			if (project.status !== "running") continue;
 
 			const plan = await getLatestPlan(project.id);
 			if (!plan || plan.status !== "approved") continue;

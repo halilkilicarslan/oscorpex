@@ -51,6 +51,12 @@ export async function listProjects(): Promise<Project[]> {
 	return rows.map(rowToProject);
 }
 
+/** List only projects with a specific status — avoids loading all rows for targeted queries. */
+export async function listProjectsByStatus(status: string): Promise<Project[]> {
+	const rows = await query<any>("SELECT * FROM projects WHERE status = $1 ORDER BY created_at DESC", [status]);
+	return rows.map(rowToProject);
+}
+
 export async function listProjectsPaginated(
 	limit: number,
 	offset: number,

@@ -153,7 +153,7 @@ export async function runLintFix(repoPath: string, files: string[], log?: (msg: 
 	if (lintFiles.length > 0) {
 		log?.(`[lint] ESLint --fix: ${lintFiles.length} dosya`);
 		try {
-			const { stderr, code } = await exec(npx, ["eslint", "--fix", "--no-warn-ignored", ...lintFiles], repoPath);
+			const { stderr, code } = await exec(npx, ["eslint", "--fix", "--no-warn-ignored", "--", ...lintFiles], repoPath);
 			if (code === 0 || code === 1) {
 				// code 1 = lint warnings/errors found but fix applied where possible
 				result.eslint.fixed = lintFiles.length;
@@ -174,7 +174,7 @@ export async function runLintFix(repoPath: string, files: string[], log?: (msg: 
 		try {
 			const { stderr, code } = await exec(
 				npx,
-				["prettier", "--write", "--no-error-on-unmatched-pattern", ...formatFiles],
+				["prettier", "--write", "--no-error-on-unmatched-pattern", "--", ...formatFiles],
 				repoPath,
 			);
 			if (code === 0) {

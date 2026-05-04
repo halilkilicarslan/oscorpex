@@ -105,16 +105,17 @@ export class CodexAdapter implements CLIAdapter {
 
 			let stdout = "";
 			let stderr = "";
+			const MAX_OUTPUT = 80_000; // Cap output to prevent memory exhaustion
 			const timer = setTimeout(() => {
 				proc.kill("SIGKILL");
 				reject(new Error("Codex CLI timed out"));
 			}, opts.timeoutMs ?? 120_000);
 
 			proc.stdout?.on("data", (d) => {
-				stdout += d.toString();
+				if (stdout.length < MAX_OUTPUT) stdout += d.toString();
 			});
 			proc.stderr?.on("data", (d) => {
-				stderr += d.toString();
+				if (stderr.length < MAX_OUTPUT) stderr += d.toString();
 			});
 
 			if (opts.signal) {
@@ -223,16 +224,17 @@ export class CursorAdapter implements CLIAdapter {
 
 			let stdout = "";
 			let stderr = "";
+			const MAX_OUTPUT = 80_000; // Cap output to prevent memory exhaustion
 			const timer = setTimeout(() => {
 				proc.kill("SIGKILL");
 				reject(new Error("Cursor agent timed out"));
 			}, opts.timeoutMs ?? 120_000);
 
 			proc.stdout?.on("data", (d) => {
-				stdout += d.toString();
+				if (stdout.length < MAX_OUTPUT) stdout += d.toString();
 			});
 			proc.stderr?.on("data", (d) => {
-				stderr += d.toString();
+				if (stderr.length < MAX_OUTPUT) stderr += d.toString();
 			});
 
 			if (opts.signal) {

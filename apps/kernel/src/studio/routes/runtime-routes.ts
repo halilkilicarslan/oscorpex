@@ -313,9 +313,13 @@ runtimeRoutes.post("/projects/:id/runtime/install", async (c) => {
 			results.push({ name: svc.name, success: true });
 			continue;
 		}
+		// Append --ignore-scripts to npm/pnpm/yarn to prevent arbitrary lifecycle script execution
+		const safeCmd = /^(npm|pnpm|yarn)\s+install/.test(svc.installCommand)
+			? `${svc.installCommand} --ignore-scripts`
+			: svc.installCommand;
 		const svcPath = svc.path === "." ? project.repoPath : join(project.repoPath, svc.path);
 		try {
-			execSync(svc.installCommand, {
+			execSync(safeCmd, {
 				cwd: svcPath,
 				encoding: "utf-8",
 				timeout: 120000,

@@ -125,8 +125,13 @@ export class ConcurrencyTracker {
 	}
 
 	release(projectId: string, providerId: string): void {
-		this.projectActive.set(projectId, Math.max(0, (this.projectActive.get(projectId) ?? 1) - 1));
-		this.providerActive.set(providerId, Math.max(0, (this.providerActive.get(providerId) ?? 1) - 1));
+		const pVal = Math.max(0, (this.projectActive.get(projectId) ?? 1) - 1);
+		if (pVal === 0) this.projectActive.delete(projectId);
+		else this.projectActive.set(projectId, pVal);
+
+		const prVal = Math.max(0, (this.providerActive.get(providerId) ?? 1) - 1);
+		if (prVal === 0) this.providerActive.delete(providerId);
+		else this.providerActive.set(providerId, prVal);
 	}
 
 	snapshot(): ConcurrencySnapshot {

@@ -95,8 +95,11 @@ export async function updatePipelineRun(
 	fields.push(`version = version + 1`);
 
 	values.push(projectId);
-	await execute(`UPDATE pipeline_runs SET ${fields.join(", ")} WHERE project_id = $${idx}`, values);
-	return getPipelineRun(projectId);
+	const row = await queryOne<any>(
+		`UPDATE pipeline_runs SET ${fields.join(", ")} WHERE project_id = $${idx} RETURNING *`,
+		values,
+	);
+	return row ? rowToPipelineRun(row) : undefined;
 }
 
 /**
@@ -162,11 +165,12 @@ export async function createAgentRun(
 		Partial<Pick<AgentRun, "taskPrompt" | "pid" | "startedAt">>,
 ): Promise<AgentRun> {
 	const ts = now();
-	await execute(
+	const row = await queryOne<any>(
 		`
     INSERT INTO agent_runs
       (id, project_id, agent_id, cli_tool, status, task_prompt, pid, started_at, created_at)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    RETURNING *
   `,
 		[
 			data.id,
@@ -180,7 +184,7 @@ export async function createAgentRun(
 			ts,
 		],
 	);
-	return (await getAgentRun(data.id))!;
+	return rowToAgentRun(row!);
 }
 
 /** Tek bir agent çalışma kaydını getirir */
@@ -218,8 +222,11 @@ export async function updateAgentRun(
 	if (fields.length === 0) return getAgentRun(id);
 
 	values.push(id);
-	await execute(`UPDATE agent_runs SET ${fields.join(", ")} WHERE id = $${idx}`, values);
-	return getAgentRun(id);
+	const row = await queryOne<any>(
+		`UPDATE agent_runs SET ${fields.join(", ")} WHERE id = $${idx} RETURNING *`,
+		values,
+	);
+	return row ? rowToAgentRun(row) : undefined;
 }
 
 /** Belirli bir agent'ın tüm çalışma geçmişini listeler (en yeniden eskiye) */

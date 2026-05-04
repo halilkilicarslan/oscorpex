@@ -487,7 +487,6 @@ function startService(repoPath: string, config: ServiceConfig, onLog: (msg: stri
 			cwd: servicePath,
 			env: { ...process.env, PORT: String(config.port), ...config.env },
 			stdio: ["ignore", "pipe", "pipe"],
-			shell: true,
 			detached: true, // isolate from main process group — prevents killing console Vite
 		});
 
@@ -683,9 +682,13 @@ export async function startApp(
 		for (const svc of analysis.services) {
 			if (!svc.depsInstalled && svc.installCommand) {
 				const svcPath = svc.path === "." ? repoPath : join(repoPath, svc.path);
-				onLog(`[app-runner] Bağımlılıklar kuruluyor: ${svc.installCommand} (${svc.name})`);
+				// Append --ignore-scripts to npm/pnpm/yarn to prevent arbitrary lifecycle script execution
+				const safeInstallCmd = /^(npm|pnpm|yarn)\s+install/.test(svc.installCommand)
+					? `${svc.installCommand} --ignore-scripts`
+					: svc.installCommand;
+				onLog(`[app-runner] Bağımlılıklar kuruluyor: ${safeInstallCmd} (${svc.name})`);
 				try {
-					execSync(svc.installCommand, {
+					execSync(safeInstallCmd, {
 						cwd: svcPath,
 						encoding: "utf-8",
 						timeout: 120000,

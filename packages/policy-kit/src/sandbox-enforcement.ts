@@ -2,6 +2,7 @@
 // Pure enforcement functions extracted from kernel's sandbox-manager.ts.
 // No DB dependencies — persistence remains in the kernel layer.
 
+import { realpathSync } from "node:fs";
 import { normalize, resolve, sep } from "node:path";
 import type { SandboxEnforcementMode, SandboxViolation } from "@oscorpex/core";
 
@@ -52,10 +53,22 @@ export function checkPathAllowed(policy: SandboxEnforcementPolicy, filePath: str
 		return { allowed: true, reason: "no filesystem scope restriction" };
 	}
 
-	const canonical = normalize(resolve(filePath));
+	// Resolve symlinks to prevent traversal via symlink pointing outside scope
+	let canonical: string;
+	try {
+		canonical = realpathSync(resolve(filePath));
+	} catch {
+		// Path does not exist yet — fall back to normalize(resolve()) for new file creation
+		canonical = normalize(resolve(filePath));
+	}
 
 	const withinScope = policy.filesystemScope.some((scope) => {
-		const canonicalScope = normalize(resolve(scope));
+		let canonicalScope: string;
+		try {
+			canonicalScope = realpathSync(resolve(scope));
+		} catch {
+			canonicalScope = normalize(resolve(scope));
+		}
 		return canonical === canonicalScope || canonical.startsWith(canonicalScope + sep);
 	});
 
