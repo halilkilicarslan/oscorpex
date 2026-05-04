@@ -14,7 +14,7 @@ import {
 	latestCLIUsageSnapshots,
 	listCLIUsageSnapshots,
 	setCLIProbeSettings,
-} from "../cli-usage.js";
+} from "../cli-usage/index.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("cli-usage-routes");
 
