@@ -437,6 +437,20 @@ class WebSocketManager {
 			}
 		}
 	}
+
+	/** Graceful shutdown — clear all flush timers, close all connections */
+	shutdown(): void {
+		for (const timer of this._flushTimers.values()) clearTimeout(timer);
+		this._flushTimers.clear();
+		this._pendingBroadcasts.clear();
+		for (const ws of this.clients.keys()) {
+			try {
+				ws.close(1001, "server shutdown");
+			} catch { /* ignore */ }
+		}
+		this.clients.clear();
+		log.info("[ws-manager] Shutdown complete");
+	}
 }
 
 // Singleton instance

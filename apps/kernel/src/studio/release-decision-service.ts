@@ -12,8 +12,6 @@ import {
 	findQualityGatePolicy,
 	getGoalScope,
 	getQualityGateEvaluationById,
-} from "./db/quality-gate-repo.js";
-import {
 	type ReleaseCandidate,
 	type ReleaseDecisionRow,
 	type ReleaseRollbackTrigger,
@@ -25,7 +23,7 @@ import {
 	insertReleaseDecision,
 	insertRollbackTrigger,
 	listActiveRollbackTriggersForCandidate,
-} from "./db/release-decision-repo.js";
+} from "./db.js";
 import { eventBus } from "./event-bus.js";
 import {
 	type ReleaseReadinessSummary,

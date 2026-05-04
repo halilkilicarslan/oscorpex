@@ -17,7 +17,7 @@ import {
 	insertQualityGateEvaluation,
 	listLatestQualityGateEvaluations,
 	listRequiredQualityGates,
-} from "./db/quality-gate-repo.js";
+} from "./db.js";
 import { eventBus } from "./event-bus.js";
 
 export type { QualityGateEnvironment, QualityGateOutcome, QualityGateEvaluation, QualityGatePolicy };

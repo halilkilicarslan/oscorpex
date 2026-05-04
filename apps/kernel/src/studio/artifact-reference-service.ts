@@ -13,9 +13,10 @@ import {
 	listArtifactsForGoal,
 	listLatestArtifactsForGoal,
 	supersedeArtifactById,
-} from "./db/artifact-reference-repo.js";
-import { type QualityGateEnvironment, getGoalScope } from "./db/quality-gate-repo.js";
-import { getLatestReleaseCandidateForGoal } from "./db/release-decision-repo.js";
+	type QualityGateEnvironment,
+	getGoalScope,
+	getLatestReleaseCandidateForGoal,
+} from "./db.js";
 import { eventBus } from "./event-bus.js";
 
 export interface ArtifactReferenceInput {

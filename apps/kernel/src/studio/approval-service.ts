@@ -16,8 +16,9 @@ import {
 	listApprovalRequestsForGoal,
 	listPendingApprovalRequests,
 	updateApprovalRequestState,
-} from "./db/approval-repo.js";
-import { type QualityGateEnvironment, getGoalScope } from "./db/quality-gate-repo.js";
+	type QualityGateEnvironment,
+	getGoalScope,
+} from "./db.js";
 import { eventBus } from "./event-bus.js";
 
 export type ApprovalType =

@@ -3,8 +3,7 @@
 // Listens to StudioEvent bus and creates in-app notifications.
 // ---------------------------------------------------------------------------
 
-import { createNotification } from "./db.js";
-import type { Notification } from "./db/notification-repo.js";
+import { createNotification, type Notification } from "./db.js";
 import { createLogger } from "./logger.js";
 import type { EventType, StudioEvent } from "./types.js";
 const log = createLogger("notification-service");

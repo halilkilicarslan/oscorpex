@@ -22,9 +22,9 @@ import {
 	listJobs,
 	resetStaleJobs,
 	updateJobStatus,
-} from "./db/job-repo.js";
+	execute,
+} from "./db.js";
 import { createLogger } from "./logger.js";
-import { execute } from "./db.js";
 const log = createLogger("job-queue");
 
 export type { Job, JobStatus };

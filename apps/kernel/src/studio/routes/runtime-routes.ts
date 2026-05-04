@@ -327,10 +327,13 @@ runtimeRoutes.post("/projects/:id/runtime/install", async (c) => {
 			});
 			results.push({ name: svc.name, success: true });
 		} catch (err) {
+			// Sanitize error — strip internal paths to prevent information leakage
+			const rawMsg = err instanceof Error ? err.message : String(err);
+			const safeMsg = rawMsg.replace(/\/[\w/.~-]{10,}/g, "<path>").slice(0, 200);
 			results.push({
 				name: svc.name,
 				success: false,
-				error: err instanceof Error ? err.message.slice(0, 200) : String(err),
+				error: safeMsg,
 			});
 		}
 	}

@@ -66,6 +66,8 @@ export * from "./capability-grant-repo.js";
 
 // v8.1: Task Session Inspector
 export * from "./inspector-repo.js";
+// v8.2: Platform Stats + Analytics
+export * from "./platform-stats-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";

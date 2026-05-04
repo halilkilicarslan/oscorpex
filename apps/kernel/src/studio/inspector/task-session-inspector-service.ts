@@ -13,7 +13,7 @@ import {
 	listTaskDiffs,
 	listTokenUsageForTask,
 	listVerificationResults,
-} from "../db/inspector-repo.js";
+} from "../db.js";
 import {
 	buildTimeline,
 	buildWarnings,

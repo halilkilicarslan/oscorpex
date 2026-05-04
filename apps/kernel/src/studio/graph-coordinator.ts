@@ -15,8 +15,8 @@ import {
 	recordGraphMutation,
 	updateGraphMutation,
 	updateTask,
+	type GraphMutationType,
 } from "./db.js";
-import type { GraphMutationType } from "./db/graph-mutation-repo.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
 import type { Task } from "./types.js";

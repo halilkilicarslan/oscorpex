@@ -11,7 +11,7 @@ import {
 	createCITracking,
 	getCITrackings,
 	updateCITracking,
-} from "./db/ci-repo.js";
+} from "./db.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("ci-tracker");
 

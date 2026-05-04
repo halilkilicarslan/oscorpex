@@ -169,6 +169,25 @@ class ProviderRuntimeCache {
 			capabilityMisses: 0,
 		};
 	}
+
+	/** Purge expired entries from both caches — call periodically to prevent unbounded growth */
+	purgeExpired(): number {
+		const now = Date.now();
+		let purged = 0;
+		for (const [id, entry] of this.availability) {
+			if (now > entry.expiresAt) {
+				this.availability.delete(id);
+				purged++;
+			}
+		}
+		for (const [id, entry] of this.capability) {
+			if (now > entry.expiresAt) {
+				this.capability.delete(id);
+				purged++;
+			}
+		}
+		return purged;
+	}
 }
 
 export const providerRuntimeCache = new ProviderRuntimeCache();

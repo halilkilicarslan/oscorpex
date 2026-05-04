@@ -7,7 +7,10 @@ import { Hono } from "hono";
 import { compress } from "hono/compress";
 import { cors } from "hono/cors";
 import { accessGuard } from "../auth/access-guard.js";
+import { createLogger } from "../logger.js";
 import { correlationMiddleware } from "../middleware/correlation-middleware.js";
+
+const log = createLogger("routes");
 import { guaranteedCorrelationHeader } from "../middleware/guaranteed-correlation-header.js";
 import { budgetGuard } from "../middleware/policy-middleware.js";
 import { rateLimiter } from "../middleware/rate-limiter.js";
@@ -73,7 +76,22 @@ studio.use("*", securityHeaders);
 const allowedOrigins = (process.env.OSCORPEX_CORS_ORIGINS ?? "http://localhost:5173,http://localhost:4242")
 	.split(",")
 	.map((o) => o.trim())
-	.filter(Boolean);
+	.filter((o) => {
+		if (!o) return false;
+		// Reject wildcard origins when used with credentials-bearing endpoints
+		if (o === "*") {
+			log.warn("[routes] CORS wildcard '*' rejected — use explicit origins");
+			return false;
+		}
+		// Basic URL validation
+		try {
+			new URL(o);
+			return true;
+		} catch {
+			log.warn(`[routes] Invalid CORS origin rejected: "${o}"`);
+			return false;
+		}
+	});
 
 studio.use(
 	"*",
@@ -92,9 +110,12 @@ studio.use("*", correlationMiddleware);
 studio.use("*", guaranteedCorrelationHeader);
 
 // ---------------------------------------------------------------------------
-// Rate Limiting — stricter limits on auth endpoints
+// Rate Limiting — stricter limits on auth, moderate on execution endpoints
 // ---------------------------------------------------------------------------
 studio.use("/auth/*", rateLimiter({ windowMs: 60_000, max: 10 }));
+studio.use("/projects/*/pipeline/start*", rateLimiter({ windowMs: 60_000, max: 30 }));
+studio.use("/projects/*/execute*", rateLimiter({ windowMs: 60_000, max: 60 }));
+studio.use("/projects/*/runtime/install*", rateLimiter({ windowMs: 60_000, max: 10 }));
 
 // ---------------------------------------------------------------------------
 // Unified Access Guard — default deny, explicit public routes
