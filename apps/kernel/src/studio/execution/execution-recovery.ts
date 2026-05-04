@@ -6,10 +6,8 @@
 import { agentRuntime } from "../agent-runtime.js";
 import { stopApp } from "../app-runner.js";
 import {
-	getLatestPlan,
+	getRunningProjectsWithPlans,
 	getTask,
-	listPhases,
-	listProjectsByStatus,
 	listProjectTasks,
 	releaseTaskClaim,
 	updatePhaseStatus,
@@ -35,13 +33,14 @@ export class ExecutionRecovery {
 	 * yeniden başlatır. Bu sayede yarıda kalmış görevler yeniden çalıştırılır.
 	 */
 	async recoverStuckTasks(): Promise<void> {
-		const projects = await listProjectsByStatus("running");
-		for (const project of projects) {
+		// Single query replaces the previous N+1 pattern (getLatestPlan + listPhases
+		// per project).  With 50 running projects that was 100+ round-trips; now it
+		// is exactly one.
+		const runningProjects = await getRunningProjectsWithPlans();
+		for (const { project, plan, phases } of runningProjects) {
 
-			const plan = await getLatestPlan(project.id);
 			if (!plan || plan.status !== "approved") continue;
 
-			const phases = await listPhases(plan.id);
 			let hasRecovered = false;
 
 			for (const phase of phases) {

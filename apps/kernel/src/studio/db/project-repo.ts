@@ -265,3 +265,222 @@ export async function listPhases(planId: string): Promise<Phase[]> {
 export async function updatePhaseStatus(id: string, status: PhaseStatus): Promise<void> {
 	await execute("UPDATE phases SET status = $1 WHERE id = $2", [status, id]);
 }
+
+// ---------------------------------------------------------------------------
+// Batch loader — eliminates N+1 queries in startup recovery
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns all running projects together with their latest approved plan and its
+ * phases (including tasks) in a single SQL query.  Used by execution-recovery
+ * to avoid issuing 2 × N queries on startup when there are N running projects.
+ *
+ * Grouping strategy:
+ *  1. Collect the latest `approved` plan per project (window rank = 1).
+ *  2. LEFT JOIN phases and tasks so projects without an approved plan still
+ *     appear in the result (with plan = null, phases = []).
+ *  3. Group rows back into the nested { project, plan, phases } shape in TS.
+ */
+export async function getRunningProjectsWithPlans(): Promise<
+	Array<{
+		project: Project;
+		plan: ProjectPlan | null;
+		phases: Phase[];
+	}>
+> {
+	const rows = await query<any>(
+		`
+		WITH latest_plans AS (
+			SELECT *,
+				ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY version DESC) AS rn
+			FROM project_plans
+			WHERE status = 'approved'
+		)
+		SELECT
+			proj.id             AS proj_id,
+			proj.name           AS proj_name,
+			proj.description    AS proj_description,
+			proj.status         AS proj_status,
+			proj.tech_stack     AS proj_tech_stack,
+			proj.repo_path      AS proj_repo_path,
+			proj.tenant_id      AS proj_tenant_id,
+			proj.owner_id       AS proj_owner_id,
+			proj.created_at     AS proj_created_at,
+			proj.updated_at     AS proj_updated_at,
+
+			pp.id               AS plan_id,
+			pp.project_id       AS plan_project_id,
+			pp.version          AS plan_version,
+			pp.status           AS plan_status,
+			pp.created_at       AS plan_created_at,
+
+			ph.id               AS ph_id,
+			ph.plan_id          AS ph_plan_id,
+			ph.name             AS ph_name,
+			ph."order"          AS ph_order,
+			ph.status           AS ph_status,
+			ph.depends_on       AS ph_depends_on,
+
+			t.id                       AS t_id,
+			t.phase_id                 AS t_phase_id,
+			t.title                    AS t_title,
+			t.description              AS t_description,
+			t.assigned_agent           AS t_assigned_agent,
+			t.status                   AS t_status,
+			t.complexity               AS t_complexity,
+			t.depends_on               AS t_depends_on,
+			t.branch                   AS t_branch,
+			t.task_type                AS t_task_type,
+			t.output                   AS t_output,
+			t.retry_count              AS t_retry_count,
+			t.error                    AS t_error,
+			t.started_at               AS t_started_at,
+			t.completed_at             AS t_completed_at,
+			t.review_status            AS t_review_status,
+			t.reviewer_agent_id        AS t_reviewer_agent_id,
+			t.review_task_id           AS t_review_task_id,
+			t.revision_count           AS t_revision_count,
+			t.assigned_agent_id        AS t_assigned_agent_id,
+			t.requires_approval        AS t_requires_approval,
+			t.approval_status          AS t_approval_status,
+			t.approval_rejection_reason AS t_approval_rejection_reason,
+			t.parent_task_id           AS t_parent_task_id,
+			t.target_files             AS t_target_files,
+			t.estimated_lines          AS t_estimated_lines,
+			t.project_id               AS t_project_id,
+			t.risk_level               AS t_risk_level,
+			t.policy_snapshot          AS t_policy_snapshot,
+			t.created_at               AS t_created_at
+		FROM projects proj
+		LEFT JOIN latest_plans pp ON pp.project_id = proj.id AND pp.rn = 1
+		LEFT JOIN phases ph ON ph.plan_id = pp.id
+		LEFT JOIN tasks t ON t.phase_id = ph.id
+		WHERE proj.status = 'running'
+		ORDER BY proj.id, pp.version DESC, ph."order", t.id
+		`,
+	);
+
+	// ---- Group flat rows into nested { project, plan, phases } buckets -----
+
+	// Outer map: projectId → { project row, plan row | null, phaseId → { phase row, task rows[] } }
+	const projectMap = new Map<
+		string,
+		{
+			projectRow: any;
+			planRow: any | null;
+			phaseMap: Map<string, { phaseRow: any; taskRows: any[] }>;
+		}
+	>();
+
+	for (const row of rows) {
+		const projectId: string = row.proj_id;
+
+		if (!projectMap.has(projectId)) {
+			projectMap.set(projectId, {
+				projectRow: {
+					id: row.proj_id,
+					name: row.proj_name,
+					description: row.proj_description,
+					status: row.proj_status,
+					tech_stack: row.proj_tech_stack,
+					repo_path: row.proj_repo_path,
+					tenant_id: row.proj_tenant_id,
+					owner_id: row.proj_owner_id,
+					created_at: row.proj_created_at,
+					updated_at: row.proj_updated_at,
+				},
+				planRow: row.plan_id
+					? {
+							id: row.plan_id,
+							project_id: row.plan_project_id,
+							version: row.plan_version,
+							status: row.plan_status,
+							created_at: row.plan_created_at,
+					  }
+					: null,
+				phaseMap: new Map(),
+			});
+		}
+
+		const bucket = projectMap.get(projectId)!;
+
+		// No approved plan → no phases
+		if (row.ph_id === null) continue;
+
+		const phaseId: string = row.ph_id;
+		if (!bucket.phaseMap.has(phaseId)) {
+			bucket.phaseMap.set(phaseId, {
+				phaseRow: {
+					id: row.ph_id,
+					plan_id: row.ph_plan_id,
+					name: row.ph_name,
+					order: row.ph_order,
+					status: row.ph_status,
+					depends_on: row.ph_depends_on,
+				},
+				taskRows: [],
+			});
+		}
+
+		// LEFT JOIN produces a NULL task row when the phase has no tasks
+		if (row.t_id !== null) {
+			bucket.phaseMap.get(phaseId)!.taskRows.push({
+				id: row.t_id,
+				phase_id: row.t_phase_id,
+				title: row.t_title,
+				description: row.t_description,
+				assigned_agent: row.t_assigned_agent,
+				status: row.t_status,
+				complexity: row.t_complexity,
+				depends_on: row.t_depends_on,
+				branch: row.t_branch,
+				task_type: row.t_task_type,
+				output: row.t_output,
+				retry_count: row.t_retry_count,
+				error: row.t_error,
+				started_at: row.t_started_at,
+				completed_at: row.t_completed_at,
+				review_status: row.t_review_status,
+				reviewer_agent_id: row.t_reviewer_agent_id,
+				review_task_id: row.t_review_task_id,
+				revision_count: row.t_revision_count,
+				assigned_agent_id: row.t_assigned_agent_id,
+				requires_approval: row.t_requires_approval,
+				approval_status: row.t_approval_status,
+				approval_rejection_reason: row.t_approval_rejection_reason,
+				parent_task_id: row.t_parent_task_id,
+				target_files: row.t_target_files,
+				estimated_lines: row.t_estimated_lines,
+				project_id: row.t_project_id,
+				risk_level: row.t_risk_level,
+				policy_snapshot: row.t_policy_snapshot,
+				created_at: row.t_created_at,
+			});
+		}
+	}
+
+	// ---- Map buckets to the typed return shape ----------------------------
+
+	return Array.from(projectMap.values()).map(({ projectRow, planRow, phaseMap }) => {
+		const phases = Array.from(phaseMap.values()).map(({ phaseRow, taskRows }) =>
+			rowToPhase(phaseRow, taskRows.map(rowToTask)),
+		);
+
+		const plan: ProjectPlan | null = planRow
+			? {
+					id: planRow.id,
+					projectId: planRow.project_id,
+					version: planRow.version,
+					status: planRow.status as PlanStatus,
+					phases,
+					createdAt: planRow.created_at,
+			  }
+			: null;
+
+		return {
+			project: rowToProject(projectRow),
+			plan,
+			phases,
+		};
+	});
+}
