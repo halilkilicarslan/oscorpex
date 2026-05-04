@@ -7,17 +7,9 @@
 import { type ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import { agentRuntime } from "../agent-runtime.js";
 import {
-	acknowledgeMessages,
 	completeSession,
 	failSession,
-	initSession,
-	loadProtocolContext,
 } from "../agent-runtime/index.js";
-import { resolveAllowedTools } from "../capability-resolver.js";
-import { buildPolicyPromptSection, getDefaultPolicy } from "../command-policy.js";
-import { buildRAGContext, formatRAGContext } from "../context-builder.js";
-import { compactCrossAgentContext } from "../context-sandbox.js";
-import { buildResumeSnapshot, formatResumeSnapshot } from "../context-session.js";
 import {
 	claimTask,
 	getAgentConfig,
@@ -27,19 +19,17 @@ import {
 	updateTask,
 } from "../db.js";
 import { eventBus } from "../event-bus.js";
-import { formatGoalPrompt, getGoalForTask } from "../goal-engine.js";
 import { createLogger } from "../logger.js";
-import { resolveModel } from "../model-router.js";
 import { persistAgentLog } from "../agent-log-store.js";
 import { markExecutionStarted } from "../preflight-warmup.js";
-import { buildTaskPrompt } from "../prompt-builder.js";
 import { syncDeclaredDependencies } from "../repo-dependency-sync.js";
 import { MAX_AUTO_RETRIES, evaluateRetry } from "../retry-policy.js";
-import { resolveAgent } from "../review-dispatcher.js";
 import { SandboxViolationError } from "../sandbox-manager.js";
 import { taskEngine } from "../task-engine.js";
 import { TIMEOUT_WARNING_THRESHOLD, resolveTaskTimeoutMs } from "../timeout-policy.js";
 import type { AgentCliTool, Task } from "../types.js";
+import { assemblePrompt } from "./prompt-assembler.js";
+import { resolveTaskAgent, resolveTaskTools, resolveTaskModel } from "./agent-resolver.js";
 import { runOutputAndTestGates, runGoalGate } from "./execution-gates-runner.js";
 import { runProviderTask } from "./provider-task-runner.js";
 import { executeTaskReview } from "./review-task-runner.js";
@@ -156,9 +146,8 @@ export class TaskExecutor {
 			return;
 		}
 
-		// Resolve agent config — prefer the task's assignedAgent value, which may
-		// be an agent ID or a role name. Try both.
-		const agent = await resolveAgent(projectId, task.assignedAgent);
+		// --- Agent resolution (delegated to agent-resolver.ts) ---
+		const agent = await resolveTaskAgent(projectId, task.assignedAgent);
 		if (!agent) {
 			await taskEngine.assignTask(task.id, task.assignedAgent);
 			await taskEngine.startTask(task.id);
@@ -176,61 +165,13 @@ export class TaskExecutor {
 		const startedTask = await this.startTaskForExecution(task, agent.id);
 		const queueWaitMs = startedTask ? computeQueueWaitMs(startedTask) : 0;
 
-		// --- Agent Runtime: init session + behavioral memory + protocol ---
-		let sessionId: string | undefined;
-		let promptSuffix = "";
-		try {
-			const sessionCtx = await initSession(projectId, agent.id, agent.role, task);
-			sessionId = sessionCtx.session.id;
-			promptSuffix += sessionCtx.behavioralPrompt;
-
-			// Strategy prompt addendum
-			if (sessionCtx.strategySelection.strategy.promptAddendum) {
-				promptSuffix += `\n\n## EXECUTION STRATEGY: ${sessionCtx.strategySelection.strategy.name}\n${sessionCtx.strategySelection.strategy.promptAddendum}\n`;
-			}
-
-			// Load inter-agent protocol messages
-			const protocolCtx = await loadProtocolContext(projectId, agent.id);
-			if (protocolCtx.hasBlockers) {
-				await updateTask(task.id, {
-					status: "blocked",
-				});
-				eventBus.emit({
-					projectId,
-					type: "agent:requested_help",
-					agentId: agent.id,
-					taskId: task.id,
-					payload: {
-						title: task.title,
-						taskTitle: task.title,
-						agentName: agent.name,
-						reason: "Execution blocked by unresolved inter-agent protocol messages",
-						protocolBlocked: true,
-					},
-				});
-				return;
-			}
-			if (protocolCtx.prompt) {
-				promptSuffix += protocolCtx.prompt;
-				await acknowledgeMessages(protocolCtx.messageIds);
-			}
-		} catch (err) {
-			log.warn("[task-executor] Agent runtime init failed (non-blocking):" + " " + String(err));
+		// --- Prompt assembly (delegated to prompt-assembler.ts) ---
+		const assembly = await assemblePrompt(projectId, task, project, agent);
+		if (assembly.blocked) {
+			return;
 		}
+		const { prompt, sessionId, goalId } = assembly;
 
-		// --- Goal-based execution: inject goal prompt if task has an associated goal ---
-		let goalId: string | undefined;
-		try {
-			const goal = await getGoalForTask(task.id);
-			if (goal && goal.status !== "achieved") {
-				promptSuffix += "\n" + formatGoalPrompt(goal);
-				goalId = goal.id;
-			}
-		} catch (err) {
-			log.warn("[task-executor] Goal lookup failed (non-blocking):" + " " + String(err));
-		}
-
-		const prompt = (await buildTaskPrompt(task, project, agent.role)) + promptSuffix;
 		const formatTaskLog = (line: string): string => {
 			const shortId = task.id.slice(0, 8);
 			return `[task:${shortId}] ${line}`;
@@ -270,25 +211,21 @@ export class TaskExecutor {
 				throw new Error(`Project ${projectId} has no repoPath configured`);
 			}
 
-			const allowedTools = await resolveAllowedTools(projectId, agent.id, agent.role);
+			// --- Tool resolution (delegated to agent-resolver.ts) ---
+			const allowedTools = await resolveTaskTools(projectId, agent.id, agent.role);
 
 			// --- Sandbox pre-execution: enforce tool restrictions ---
 			await enforceSandboxPreExecution(sandboxPolicy, allowedTools, sandboxSessionId);
 
 			// v3.4 + M4: Model routing — complexity + prior failures + review rejections + provider-native models.
 			const primaryCliTool: AgentCliTool = agent.cliTool && agent.cliTool !== "none" ? agent.cliTool : "claude-code";
-			let routedModel: string = agent.model ?? "sonnet";
-			try {
-				const resolved = await resolveModel(task, {
-					projectId,
-					priorFailures: task.retryCount ?? 0,
-					reviewRejections: task.revisionCount ?? 0,
-					cliTool: primaryCliTool,
-				});
-				routedModel = resolved.model;
-			} catch (err) {
-				log.warn("[task-executor] resolveModel failed, using fallback:" + " " + String(err));
-			}
+
+			// --- Model resolution (delegated to agent-resolver.ts) ---
+			const { routedModel } = await resolveTaskModel(task, {
+				projectId,
+				primaryCliTool,
+				agentModel: agent.model,
+			});
 
 			// TASK 7: Provider-aware timeout resolution
 			timeoutMs = await resolveTaskTimeoutMs(projectId, task.complexity, agent.taskTimeout, primaryCliTool);
