@@ -6,9 +6,14 @@ interface MessageBubbleProps {
 	message: ChatMessage;
 }
 
+const JSON_BLOCK_RE = /```(?:askuser-json|plan-json|scope-json|team-json)[\s\S]*?```/g;
+
 const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProps) {
 	const isUser = message.role === 'user';
 	const isError = message.id.startsWith('error-');
+	const displayContent = isUser ? message.content : message.content.replace(JSON_BLOCK_RE, '').trim();
+
+	if (!displayContent && !isError) return null;
 
 	return (
 		<div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
@@ -34,7 +39,7 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
 							: 'bg-[#1a1a1a] text-[#d4d4d4] border border-[#262626] rounded-tl-md'
 				}`}
 			>
-				{message.content}
+				{displayContent}
 			</div>
 		</div>
 	);
