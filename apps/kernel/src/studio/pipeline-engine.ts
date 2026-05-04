@@ -26,8 +26,7 @@ import { PipelineBuildService } from "./pipeline/pipeline-build-service.js";
 import { PipelineCompletionService } from "./pipeline/pipeline-completion-service.js";
 import { PipelineControlService } from "./pipeline/pipeline-control-service.js";
 import { PipelineReviewHelpers } from "./pipeline/pipeline-review-helpers.js";
-import { canAdvance } from "./pipeline/replan-gate.js";
-import { decideStageAdvance } from "./pipeline/stage-advance-service.js";
+import { StageAdvanceOrchestrator } from "./pipeline/stage-advance-service.js";
 import { PipelineBranchManager } from "./pipeline/vcs-phase-hooks.js";
 import { PipelineStateManager, runToState } from "./pipeline/pipeline-state-service.js";
 import { PipelineTaskHook } from "./pipeline/pipeline-task-hook.js";
@@ -59,6 +58,7 @@ class PipelineEngine {
 	private controlService: PipelineControlService;
 	private reviewHelpers: PipelineReviewHelpers;
 	private taskHook: PipelineTaskHook;
+	private stageAdvanceOrchestrator: StageAdvanceOrchestrator;
 
 	constructor() {
 		this.buildService = new PipelineBuildService();
@@ -67,6 +67,10 @@ class PipelineEngine {
 		this.completionService = new PipelineCompletionService(this.stateManager, this.branchManager);
 		this.controlService = new PipelineControlService(this.stateManager);
 		this.reviewHelpers = new PipelineReviewHelpers();
+		this.stageAdvanceOrchestrator = new StageAdvanceOrchestrator(this.stateManager, {
+			completeStage: (projectId, stageIndex) => this.completeStage(projectId, stageIndex),
+			markFailed: (projectId, reason) => this.markFailed(projectId, reason),
+		});
 		this.taskHook = new PipelineTaskHook(
 			(projectId) => this.advanceStage(projectId),
 			(projectId) => this.startPipeline(projectId),
@@ -234,6 +238,7 @@ class PipelineEngine {
 
 	/**
 	 * Mevcut aşamanın tüm görevlerinin tamamlanıp tamamlanmadığını kontrol eder.
+	 * Orchestration logic StageAdvanceOrchestrator'a devredilmiştir.
 	 *
 	 * v2 ek kontroller:
 	 *   - 'review' durumundaki task'lar henüz tamamlanmamış sayılır
@@ -241,55 +246,7 @@ class PipelineEngine {
 	 *   - Sadece 'done' durumundakiler tamamlanmış sayılır
 	 */
 	async advanceStage(projectId: string): Promise<PipelineState> {
-		// Always read from DB for correctness (cache is just performance)
-		// Use withTransaction + SELECT FOR UPDATE to prevent concurrent advanceStage race conditions
-		const state = await this.stateManager.loadState(projectId);
-		if (!state) throw new Error(`${projectId} için pipeline durumu bulunamadı`);
-
-		if (state.status === "paused" || state.status === "completed" || state.status === "failed") {
-			return state;
-		}
-
-		// Acquire row-level lock to prevent concurrent advanceStage from double-advancing
-		const lockedRun = await this.stateManager.acquireAdvanceLock(projectId);
-		if (!lockedRun) {
-			log.info(`[pipeline-engine] advanceStage skipped — could not acquire lock (project=${projectId})`);
-			return state;
-		}
-
-		// Block advance if there's a pending replan awaiting approval
-		const replanGate = await canAdvance(projectId);
-		if (!replanGate.allowed) {
-			log.info(`[pipeline-engine] advanceStage blocked — pending replan ${replanGate.replanEventId} awaiting approval`);
-			eventBus.emit({
-				projectId,
-				type: "plan:replanned",
-				payload: { awaiting_approval: true, replanEventId: replanGate.replanEventId },
-			});
-			return state;
-		}
-
-		const currentIndex = state.currentStage;
-		const currentStage = state.stages[currentIndex];
-		if (!currentStage) return state;
-
-		const freshTaskIds = await this.stateManager.resolveStageTaskIds(projectId, currentIndex, state);
-
-		if (freshTaskIds.length === 0) {
-			await this.completeStage(projectId, currentIndex);
-			return (await this.stateManager.getState(projectId))!;
-		}
-
-		const statuses = await Promise.all(freshTaskIds.map((id) => this.stateManager.getTaskStatus(id)));
-
-		const decision = decideStageAdvance(statuses);
-		if (decision === "failed") {
-			await this.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
-		} else if (decision === "completed") {
-			await this.completeStage(projectId, currentIndex);
-		}
-
-		return (await this.stateManager.getState(projectId))!;
+		return this.stageAdvanceOrchestrator.advance(projectId);
 	}
 
 	// -------------------------------------------------------------------------
