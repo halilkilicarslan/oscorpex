@@ -44,15 +44,26 @@ export async function createTask(
 		projectId = phaseRow?.project_id ?? null;
 	}
 
+	// Resolve tenant_id from project — denormalized for direct RLS matching (avoids subquery chain).
+	let tenantId: string | null = null;
+	if (projectId) {
+		const projectRow = await queryOne<{ tenant_id: string | null }>(
+			`SELECT tenant_id FROM projects WHERE id = $1`,
+			[projectId],
+		);
+		tenantId = projectRow?.tenant_id ?? null;
+	}
+
 	await execute(
 		`
-    INSERT INTO tasks (id, phase_id, project_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type, test_expectation, requires_approval, parent_task_id, target_files, estimated_lines, assigned_agent_id)
-    VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8, $9, 0, $10, $11, $12, $13, $14, $15, $16)
+    INSERT INTO tasks (id, phase_id, project_id, tenant_id, title, description, assigned_agent, status, complexity, depends_on, branch, retry_count, task_type, test_expectation, requires_approval, parent_task_id, target_files, estimated_lines, assigned_agent_id)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8, $9, $10, 0, $11, $12, $13, $14, $15, $16, $17)
   `,
 		[
 			id,
 			data.phaseId,
 			projectId,
+			tenantId,
 			data.title,
 			data.description,
 			data.assignedAgent,

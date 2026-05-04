@@ -2353,4 +2353,77 @@ CREATE INDEX IF NOT EXISTS idx_tasks_phase_status ON tasks(phase_id, status);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_status ON tasks(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_token_usage_project_created ON token_usage(project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_project_type_ts ON events(project_id, type, timestamp DESC);
+
+-- ---------------------------------------------------------------------------
+-- RLS Optimization: direct tenant_id columns (avoid subquery chains on hot tables)
+-- Rationale: The original RLS policies for tasks, project_plans, and phases used
+-- multi-level subquery chains (tasks→projects, phases→plans→projects) evaluated on
+-- every row access. Adding a denormalized tenant_id column with a direct equality
+-- check reduces per-row cost from O(subquery) to O(1) index lookup.
+-- ---------------------------------------------------------------------------
+
+-- 1. tasks.tenant_id -------------------------------------------------------
+DO $$ BEGIN
+  ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_tasks_tenant_id ON tasks(tenant_id);
+
+-- Backfill existing rows from their project's tenant_id
+UPDATE tasks t
+SET tenant_id = p.tenant_id
+FROM projects p
+WHERE t.project_id = p.id
+  AND t.tenant_id IS NULL
+  AND p.tenant_id IS NOT NULL;
+
+-- Replace subquery-based RLS with direct column match
+DROP POLICY IF EXISTS tenant_isolation_tasks ON tasks;
+CREATE POLICY tenant_isolation_tasks ON tasks
+  USING (tenant_id IS NULL OR tenant_id = current_setting('app.current_tenant_id', true));
+
+-- 2. project_plans.tenant_id -----------------------------------------------
+DO $$ BEGIN
+  ALTER TABLE project_plans ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_project_plans_tenant_id ON project_plans(tenant_id);
+
+-- Backfill from projects
+UPDATE project_plans pp
+SET tenant_id = pr.tenant_id
+FROM projects pr
+WHERE pp.project_id = pr.id
+  AND pp.tenant_id IS NULL
+  AND pr.tenant_id IS NOT NULL;
+
+-- Replace subquery-based RLS with direct column match
+DROP POLICY IF EXISTS tenant_isolation_project_plans ON project_plans;
+CREATE POLICY tenant_isolation_project_plans ON project_plans
+  USING (tenant_id IS NULL OR tenant_id = current_setting('app.current_tenant_id', true));
+
+-- 3. phases.tenant_id -------------------------------------------------------
+DO $$ BEGIN
+  ALTER TABLE phases ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_phases_tenant_id ON phases(tenant_id);
+
+-- Backfill: phases → project_plans → projects
+UPDATE phases ph
+SET tenant_id = pr.tenant_id
+FROM project_plans pp
+JOIN projects pr ON pp.project_id = pr.id
+WHERE ph.plan_id = pp.id
+  AND ph.tenant_id IS NULL
+  AND pr.tenant_id IS NOT NULL;
+
+-- Replace double-subquery RLS with direct column match
+DROP POLICY IF EXISTS tenant_isolation_phases ON phases;
+CREATE POLICY tenant_isolation_phases ON phases
+  USING (tenant_id IS NULL OR tenant_id = current_setting('app.current_tenant_id', true));
+
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_project_status ON agent_sessions(project_id, status);
