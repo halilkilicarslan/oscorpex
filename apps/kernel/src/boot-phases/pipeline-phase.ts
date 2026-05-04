@@ -9,6 +9,6 @@ const log = createLogger("boot:pipeline");
 
 export async function pipelinePhase(): Promise<void> {
 	const { pipelineEngine } = await import("../studio/pipeline-engine.js");
-	pipelineEngine.registerTaskHook();
+	pipelineEngine().registerTaskHook();
 	log.info("Pipeline engine hooks registered");
 }

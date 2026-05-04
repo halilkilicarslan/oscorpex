@@ -149,9 +149,9 @@ export class TaskExecutor {
 		// --- Agent resolution (delegated to agent-resolver.ts) ---
 		const agent = await resolveTaskAgent(projectId, task.assignedAgent);
 		if (!agent) {
-			await taskEngine.assignTask(task.id, task.assignedAgent);
-			await taskEngine.startTask(task.id);
-			await taskEngine.failTask(
+			await taskEngine().assignTask(task.id, task.assignedAgent);
+			await taskEngine().startTask(task.id);
+			await taskEngine().failTask(
 				task.id,
 				`No agent found for assignment "${task.assignedAgent}" in project ${projectId}`,
 			);
@@ -285,7 +285,7 @@ export class TaskExecutor {
 				await runOutputAndTestGates(projectId, task, project.repoPath, output, agent, sessionId);
 			}
 
-			await taskEngine.completeTask(task.id, output, { executionRepoPath: runtimeRepoPath });
+			await taskEngine().completeTask(task.id, output, { executionRepoPath: runtimeRepoPath });
 
 			closeSandboxExecution(sandboxContext);
 
@@ -350,7 +350,7 @@ export class TaskExecutor {
 				// Pause the pipeline — stops all running tasks
 				try {
 					const { pipelineEngine } = await import("../pipeline-engine.js");
-					await pipelineEngine.pausePipeline(projectId);
+					await pipelineEngine().pausePipeline(projectId);
 				} catch (pauseErr) {
 					log.error({ err: pauseErr }, "Failed to pause pipeline after rate limit");
 				}
@@ -390,7 +390,7 @@ export class TaskExecutor {
 				}
 			}
 
-			await taskEngine.failTask(task.id, errorMsg);
+			await taskEngine().failTask(task.id, errorMsg);
 
 			// --- Agent Runtime: record failed session ---
 			if (sessionId && agent) {
@@ -441,7 +441,7 @@ export class TaskExecutor {
 					await new Promise((r) => setTimeout(r, delayMs));
 				}
 
-				const retried = await taskEngine.retryTask(task.id);
+				const retried = await taskEngine().retryTask(task.id);
 				// Re-queue through executeTask to respect semaphore concurrency limits
 				setTimeout(() => {
 					executeTask(projectId, retried).catch((err) =>

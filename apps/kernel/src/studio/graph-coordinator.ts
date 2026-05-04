@@ -574,7 +574,7 @@ export async function approveGraphMutationRequest(mutationId: string, approvedBy
 	});
 
 	const { executionEngine } = await import("./execution-engine.js");
-	executionEngine
+	executionEngine()
 		.startProjectExecution(mutation.projectId)
 		.catch((err) => log.warn("[graph-coordinator] Non-blocking operation failed:", err?.message ?? err));
 

@@ -259,7 +259,7 @@ class PipelineEngine {
 
 	async getEnrichedPipelineStatus(projectId: string): Promise<{
 		pipelineState: PipelineState | null;
-		taskProgress: Awaited<ReturnType<typeof taskEngine.getProgress>>;
+		taskProgress: Awaited<ReturnType<ReturnType<typeof taskEngine>["getProgress"]>>;
 		derivedStatus: PipelineStatus;
 		warning?: string;
 	}> {
@@ -337,9 +337,18 @@ function now(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Singleton dışa aktarımı
+// Factory — lazy singleton accessed via pipelineEngine()
 // ---------------------------------------------------------------------------
-export const pipelineEngine = new PipelineEngine();
 
-// Uygulama başladığında TaskEngine hook'unu kaydet
-pipelineEngine.registerTaskHook();
+let _instance: PipelineEngine | null = null;
+
+export function pipelineEngine(): PipelineEngine {
+	if (!_instance) throw new Error("PipelineEngine not initialized — call initPipelineEngine() first");
+	return _instance;
+}
+
+export function initPipelineEngine(): PipelineEngine {
+	if (_instance) return _instance;
+	_instance = new PipelineEngine();
+	return _instance;
+}

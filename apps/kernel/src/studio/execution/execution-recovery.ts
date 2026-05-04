@@ -75,7 +75,7 @@ export class ExecutionRecovery {
 					if (task.status === "revision") {
 						log.info(`[execution-recovery] Recovery: restarting revision "${task.title}"`);
 						try {
-							await taskEngine.restartRevision(task.id);
+							await taskEngine().restartRevision(task.id);
 							const fresh = await getTask(task.id);
 							if (fresh) {
 								this._executeTask(project.id, fresh).catch((err) =>
@@ -93,7 +93,7 @@ export class ExecutionRecovery {
 			// These may sit in running OR completed phases with satisfied dependencies
 			for (const phase of phases) {
 				if (phase.status !== "running" && phase.status !== "completed") continue;
-				const ready = await taskEngine.getReadyTasks(phase.id);
+				const ready = await taskEngine().getReadyTasks(phase.id);
 				if (ready.length > 0) {
 					log.info(
 						`[execution-recovery] Recovery: ${ready.length} orphaned ready task(s) in phase "${phase.name}" — dispatching`,
@@ -123,7 +123,7 @@ export class ExecutionRecovery {
 			if (hasRecovered) {
 				for (const phase of phases) {
 					if (phase.status !== "running") continue;
-					const ready = await taskEngine.getReadyTasks(phase.id);
+					const ready = await taskEngine().getReadyTasks(phase.id);
 					if (ready.length > 0) {
 						Promise.allSettled(ready.map((task: Task) => this._executeTask(project.id, task))).catch((err) =>
 							log.warn("[execution-recovery] Non-blocking operation failed:" + " " + String(err?.message ?? err)),

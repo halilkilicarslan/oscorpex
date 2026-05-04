@@ -22,7 +22,7 @@ export class PipelineTaskHook {
 		if (this.registered) return;
 		this.registered = true;
 
-		taskEngine.onTaskCompleted((taskId, projectId) => {
+		taskEngine().onTaskCompleted((taskId, projectId) => {
 			getPipelineRun(projectId)
 				.then(async (run) => {
 					if (run && run.status === "running") {

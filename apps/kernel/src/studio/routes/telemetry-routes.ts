@@ -84,7 +84,7 @@ router.get("/providers/latency", (c) => {
 	const providers = ["claude-code", "codex", "cursor"];
 	const results = providers.map((id) => ({
 		provider: id,
-		...executionEngine.telemetry.getLatencySnapshot(id),
+		...executionEngine().telemetry.getLatencySnapshot(id),
 	}));
 	return c.json({ providers: results });
 });
@@ -98,7 +98,7 @@ router.get("/providers/latency", (c) => {
 router.get("/providers/records/:runId/:taskId", (c) => {
 	const runId = c.req.param("runId");
 	const taskId = c.req.param("taskId");
-	const record = executionEngine.telemetry.getRecord(runId, taskId);
+	const record = executionEngine().telemetry.getRecord(runId, taskId);
 	if (!record) {
 		return c.json({ error: "Record not found" }, 404);
 	}
@@ -119,7 +119,7 @@ router.get("/providers/records", (c) => {
 	const successFilter = c.req.query("success");
 	const limit = limitParam ? Math.min(Number.parseInt(limitParam, 10) || 50, 200) : 50;
 
-	let records = executionEngine.telemetry.getRecentRecords(limit);
+	let records = executionEngine().telemetry.getRecentRecords(limit);
 
 	if (providerFilter) {
 		records = records.filter((r) => (r.finalProvider ?? r.primaryProvider) === providerFilter);
@@ -148,7 +148,7 @@ router.get("/providers/queue-wait", (c) => {
 	const limitParam = c.req.query("limit");
 	const limit = limitParam ? Math.min(Number.parseInt(limitParam, 10) || 20, 100) : 20;
 
-	const records = executionEngine.telemetry.getRecentRecords(limit);
+	const records = executionEngine().telemetry.getRecentRecords(limit);
 	const withQueueWait = records.map((r) => ({
 		runId: r.runId,
 		taskId: r.taskId,
@@ -185,7 +185,7 @@ router.get("/providers/queue-wait", (c) => {
 router.get("/concurrency", (c) => {
 	// Access private controller via type assertion for debug endpoint
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const engine = executionEngine as any;
+	const engine = executionEngine() as any;
 	const controller = engine._concurrencyController as
 		| import("../adaptive-concurrency.js").AdaptiveConcurrencyController
 		| undefined;
@@ -299,7 +299,7 @@ router.get("/db-pool", (c) => {
  */
 router.get("/runtime", (c) => {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const engine = executionEngine as any;
+	const engine = executionEngine() as any;
 	return c.json({
 		runtime: {
 			dispatchingTaskCount: engine._dispatchingTasks?.size ?? 0,
@@ -328,7 +328,7 @@ router.get("/performance/baseline", (c) => {
 	const windowParam = c.req.query("window");
 	const windowMs = windowParam ? Math.min(Number.parseInt(windowParam, 10) || 3600000, 24 * 3600000) : 3600000;
 
-	const baseline = buildPerformanceBaseline(executionEngine.telemetry, windowMs);
+	const baseline = buildPerformanceBaseline(executionEngine().telemetry, windowMs);
 	return c.json({ baseline });
 });
 

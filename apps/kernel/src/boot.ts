@@ -12,6 +12,7 @@ import { createLogger } from "./studio/logger.js";
 import { authConfigPhase } from "./boot-phases/auth-config-phase.js";
 import { containerPoolPhase } from "./boot-phases/container-pool-phase.js";
 import { dbPhase } from "./boot-phases/db-phase.js";
+import { enginePhase } from "./boot-phases/engine-phase.js";
 import { httpPhase } from "./boot-phases/http-phase.js";
 import { pipelinePhase } from "./boot-phases/pipeline-phase.js";
 import { providerRegistryPhase } from "./boot-phases/provider-registry-phase.js";
@@ -53,6 +54,9 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 	// Phase 1.5: Auth config validation (fatal in production)
 	authConfigPhase();
 
+	// Phase 1.8: Engine initialization (must precede recovery + pipeline phases)
+	await enginePhase();
+
 	// Phase 2: Provider state (warning on failure)
 	await providerStatePhase();
 
@@ -92,9 +96,9 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 		const { taskEngine } = await import("./studio/task-engine.js");
 		const { pipelineEngine } = await import("./studio/pipeline-engine.js");
 		const { eventBus } = await import("./studio/event-bus.js");
-		registerService("executionEngine", executionEngine);
-		registerService("taskEngine", taskEngine);
-		registerService("pipelineEngine", pipelineEngine);
+		registerService("executionEngine", executionEngine());
+		registerService("taskEngine", taskEngine());
+		registerService("pipelineEngine", pipelineEngine());
 		registerService("eventBus", eventBus);
 		log.info("[boot] Service registry populated (4 services)");
 	}

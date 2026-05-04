@@ -19,8 +19,8 @@ export async function executeSpecialTask(
 	task: Task,
 	dispatchReadyTasks: (projectId: string, phaseId: string) => Promise<void>,
 ): Promise<void> {
-	await taskEngine.assignTask(task.id, task.taskType ?? "system");
-	await taskEngine.startTask(task.id);
+	await taskEngine().assignTask(task.id, task.taskType ?? "system");
+	await taskEngine().startTask(task.id);
 
 	const termLog = (msg: string) => {
 		eventBus.emitTransient({
@@ -47,7 +47,7 @@ export async function executeSpecialTask(
 			};
 		}
 
-		await taskEngine.completeTask(task.id, output, { executionRepoPath: project.repoPath });
+		await taskEngine().completeTask(task.id, output, { executionRepoPath: project.repoPath });
 	} catch (err) {
 		const errorMsg = err instanceof Error ? err.message : String(err);
 		log.error(`[task-executor] Special task failed: "${task.title}" — ${errorMsg}`);
@@ -57,7 +57,7 @@ export async function executeSpecialTask(
 			taskId: task.id,
 			payload: { error: errorMsg },
 		});
-		await taskEngine.failTask(task.id, errorMsg);
+		await taskEngine().failTask(task.id, errorMsg);
 		await updateProject(projectId, { status: "failed" });
 	}
 

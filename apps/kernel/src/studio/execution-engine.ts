@@ -137,7 +137,7 @@ class ExecutionEngine {
 	 * project. Used by the GET /projects/:id/execution/status endpoint.
 	 */
 	async getExecutionStatus(projectId: string) {
-		const progress = await taskEngine.getProgress(projectId);
+		const progress = await taskEngine().getProgress(projectId);
 
 		return {
 			projectId,
@@ -270,14 +270,22 @@ class ExecutionEngine {
 	}
 }
 
-export const executionEngine = new ExecutionEngine();
+// ---------------------------------------------------------------------------
+// Factory — lazy singleton accessed via executionEngine()
+// ---------------------------------------------------------------------------
 
-// Uygulama başlangıcında yarıda kalmış görevleri kurtart
-if (process.env.VITEST !== "true") {
-	// Access recovery module through the engine's internal recovery instance.
-	// We bind recoverStuckTasks so the deadlock-retry wrapper can call it directly.
-	const _engine = executionEngine as unknown as { recovery: import("./execution/execution-recovery.js").ExecutionRecovery };
-	runStartupRecoveryWithRetry(_engine.recovery).catch((err) => {
-		log.error("[execution-engine] Startup recovery failed:" + " " + String(err));
-	});
+let _instance: ExecutionEngine | null = null;
+
+export function executionEngine(): ExecutionEngine {
+	if (!_instance) throw new Error("ExecutionEngine not initialized — call initExecutionEngine() first");
+	return _instance;
 }
+
+export function initExecutionEngine(): ExecutionEngine {
+	if (_instance) return _instance;
+	_instance = new ExecutionEngine();
+	return _instance;
+}
+
+// Re-export for callers that need to drive startup recovery from outside.
+export { runStartupRecoveryWithRetry };

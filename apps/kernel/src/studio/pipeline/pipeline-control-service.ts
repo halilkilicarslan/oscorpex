@@ -29,7 +29,7 @@ export class PipelineControlService {
 		this.stateManager.invalidateCache(projectId);
 		this.stateManager.setCacheEntry(projectId, runToState(run));
 
-		const cancelledCount = await executionEngine.cancelRunningTasks(projectId);
+		const cancelledCount = await executionEngine().cancelRunningTasks(projectId);
 		log.info(`[pipeline-engine] Pipeline paused: ${cancelledCount} task(s) cancelled for ${projectId}`);
 
 		eventBus.emit({
@@ -55,7 +55,7 @@ export class PipelineControlService {
 			payload: { resumedAt: now(), currentStage: run.currentStage },
 		});
 
-		executionEngine.startProjectExecution(projectId).catch((err) => {
+		executionEngine().startProjectExecution(projectId).catch((err) => {
 			log.error(`[pipeline-engine] Resume dispatch failed:` + " " + String(err));
 		});
 

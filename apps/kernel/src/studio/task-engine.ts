@@ -201,4 +201,19 @@ class TaskEngine {
 	}
 }
 
-export const taskEngine = new TaskEngine();
+// ---------------------------------------------------------------------------
+// Factory — lazy singleton accessed via taskEngine()
+// ---------------------------------------------------------------------------
+
+let _instance: TaskEngine | null = null;
+
+export function taskEngine(): TaskEngine {
+	if (!_instance) throw new Error("TaskEngine not initialized — call initTaskEngine() first");
+	return _instance;
+}
+
+export function initTaskEngine(): TaskEngine {
+	if (_instance) return _instance;
+	_instance = new TaskEngine();
+	return _instance;
+}

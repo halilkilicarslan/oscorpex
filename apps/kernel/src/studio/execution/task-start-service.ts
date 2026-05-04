@@ -12,12 +12,12 @@ export async function startTaskForExecution(task: Task, agentId: string): Promis
 	const currentStatus = currentTask?.status ?? task.status;
 
 	if (currentStatus === "queued") {
-		await taskEngine.assignTask(task.id, agentId);
-		return taskEngine.startTask(task.id);
+		await taskEngine().assignTask(task.id, agentId);
+		return taskEngine().startTask(task.id);
 	}
 
 	if (currentStatus === "assigned") {
-		return taskEngine.startTask(task.id);
+		return taskEngine().startTask(task.id);
 	}
 
 	// status === "running" -> already started (e.g. revision restart)

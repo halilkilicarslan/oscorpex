@@ -86,9 +86,9 @@ export async function executeReviewTask(
 	const originalTask = originalTaskId ? await getTask(originalTaskId) : null;
 
 	if (!originalTask) {
-		await taskEngine.assignTask(reviewTask.id, reviewTask.assignedAgent);
-		await taskEngine.startTask(reviewTask.id);
-		await taskEngine.completeTask(reviewTask.id, {
+		await taskEngine().assignTask(reviewTask.id, reviewTask.assignedAgent);
+		await taskEngine().startTask(reviewTask.id);
+		await taskEngine().completeTask(reviewTask.id, {
 			filesCreated: [],
 			filesModified: [],
 			logs: ["Orijinal task bulunamadı — review atlandı"],
@@ -98,15 +98,15 @@ export async function executeReviewTask(
 
 	const reviewer = await resolveAgent(projectId, reviewTask.assignedAgent);
 	if (!reviewer) {
-		await taskEngine.assignTask(reviewTask.id, reviewTask.assignedAgent);
-		await taskEngine.startTask(reviewTask.id);
-		await taskEngine.failTask(reviewTask.id, "Reviewer agent bulunamadı");
-		await taskEngine.submitReview(originalTaskId!, false, "Reviewer bulunamadı — eskalasyon gerekli");
+		await taskEngine().assignTask(reviewTask.id, reviewTask.assignedAgent);
+		await taskEngine().startTask(reviewTask.id);
+		await taskEngine().failTask(reviewTask.id, "Reviewer agent bulunamadı");
+		await taskEngine().submitReview(originalTaskId!, false, "Reviewer bulunamadı — eskalasyon gerekli");
 		return;
 	}
 
-	await taskEngine.assignTask(reviewTask.id, reviewer.id);
-	await taskEngine.startTask(reviewTask.id);
+	await taskEngine().assignTask(reviewTask.id, reviewer.id);
+	await taskEngine().startTask(reviewTask.id);
 
 	agentRuntime.ensureVirtualProcess(projectId, reviewer.id, reviewer.name);
 	const termLog = (msg: string) => agentRuntime.appendVirtualOutput(projectId, reviewer.id, msg);
@@ -143,12 +143,12 @@ export async function executeReviewTask(
 		termLog(`[review] "${originalTask.title}" — zero-file decision inceleniyor...`);
 		reviewPrompt = buildZeroFileReviewPrompt(project, originalTask, allFiles, decisionContent);
 	} else if (allFiles.length === 0) {
-		await taskEngine.completeTask(reviewTask.id, {
+		await taskEngine().completeTask(reviewTask.id, {
 			filesCreated: [],
 			filesModified: [],
 			logs: ["İncelenecek dosya yok — orijinal task dosya değişikliği üretmedi"],
 		});
-		await taskEngine.submitReview(
+		await taskEngine().submitReview(
 			originalTaskId!,
 			false,
 			"İncelenecek dosya yok — orijinal task dosya değişikliği üretmedi",
@@ -222,12 +222,12 @@ export async function executeReviewTask(
 			);
 		}
 
-		await taskEngine.completeTask(reviewTask.id, {
+		await taskEngine().completeTask(reviewTask.id, {
 			filesCreated: [],
 			filesModified: cliResult.filesModified ?? [],
 			logs: [feedback],
 		});
-		await taskEngine.submitReview(originalTaskId!, approved, feedback);
+		await taskEngine().submitReview(originalTaskId!, approved, feedback);
 		agentRuntime.markVirtualStopped(projectId, reviewer.id);
 		await reviewWorkspace
 			.cleanup()
@@ -237,7 +237,7 @@ export async function executeReviewTask(
 			const revisedTask = await getTask(originalTaskId!);
 			if (revisedTask?.status === "revision") {
 				log.info(`[review-dispatcher] Review rejected — restarting "${revisedTask.title}" for revision`);
-				await taskEngine.restartRevision(originalTaskId!);
+				await taskEngine().restartRevision(originalTaskId!);
 			}
 		}
 	} catch (err) {
@@ -249,9 +249,9 @@ export async function executeReviewTask(
 				.cleanup()
 				.catch((e) => log.warn("[review-dispatcher] Non-blocking operation failed:", e?.message ?? e));
 		}
-		await taskEngine.failTask(reviewTask.id, msg);
+		await taskEngine().failTask(reviewTask.id, msg);
 		try {
-			await taskEngine.submitReview(originalTaskId!, false, `Review başarısız: ${msg.slice(0, 200)} — insan incelemesi gerekli`);
+			await taskEngine().submitReview(originalTaskId!, false, `Review başarısız: ${msg.slice(0, 200)} — insan incelemesi gerekli`);
 		} catch {
 			/* failsafe */
 		}

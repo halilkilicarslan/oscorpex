@@ -150,7 +150,7 @@ class KernelRunStore implements RunStore {
 
 class KernelScheduler implements Scheduler {
 	async getReadyTasks(runId: string): Promise<CoreTask[]> {
-		const tasks = await taskEngine.getReadyTasks(runId);
+		const tasks = await taskEngine().getReadyTasks(runId);
 		return tasks.map(toCoreTask);
 	}
 	async claim(taskId: string, workerId: string): Promise<CoreTask> {
@@ -318,7 +318,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 	// --- Task lifecycle — delegates to taskEngine + hooks ---
 
 	async assignTask(taskId: string, agentId: string): Promise<CoreTask> {
-		const result = await taskEngine.assignTask(taskId, agentId);
+		const result = await taskEngine().assignTask(taskId, agentId);
 		return toCoreTask(result);
 	}
 
@@ -327,13 +327,13 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		const proceed = await runHooks("before_task_start", ctx);
 		if (!proceed) throw new Error(`Task ${taskId} blocked by pre-start hook`);
 
-		const result = await taskEngine.startTask(taskId);
+		const result = await taskEngine().startTask(taskId);
 		return toCoreTask(result);
 	}
 
 	async completeTask(taskId: string, output?: CoreTaskOutput): Promise<CoreTask> {
 		const kernelOutput = output !== undefined ? toKernelTaskOutput(output) : undefined;
-		const result = await taskEngine.completeTask(
+		const result = await taskEngine().completeTask(
 			taskId,
 			// completeTask requires a non-optional TaskOutput; supply an empty one when omitted
 			kernelOutput ?? { filesCreated: [], filesModified: [], logs: [] },
@@ -343,38 +343,38 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 	}
 
 	async failTask(taskId: string, error: string): Promise<CoreTask> {
-		const result = await taskEngine.failTask(taskId, error);
+		const result = await taskEngine().failTask(taskId, error);
 		await runHooks("after_task_fail", { runId: "", taskId: result.id, projectId: "", metadata: { error } });
 		return toCoreTask(result);
 	}
 
 	async retryTask(taskId: string): Promise<CoreTask> {
-		const result = await taskEngine.retryTask(taskId);
+		const result = await taskEngine().retryTask(taskId);
 		return toCoreTask(result);
 	}
 
 	async submitReview(taskId: string, approved: boolean, feedback?: string): Promise<CoreTask> {
-		const result = await taskEngine.submitReview(taskId, approved, feedback);
+		const result = await taskEngine().submitReview(taskId, approved, feedback);
 		return toCoreTask(result);
 	}
 
 	async restartRevision(taskId: string): Promise<CoreTask> {
-		const result = await taskEngine.restartRevision(taskId);
+		const result = await taskEngine().restartRevision(taskId);
 		return toCoreTask(result);
 	}
 
 	async approveTask(taskId: string): Promise<CoreTask> {
-		const result = await taskEngine.approveTask(taskId);
+		const result = await taskEngine().approveTask(taskId);
 		return toCoreTask(result);
 	}
 
 	async rejectTask(taskId: string, reason?: string): Promise<CoreTask> {
-		const result = await taskEngine.rejectTask(taskId, reason);
+		const result = await taskEngine().rejectTask(taskId, reason);
 		return toCoreTask(result);
 	}
 
 	async executeTask(projectId: string, task: CoreTask): Promise<void> {
-		executionEngine.executeTask(projectId, toKernelTask(task)).catch((err) => {
+		executionEngine().executeTask(projectId, toKernelTask(task)).catch((err) => {
 			// eslint-disable-next-line no-console
 			console.warn("[kernel] executeTask background error:", err?.message ?? err);
 		});
@@ -382,7 +382,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 
 	async startPipeline(projectId: string): Promise<void> {
 		try {
-			await pipelineEngine.startPipeline(projectId);
+			await pipelineEngine().startPipeline(projectId);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			const retryableRunningState =
@@ -393,45 +393,45 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 		}
 
 		// Ensure dispatcher is always kicked, even when pipeline run already exists.
-		await executionEngine.startProjectExecution(projectId);
+		await executionEngine().startProjectExecution(projectId);
 	}
 
 	async advancePipeline(projectId: string): Promise<void> {
-		await pipelineEngine.advanceStage(projectId);
+		await pipelineEngine().advanceStage(projectId);
 	}
 
 	async startProjectExecution(projectId: string): Promise<void> {
-		await executionEngine.startProjectExecution(projectId);
+		await executionEngine().startProjectExecution(projectId);
 	}
 
 	async getProjectProgress(projectId: string): Promise<any> {
-		return taskEngine.getProgress(projectId);
+		return taskEngine().getProgress(projectId);
 	}
 
 	async getPipelineStatus(projectId: string): Promise<any> {
-		return pipelineEngine.getEnrichedPipelineStatus(projectId);
+		return pipelineEngine().getEnrichedPipelineStatus(projectId);
 	}
 
 	async getExecutionStatus(projectId: string): Promise<any> {
-		return executionEngine.getExecutionStatus(projectId);
+		return executionEngine().getExecutionStatus(projectId);
 	}
 
 	async pausePipeline(projectId: string): Promise<void> {
-		await pipelineEngine.pausePipeline(projectId);
+		await pipelineEngine().pausePipeline(projectId);
 	}
 
 	async resumePipeline(projectId: string): Promise<void> {
-		await pipelineEngine.resumePipeline(projectId);
+		await pipelineEngine().resumePipeline(projectId);
 	}
 
 	async retryPipeline(projectId: string): Promise<void> {
-		await pipelineEngine.retryFailedPipeline(projectId);
+		await pipelineEngine().retryFailedPipeline(projectId);
 	}
 
 	// --- Kernel-first passthroughs for routes that still import engines directly ---
 
 	async getReadyTasks(phaseId: string): Promise<any[]> {
-		return taskEngine.getReadyTasks(phaseId);
+		return taskEngine().getReadyTasks(phaseId);
 	}
 
 	async runStandup(projectId: string): Promise<any> {
@@ -496,7 +496,7 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 	}
 
 	async getPipelineState(projectId: string): Promise<PipelineState | null> {
-		const state = await pipelineEngine.getPipelineState(projectId);
+		const state = await pipelineEngine().getPipelineState(projectId);
 		return state !== null ? toCorePipelineState(state) : null;
 	}
 }

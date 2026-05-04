@@ -111,7 +111,7 @@ export class PipelineStateManager {
 		advanceStageFn: (projectId: string) => Promise<PipelineState>,
 	): Promise<{
 		pipelineState: PipelineState | null;
-		taskProgress: Awaited<ReturnType<typeof taskEngine.getProgress>>;
+		taskProgress: Awaited<ReturnType<ReturnType<typeof taskEngine>["getProgress"]>>;
 		derivedStatus: PipelineStatus;
 		warning?: string;
 	}> {
@@ -126,7 +126,7 @@ export class PipelineStateManager {
 			}
 		}
 
-		const taskProgress = await taskEngine.getProgress(projectId);
+		const taskProgress = await taskEngine().getProgress(projectId);
 		const overall = taskProgress.overall;
 
 		let derivedStatus: PipelineStatus = pipelineState?.status ?? "idle";

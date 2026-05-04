@@ -42,7 +42,7 @@ export interface AppendTaskInput {
 
 async function bestEffortRefresh(projectId: string): Promise<void> {
 	try {
-		await pipelineEngine.refreshPipeline(projectId);
+		await pipelineEngine().refreshPipeline(projectId);
 	} catch (err) {
 		// Pipeline not running yet or not found — safe to ignore
 		const msg = err instanceof Error ? err.message : String(err);

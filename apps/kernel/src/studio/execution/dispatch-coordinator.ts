@@ -72,7 +72,7 @@ export class TaskDispatcher {
 
 				let hasReadyTask = false;
 				for (const phaseId of phaseIds) {
-					const readyTasks = await taskEngine.getReadyTasks(phaseId);
+					const readyTasks = await taskEngine().getReadyTasks(phaseId);
 					if (readyTasks.length > 0) {
 						hasReadyTask = true;
 						const sorted = sortTasksByFairness(readyTasks);
@@ -119,7 +119,7 @@ export class TaskDispatcher {
 			const phases = await listPhases(plan.id);
 			for (const phase of phases) {
 				if (phase.status === "running") {
-					readyTasks.push(...(await taskEngine.getReadyTasks(phase.id)));
+					readyTasks.push(...(await taskEngine().getReadyTasks(phase.id)));
 				}
 			}
 		}
@@ -127,7 +127,7 @@ export class TaskDispatcher {
 		// If no running phases have ready tasks, start a new phase
 		if (readyTasks.length === 0) {
 			try {
-				readyTasks = await taskEngine.beginExecution(projectId);
+				readyTasks = await taskEngine().beginExecution(projectId);
 			} catch {
 				// No pending phase or no approved plan — nothing to do
 			}
@@ -157,8 +157,8 @@ export class TaskDispatcher {
 		// can mark completed while task rows are still queued — we must keep dispatching ready work.
 		if (pipelineRun && (pipelineRun.status === "paused" || pipelineRun.status === "failed")) return;
 
-		const phaseFailed = await taskEngine.isPhaseFailed(phaseId);
-		const ready = await taskEngine.getReadyTasks(phaseId);
+		const phaseFailed = await taskEngine().isPhaseFailed(phaseId);
+		const ready = await taskEngine().getReadyTasks(phaseId);
 		if (ready.length === 0) return;
 
 		// If phase has failed tasks, only dispatch review tasks (to complete in-progress work)
