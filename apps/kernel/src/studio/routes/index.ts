@@ -55,6 +55,7 @@ import { releaseRoutes } from "./releases.js";
 import { replayRoutes } from "./replay-routes.js";
 import { runtimeRoutes } from "./runtime-routes.js";
 import { sandboxRoutes } from "./sandbox-routes.js";
+import { skillRoutes } from "./skill-routes.js";
 import { sprintRoutes } from "./sprint-routes.js";
 import { taskRoutes } from "./task-routes.js";
 import { teamRoutes } from "./team-routes.js";
@@ -197,6 +198,9 @@ studio.route("/", qualityGateRoutes);
 studio.route("/", approvalRoutes);
 studio.route("/", releaseRoutes);
 studio.route("/", artifactRoutes);
+
+// Skills — CRUD + agent/project assignments
+studio.route("/", skillRoutes);
 
 // YAGNI-deferred: marketplace, cluster, collaboration
 // Re-enable when needed.

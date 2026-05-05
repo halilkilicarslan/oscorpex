@@ -71,5 +71,8 @@ export * from "./platform-stats-repo.js";
 // v8.2: Command Audit Logs
 export * from "./command-audit-repo.js";
 
+// Skills system — reusable agent capabilities
+export * from "./skill-repo.js";
+
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";

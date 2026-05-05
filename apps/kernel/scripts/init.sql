@@ -2445,4 +2445,47 @@ DROP POLICY IF EXISTS tenant_isolation_phases ON phases;
 CREATE POLICY tenant_isolation_phases ON phases
   USING (tenant_id IS NULL OR tenant_id = current_setting('app.current_tenant_id', true));
 
+-- ---------------------------------------------------------------------------
+-- Skills system — reusable agent capabilities
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS skills (
+    id                TEXT        PRIMARY KEY,
+    name              TEXT        NOT NULL,
+    description       TEXT        NOT NULL,
+    content_md        TEXT        NOT NULL DEFAULT '',
+    triggers          TEXT        NOT NULL DEFAULT '[]',
+    applicable_roles  TEXT        NOT NULL DEFAULT '[]',
+    provider_hint     TEXT,
+    model_hint        TEXT,
+    category          TEXT        NOT NULL DEFAULT 'custom',
+    is_global         BOOLEAN     NOT NULL DEFAULT FALSE,
+    max_token_budget  INTEGER     NOT NULL DEFAULT 5000,
+    created_by        TEXT,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_skills_category ON skills(category);
+CREATE INDEX IF NOT EXISTS idx_skills_global   ON skills(is_global) WHERE is_global = TRUE;
+
+-- Skill-to-agent assignments
+CREATE TABLE IF NOT EXISTS agent_skills (
+    id          TEXT        PRIMARY KEY,
+    agent_id    TEXT        NOT NULL,
+    skill_id    TEXT        NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    priority    INTEGER     NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(agent_id, skill_id)
+);
+
+-- Skill-to-project assignments
+CREATE TABLE IF NOT EXISTS project_skills (
+    id          TEXT        PRIMARY KEY,
+    project_id  TEXT        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    skill_id    TEXT        NOT NULL REFERENCES skills(id)   ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(project_id, skill_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_project_status ON agent_sessions(project_id, status);

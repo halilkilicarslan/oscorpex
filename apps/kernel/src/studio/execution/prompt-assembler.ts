@@ -13,6 +13,7 @@ import { eventBus } from "../event-bus.js";
 import { formatGoalPrompt, getGoalForTask } from "../goal-engine.js";
 import { createLogger } from "../logger.js";
 import { buildTaskPrompt } from "../prompt-builder.js";
+import { resolveSkillsForTask } from "../skill-resolver.js";
 import type { AgentConfig, Project, Task } from "../types.js";
 
 const log = createLogger("prompt-assembler");
@@ -108,6 +109,22 @@ export async function assemblePrompt(
 		}
 	} catch (err) {
 		log.warn(`[prompt-assembler] Agent runtime init failed (non-blocking): ${String(err)}`);
+	}
+
+	// --- Skill injection: resolve and inject relevant skills for this task + agent ---
+	try {
+		const skillResult = await resolveSkillsForTask(
+			task,
+			agent.id,
+			agent.role,
+			projectId,
+			10_000, // max skill token budget
+		);
+		if (skillResult.promptSection) {
+			promptSuffix += `\n\n${skillResult.promptSection}`;
+		}
+	} catch (err) {
+		log.warn({ err }, "[prompt-assembler] Skill resolution failed (non-blocking)");
 	}
 
 	// --- Goal-based execution: inject goal prompt if task has an associated goal ---
