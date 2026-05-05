@@ -23,7 +23,10 @@ export {
 	checkConstraints,
 	canAutoApprove,
 	classifyRisk,
+	assessRisk,
 	type ConstraintCheck,
+	type RiskSignals,
+	type RiskAssessment,
 } from "./agent-constraints.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("index");

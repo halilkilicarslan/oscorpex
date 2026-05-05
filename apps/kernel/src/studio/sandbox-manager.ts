@@ -18,7 +18,7 @@ import {
 } from "@oscorpex/policy-kit";
 import { execute, getProjectSetting, query, queryOne } from "./db.js";
 import { createLogger } from "./logger.js";
-import type { Task } from "./types.js";
+import type { RiskLevel, Task } from "./types.js";
 const log = createLogger("sandbox-manager");
 
 // Re-export for backward compatibility
@@ -136,7 +136,7 @@ export async function createSandboxPolicy(params: Omit<SandboxPolicy, "id">): Pr
 }
 
 export async function getSandboxPolicy(projectId: string): Promise<SandboxPolicy | null> {
-	const row = await queryOne(`SELECT * FROM sandbox_policies WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1`, [
+	const row = await queryOne("SELECT * FROM sandbox_policies WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1", [
 		projectId,
 	]);
 	return row ? rowToPolicy(row) : null;
@@ -166,18 +166,18 @@ export async function startSandboxSession(params: {
 }
 
 export async function endSandboxSession(sessionId: string): Promise<void> {
-	await execute(`UPDATE sandbox_sessions SET ended_at = now() WHERE id = $1`, [sessionId]);
+	await execute("UPDATE sandbox_sessions SET ended_at = now() WHERE id = $1", [sessionId]);
 }
 
 export async function recordViolation(sessionId: string, violation: SandboxViolation): Promise<void> {
-	await execute(`UPDATE sandbox_sessions SET violations = violations || $2::jsonb WHERE id = $1`, [
+	await execute("UPDATE sandbox_sessions SET violations = violations || $2::jsonb WHERE id = $1", [
 		sessionId,
 		JSON.stringify([violation]),
 	]);
 }
 
 export async function getSessionViolations(sessionId: string): Promise<SandboxViolation[]> {
-	const row = await queryOne(`SELECT violations FROM sandbox_sessions WHERE id = $1`, [sessionId]);
+	const row = await queryOne("SELECT violations FROM sandbox_sessions WHERE id = $1", [sessionId]);
 	return (row?.violations as SandboxViolation[]) ?? [];
 }
 
@@ -185,7 +185,12 @@ export async function getSessionViolations(sessionId: string): Promise<SandboxVi
  * Resolve effective sandbox policy for a task.
  * Uses buildDefaultSandboxPolicy from @oscorpex/policy-kit for defaults.
  */
-export async function resolveTaskPolicy(projectId: string, task: Task, agentRole: string): Promise<SandboxPolicy> {
+export async function resolveTaskPolicy(
+	projectId: string,
+	task: Task,
+	agentRole: string,
+	riskLevel?: RiskLevel,
+): Promise<SandboxPolicy> {
 	const projectPolicy = await getSandboxPolicy(projectId);
 	const defaultPolicy = buildDefaultSandboxPolicy(projectId);
 	const base: SandboxPolicy = projectPolicy ?? {
@@ -220,6 +225,20 @@ export async function resolveTaskPolicy(projectId: string, task: Task, agentRole
 			networkPolicy: base.networkPolicy ?? "full_network",
 			elevatedCapabilities: [...base.elevatedCapabilities, "docker", "network_access"],
 		};
+	}
+
+	// Risk-based sandbox hardening
+	if (riskLevel === "critical") {
+		base.enforcementMode = "hard";
+		base.networkPolicy = "project_only";
+		if (!base.deniedTools.includes("Bash")) {
+			log.info({ taskId: task.id, riskLevel }, "[sandbox] Critical-risk task: hard enforcement enabled");
+		}
+	} else if (riskLevel === "high") {
+		if (base.enforcementMode === "off") {
+			base.enforcementMode = "soft";
+		}
+		log.info({ taskId: task.id, riskLevel }, "[sandbox] High-risk task: soft enforcement minimum");
 	}
 
 	return base;

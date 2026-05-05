@@ -15,7 +15,7 @@ import {
 	resolveTaskPolicy,
 	startSandboxSession,
 } from "../sandbox-manager.js";
-import type { Task, TaskOutput } from "../types.js";
+import type { RiskLevel, Task, TaskOutput } from "../types.js";
 
 const log = createLogger("sandbox-execution-guard");
 
@@ -32,11 +32,12 @@ export async function setupSandboxExecution(
 	agentId: string,
 	agentRole: string,
 	repoPath: string,
+	riskLevel?: RiskLevel,
 ): Promise<SandboxExecutionContext> {
 	const context: SandboxExecutionContext = { runtimeRepoPath: repoPath };
 
 	try {
-		context.sandboxPolicy = await resolveTaskPolicy(projectId, task, agentRole);
+		context.sandboxPolicy = await resolveTaskPolicy(projectId, task, agentRole, riskLevel);
 		if (repoPath) {
 			context.isolatedWorkspace = await resolveWorkspace(repoPath, task.id, context.sandboxPolicy);
 			context.runtimeRepoPath = context.isolatedWorkspace.repoPath || repoPath;
@@ -49,7 +50,7 @@ export async function setupSandboxExecution(
 			context.sandboxSessionId = session.id;
 		}
 	} catch (err) {
-		log.warn("[task-executor] Sandbox init failed (non-blocking):" + " " + String(err));
+		log.warn(`[task-executor] Sandbox init failed (non-blocking): ${String(err)}`);
 	}
 
 	return context;
@@ -72,10 +73,7 @@ export async function enforceSandboxPreExecution(
 	}
 }
 
-export function enforceSandboxHardPreflight(
-	sandboxPolicy: SandboxPolicy | undefined,
-	allowedTools: string[],
-): void {
+export function enforceSandboxHardPreflight(sandboxPolicy: SandboxPolicy | undefined, allowedTools: string[]): void {
 	if (sandboxPolicy?.enforcementMode !== "hard" || sandboxPolicy.deniedTools.length === 0) return;
 
 	const deniedInAllowed = allowedTools.filter((tool) => sandboxPolicy.deniedTools.includes(tool));
@@ -103,15 +101,17 @@ export async function enforceSandboxPostExecution(
 	await enforceOutputSizeCheck(sandboxPolicy, outputSizeEstimate, sandboxSessionId);
 }
 
-export function closeSandboxExecution(context: Pick<SandboxExecutionContext, "sandboxSessionId" | "isolatedWorkspace">): void {
+export function closeSandboxExecution(
+	context: Pick<SandboxExecutionContext, "sandboxSessionId" | "isolatedWorkspace">,
+): void {
 	if (context.sandboxSessionId) {
 		endSandboxSession(context.sandboxSessionId).catch((err) =>
-			log.warn("[task-executor] Sandbox end failed:" + " " + String(err)),
+			log.warn(`[task-executor] Sandbox end failed: ${String(err)}`),
 		);
 	}
 	if (context.isolatedWorkspace?.isolated) {
 		context.isolatedWorkspace
 			.cleanup()
-			.catch((err) => log.warn("[task-executor] Workspace cleanup failed:" + " " + String(err)));
+			.catch((err) => log.warn(`[task-executor] Workspace cleanup failed: ${String(err)}`));
 	}
 }

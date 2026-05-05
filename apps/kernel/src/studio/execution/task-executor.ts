@@ -212,7 +212,14 @@ export class TaskExecutor {
 		// --- Sandbox: resolve policy for this task ---
 		let sandboxContext: SandboxExecutionContext = { runtimeRepoPath: project.repoPath };
 		if (project.repoPath) {
-			sandboxContext = await setupSandboxExecution(projectId, task, agent.id, agent.role, project.repoPath);
+			sandboxContext = await setupSandboxExecution(
+				projectId,
+				task,
+				agent.id,
+				agent.role,
+				project.repoPath,
+				task.riskLevel,
+			);
 		}
 		const { sandboxPolicy, sandboxSessionId, isolatedWorkspace } = sandboxContext;
 		const runtimeRepoPath = sandboxContext.runtimeRepoPath;
