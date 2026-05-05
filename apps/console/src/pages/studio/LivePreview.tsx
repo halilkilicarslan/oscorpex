@@ -17,6 +17,7 @@ import {
 	type AppStatus,
 	detectApiOnlyPreview,
 	fetchAppStatus,
+	fetchTasks,
 	stopApp,
 	switchPreviewService,
 } from "../../lib/studio-api";
@@ -36,14 +37,13 @@ export default function LivePreview({
 	projectId,
 	appStatus,
 	onStatusChange,
-	cliDemoLogs,
 }: {
 	projectId: string;
 	appStatus: AppStatus;
 	onStatusChange: (status: AppStatus) => void;
-	cliDemoLogs?: string[];
 }) {
 	const [loading, setLoading] = useState(false);
+	const [cliDemoLogs, setCliDemoLogs] = useState<string[]>([]);
 	const [device, setDevice] = useState<DeviceSize>("desktop");
 	const [fullscreen, setFullscreen] = useState(false);
 	const [iframeKey, setIframeKey] = useState(0);
@@ -52,6 +52,21 @@ export default function LivePreview({
 	const [viewMode, setViewMode] = useState<ViewMode>("preview");
 	const [isApiOnly, setIsApiOnly] = useState(false);
 	const apiDetectedOnce = useRef(false);
+
+	// Fetch CLI demo logs when app is not running (CLI projects)
+	useEffect(() => {
+		if (appStatus.running) return;
+		fetchTasks(projectId)
+			.then((tasks) => {
+				const runAppTask = tasks.find(
+					(t: any) => t.taskType === "run-app" && t.status === "done" && t.output?.logs?.length,
+				);
+				if (runAppTask?.output?.logs) {
+					setCliDemoLogs(runAppTask.output.logs);
+				}
+			})
+			.catch(() => {});
+	}, [projectId, appStatus.running]);
 
 	// Determine preview URL
 	const services = appStatus.services || [];
