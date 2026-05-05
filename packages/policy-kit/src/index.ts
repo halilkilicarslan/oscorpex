@@ -38,3 +38,12 @@ export {
 	shouldEnforce,
 } from "./sandbox-enforcement.js";
 export type { CheckResult, SandboxEnforcementPolicy } from "./sandbox-enforcement.js";
+
+// Command enforcement (pure functions)
+export {
+	matchesGlobPattern,
+	checkCommandAllowed,
+	validateCommandBatch,
+	parseCommandsFromLog,
+} from "./command-enforcement.js";
+export type { CommandCheckResult, CommandAuditResult } from "./command-enforcement.js";

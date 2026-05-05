@@ -3,6 +3,12 @@
 // Role bazlı komut kısıtlamalarını tanımlar ve prompt'a enjekte eder.
 // ---------------------------------------------------------------------------
 
+import { parseCommandsFromLog, validateCommandBatch } from "@oscorpex/policy-kit";
+import type { CommandAuditResult } from "@oscorpex/policy-kit";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("command-policy");
+
 export interface CommandPolicy {
 	role: string;
 	allowedPatterns: string[]; // İzin verilen shell komut kalıpları (glob-benzeri)
@@ -85,15 +91,54 @@ export function buildPolicyPromptSection(policy: CommandPolicy): string {
 	const destructive = policy.destructiveAllowed ? "Allowed (use with caution)" : "Not allowed";
 
 	return [
-		`## Security Policy`,
-		`Your role has the following restrictions:`,
-		`- Allowed commands:`,
+		"## Security Policy",
+		"Your role has the following restrictions:",
+		"- Allowed commands:",
 		allowedList,
-		`- Denied commands:`,
+		"- Denied commands:",
 		deniedList,
 		`- File write access: ${fileWrite}`,
 		`- Destructive operations: ${destructive}`,
-		``,
-		`IMPORTANT: Do not execute denied commands. If a task requires a denied command, report it in your output instead of executing it.`,
+		"",
+		"IMPORTANT: Do not execute denied commands. If a task requires a denied command, report it in your output instead of executing it.",
 	].join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// Runtime enforcement — bridges CommandPolicy with @oscorpex/policy-kit
+// ---------------------------------------------------------------------------
+
+/**
+ * Enforces command policy against CLI output logs.
+ * Extracts commands from log lines, validates against the role's policy.
+ * Returns audit result with any violations found.
+ */
+export function enforceCommandPolicy(logLines: string[], policy: CommandPolicy): CommandAuditResult {
+	const commands = parseCommandsFromLog(logLines);
+	if (commands.length === 0) {
+		return { commands: [], totalChecked: 0, violations: [], hasViolations: false };
+	}
+
+	const result = validateCommandBatch(commands, policy.allowedPatterns, policy.deniedPatterns);
+
+	if (result.hasViolations) {
+		log.warn(
+			{ role: policy.role, violationCount: result.violations.length },
+			`[command-policy] ${result.violations.length} command policy violation(s) detected for role "${policy.role}"`,
+		);
+		for (const v of result.violations) {
+			log.warn(
+				{ command: v.command, pattern: v.matchedPattern, reason: v.reason },
+				`[command-policy] Violation: "${v.command}"`,
+			);
+		}
+	}
+
+	return result;
+}
+
+/**
+ * Checks if a single command would be allowed under the given policy.
+ * Useful for pre-validation scenarios.
+ */
+export { checkCommandAllowed } from "@oscorpex/policy-kit";

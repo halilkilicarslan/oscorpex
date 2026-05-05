@@ -8,7 +8,16 @@ import type { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import { persistAgentLog } from "../agent-log-store.js";
 import { agentRuntime } from "../agent-runtime.js";
 import { completeSession, failSession } from "../agent-runtime/index.js";
-import { claimTask, getAgentConfig, getProject, getTask, releaseTaskClaim, updateTask } from "../db.js";
+import { enforceCommandPolicy, getDefaultPolicy } from "../command-policy.js";
+import {
+	claimTask,
+	getAgentConfig,
+	getProject,
+	getTask,
+	recordCommandAuditBatch,
+	releaseTaskClaim,
+	updateTask,
+} from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
 import { markExecutionStarted } from "../preflight-warmup.js";
@@ -41,6 +50,46 @@ export { TaskTimeoutError } from "./task-timeout.js";
 export { computeQueueWaitMs } from "./queue-wait.js";
 
 const log = createLogger("task-executor");
+
+// ---------------------------------------------------------------------------
+// Post-execution command audit
+// ---------------------------------------------------------------------------
+
+/**
+ * Parses CLI logs for executed shell commands, validates them against the
+ * role's command policy, and persists the audit trail. Non-blocking — any
+ * error is logged as a warning and execution continues normally.
+ */
+async function auditExecutedCommands(
+	projectId: string,
+	taskId: string,
+	agentId: string | undefined,
+	agentRole: string,
+	logs: string[],
+): Promise<void> {
+	try {
+		const policy = getDefaultPolicy(agentRole);
+		const audit = enforceCommandPolicy(logs, policy);
+
+		if (audit.totalChecked === 0) return;
+
+		const entries = audit.commands.map((cmd) => ({
+			projectId,
+			taskId,
+			agentId,
+			agentRole,
+			command: cmd.command,
+			allowed: cmd.allowed,
+			policyRole: policy.role,
+			matchedPattern: cmd.matchedPattern,
+			violationReason: cmd.allowed ? undefined : cmd.reason,
+		}));
+
+		await recordCommandAuditBatch(entries);
+	} catch (err) {
+		log.warn({ err }, "[task-executor] Command audit failed (non-fatal)");
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Rate-limit detection
@@ -274,6 +323,9 @@ export class TaskExecutor {
 			if (project.repoPath) {
 				await runOutputAndTestGates(projectId, task, project.repoPath, output, agent, sessionId);
 			}
+
+			// --- Post-execution command audit (non-blocking) ---
+			await auditExecutedCommands(projectId, task.id, agent.id, task.assignedAgent ?? agent.role, cliResult.logs);
 
 			await taskEngine().completeTask(task.id, output, { executionRepoPath: runtimeRepoPath });
 

@@ -68,6 +68,8 @@ export * from "./capability-grant-repo.js";
 export * from "./inspector-repo.js";
 // v8.2: Platform Stats + Analytics
 export * from "./platform-stats-repo.js";
+// v8.2: Command Audit Logs
+export * from "./command-audit-repo.js";
 
 // resetDb — close pool (used by tests)
 export { resetDb } from "./reset.js";

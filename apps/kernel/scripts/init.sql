@@ -2346,6 +2346,25 @@ CREATE TABLE IF NOT EXISTS operator_flags (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Command audit logs — tracks commands detected in agent output and policy violations
+CREATE TABLE IF NOT EXISTS command_audit_logs (
+    id               TEXT PRIMARY KEY,
+    project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id          TEXT NOT NULL,
+    agent_id         TEXT,
+    agent_role       TEXT,
+    command          TEXT NOT NULL,
+    allowed          BOOLEAN NOT NULL DEFAULT TRUE,
+    policy_role      TEXT,
+    matched_pattern  TEXT,
+    violation_reason TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_command_audit_project ON command_audit_logs(project_id);
+CREATE INDEX IF NOT EXISTS idx_command_audit_task ON command_audit_logs(task_id);
+CREATE INDEX IF NOT EXISTS idx_command_audit_violations ON command_audit_logs(project_id) WHERE allowed = FALSE;
+
 -- ---------------------------------------------------------------------------
 -- Performance indexes (Phase 2 — 2026-05-02)
 -- ---------------------------------------------------------------------------
