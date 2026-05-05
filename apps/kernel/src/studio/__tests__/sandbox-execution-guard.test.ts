@@ -95,8 +95,8 @@ function makeTask(overrides: Partial<{ id: string; title: string; riskLevel: str
 		retryCount: 0,
 		revisionCount: 0,
 		requiresApproval: false,
-		riskLevel: overrides.riskLevel as "low" | "medium" | "high" | "critical" | undefined,
-	};
+		riskLevel: (overrides.riskLevel ?? undefined) as "low" | "medium" | "high" | "critical" | undefined,
+	} as unknown as import("../types.js").Task;
 }
 
 function makeWorkspace(overrides: Partial<ExecutionWorkspace> = {}): ExecutionWorkspace {

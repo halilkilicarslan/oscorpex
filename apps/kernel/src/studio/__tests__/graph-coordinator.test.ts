@@ -574,7 +574,7 @@ describe("Cycle detection — DFS traversal correctness", () => {
 		await expect(addEdge(ctx, { fromTaskId: "task-C", toTaskId: "task-D" })).resolves.toMatchObject({ success: true });
 
 		// Verify getTask was not called excessively for "task-A" (visited once)
-		const taskACalls = mockGetTask.mock.calls.filter(([id]: [string]) => id === "task-A");
+		const taskACalls = mockGetTask.mock.calls.filter((args) => args[0] === "task-A");
 		expect(taskACalls.length).toBe(1);
 	});
 
