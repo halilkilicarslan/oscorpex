@@ -9,15 +9,15 @@ import {
 	type GoalScope,
 	type QualityGateEnvironment,
 	type QualityGateEvaluation,
-	findQualityGatePolicy,
-	getGoalScope,
-	getQualityGateEvaluationById,
 	type ReleaseCandidate,
 	type ReleaseDecisionRow,
 	type ReleaseRollbackTrigger,
 	createReleaseCandidate,
+	findQualityGatePolicy,
+	getGoalScope,
 	getLatestReleaseCandidateForGoal,
 	getLatestReleaseDecisionForCandidate,
+	getQualityGateEvaluationById,
 	getReleaseCandidateById,
 	insertOverrideActionActive,
 	insertReleaseDecision,
@@ -636,9 +636,7 @@ export class ReleaseDecisionService {
 		if (hardFailGateTypes.has(gateType)) throw new NonOverridableGateError(gateType);
 
 		if (gateType === "security_scan") {
-			const severity = String(
-				(evaluation.details as any)?.severity ?? (evaluation.details as any)?.findingSeverity ?? "",
-			);
+			const severity = String(evaluation.details?.severity ?? evaluation.details?.findingSeverity ?? "");
 			const normalized = severity.toLowerCase();
 			const isHardOrUnknown = normalized === "high" || normalized === "critical" || normalized === "";
 			if (evaluation.outcome === "failed" || evaluation.outcome === "blocked") {
@@ -647,7 +645,7 @@ export class ReleaseDecisionService {
 		}
 
 		if (gateType === "provider_policy_compliance") {
-			const policyState = String((evaluation.details as any)?.policyState ?? (evaluation.details as any)?.result ?? "");
+			const policyState = String(evaluation.details?.policyState ?? evaluation.details?.result ?? "");
 			if (policyState.toLowerCase() === "deny") throw new NonOverridableGateError(gateType);
 		}
 	}

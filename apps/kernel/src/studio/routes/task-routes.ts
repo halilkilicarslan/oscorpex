@@ -54,7 +54,7 @@ taskRoutes.get("/projects/:id/tasks", async (c) => {
 		c.header("X-Total-Count", String(total));
 		return c.json(tasksWithSummary);
 	} catch (err) {
-		log.error("[task-routes] list tasks failed:" + " " + String(err));
+		log.error(`[task-routes] list tasks failed: ${String(err)}`);
 		return c.json({ error: "Failed to list tasks" }, 500);
 	}
 });
@@ -65,7 +65,7 @@ taskRoutes.get("/projects/:id/tasks/:taskId", async (c) => {
 		if (!task) return c.json({ error: "Task not found" }, 404);
 		return c.json(task);
 	} catch (err) {
-		log.error("[task-routes] get task failed:" + " " + String(err));
+		log.error(`[task-routes] get task failed: ${String(err)}`);
 		return c.json({ error: "Failed to get task" }, 500);
 	}
 });
@@ -85,7 +85,7 @@ taskRoutes.patch("/projects/:id/tasks/:taskId", async (c) => {
 		if (!task) return c.json({ error: "Task not found" }, 404);
 		return c.json(task);
 	} catch (err) {
-		log.error("[task-routes] update task failed:" + " " + String(err));
+		log.error(`[task-routes] update task failed: ${String(err)}`);
 		return c.json({ error: "Failed to update task" }, 500);
 	}
 });
@@ -96,7 +96,7 @@ taskRoutes.post("/projects/:id/tasks/:taskId/retry", async (c) => {
 			const teamGuard = await ensureProjectTeamInitialized(c, c.req.param("id"));
 			if (teamGuard) return teamGuard;
 			const updated = await kernel.retryTask(c.req.param("taskId"));
-			kernel.executeTask(c.req.param("id"), updated as any);
+			kernel.executeTask(c.req.param("id"), updated);
 			return c.json({ success: true, task: updated });
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Retry failed";
@@ -145,7 +145,7 @@ taskRoutes.post("/projects/:id/tasks/:taskId/approve", async (c) => {
 			if (teamGuard) return teamGuard;
 			const taskId = c.req.param("taskId");
 			const updated = await kernel.approveTask(taskId);
-			kernel.executeTask(projectId, updated as any);
+			kernel.executeTask(projectId, updated);
 			return c.json({ success: true, task: updated });
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Onay işlemi başarısız";
@@ -177,7 +177,7 @@ taskRoutes.get("/projects/:id/approvals", async (c) => {
 		const pendingTasks = await listPendingApprovals(c.req.param("id"));
 		return c.json(pendingTasks);
 	} catch (err) {
-		log.error("[task-routes] list approvals failed:" + " " + String(err));
+		log.error(`[task-routes] list approvals failed: ${String(err)}`);
 		return c.json({ error: "Failed to list approvals" }, 500);
 	}
 });
@@ -232,7 +232,7 @@ taskRoutes.get("/projects/:id/tasks/:taskId/output", async (c) => {
 			output: task.output,
 		});
 	} catch (err) {
-		log.error("[task-routes] get task output failed:" + " " + String(err));
+		log.error(`[task-routes] get task output failed: ${String(err)}`);
 		return c.json({ error: "Failed to get task output" }, 500);
 	}
 });
@@ -249,7 +249,7 @@ taskRoutes.get("/projects/:id/tasks/:taskId/diffs", async (c) => {
 
 		return c.json({ taskId, summary, diffs });
 	} catch (err) {
-		log.error("[task-routes] get task diffs failed:" + " " + String(err));
+		log.error(`[task-routes] get task diffs failed: ${String(err)}`);
 		return c.json({ error: "Failed to get task diffs" }, 500);
 	}
 });

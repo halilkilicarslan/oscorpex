@@ -48,6 +48,13 @@ export type WSMessageType =
 	| "subscribed" // Abone onayı
 	| "unsubscribed"; // Abonelik iptali onayı
 
+/** IncomingMessage augmented with WS upgrade query params set by ws-server during upgrade handling. */
+interface AugmentedRequest extends IncomingMessage {
+	correlationId?: string;
+	token?: string;
+	apiKey?: string;
+}
+
 /** Bağlı client'ı temsil eden dahili kayıt */
 interface ClientRecord {
 	ws: WebSocket;
@@ -184,12 +191,13 @@ class WebSocketManager {
 			// M6.4: Tenant isolation — URL query param ?token=<jwt> から tenantId çıkar.
 			// Browser WS API header gönderemediğinden token query param olarak iletilir.
 			// Auth enabled + no valid token → connection rejected (fail-closed).
+			const augmented = req as AugmentedRequest;
 			let tenantId: string | null = null;
 			const authEnabled = process.env.OSCORPEX_AUTH_ENABLED === "true";
 			if (authEnabled) {
 				try {
-					const token = (req as any).token as string | undefined;
-					const apiKey = (req as any).apiKey as string | undefined;
+					const token = augmented.token;
+					const apiKey = augmented.apiKey;
 					const envApiKey = process.env.OSCORPEX_API_KEY;
 					if (token) {
 						const payload = verifyJwt(token);
@@ -220,7 +228,7 @@ class WebSocketManager {
 				subscriptions: new Set(),
 				lastPong: Date.now(),
 				tenantId,
-				correlationId: (req as any).correlationId,
+				correlationId: augmented.correlationId,
 			};
 			this.clients.set(ws, record);
 
@@ -446,7 +454,9 @@ class WebSocketManager {
 		for (const ws of this.clients.keys()) {
 			try {
 				ws.close(1001, "server shutdown");
-			} catch { /* ignore */ }
+			} catch {
+				/* ignore */
+			}
 		}
 		this.clients.clear();
 		log.info("[ws-manager] Shutdown complete");

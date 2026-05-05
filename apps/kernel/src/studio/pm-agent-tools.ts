@@ -31,7 +31,7 @@ import {
 import { createLogger } from "./logger.js";
 import { getModelPricing } from "./providers/model-pricing.js";
 import { canonicalizeAgentRole, roleMatches } from "./roles.js";
-import type { TaskComplexity } from "./types.js";
+import type { TaskComplexity, TaskType, TestExpectation } from "./types.js";
 
 const log = createLogger("pm-agent-tools");
 
@@ -256,8 +256,8 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 				complexity: t.complexity as TaskComplexity,
 				dependsOn: [],
 				branch: t.branch,
-				taskType: t.taskType as any,
-				testExpectation: t.testExpectation as any,
+				taskType: t.taskType as TaskType | undefined,
+				testExpectation: t.testExpectation as TestExpectation | undefined,
 				requiresApproval: autoRequiresApproval,
 				targetFiles: t.targetFiles ?? [],
 				estimatedLines: t.estimatedLines,
@@ -334,7 +334,8 @@ export async function buildPlan(projectId: string, phases: PhaseInput[]) {
 
 export const pmToolkit = {
 	createProjectPlan: tool({
-		description: `Create a structured project plan with phases and tasks. The plan will be presented to the user for approval before execution begins.`,
+		description:
+			"Create a structured project plan with phases and tasks. The plan will be presented to the user for approval before execution begins.",
 		inputSchema: z.object({
 			projectId: z.string().describe("The project ID to create the plan for"),
 			phases: z.array(phaseSchema).describe("Ordered list of project phases"),

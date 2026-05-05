@@ -9,9 +9,9 @@
 //   4. Project settings override (DB'den)
 // ---------------------------------------------------------------------------
 
-import { type ChildProcess, execFileSync, execSync, spawn } from "child_process";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { type ChildProcess, execFileSync, execSync, spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { getDbConnectionInfo, provisionDatabase } from "./db-provisioner.js";
 import { createLogger } from "./logger.js";
 import { analyzeProject, generateStudioConfig, writeEnvFile } from "./runtime-analyzer.js";
@@ -175,7 +175,7 @@ function detectLanguage(dirPath: string, dirName: string): LangDetection | null 
 			const exec = usePnpm ? "pnpm exec" : "npx";
 
 			// Next.js (fullstack)
-			if (deps["next"]) {
+			if (deps.next) {
 				return {
 					name: dirName,
 					path: dirPath,
@@ -185,7 +185,7 @@ function detectLanguage(dirPath: string, dirName: string): LangDetection | null 
 				};
 			}
 			// Nuxt
-			if (deps["nuxt"]) {
+			if (deps.nuxt) {
 				return {
 					name: dirName,
 					path: dirPath,
@@ -195,7 +195,7 @@ function detectLanguage(dirPath: string, dirName: string): LangDetection | null 
 				};
 			}
 			// Vite / React / Vue / Svelte (frontend)
-			if (deps["vite"]) {
+			if (deps.vite) {
 				return {
 					name: dirName,
 					path: dirPath,
@@ -225,7 +225,7 @@ function detectLanguage(dirPath: string, dirName: string): LangDetection | null 
 				};
 			}
 			// Express / Hono / Fastify / Koa (backend)
-			if (deps["express"] || deps["hono"] || deps["fastify"] || deps["koa"]) {
+			if (deps.express || deps.hono || deps.fastify || deps.koa) {
 				const devScript = pkg.scripts?.dev;
 				if (devScript) {
 					return {
@@ -344,7 +344,7 @@ function detectLanguage(dirPath: string, dirName: string): LangDetection | null 
 		return {
 			name: dirName,
 			path: dirPath,
-			command: `go run . --port \${PORT}`,
+			command: "go run . --port ${PORT}",
 			readyPattern: "listening|started|running|serving",
 			type: "backend",
 		};
@@ -356,7 +356,7 @@ function detectLanguage(dirPath: string, dirName: string): LangDetection | null 
 			return {
 				name: dirName,
 				path: dirPath,
-				command: `bundle exec rails server -p \${PORT}`,
+				command: "bundle exec rails server -p ${PORT}",
 				readyPattern: "listening|puma starting|rails.*started",
 				type: "backend",
 			};
@@ -368,7 +368,7 @@ function detectLanguage(dirPath: string, dirName: string): LangDetection | null 
 		return {
 			name: dirName,
 			path: dirPath,
-			command: `cargo run`,
+			command: "cargo run",
 			readyPattern: "listening|started|running|serving",
 			type: "backend",
 		};
@@ -678,7 +678,7 @@ export async function startApp(
 							stdio: "pipe",
 							env: { ...process.env, ...dbEnvVars },
 						});
-						onLog(`[app-runner] Migration başarılı`);
+						onLog("[app-runner] Migration başarılı");
 					}
 				}
 			} catch (err) {
@@ -723,13 +723,15 @@ export async function startApp(
 		}
 
 		// Frontend servisine backend URL'ini Vite proxy target olarak enjekte et
+		type ServiceWithEnv = DetectedService & { env?: Record<string, string> };
+		const servicesWithEnv = analysis.services as ServiceWithEnv[];
 		if (analysis.services.length > 1) {
-			const backendSvc = analysis.services.find((s) => s.type === "backend");
-			const frontendSvc = analysis.services.find((s) => s.type === "frontend" || s.type === "fullstack");
+			const backendSvc = servicesWithEnv.find((s) => s.type === "backend");
+			const frontendSvc = servicesWithEnv.find((s) => s.type === "frontend" || s.type === "fullstack");
 			if (backendSvc && frontendSvc) {
 				const backendUrl = `http://localhost:${backendSvc.port}`;
-				(frontendSvc as any).env = {
-					...((frontendSvc as any).env || {}),
+				frontendSvc.env = {
+					...frontendSvc.env,
 					API_TARGET: backendUrl,
 				};
 				onLog(`[app-runner] Frontend env: API_TARGET=${backendUrl}`);
@@ -738,7 +740,7 @@ export async function startApp(
 
 		// Direct start — each service
 		const running: RunningService[] = [];
-		for (const svc of analysis.services) {
+		for (const svc of servicesWithEnv) {
 			try {
 				const svcConfig: ServiceConfig = {
 					name: svc.name,
@@ -746,7 +748,7 @@ export async function startApp(
 					command: svc.startCommand,
 					port: svc.port,
 					readyPattern: svc.readyPattern,
-					env: (svc as any).env,
+					env: svc.env,
 				};
 				const started = await startService(repoPath, svcConfig, onLog);
 				running.push(started);

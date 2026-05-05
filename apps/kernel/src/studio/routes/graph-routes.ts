@@ -12,6 +12,7 @@ import {
 	rejectReplanEvent,
 } from "../adaptive-replanner.js";
 import {
+	type LearningType,
 	extractPatternsFromEpisodes,
 	getGlobalPatterns,
 	getLearningPatterns,
@@ -171,7 +172,7 @@ graphRoutes.post("/graph-mutations/:mutationId/reject", async (c) => {
 graphRoutes.get("/projects/:projectId/goals", async (c) => {
 	try {
 		const status = c.req.query("status");
-		const goals = await kernel.listGoals(c.req.param("projectId"), status as any);
+		const goals = await kernel.listGoals(c.req.param("projectId"), status);
 		return c.json(goals);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
@@ -321,7 +322,7 @@ graphRoutes.get("/learning/global", async (c) => {
 	try {
 		const learningType = c.req.query("type") ?? "strategy_success";
 		const limit = Number(c.req.query("limit") ?? "20");
-		const patterns = await getGlobalPatterns(learningType as any, limit);
+		const patterns = await getGlobalPatterns(learningType as LearningType, limit);
 		return c.json(patterns);
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);

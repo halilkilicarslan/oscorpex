@@ -94,7 +94,7 @@ router.post("/register", async (c) => {
 			201,
 		);
 	} catch (err) {
-		log.error("[auth] register error:" + " " + String(err));
+		log.error(`[auth] register error: ${String(err)}`);
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -131,7 +131,7 @@ router.post("/login", async (c) => {
 			},
 		});
 	} catch (err) {
-		log.error("[auth] login error:" + " " + String(err));
+		log.error(`[auth] login error: ${String(err)}`);
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -169,7 +169,7 @@ router.get("/me", async (c) => {
 			role,
 		});
 	} catch (err) {
-		log.error("[auth] me error:" + " " + String(err));
+		log.error(`[auth] me error: ${String(err)}`);
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -179,14 +179,13 @@ router.get("/me", async (c) => {
 // ---------------------------------------------------------------------------
 router.get("/users", requirePermission("users:read"), async (c) => {
 	try {
-		// biome-ignore lint/suspicious/noExplicitAny: Hono context variables
-		const tid = (c as any).get("tenantId") as string | undefined;
+		const tid = c.get("tenantId");
 		if (!tid) return c.json({ error: "Tenant context required" }, 400);
 
 		const users = await listTenantUsers(tid);
 		return c.json(users);
 	} catch (err) {
-		log.error("[auth] users list error:" + " " + String(err));
+		log.error(`[auth] users list error: ${String(err)}`);
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -196,10 +195,8 @@ router.get("/users", requirePermission("users:read"), async (c) => {
 // ---------------------------------------------------------------------------
 router.patch("/users/:id/role", async (c) => {
 	try {
-		// biome-ignore lint/suspicious/noExplicitAny: Hono context variables
-		const ctx = c as any;
-		const tid = ctx.get("tenantId") as string | undefined;
-		const callerRole = ctx.get("userRole") as string | undefined;
+		const tid = c.get("tenantId");
+		const callerRole = c.get("userRole");
 
 		if (!tid) return c.json({ error: "Tenant context required" }, 400);
 		if (callerRole !== "owner") return c.json({ error: "Only owners can change roles" }, 403);
@@ -216,14 +213,14 @@ router.patch("/users/:id/role", async (c) => {
 		await upsertUserRole(userId, tid, role);
 
 		// M6.4: Audit log — non-blocking
-		const callerId = ctx.get("userId") as string | undefined;
+		const callerId = c.get("userId");
 		if (callerId) {
 			logTenantActivity(tid, callerId, "role_change", { targetUserId: userId, newRole: role });
 		}
 
 		return c.json({ ok: true, userId, role });
 	} catch (err) {
-		log.error("[auth] patch role error:" + " " + String(err));
+		log.error(`[auth] patch role error: ${String(err)}`);
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -233,10 +230,8 @@ router.patch("/users/:id/role", async (c) => {
 // ---------------------------------------------------------------------------
 router.post("/api-keys", async (c) => {
 	try {
-		// biome-ignore lint/suspicious/noExplicitAny: Hono context variables
-		const ctx = c as any;
-		const tid = ctx.get("tenantId") as string | undefined;
-		const uid = ctx.get("userId") as string | undefined;
+		const tid = c.get("tenantId");
+		const uid = c.get("userId");
 
 		if (!tid || !uid) return c.json({ error: "Auth required" }, 401);
 
@@ -253,7 +248,7 @@ router.post("/api-keys", async (c) => {
 
 		return c.json(result, 201);
 	} catch (err) {
-		log.error("[auth] create api-key error:" + " " + String(err));
+		log.error(`[auth] create api-key error: ${String(err)}`);
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -263,14 +258,13 @@ router.post("/api-keys", async (c) => {
 // ---------------------------------------------------------------------------
 router.get("/api-keys", async (c) => {
 	try {
-		// biome-ignore lint/suspicious/noExplicitAny: Hono context variables
-		const tid = (c as any).get("tenantId") as string | undefined;
+		const tid = c.get("tenantId");
 		if (!tid) return c.json({ error: "Tenant context required" }, 400);
 
 		const keys = await listApiKeys(tid);
 		return c.json(keys);
 	} catch (err) {
-		log.error("[auth] list api-keys error:" + " " + String(err));
+		log.error(`[auth] list api-keys error: ${String(err)}`);
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
@@ -281,10 +275,8 @@ router.get("/api-keys", async (c) => {
 router.delete("/api-keys/:id", async (c) => {
 	try {
 		const keyId = c.req.param("id");
-		// biome-ignore lint/suspicious/noExplicitAny: Hono context variables
-		const ctx = c as any;
-		const tid = ctx.get("tenantId") as string | undefined;
-		const uid = ctx.get("userId") as string | undefined;
+		const tid = c.get("tenantId");
+		const uid = c.get("userId");
 
 		if (tid) {
 			const tenantKeys = await listApiKeys(tid);
@@ -302,7 +294,7 @@ router.delete("/api-keys/:id", async (c) => {
 
 		return c.json({ ok: true });
 	} catch (err) {
-		log.error("[auth] revoke api-key error:" + " " + String(err));
+		log.error(`[auth] revoke api-key error: ${String(err)}`);
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });

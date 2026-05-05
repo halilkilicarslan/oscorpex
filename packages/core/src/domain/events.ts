@@ -133,7 +133,12 @@ export type EventType =
 	| "run:paused"
 	| "run:resumed"
 	| "run:failed"
-	| "run:completed";
+	| "run:completed"
+	// Review
+	| "review:approved"
+	| "review:rejected"
+	// Task escalation
+	| "task:escalated";
 
 // Legacy event type for backward compatibility during migration
 // This matches the current StudioEvent shape and will be deprecated once

@@ -35,6 +35,7 @@ import {
 	updateAgentConfig,
 } from "../db.js";
 import { createLogger } from "../logger.js";
+import type { MessageStatus, MessageType } from "../types.js";
 const log = createLogger("agent-routes");
 
 function matchesTaskFilter(line: string, taskId?: string): boolean {
@@ -120,7 +121,7 @@ agentRoutes.post("/projects/:id/messages", async (c) => {
 		projectId,
 		body.fromAgentId,
 		body.toAgentId,
-		body.type as any,
+		body.type as MessageType,
 		body.subject,
 		body.content,
 		body.metadata,
@@ -137,7 +138,7 @@ agentRoutes.get("/projects/:id/messages", async (c) => {
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
 	const agentId = c.req.query("agentId");
-	const status = c.req.query("status") as any;
+	const status = c.req.query("status") as MessageStatus | undefined;
 	const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
 	const offset = Number(c.req.query("offset") ?? 0);
 
@@ -170,7 +171,7 @@ agentRoutes.post("/projects/:id/messages/broadcast", async (c) => {
 		body.subject,
 		body.content,
 		body.metadata,
-		body.type as any,
+		body.type as MessageType | undefined,
 	);
 	return c.json({ sent: sent.length, messages: sent }, 201);
 });
@@ -247,7 +248,7 @@ agentRoutes.get("/projects/:id/agents/:agentId/inbox", async (c) => {
 	const project = await getProject(c.req.param("id"));
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
-	const status = c.req.query("status") as any;
+	const status = c.req.query("status") as MessageStatus | undefined;
 	const messages = getInbox(c.req.param("id"), c.req.param("agentId"), status);
 
 	return c.json(messages);
@@ -302,7 +303,7 @@ agentRoutes.post("/projects/:id/agents/:agentId/start", async (c) => {
 				cliTool: record.cliTool,
 			});
 		} catch (localErr) {
-			log.warn("[routes] Yerel süreç başlatılamadı, Docker deneniyor:" + " " + String(localErr));
+			log.warn(`[routes] Yerel süreç başlatılamadı, Docker deneniyor: ${String(localErr)}`);
 		}
 	}
 
@@ -550,7 +551,7 @@ agentRoutes.post("/projects/:id/agents/:agentId/chat", async (c) => {
 		if (msg.includes("not found") || msg.includes("does not belong")) {
 			return c.json({ error: msg }, 404);
 		}
-		log.error("[agent-routes] chat failed:" + " " + String(err));
+		log.error(`[agent-routes] chat failed: ${String(err)}`);
 		return c.json({ error: msg }, 500);
 	}
 });

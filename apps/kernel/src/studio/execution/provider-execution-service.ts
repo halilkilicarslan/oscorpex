@@ -15,15 +15,15 @@
 // ---------------------------------------------------------------------------
 
 import type { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
-import type { AgentCliTool } from "../types.js";
-import { createLogger } from "../logger.js";
+import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
 import { composeSystemPrompt } from "../behavioral-prompt.js";
+import { createLogger } from "../logger.js";
 import { defaultSystemPrompt } from "../prompt-builder.js";
 import { createProviderResolver } from "../provider-resolver.js";
 import { providerState } from "../provider-state.js";
 import {
-	type TelemetryRecord,
 	CANCEL_REASONS,
+	type TelemetryRecord,
 	classifyProviderErrorWithReason,
 	finishProviderTelemetry,
 	recordProviderCancel,
@@ -31,7 +31,7 @@ import {
 	recordProviderFallback,
 	startProviderTelemetry,
 } from "../provider-telemetry.js";
-import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
+import type { AgentCliTool } from "../types.js";
 
 const log = createLogger("provider-execution-service");
 
@@ -143,7 +143,10 @@ export class ProviderExecutionService {
 
 		// Build the sorted, skip/cooldown-aware adapter chain using ALL registered adapters
 		const { providerRegistry } = await import("../kernel/provider-registry.js");
-		const allAdapterIds = providerRegistry.list().map((p) => p.id).filter((id) => id !== primaryCliTool) as AgentCliTool[];
+		const allAdapterIds = providerRegistry
+			.list()
+			.map((p) => p.id)
+			.filter((id) => id !== primaryCliTool) as AgentCliTool[];
 		const resolver = await createProviderResolver(primaryCliTool, allAdapterIds, this.telemetry);
 
 		// ---------------------------------------------------------------------------
@@ -168,9 +171,7 @@ export class ProviderExecutionService {
 			...agentConfig,
 			skills: agentConfig.skills ?? [],
 		};
-		const systemPrompt = rawSystemPrompt
-			? composeSystemPrompt(rawSystemPrompt)
-			: defaultSystemPrompt(safeAgentConfig);
+		const systemPrompt = rawSystemPrompt ? composeSystemPrompt(rawSystemPrompt) : defaultSystemPrompt(safeAgentConfig);
 		if (queueWaitMs !== undefined) {
 			telemetryRecord.queueWaitMs = queueWaitMs;
 		}
@@ -321,8 +322,9 @@ export class ProviderExecutionService {
 			lastAdapterError ?? new Error("All CLI adapters exhausted"),
 		);
 
-		const err = lastAdapterError ?? new Error("All CLI adapters exhausted — no provider available.");
-		(err as any).classification = lastFailureClassification ?? "unknown";
+		const err = Object.assign(lastAdapterError ?? new Error("All CLI adapters exhausted — no provider available."), {
+			classification: lastFailureClassification ?? ("unknown" as ProviderErrorClassification | "unknown"),
+		});
 		throw err;
 	}
 }
@@ -336,6 +338,8 @@ export interface ProvidersExhaustedResult {
 	retryMs: number;
 }
 
-export function isProvidersExhausted(r: NormalizedProviderResult | ProvidersExhaustedResult): r is ProvidersExhaustedResult {
+export function isProvidersExhausted(
+	r: NormalizedProviderResult | ProvidersExhaustedResult,
+): r is ProvidersExhaustedResult {
 	return (r as ProvidersExhaustedResult)._exhausted === true;
 }

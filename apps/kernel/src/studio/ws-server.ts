@@ -23,10 +23,18 @@
 //     { type: 'error',        payload: { message } }
 // ---------------------------------------------------------------------------
 
+import type { IncomingMessage } from "node:http";
 import { createServer } from "node:http";
 import { createLogger } from "./logger.js";
 import { wsManager } from "./ws-manager.js";
 const log = createLogger("ws-server");
+
+/** IncomingMessage augmented with WS upgrade query params attached during upgrade handling. */
+interface AugmentedRequest extends IncomingMessage {
+	correlationId?: string;
+	token?: string;
+	apiKey?: string;
+}
 
 const WS_PORT = Number(process.env.STUDIO_WS_PORT ?? 3142);
 const WS_PATH = "/api/studio/ws";
@@ -52,17 +60,18 @@ export function startWSServer(): void {
 		// Extract correlationId/auth query params for tracing/auth in ws-manager.
 		try {
 			const parsed = new URL(url, "http://localhost");
+			const augmented = req as AugmentedRequest;
 			const correlationId = parsed.searchParams.get("correlationId");
 			if (correlationId) {
-				(req as any).correlationId = correlationId;
+				augmented.correlationId = correlationId;
 			}
 			const token = parsed.searchParams.get("token");
 			if (token) {
-				(req as any).token = token;
+				augmented.token = token;
 			}
 			const apiKey = parsed.searchParams.get("apiKey");
 			if (apiKey) {
-				(req as any).apiKey = apiKey;
+				augmented.apiKey = apiKey;
 			}
 		} catch {
 			// ignore parse errors
@@ -76,6 +85,6 @@ export function startWSServer(): void {
 	});
 
 	httpServer.on("error", (err) => {
-		log.error("[ws-server] Sunucu hatası:" + " " + String(err.message));
+		log.error(`[ws-server] Sunucu hatası: ${String(err.message)}`);
 	});
 }

@@ -144,7 +144,7 @@ export async function updateWebhook(
 	if (fields.length === 0) return getWebhook(id);
 
 	values.push(id);
-	await execute(`UPDATE webhooks SET ${fields.join(", ")} WHERE id = $${idx}`, values as any[]);
+	await execute(`UPDATE webhooks SET ${fields.join(", ")} WHERE id = $${idx}`, values);
 	return getWebhook(id);
 }
 

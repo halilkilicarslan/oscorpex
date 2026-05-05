@@ -87,9 +87,9 @@ export async function updateAgentSession(
 	if (fields.length === 0) return getAgentSession(id);
 
 	values.push(id);
-	const row = await queryOne<any>(
+	const row = await queryOne<Record<string, unknown>>(
 		`UPDATE agent_sessions SET ${fields.join(", ")} WHERE id = $${idx} RETURNING *`,
-		values as any[],
+		values,
 	);
 	return row ? rowToSession(row) : undefined;
 }
@@ -109,13 +109,13 @@ export async function addObservation(sessionId: string, observation: AgentObserv
 export async function listAgentSessions(projectId: string, agentId?: string, limit = 20): Promise<AgentSession[]> {
 	if (agentId) {
 		const rows = await query<any>(
-			`SELECT * FROM agent_sessions WHERE project_id = $1 AND agent_id = $2 ORDER BY created_at DESC LIMIT $3`,
+			"SELECT * FROM agent_sessions WHERE project_id = $1 AND agent_id = $2 ORDER BY created_at DESC LIMIT $3",
 			[projectId, agentId, limit],
 		);
 		return rows.map(rowToSession);
 	}
 	const rows = await query<any>(
-		`SELECT * FROM agent_sessions WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2`,
+		"SELECT * FROM agent_sessions WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2",
 		[projectId, limit],
 	);
 	return rows.map(rowToSession);

@@ -4,23 +4,13 @@
 // prompt building, CLI dispatch, output gates, retry, provider fallback.
 // ---------------------------------------------------------------------------
 
-import { type ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
+import type { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
+import { persistAgentLog } from "../agent-log-store.js";
 import { agentRuntime } from "../agent-runtime.js";
-import {
-	completeSession,
-	failSession,
-} from "../agent-runtime/index.js";
-import {
-	claimTask,
-	getAgentConfig,
-	getProject,
-	getTask,
-	releaseTaskClaim,
-	updateTask,
-} from "../db.js";
+import { completeSession, failSession } from "../agent-runtime/index.js";
+import { claimTask, getAgentConfig, getProject, getTask, releaseTaskClaim, updateTask } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
-import { persistAgentLog } from "../agent-log-store.js";
 import { markExecutionStarted } from "../preflight-warmup.js";
 import { syncDeclaredDependencies } from "../repo-dependency-sync.js";
 import { MAX_AUTO_RETRIES, evaluateRetry } from "../retry-policy.js";
@@ -28,28 +18,24 @@ import { SandboxViolationError } from "../sandbox-manager.js";
 import { taskEngine } from "../task-engine.js";
 import { TIMEOUT_WARNING_THRESHOLD, resolveTaskTimeoutMs } from "../timeout-policy.js";
 import type { AgentCliTool, Task } from "../types.js";
+import { resolveTaskAgent, resolveTaskModel, resolveTaskTools } from "./agent-resolver.js";
+import { runGoalGate, runOutputAndTestGates } from "./execution-gates-runner.js";
 import { assemblePrompt } from "./prompt-assembler.js";
-import { resolveTaskAgent, resolveTaskTools, resolveTaskModel } from "./agent-resolver.js";
-import { runOutputAndTestGates, runGoalGate } from "./execution-gates-runner.js";
 import { runProviderTask } from "./provider-task-runner.js";
+import { computeQueueWaitMs } from "./queue-wait.js";
 import { executeTaskReview } from "./review-task-runner.js";
 import {
+	type SandboxExecutionContext,
 	closeSandboxExecution,
 	enforceSandboxHardPreflight,
 	enforceSandboxPostExecution,
 	enforceSandboxPreExecution,
 	setupSandboxExecution,
-	type SandboxExecutionContext,
 } from "./sandbox-execution-guard.js";
 import { executeSpecialTask } from "./special-task-runner.js";
+import { buildTaskOutput, recordOutputReceived, runTaskCompletionEffects } from "./task-output-handler.js";
 import { startTaskForExecution } from "./task-start-service.js";
 import { TaskTimeoutError } from "./task-timeout.js";
-import { computeQueueWaitMs } from "./queue-wait.js";
-import {
-	buildTaskOutput,
-	recordOutputReceived,
-	runTaskCompletionEffects,
-} from "./task-output-handler.js";
 
 export { TaskTimeoutError } from "./task-timeout.js";
 export { computeQueueWaitMs } from "./queue-wait.js";
@@ -88,10 +74,7 @@ export class TaskExecutor {
 	 * updated task record. This is the single point where queue-wait timestamps
 	 * are produced.
 	 */
-	async startTaskForExecution(
-		task: Task,
-		agentId: string,
-	): Promise<Task | undefined> {
+	async startTaskForExecution(task: Task, agentId: string): Promise<Task | undefined> {
 		return startTaskForExecution(task, agentId);
 	}
 
@@ -195,13 +178,11 @@ export class TaskExecutor {
 					);
 				} else if (syn.ranInstall && !syn.ok) {
 					log.warn(
-						`[task-executor] Pre-run dependency sync incomplete` +
-							(syn.error ? `: ${syn.error}` : "") +
-							(syn.missingAfter.length ? ` — still missing: ${syn.missingAfter.join(", ")}` : ""),
+						`[task-executor] Pre-run dependency sync incomplete${syn.error ? `: ${syn.error}` : ""}${syn.missingAfter.length ? ` — still missing: ${syn.missingAfter.join(", ")}` : ""}`,
 					);
 				}
 			} catch (err) {
-				log.warn("[task-executor] Pre-run dependency sync threw:" + " " + String(err));
+				log.warn(`[task-executor] Pre-run dependency sync threw: ${String(err)}`);
 			}
 		}
 
@@ -279,7 +260,16 @@ export class TaskExecutor {
 
 			const output = await buildTaskOutput(cliResult, runtimeRepoPath, isolatedWorkspace);
 			recordOutputReceived(sessionId, output);
-			await runTaskCompletionEffects({ projectId, project, task, agent, output, cliResult, agentRuntime, formatTaskLog });
+			await runTaskCompletionEffects({
+				projectId,
+				project,
+				task,
+				agent,
+				output,
+				cliResult,
+				agentRuntime,
+				formatTaskLog,
+			});
 			await enforceSandboxPostExecution(sandboxPolicy, output, sandboxSessionId);
 			if (project.repoPath) {
 				await runOutputAndTestGates(projectId, task, project.repoPath, output, agent, sessionId);
@@ -298,7 +288,7 @@ export class TaskExecutor {
 			if (sessionId) {
 				completeSession(sessionId, projectId, agent.id, agent.role, task, {
 					costUsd: cliResult?.costUsd,
-				}).catch((e) => log.warn("[task-executor] Session complete failed:" + " " + String(e)));
+				}).catch((e) => log.warn(`[task-executor] Session complete failed: ${String(e)}`));
 			}
 
 			// Review task dispatch: task-engine creates a review task which
@@ -385,7 +375,7 @@ export class TaskExecutor {
 				const failOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
 				if (failOutputLines.length > 0) {
 					persistAgentLog(projectId, agent.id, failOutputLines).catch((err) =>
-						log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+						log.warn(`[task-executor] Non-blocking operation failed: ${String(err?.message ?? err)}`),
 					);
 				}
 			}
@@ -395,18 +385,20 @@ export class TaskExecutor {
 			// --- Agent Runtime: record failed session ---
 			if (sessionId && agent) {
 				failSession(sessionId, projectId, agent.id, agent.role, task, errorMsg).catch((e) =>
-					log.warn("[task-executor] Session fail record failed:" + " " + String(e)),
+					log.warn(`[task-executor] Session fail record failed: ${String(e)}`),
 				);
 			}
 			if (isolatedWorkspace?.isolated) {
-				isolatedWorkspace
-					.cleanup()
-					.catch((e) => log.warn("[task-executor] Workspace cleanup failed:" + " " + String(e)));
+				isolatedWorkspace.cleanup().catch((e) => log.warn(`[task-executor] Workspace cleanup failed: ${String(e)}`));
 			}
 
 			// --- Self-healing: auto-retry with error context (TASK 10) ---
 			const failedTask = await getTask(task.id);
-			const failureClass = (err as any)?.classification ?? "unknown";
+			const failureClass = (
+				err !== null && typeof err === "object" && "classification" in err
+					? (err as { classification: import("@oscorpex/provider-sdk").ProviderErrorClassification }).classification
+					: "unknown"
+			) satisfies import("@oscorpex/provider-sdk").ProviderErrorClassification;
 			const { shouldRetry, delayMs } = evaluateRetry(failureClass, failedTask?.retryCount ?? 0);
 
 			if (!isTimeout && shouldRetry && failedTask) {
@@ -445,7 +437,7 @@ export class TaskExecutor {
 				// Re-queue through executeTask to respect semaphore concurrency limits
 				setTimeout(() => {
 					executeTask(projectId, retried).catch((err) =>
-						log.warn("[task-executor] Self-heal retry dispatch failed:" + " " + String(err?.message ?? err)),
+						log.warn(`[task-executor] Self-heal retry dispatch failed: ${String(err?.message ?? err)}`),
 					);
 				}, 25);
 				return; // skip dispatchReadyTasks — retry will go through executeTask

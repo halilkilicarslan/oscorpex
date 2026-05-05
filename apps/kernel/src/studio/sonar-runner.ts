@@ -14,8 +14,8 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getProjectSetting } from "./db.js";
-import { createLogger } from "./logger.js";
 import { execute, query, queryOne } from "./db.js";
+import { createLogger } from "./logger.js";
 const log = createLogger("sonar-runner");
 
 // ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ function exec(
 				env: { ...process.env, ...env },
 			},
 			(err, stdout, stderr) => {
-				const code = err && "code" in err ? (err as any).code : 0;
+				const code = err && "code" in err ? (err as NodeJS.ErrnoException).code : 0;
 				resolve({ stdout: stdout ?? "", stderr: stderr ?? "", code: typeof code === "number" ? code : 1 });
 			},
 		);
@@ -166,7 +166,7 @@ export async function fetchQualityGate(projectKey: string, projectId?: string): 
 		const url = `${config.hostUrl}/api/qualitygates/project_status?projectKey=${encodeURIComponent(projectKey)}`;
 		const headers: Record<string, string> = {};
 		if (config.token) {
-			headers["Authorization"] = `Bearer ${config.token}`;
+			headers.Authorization = `Bearer ${config.token}`;
 		}
 
 		const resp = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
@@ -174,14 +174,23 @@ export async function fetchQualityGate(projectKey: string, projectId?: string): 
 			return { status: "NONE", conditions: [] };
 		}
 
-		const data = (await resp.json()) as any;
+		interface SonarConditionRaw {
+			metricKey: string;
+			status: string;
+			actualValue?: string;
+			errorThreshold?: string;
+		}
+		interface SonarProjectStatusResponse {
+			projectStatus?: { status?: string; conditions?: SonarConditionRaw[] };
+		}
+		const data = (await resp.json()) as SonarProjectStatusResponse;
 		const ps = data.projectStatus;
 
 		return {
-			status: ps?.status ?? "NONE",
-			conditions: (ps?.conditions ?? []).map((c: any) => ({
+			status: (ps?.status ?? "NONE") as QualityGateResult["status"],
+			conditions: (ps?.conditions ?? []).map((c) => ({
 				metricKey: c.metricKey,
-				status: c.status,
+				status: c.status as QualityGateCondition["status"],
 				actualValue: c.actualValue,
 				errorThreshold: c.errorThreshold,
 			})),

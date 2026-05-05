@@ -40,7 +40,7 @@ import {
 	streamPlannerWithCLI,
 } from "../planner-cli.js";
 import { TEAM_ARCHITECT_SYSTEM_PROMPT } from "../team-architect.js";
-import type { ProjectAgent } from "../types.js";
+import type { DependencyType, ProjectAgent } from "../types.js";
 const log = createLogger("team-routes");
 
 export const teamRoutes = new Hono();
@@ -263,7 +263,7 @@ teamRoutes.post("/projects/:id/team", async (c) => {
 			personality: agent.personality,
 			role: agent.role,
 			model: agent.model,
-		}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
+		}).catch((err) => log.error(`Failed to create agent files: ${String(err)}`));
 		return c.json(agent, 201);
 	}
 
@@ -289,7 +289,7 @@ teamRoutes.post("/projects/:id/team", async (c) => {
 		personality: agent.personality,
 		role: agent.role,
 		model: agent.model,
-	}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
+	}).catch((err) => log.error(`Failed to create agent files: ${String(err)}`));
 	return c.json(agent, 201);
 });
 
@@ -297,7 +297,7 @@ teamRoutes.post("/projects/:id/team/apply", async (c) => {
 	const projectId = c.req.param("id");
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
-	const role = (c as any).get("userRole") as string | undefined;
+	const role = c.get("userRole" as never) as string | undefined;
 	if (role && !hasPermission(role, "team:write") && !hasPermission(role, "projects:update")) {
 		return c.json({ error: "Forbidden", requiredAnyOf: ["team:write", "projects:update"], role }, 403);
 	}
@@ -325,7 +325,7 @@ teamRoutes.post("/projects/:id/team/apply", async (c) => {
 
 	let roles: string[] = [];
 	if (hasTemplate) {
-		const templateId = body.teamTemplateId!.trim();
+		const templateId = body.teamTemplateId?.trim();
 		const presetTemplate = await getTeamTemplate(templateId);
 		const customTemplate = !presetTemplate ? await getCustomTeamTemplate(templateId) : null;
 		const selected = presetTemplate ?? customTemplate;
@@ -356,7 +356,7 @@ teamRoutes.post("/projects/:id/team/apply", async (c) => {
 			personality: agent.personality,
 			role: agent.role,
 			model: agent.model,
-		}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
+		}).catch((err) => log.error(`Failed to create agent files: ${String(err)}`));
 	}
 
 	return c.json({ ok: true, data: agents }, 201);
@@ -414,7 +414,7 @@ teamRoutes.put("/projects/:id/team/:agentId", async (c) => {
 		personality: updated.personality,
 		role: updated.role,
 		model: updated.model,
-	}).catch((err) => log.error("Failed to update agent files:" + " " + String(err)));
+	}).catch((err) => log.error(`Failed to update agent files: ${String(err)}`));
 	return c.json(updated);
 });
 
@@ -460,7 +460,7 @@ teamRoutes.post("/projects/:id/team/from-template", async (c) => {
 			personality: agent.personality,
 			role: agent.role,
 			model: agent.model,
-		}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
+		}).catch((err) => log.error(`Failed to create agent files: ${String(err)}`));
 	}
 	return c.json(agents, 201);
 });
@@ -560,7 +560,7 @@ teamRoutes.put("/projects/:id/team/:agentId/hierarchy", async (c) => {
 teamRoutes.get("/projects/:id/dependencies", async (c) => {
 	const { listAgentDependencies } = await import("../db.js");
 	const projectId = c.req.param("id");
-	const type = c.req.query("type") as any;
+	const type = c.req.query("type") as DependencyType | undefined;
 	return c.json(await listAgentDependencies(projectId, type));
 });
 

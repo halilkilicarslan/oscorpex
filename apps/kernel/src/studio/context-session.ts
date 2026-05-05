@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { createHash } from "node:crypto";
+import type { EventType } from "@oscorpex/core";
 import {
 	countSessionEvents,
 	evictLowPriorityEvents,
@@ -99,7 +100,7 @@ export async function trackEvent(
 // ---------------------------------------------------------------------------
 
 export function initContextSession(eventBus: EventBus): void {
-	const bridgeEvents = [
+	const bridgeEvents: string[] = [
 		"task:completed",
 		"task:failed",
 		"task:started",
@@ -113,10 +114,10 @@ export function initContextSession(eventBus: EventBus): void {
 	];
 
 	for (const eventType of bridgeEvents) {
-		eventBus.on(eventType as any, (data: any) => {
+		eventBus.on(eventType as EventType, (data) => {
 			trackEvent(data.projectId, data.taskId, data.agentId, eventType, JSON.stringify(data.payload ?? data)).catch(
 				(err) => {
-					log.warn(`[context-session] Failed to track ${eventType}:` + " " + String(err));
+					log.warn(`[context-session] Failed to track ${eventType}: ${String(err)}`);
 				},
 			);
 		});

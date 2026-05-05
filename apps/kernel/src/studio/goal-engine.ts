@@ -49,6 +49,7 @@ export interface CriterionResult {
 	criterion: string;
 	met: boolean;
 	evidence?: string;
+	confidence?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,12 +89,12 @@ export async function createGoal(params: {
 }
 
 export async function getGoal(id: string): Promise<ExecutionGoal | null> {
-	const row = await queryOne(`SELECT * FROM execution_goals WHERE id = $1`, [id]);
+	const row = await queryOne("SELECT * FROM execution_goals WHERE id = $1", [id]);
 	return row ? rowToGoal(row) : null;
 }
 
 export async function getGoalForTask(taskId: string): Promise<ExecutionGoal | null> {
-	const row = await queryOne(`SELECT * FROM execution_goals WHERE task_id = $1`, [taskId]);
+	const row = await queryOne("SELECT * FROM execution_goals WHERE task_id = $1", [taskId]);
 	return row ? rowToGoal(row) : null;
 }
 
@@ -127,12 +128,12 @@ export async function ensureGoalForTask(params: {
 export async function listGoals(projectId: string, status?: GoalStatus): Promise<ExecutionGoal[]> {
 	if (status) {
 		const rows = await query(
-			`SELECT * FROM execution_goals WHERE project_id = $1 AND status = $2 ORDER BY created_at DESC`,
+			"SELECT * FROM execution_goals WHERE project_id = $1 AND status = $2 ORDER BY created_at DESC",
 			[projectId, status],
 		);
 		return rows.map(rowToGoal);
 	}
-	const rows = await query(`SELECT * FROM execution_goals WHERE project_id = $1 ORDER BY created_at DESC`, [projectId]);
+	const rows = await query("SELECT * FROM execution_goals WHERE project_id = $1 ORDER BY created_at DESC", [projectId]);
 	return rows.map(rowToGoal);
 }
 
@@ -194,15 +195,15 @@ export async function failGoal(goalId: string, reason: string): Promise<Executio
 export function formatGoalPrompt(goal: ExecutionGoal): string {
 	const def = goal.definition;
 	const lines: string[] = [
-		`--- GOAL ---`,
+		"--- GOAL ---",
 		`Objective: ${def.goal}`,
-		``,
-		`Constraints:`,
+		"",
+		"Constraints:",
 		...def.constraints.map((c) => `  - ${c}`),
-		``,
-		`Success Criteria (ALL must be met):`,
+		"",
+		"Success Criteria (ALL must be met):",
 		...def.successCriteria.map((sc, i) => `  ${i + 1}. ${sc}`),
-		`--- END GOAL ---`,
+		"--- END GOAL ---",
 	];
 	return lines.join("\n");
 }
@@ -309,7 +310,7 @@ export async function validateCriteriaWithLLM(
 			evidence: c.evidence,
 		}));
 	} catch (err) {
-		log.warn("[goal-engine] LLM validation failed, falling back to keyword heuristic:" + " " + String(err));
+		log.warn(`[goal-engine] LLM validation failed, falling back to keyword heuristic: ${String(err)}`);
 		return validateCriteriaFromOutput(goal, output);
 	}
 }
@@ -338,10 +339,8 @@ export function shouldEnforceGoalFailure(results: CriterionResult[], mode: GoalE
 	const allMet = results.every((r) => r.met);
 	if (allMet) return false;
 	// Only enforce if at least one criterion has high confidence of failure
-	const hasConfidentFailure = results.some(
-		(r) => !r.met && (r as any).confidence !== undefined && (r as any).confidence >= 0.7,
-	);
+	const hasConfidentFailure = results.some((r) => !r.met && r.confidence !== undefined && r.confidence >= 0.7);
 	// If no confidence data (keyword heuristic), enforce based on met/not-met
-	const hasAnyConfidence = results.some((r) => (r as any).confidence !== undefined);
+	const hasAnyConfidence = results.some((r) => r.confidence !== undefined);
 	return hasConfidentFailure || !hasAnyConfidence;
 }

@@ -20,7 +20,7 @@ class DbReplayStore implements ReplayStore {
 	}
 
 	async saveSnapshot(snapshot: ReplaySnapshot): Promise<void> {
-		const metadata = (snapshot as any).metadata ?? {};
+		const metadata = snapshot.metadata ?? {};
 		const contextHash = this.hashSnapshot(snapshot);
 		await execute(
 			`INSERT INTO replay_snapshots (id, run_id, checkpoint_id, snapshot_json, context_hash, metadata, policy_decisions_json, verification_reports_json, created_at)
@@ -210,19 +210,26 @@ export async function createCheckpointSnapshot(
 	}
 
 	// Fallback: build a Run-compatible object from pipeline + project
-	const runSummary: any = runRecord ?? {
+	const pipelineStatusToRunStatus = (s: string | undefined): import("@oscorpex/core").RunStatus => {
+		if (s === "running") return "running";
+		if (s === "paused") return "paused";
+		if (s === "completed") return "completed";
+		if (s === "failed") return "failed";
+		return "created";
+	};
+	const runSummary: import("@oscorpex/core").Run = runRecord ?? {
 		id: projectId,
 		projectId,
 		goal: project?.description ?? "",
 		mode: "execute",
-		status: (pipeline?.status as any) ?? "idle",
-		currentStageId: pipeline?.currentStage ?? undefined,
+		status: pipelineStatusToRunStatus(pipeline?.status),
+		currentStageId: pipeline?.currentStage != null ? String(pipeline.currentStage) : undefined,
 		startedAt: pipeline?.startedAt ?? undefined,
 		completedAt: pipeline?.completedAt ?? undefined,
 		metadata: {
 			taskCount: tasks.length,
-			completedTaskCount: tasks.filter((t: any) => t.status === "done").length,
-			failedTaskCount: tasks.filter((t: any) => t.status === "failed").length,
+			completedTaskCount: tasks.filter((t) => t.status === "done").length,
+			failedTaskCount: tasks.filter((t) => t.status === "failed").length,
 		},
 	};
 	try {
@@ -302,7 +309,7 @@ export async function createCheckpointSnapshot(
 		createdAt: new Date().toISOString(),
 		run: runSummary,
 		stages: pipeline ? JSON.parse(pipeline.stagesJson) : [],
-		tasks: tasks as any,
+		tasks: tasks as unknown as import("@oscorpex/core").Task[],
 		artifacts,
 		policyDecisions,
 		verificationReports,
@@ -346,7 +353,7 @@ export async function restoreFromSnapshot(
 	const result: ReplayRestoreResult = { tasksRestored: 0, pipelineRestored: false, errors: [] };
 
 	// Restore task statuses from snapshot
-	for (const task of snapshot.tasks as any[]) {
+	for (const task of snapshot.tasks) {
 		try {
 			if (!dryRun) {
 				await updateTask(task.id, {
@@ -368,7 +375,13 @@ export async function restoreFromSnapshot(
 			if (!dryRun) {
 				await createPipelineRun({
 					projectId: snapshot.projectId,
-					status: (snapshot.run as any)?.status ?? "running",
+					status:
+						snapshot.run.status === "running" ||
+						snapshot.run.status === "paused" ||
+						snapshot.run.status === "completed" ||
+						snapshot.run.status === "failed"
+							? snapshot.run.status
+							: "running",
 					stagesJson: JSON.stringify(snapshot.stages),
 				});
 			}

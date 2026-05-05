@@ -39,22 +39,18 @@ export interface DbPoolSnapshot {
 export function getDbPoolSnapshot(): DbPoolSnapshot {
 	try {
 		const pool = getPool();
-		// pg.Pool internal properties (not in public types but available at runtime)
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const total = (pool as any).totalCount ?? 0;
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const idle = (pool as any).idleCount ?? 0;
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const waiting = (pool as any).waitingCount ?? 0;
+		const total = pool.totalCount ?? 0;
+		const idle = pool.idleCount ?? 0;
+		const waiting = pool.waitingCount ?? 0;
 
 		return {
 			total,
 			idle,
 			waiting,
 			active: total - idle,
-			max: (pool.options as any).max ?? 20,
-			connectionTimeoutMs: (pool.options as any).connectionTimeoutMillis ?? 5_000,
-			idleTimeoutMs: (pool.options as any).idleTimeoutMillis ?? 30_000,
+			max: pool.options.max ?? 20,
+			connectionTimeoutMs: pool.options.connectionTimeoutMillis ?? 5_000,
+			idleTimeoutMs: pool.options.idleTimeoutMillis ?? 30_000,
 		};
 	} catch {
 		// Pool not initialized yet

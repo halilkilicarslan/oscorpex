@@ -47,10 +47,9 @@ export async function createTask(
 	// Resolve tenant_id from project — denormalized for direct RLS matching (avoids subquery chain).
 	let tenantId: string | null = null;
 	if (projectId) {
-		const projectRow = await queryOne<{ tenant_id: string | null }>(
-			`SELECT tenant_id FROM projects WHERE id = $1`,
-			[projectId],
-		);
+		const projectRow = await queryOne<{ tenant_id: string | null }>("SELECT tenant_id FROM projects WHERE id = $1", [
+			projectId,
+		]);
 		tenantId = projectRow?.tenant_id ?? null;
 	}
 
@@ -111,7 +110,7 @@ export async function getTask(id: string): Promise<Task | undefined> {
 /** Batch-fetch tasks by IDs — returns a Map for O(1) lookup */
 export async function getTasksByIds(ids: string[]): Promise<Map<string, Task>> {
 	if (ids.length === 0) return new Map();
-	const rows = await query<Record<string, unknown>>(`SELECT * FROM tasks WHERE id = ANY($1)`, [ids]);
+	const rows = await query<Record<string, unknown>>("SELECT * FROM tasks WHERE id = ANY($1)", [ids]);
 	const map = new Map<string, Task>();
 	for (const row of rows) {
 		const task = rowToTask(row);
@@ -286,9 +285,9 @@ export async function updateTask(
 	if (fields.length === 0) return getTask(id);
 
 	values.push(id);
-	const row = await queryOne<any>(
+	const row = await queryOne<Record<string, unknown>>(
 		`UPDATE tasks SET ${fields.join(", ")} WHERE id = $${idx} RETURNING *`,
-		values as any[],
+		values,
 	);
 	return row ? rowToTask(row) : undefined;
 }
@@ -317,7 +316,7 @@ export async function claimTask(taskId: string, claimedBy: string): Promise<Task
 
 		// Claim it
 		const result = await client.query(
-			`UPDATE tasks SET claimed_by = $1, claimed_at = now(), dispatch_attempts = dispatch_attempts + 1 WHERE id = $2 RETURNING *`,
+			"UPDATE tasks SET claimed_by = $1, claimed_at = now(), dispatch_attempts = dispatch_attempts + 1 WHERE id = $2 RETURNING *",
 			[claimedBy, taskId],
 		);
 		return result.rows[0] ? rowToTask(result.rows[0]) : null;
@@ -329,7 +328,7 @@ export async function claimTask(taskId: string, claimedBy: string): Promise<Task
  * Clears claimed_by/claimed_at so the task can be reclaimed on retry.
  */
 export async function releaseTaskClaim(taskId: string): Promise<void> {
-	await execute(`UPDATE tasks SET claimed_by = NULL, claimed_at = NULL WHERE id = $1`, [taskId]);
+	await execute("UPDATE tasks SET claimed_by = NULL, claimed_at = NULL WHERE id = $1", [taskId]);
 }
 
 /**

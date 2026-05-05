@@ -73,8 +73,8 @@ replayRoutes.post("/runs/:runId/restore", async (c) => {
 		const actor = {
 			ip: c.req.header("x-forwarded-for") ?? "unknown",
 			// tenant auth context — populated by auth middleware when enabled
-			userId: (c as any).get?.("userId") ?? "anonymous",
-			role: (c as any).get?.("userRole") ?? "unknown",
+			userId: (c.get("userId" as never) as string | undefined) ?? "anonymous",
+			role: (c.get("userRole" as never) as string | undefined) ?? "unknown",
 		};
 
 		// Authorization gate: real restore requires elevated role

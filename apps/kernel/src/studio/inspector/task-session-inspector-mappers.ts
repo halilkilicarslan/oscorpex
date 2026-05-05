@@ -249,9 +249,7 @@ export function buildTimeline(
 			items.push(tl(sessionRow.created_at, "session:started", "Agent session started", "info", "session"));
 		}
 		if (sessionRow.strategy) {
-			items.push(
-				tl(sessionRow.created_at, "session:strategy", `Strategy: ${sessionRow.strategy}`, "info", "session"),
-			);
+			items.push(tl(sessionRow.created_at, "session:strategy", `Strategy: ${sessionRow.strategy}`, "info", "session"));
 		}
 		if (sessionRow.completed_at && sessionRow.status === "completed") {
 			items.push(tl(sessionRow.completed_at, "session:completed", "Session completed", "success", "session"));
@@ -273,19 +271,19 @@ export function buildTimeline(
 	// Episodes
 	if (episodes) {
 		for (const ep of episodes) {
-			const sev = ep.outcome === "success" ? "success" : ep.outcome === "failure" ? "error" : "info";
-			items.push(
-				tl(ep.created_at, "episode:" + ep.outcome, `Episode: ${ep.action_summary}`, sev as any, "provider"),
-			);
+			const sev: InspectorTimelineItem["severity"] =
+				ep.outcome === "success" ? "success" : ep.outcome === "failure" ? "error" : "info";
+			items.push(tl(ep.created_at, `episode:${ep.outcome}`, `Episode: ${ep.action_summary}`, sev, "provider"));
 		}
 	}
 
 	// Verification gates
 	if (verifications) {
 		for (const v of verifications) {
-			const sev = v.status === "passed" || v.status === "pass" ? "success" : "warning";
+			const sev: InspectorTimelineItem["severity"] =
+				v.status === "passed" || v.status === "pass" ? "success" : "warning";
 			items.push(
-				tl(v.created_at, `gate:${v.verification_type}`, `Gate: ${v.verification_type} — ${v.status}`, sev as any, "gate"),
+				tl(v.created_at, `gate:${v.verification_type}`, `Gate: ${v.verification_type} — ${v.status}`, sev, "gate"),
 			);
 		}
 	}

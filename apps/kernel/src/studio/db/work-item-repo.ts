@@ -121,9 +121,9 @@ export async function getWorkItems(
 		values.push(filters.sourceTaskId);
 	}
 
-	const rows = await query<any>(
+	const rows = await query<Record<string, unknown>>(
 		`SELECT * FROM work_items WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC`,
-		values as any[],
+		values,
 	);
 	return rows.map(rowToWorkItem);
 }
@@ -167,12 +167,12 @@ export async function getWorkItemsPaginated(
 
 	const where = conditions.join(" AND ");
 
-	const countRows = await query<any>(`SELECT COUNT(*) AS cnt FROM work_items WHERE ${where}`, values as any[]);
+	const countRows = await query<{ cnt: string }>(`SELECT COUNT(*) AS cnt FROM work_items WHERE ${where}`, values);
 	const total = Number(countRows[0]?.cnt ?? 0);
 
-	const rows = await query<any>(
+	const rows = await query<Record<string, unknown>>(
 		`SELECT * FROM work_items WHERE ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
-		[...values, limit, offset] as any[],
+		[...values, limit, offset],
 	);
 	return [rows.map(rowToWorkItem), total];
 }
@@ -233,7 +233,7 @@ export async function updateWorkItem(
 	values.push(now());
 	values.push(id);
 
-	await execute(`UPDATE work_items SET ${fields.join(", ")} WHERE id = $${idx}`, values as any[]);
+	await execute(`UPDATE work_items SET ${fields.join(", ")} WHERE id = $${idx}`, values);
 	return getWorkItem(id);
 }
 
