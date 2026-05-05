@@ -269,6 +269,8 @@ export class TaskExecutor {
 				projectId,
 				primaryCliTool,
 				agentModel: agent.model,
+				agentId: agent.id,
+				agentRole: agent.role,
 			});
 
 			// TASK 7: Provider-aware timeout resolution

@@ -69,9 +69,20 @@ export async function resolveModel(
 		riskLevel?: string;
 		cliTool?: AgentCliTool | string;
 		profile?: ProviderPolicyProfile;
+		agentId?: string;
+		agentRole?: string;
 	},
 ): Promise<ResolvedModel> {
-	const { projectId, priorFailures = 0, reviewRejections = 0, riskLevel, cliTool, profile } = context;
+	const {
+		projectId,
+		priorFailures = 0,
+		reviewRejections = 0,
+		riskLevel,
+		cliTool,
+		profile,
+		agentId,
+		agentRole,
+	} = context;
 
 	// 1. Load project-level routing config and profile
 	const settings = await getProjectSettings(projectId, "model_routing");
@@ -103,6 +114,33 @@ export async function resolveModel(
 			decisionReason: `review_task_downgrade | profile=${resolvedProfile}`,
 			selectedProfile: resolvedProfile,
 		};
+	}
+
+	// Skill-based provider/model hints — skills can suggest optimal provider for the task
+	if (agentId && agentRole) {
+		try {
+			const { resolveSkillsForTask } = await import("./skill-resolver.js");
+			const skillResult = await resolveSkillsForTask(task, agentId, agentRole, projectId, 0);
+			const hintSkill = skillResult.skills.find((s) => s.skill.providerHint || s.skill.modelHint);
+			if (hintSkill) {
+				const hint = hintSkill.skill;
+				if (hint.modelHint) {
+					log.info(
+						`[model-router] ${task.id} → ${hint.modelHint} (skill_hint: ${hint.name}, profile=${resolvedProfile})`,
+					);
+					return {
+						provider: hint.providerHint ?? "anthropic",
+						model: hint.modelHint,
+						effort: effortForTier((task.complexity as Tier) ?? "M"),
+						cliTool: cliTool ?? "claude-code",
+						decisionReason: `skill_hint:${hint.name} | profile=${resolvedProfile}`,
+						selectedProfile: resolvedProfile,
+					};
+				}
+			}
+		} catch {
+			// Skill resolution failed — continue with normal routing
+		}
 	}
 
 	// 2. Determine base tier from task complexity

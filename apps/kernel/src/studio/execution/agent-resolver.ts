@@ -8,7 +8,7 @@
 
 import { resolveAllowedTools } from "../capability-resolver.js";
 import { createLogger } from "../logger.js";
-import { resolveModel, type ResolvedModel } from "../model-router.js";
+import { type ResolvedModel, resolveModel } from "../model-router.js";
 import { resolveAgent } from "../review-dispatcher.js";
 import type { AgentCliTool, AgentConfig, Task } from "../types.js";
 
@@ -46,10 +46,7 @@ export interface ModelResolution {
  * Returns undefined when no match is found so the caller can handle the
  * missing-agent case (fail the task and dispatch ready tasks).
  */
-export async function resolveTaskAgent(
-	projectId: string,
-	assignment: string,
-): Promise<AgentConfig | undefined> {
+export async function resolveTaskAgent(projectId: string, assignment: string): Promise<AgentConfig | undefined> {
 	return resolveAgent(projectId, assignment);
 }
 
@@ -61,11 +58,7 @@ export async function resolveTaskAgent(
  * Returns the list of allowed CLI tools for the given agent in the given
  * project, derived from capability records and role-based defaults.
  */
-export async function resolveTaskTools(
-	projectId: string,
-	agentId: string,
-	agentRole: string,
-): Promise<string[]> {
+export async function resolveTaskTools(projectId: string, agentId: string, agentRole: string): Promise<string[]> {
 	return resolveAllowedTools(projectId, agentId, agentRole);
 }
 
@@ -85,6 +78,8 @@ export async function resolveTaskModel(
 		projectId: string;
 		primaryCliTool: AgentCliTool;
 		agentModel: string | undefined;
+		agentId?: string;
+		agentRole?: string;
 	},
 ): Promise<ModelResolution> {
 	const fallbackModel = context.agentModel ?? "sonnet";
@@ -95,10 +90,12 @@ export async function resolveTaskModel(
 			priorFailures: task.retryCount ?? 0,
 			reviewRejections: task.revisionCount ?? 0,
 			cliTool: context.primaryCliTool,
+			agentId: context.agentId,
+			agentRole: context.agentRole,
 		});
 		return { routedModel: resolved.model, resolved };
 	} catch (err) {
-		log.warn("[agent-resolver] resolveModel failed, using fallback:" + " " + String(err));
+		log.warn(`[agent-resolver] resolveModel failed, using fallback: ${String(err)}`);
 		return {
 			routedModel: fallbackModel,
 			resolved: {
