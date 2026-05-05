@@ -145,6 +145,33 @@ export async function runIntegrationTest(
 			testResults: { passed, failed, total },
 			logs,
 		};
+	} catch (httpErr) {
+		// HTTP path failed — fall back to CLI smoke test
+		log(`[integration-test] HTTP test failed: ${httpErr instanceof Error ? httpErr.message : String(httpErr)}`);
+		log("[integration-test] Falling back to CLI smoke test...");
+
+		const { execSync } = await import("node:child_process");
+		const cliCommands = extractCliCommands(task?.description ?? "");
+		if (cliCommands.length > 0) {
+			const cliResults: { cmd: string; passed: boolean; detail: string }[] = [];
+			for (const cmd of cliCommands) {
+				try {
+					const output = execSync(cmd, { cwd: repoPath, timeout: 30000, encoding: "utf8" });
+					cliResults.push({ cmd, passed: true, detail: output.slice(0, 200) });
+					log(`[integration-test] CLI: ${cmd} → PASS`);
+				} catch (err) {
+					const msg = err instanceof Error ? err.message.slice(0, 200) : String(err);
+					cliResults.push({ cmd, passed: false, detail: msg });
+					log(`[integration-test] CLI: ${cmd} → FAIL: ${msg}`);
+				}
+			}
+			const passed = cliResults.filter((r) => r.passed).length;
+			const failed = cliResults.filter((r) => !r.passed).length;
+			log(`[integration-test] CLI Results: ${passed}/${cliResults.length} passed`);
+			if (failed > 0) throw new Error(`CLI smoke tests failed: ${failed}/${cliResults.length}`);
+			return { filesCreated: [], filesModified: [], testResults: { passed, failed, total: cliResults.length }, logs };
+		}
+		throw httpErr;
 	} finally {
 		await stopApp(projectId, log).catch((err) =>
 			log(`[task-runners] Non-blocking operation failed: ${err?.message ?? String(err)}`),
