@@ -2,17 +2,17 @@
 // AuthContext — JWT auth state management
 // ---------------------------------------------------------------------------
 
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
+	type AuthUser,
+	type RegisterData,
 	fetchCurrentUser,
 	login as loginApi,
 	register as registerApi,
-	type AuthUser,
-	type RegisterData,
-} from '../lib/studio-api/auth';
-import { StudioApiError } from '../lib/studio-api/base';
+} from "../lib/studio-api/auth";
+import { StudioApiError } from "../lib/studio-api/base";
 
-const TOKEN_KEY = 'oscorpex_token';
+const TOKEN_KEY = "oscorpex_token";
 
 interface AuthContextValue {
 	user: AuthUser | null;
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		if (token) {
 			fetchCurrentUser(token)
 				.then((data) => {
-					if ((data as any).authDisabled) {
+					if (data.authDisabled) {
 						setAuthDisabled(true);
 						return;
 					}
@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			// No token: check if auth is disabled on the server
 			fetchCurrentUser("")
 				.then((data) => {
-					if ((data as any).authDisabled) {
+					if (data.authDisabled) {
 						setAuthDisabled(true);
 					}
 				})
@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				})
 				.finally(() => setIsLoading(false));
 		}
-	// eslint-disable-next-line react-hooks/exhaustive-deps
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	const persistToken = (t: string) => {
@@ -134,6 +134,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
 	const ctx = useContext(AuthContext);
-	if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+	if (!ctx) throw new Error("useAuth must be used within AuthProvider");
 	return ctx;
 }

@@ -8,13 +8,7 @@ import { randomUUID } from "node:crypto";
 import { query, queryOne } from "../db.js";
 import { createLogger } from "../logger.js";
 import { probeBinary, sanitizeError } from "./binary-locator.js";
-import { cachedCredentials } from "./oauth.js";
-import {
-	getCLIProbeSettings,
-	latestCLIUsageSnapshots,
-	persistSnapshot,
-	recordProbeEvent,
-} from "./persistence.js";
+import { getCLIProbeSettings, latestCLIUsageSnapshots, persistSnapshot, recordProbeEvent } from "./persistence.js";
 import { probeClaude } from "./probes/claude-probe.js";
 import { probeCodex } from "./probes/codex-probe.js";
 import { probeCursor } from "./probes/cursor-probe.js";
@@ -251,9 +245,7 @@ export async function getCLIUsageSnapshot(providerId: CLIProviderId, refresh = f
 
 	if (refresh) {
 		if (permissions.enabled) {
-			await persistSnapshot(snapshot).catch((err) =>
-				recordProbeEvent(providerId, "error", sanitizeError(err)),
-			);
+			await persistSnapshot(snapshot).catch((err) => recordProbeEvent(providerId, "error", sanitizeError(err)));
 			await recordProbeEvent(providerId, snapshot.global ? "refreshed" : "unavailable", `${def.label} refreshed`);
 		} else {
 			await recordProbeEvent(providerId, "skipped", `${def.label} global probe is disabled`);
@@ -278,7 +270,13 @@ export function isCLIProviderId(value: string): value is CLIProviderId {
 }
 
 // Re-export persistence functions used by routes
-export { getCLIProbeSettings, setCLIProbeSettings, latestCLIUsageSnapshots, getCLIUsageHistory, getCLIProbeEvents } from "./persistence.js";
+export {
+	getCLIProbeSettings,
+	setCLIProbeSettings,
+	latestCLIUsageSnapshots,
+	getCLIUsageHistory,
+	getCLIProbeEvents,
+} from "./persistence.js";
 
 // Re-export all types
 export type {

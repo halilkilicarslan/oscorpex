@@ -2,9 +2,9 @@
 // Oscorpex — Auth API client
 // ---------------------------------------------------------------------------
 
-import { httpGet, httpPost, httpDelete, StudioApiError } from './base.js';
+import { StudioApiError, httpDelete, httpGet, httpPost } from "./base.js";
 
-const AUTH_BASE = '/api/auth';
+const AUTH_BASE = "/api/auth";
 
 export interface AuthUser {
 	id: string;
@@ -12,6 +12,8 @@ export interface AuthUser {
 	displayName: string;
 	tenantId: string;
 	role: string;
+	/** Backend may return this when auth is globally disabled */
+	authDisabled?: boolean;
 }
 
 export interface LoginResponse {
@@ -79,7 +81,7 @@ export async function fetchAuthUsers(token: string): Promise<AuthUser[]> {
 		});
 	} catch (err) {
 		if (err instanceof StudioApiError) {
-			throw new Error(err.message ?? 'Failed to fetch users');
+			throw new Error(err.message ?? "Failed to fetch users");
 		}
 		throw err;
 	}
@@ -87,9 +89,13 @@ export async function fetchAuthUsers(token: string): Promise<AuthUser[]> {
 
 export async function createApiKey(token: string, name: string): Promise<CreateApiKeyResponse> {
 	try {
-		return await httpPost<CreateApiKeyResponse>(`${AUTH_BASE}/api-keys`, { name }, {
-			headers: { Authorization: `Bearer ${token}` },
-		});
+		return await httpPost<CreateApiKeyResponse>(
+			`${AUTH_BASE}/api-keys`,
+			{ name },
+			{
+				headers: { Authorization: `Bearer ${token}` },
+			},
+		);
 	} catch (err) {
 		if (err instanceof StudioApiError) {
 			throw new Error(err.message ?? `Failed to create API key (${err.status})`);
@@ -105,7 +111,7 @@ export async function listApiKeys(token: string): Promise<ApiKey[]> {
 		});
 	} catch (err) {
 		if (err instanceof StudioApiError) {
-			throw new Error(err.message ?? 'Failed to fetch API keys');
+			throw new Error(err.message ?? "Failed to fetch API keys");
 		}
 		throw err;
 	}
@@ -118,7 +124,7 @@ export async function revokeApiKey(token: string, id: string): Promise<void> {
 		});
 	} catch (err) {
 		if (err instanceof StudioApiError) {
-			throw new Error(err.message ?? 'Failed to revoke API key');
+			throw new Error(err.message ?? "Failed to revoke API key");
 		}
 		throw err;
 	}
