@@ -226,6 +226,16 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: "/providers", permission: "providers:operate", methods: ["POST"] },
 	{ pattern: /^\/providers\/[^/]+$/, permission: "providers:read", methods: ["GET"] },
 	{ pattern: /^\/providers\/[^/]+$/, permission: "providers:operate", methods: ["PATCH", "PUT", "DELETE"] },
+	// Skills
+	{ pattern: "/skills", permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/skills\/[^/]+$/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/skills", permission: "projects:update", methods: ["POST"] },
+	{ pattern: /^\/skills\/[^/]+$/, permission: "projects:update", methods: ["PUT", "DELETE"] },
+	{ pattern: /^\/agents\/[^/]+\/skills/, permission: "team:read", methods: ["GET"] },
+	{ pattern: /^\/agents\/[^/]+\/skills/, permission: "team:write", methods: ["POST", "DELETE"] },
+	{ pattern: /^\/projects\/[^/]+\/skills/, permission: "projects:read", methods: ["GET"] },
+	{ pattern: /^\/projects\/[^/]+\/skills/, permission: "projects:update", methods: ["POST", "DELETE"] },
+
 	{ pattern: "/config/status", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/planner/providers", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/providers/test", permission: "providers:operate", methods: ["POST"] },
@@ -406,7 +416,11 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: "/policy", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/policy/", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/provider-ops", permission: "control-plane:operate", methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
-	{ pattern: "/provider-ops/", permission: "control-plane:operate", methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+	{
+		pattern: "/provider-ops/",
+		permission: "control-plane:operate",
+		methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+	},
 	{ pattern: "/queue-health", permission: "control-plane:read", methods: ["GET"] },
 
 	// Top-level SSE event stream
