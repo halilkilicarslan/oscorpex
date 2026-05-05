@@ -124,7 +124,9 @@ export async function resolveBinaryPath(binary: string): Promise<string | null> 
 		});
 		binaryPathCache.set(binary, result);
 		return result;
-	} catch {
+	} catch (err) {
+		// Binary not found on PATH — this is expected when a provider is not installed
+		log.warn({ err, binary }, "[preflight-warmup] binary not found on PATH");
 		binaryPathCache.set(binary, null);
 		return null;
 	}

@@ -40,13 +40,13 @@ export async function insertEvent(
 }
 
 export async function getEvent(eventId: string): Promise<StudioEvent | null> {
-	const row = await queryOne<any>("SELECT * FROM events WHERE id = $1", [eventId]);
+	const row = await queryOne<Record<string, unknown>>("SELECT * FROM events WHERE id = $1", [eventId]);
 	if (!row) return null;
 	return rowToEvent(row);
 }
 
 export async function listEvents(projectId: string, limit = 100, offset = 0): Promise<StudioEvent[]> {
-	const rows = await query<any>(
+	const rows = await query<Record<string, unknown>>(
 		"SELECT * FROM events WHERE project_id = $1 ORDER BY timestamp DESC LIMIT $2 OFFSET $3",
 		[projectId, limit, offset],
 	);
@@ -54,7 +54,7 @@ export async function listEvents(projectId: string, limit = 100, offset = 0): Pr
 }
 
 export async function countEvents(projectId: string): Promise<number> {
-	const rows = await query<any>("SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1", [projectId]);
+	const rows = await query<{ cnt: string }>("SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1", [projectId]);
 	return Number(rows[0]?.cnt ?? 0);
 }
 
@@ -88,15 +88,19 @@ export async function listChatMessages(projectId: string, agentId?: string, limi
 	const conditions = ["project_id = $1"];
 	const values: unknown[] = [projectId];
 	if (agentId) {
-		conditions.push(`agent_id = $2`);
+		conditions.push("agent_id = $2");
 		values.push(agentId);
 	}
 	values.push(limit);
 	const limitParam = `$${values.length}`;
-	const rows = await query<any>(
-		`SELECT * FROM chat_messages WHERE ${conditions.join(" AND ")} ORDER BY created_at LIMIT ${limitParam}`,
-		values,
-	);
+	const rows = await query<{
+		id: string;
+		project_id: string;
+		role: string;
+		content: string;
+		agent_id: string | null;
+		created_at: string;
+	}>(`SELECT * FROM chat_messages WHERE ${conditions.join(" AND ")} ORDER BY created_at LIMIT ${limitParam}`, values);
 	return rows.map((row) => ({
 		id: row.id,
 		projectId: row.project_id,

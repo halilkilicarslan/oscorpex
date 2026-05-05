@@ -38,7 +38,6 @@ export class ExecutionRecovery {
 		// is exactly one.
 		const runningProjects = await getRunningProjectsWithPlans();
 		for (const { project, plan, phases } of runningProjects) {
-
 			if (!plan || plan.status !== "approved") continue;
 
 			let hasRecovered = false;
@@ -64,7 +63,7 @@ export class ExecutionRecovery {
 			if (hasRecovered) {
 				log.info(`[execution-recovery] Recovering project "${project.name}" — restarting execution`);
 				this._startProjectExecution(project.id).catch((err) => {
-					log.error(`[execution-recovery] Recovery failed for "${project.name}":` + " " + String(err));
+					log.error(`[execution-recovery] Recovery failed for "${project.name}": ${String(err)}`);
 				});
 			}
 
@@ -79,7 +78,7 @@ export class ExecutionRecovery {
 							const fresh = await getTask(task.id);
 							if (fresh) {
 								this._executeTask(project.id, fresh).catch((err) =>
-									log.warn("[execution-recovery] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+									log.warn(`[execution-recovery] Non-blocking operation failed: ${String(err?.message ?? err)}`),
 								);
 							}
 						} catch (e) {
@@ -99,7 +98,7 @@ export class ExecutionRecovery {
 						`[execution-recovery] Recovery: ${ready.length} orphaned ready task(s) in phase "${phase.name}" — dispatching`,
 					);
 					Promise.allSettled(ready.map((task: Task) => this._executeTask(project.id, task))).catch((err) =>
-						log.warn("[execution-recovery] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+						log.warn(`[execution-recovery] Non-blocking operation failed: ${String(err?.message ?? err)}`),
 					);
 				}
 
@@ -126,7 +125,7 @@ export class ExecutionRecovery {
 					const ready = await taskEngine().getReadyTasks(phase.id);
 					if (ready.length > 0) {
 						Promise.allSettled(ready.map((task: Task) => this._executeTask(project.id, task))).catch((err) =>
-							log.warn("[execution-recovery] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+							log.warn(`[execution-recovery] Non-blocking operation failed: ${String(err?.message ?? err)}`),
 						);
 					}
 				}
@@ -163,8 +162,9 @@ export class ExecutionRecovery {
 		// 3. Stop any app services (vite, next dev, etc.) spawned for the project
 		try {
 			await stopApp(projectId);
-		} catch {
-			/* non-critical */
+		} catch (err) {
+			// Non-critical — app may already be stopped or never started
+			log.warn({ err }, "[execution-recovery] stopApp failed during pipeline pause (non-critical)");
 		}
 
 		// 4. Reset running tasks back to queued so they re-run on resume
@@ -175,7 +175,7 @@ export class ExecutionRecovery {
 					await updateTask(task.id, { status: "queued", startedAt: null as unknown as string });
 					log.info(`[execution-recovery] Task "${task.title}" → queued (pipeline paused)`);
 				} catch (err) {
-					log.warn(`[execution-recovery] Task reset failed: ${task.id}` + " " + String(err));
+					log.warn(`[execution-recovery] Task reset failed: ${task.id} ${String(err)}`);
 				}
 			}
 		}
@@ -205,10 +205,7 @@ function isDeadlockError(err: unknown): boolean {
 // runStartupRecoveryWithRetry
 // ---------------------------------------------------------------------------
 
-export async function runStartupRecoveryWithRetry(
-	recovery: ExecutionRecovery,
-	maxAttempts = 3,
-): Promise<void> {
+export async function runStartupRecoveryWithRetry(recovery: ExecutionRecovery, maxAttempts = 3): Promise<void> {
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
 			await recovery.recoverStuckTasks();

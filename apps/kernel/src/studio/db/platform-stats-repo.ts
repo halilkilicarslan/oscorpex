@@ -49,9 +49,51 @@ export interface PlatformStats {
 	}>;
 }
 
+interface ProjectStatsRow {
+	total: string;
+	active: string;
+	completed: string;
+	failed: string;
+}
+
+interface TaskStatsRow {
+	total: string;
+	done: string;
+	running: string;
+	failed: string;
+	queued: string;
+}
+
+interface CostStatsRow {
+	total_cost: string;
+	total_tokens: string;
+	cache_read: string;
+	cache_creation: string;
+	active_agents: string;
+}
+
+interface RecentProjectRow {
+	id: string;
+	name: string;
+	status: string;
+	description: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+interface RecentTaskRow {
+	id: string;
+	title: string;
+	status: string;
+	assigned_agent: string | null;
+	complexity: string | null;
+	completed_at: string | null;
+	project_name: string;
+}
+
 export async function getPlatformStats(): Promise<PlatformStats> {
 	const [projectStats, taskStats, costStats, recentProjects, recentTasks] = await Promise.all([
-		queryOne<any>(`
+		queryOne<ProjectStatsRow>(`
 			SELECT
 				COUNT(*) AS total,
 				COUNT(*) FILTER (WHERE status = 'active' OR status = 'planning' OR status = 'executing') AS active,
@@ -59,7 +101,7 @@ export async function getPlatformStats(): Promise<PlatformStats> {
 				COUNT(*) FILTER (WHERE status = 'failed') AS failed
 			FROM projects
 		`),
-		queryOne<any>(`
+		queryOne<TaskStatsRow>(`
 			SELECT
 				COUNT(*) AS total,
 				COUNT(*) FILTER (WHERE status = 'done') AS done,
@@ -68,7 +110,7 @@ export async function getPlatformStats(): Promise<PlatformStats> {
 				COUNT(*) FILTER (WHERE status = 'queued' OR status = 'assigned') AS queued
 			FROM tasks
 		`),
-		queryOne<any>(`
+		queryOne<CostStatsRow>(`
 			SELECT
 				COALESCE(SUM(cost_usd), 0) AS total_cost,
 				COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens), 0) AS total_tokens,
@@ -77,11 +119,11 @@ export async function getPlatformStats(): Promise<PlatformStats> {
 				COUNT(DISTINCT agent_id) AS active_agents
 			FROM token_usage
 		`),
-		query<any>(`
+		query<RecentProjectRow>(`
 			SELECT id, name, status, description, created_at, updated_at
 			FROM projects ORDER BY updated_at DESC LIMIT 5
 		`),
-		query<any>(`
+		query<RecentTaskRow>(`
 			SELECT t.id, t.title, t.status, t.assigned_agent, t.complexity, t.completed_at, p.name AS project_name
 			FROM tasks t
 			JOIN phases ph ON ph.id = t.phase_id
@@ -118,7 +160,7 @@ export async function getPlatformStats(): Promise<PlatformStats> {
 			cacheRate: Math.round(cacheRate * 1000) / 10,
 			activeAgents: Number(costStats?.active_agents ?? 0),
 		},
-		recentProjects: recentProjects.map((r: any) => ({
+		recentProjects: recentProjects.map((r) => ({
 			id: r.id,
 			name: r.name,
 			status: r.status,
@@ -126,7 +168,7 @@ export async function getPlatformStats(): Promise<PlatformStats> {
 			createdAt: r.created_at,
 			updatedAt: r.updated_at,
 		})),
-		recentTasks: recentTasks.map((r: any) => ({
+		recentTasks: recentTasks.map((r) => ({
 			id: r.id,
 			title: r.title,
 			status: r.status,
@@ -182,6 +224,77 @@ export interface PlatformAnalytics {
 	costByModel: Array<{ model: string; calls: number; cost: number; tokens: number }>;
 }
 
+interface AnalyticsTotalsRow {
+	total_projects: string;
+	total_tasks: string;
+	tasks_done: string;
+	tasks_failed: string;
+	unique_agents: string;
+	avg_task_min: string;
+	total_cost: string;
+	cache_read: string;
+	total_tokens: string;
+	total_events: string;
+	total_errors: string;
+	active_days: string;
+}
+
+interface AgentUsageRow {
+	agent_name: string;
+	role: string;
+	task_count: string;
+}
+
+interface DailyActivityRow {
+	date: unknown;
+	events: string;
+	errors: string;
+	completions: string;
+}
+
+interface HourlyPatternRow {
+	hour: string;
+	count: string;
+}
+
+interface ProjectActivityRow {
+	project_name: string;
+	project_id: string;
+	status: string;
+	events: string;
+	active_days: string;
+}
+
+interface FileActivityRow {
+	file: string;
+	count: string;
+}
+
+interface ComplexityDistRow {
+	complexity: string;
+	count: string;
+}
+
+interface EventTypeRow {
+	type: string;
+	count: string;
+}
+
+interface ErrorRateRow {
+	project_name: string;
+	project_id: string;
+	errors: string;
+	total: string;
+	error_rate: string;
+}
+
+interface CostByModelRow {
+	model: string;
+	calls: string;
+	cost: string;
+	tokens: string;
+}
+
 export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
 	const [
 		totalsRow,
@@ -196,7 +309,7 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
 		costByModel,
 	] = await Promise.all([
 		// Totals
-		queryOne<any>(`
+		queryOne<AnalyticsTotalsRow>(`
 			SELECT
 				(SELECT COUNT(*) FROM projects) AS total_projects,
 				(SELECT COUNT(*) FROM tasks) AS total_tasks,
@@ -213,7 +326,7 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
 				(SELECT COUNT(DISTINCT DATE(timestamp::timestamptz)) FROM events) AS active_days
 		`),
 		// Agent usage (like tool usage)
-		query<any>(`
+		query<AgentUsageRow>(`
 			SELECT COALESCE(pa.name, t.assigned_agent) AS agent_name,
 				COALESCE(pa.role, 'unknown') AS role,
 				COUNT(t.id) AS task_count
@@ -224,7 +337,7 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
 			ORDER BY task_count DESC LIMIT 12
 		`),
 		// Daily activity (like sessionsByDate)
-		query<any>(`
+		query<DailyActivityRow>(`
 			SELECT DATE(timestamp::timestamptz) AS date, COUNT(*) AS events,
 				COUNT(*) FILTER (WHERE type LIKE '%failed%') AS errors,
 				COUNT(*) FILTER (WHERE type = 'task:completed') AS completions
@@ -233,12 +346,12 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
 			ORDER BY date DESC LIMIT 30
 		`),
 		// Hourly pattern (like hourlyPattern)
-		query<any>(`
+		query<HourlyPatternRow>(`
 			SELECT EXTRACT(HOUR FROM timestamp::timestamptz) AS hour, COUNT(*) AS count
 			FROM events GROUP BY hour ORDER BY hour
 		`),
 		// Project activity (like projectActivity)
-		query<any>(`
+		query<ProjectActivityRow>(`
 			SELECT p.name AS project_name, p.id AS project_id, p.status,
 				COUNT(e.id) AS events,
 				COUNT(DISTINCT DATE(e.timestamp::timestamptz)) AS active_days
@@ -248,24 +361,24 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
 			ORDER BY events DESC LIMIT 10
 		`),
 		// Hot files (like fileActivity) — from task_diffs
-		query<any>(`
+		query<FileActivityRow>(`
 			SELECT file_path AS file, COUNT(*) AS count
 			FROM task_diffs
 			GROUP BY file_path ORDER BY count DESC LIMIT 15
 		`),
 		// Complexity distribution (like explore vs execute)
-		query<any>(`
+		query<ComplexityDistRow>(`
 			SELECT complexity, COUNT(*) AS count FROM tasks
 			WHERE complexity IS NOT NULL
 			GROUP BY complexity ORDER BY count DESC
 		`),
 		// Event types (like eventTypes)
-		query<any>(`
+		query<EventTypeRow>(`
 			SELECT type, COUNT(*) AS count FROM events
 			GROUP BY type ORDER BY count DESC LIMIT 15
 		`),
 		// Error rates by project (like errorRates)
-		query<any>(`
+		query<ErrorRateRow>(`
 			SELECT p.name AS project_name, p.id AS project_id,
 				COUNT(*) FILTER (WHERE e.type LIKE '%failed%') AS errors,
 				COUNT(*) AS total,
@@ -279,7 +392,7 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
 			ORDER BY error_rate DESC
 		`),
 		// Cost by model (like MCP tools breakdown)
-		query<any>(`
+		query<CostByModelRow>(`
 			SELECT model, COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost,
 				COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens
 			FROM token_usage
@@ -288,7 +401,7 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
 		`),
 	]);
 
-	const t = totalsRow ?? {};
+	const t = totalsRow ?? ({} as Partial<AnalyticsTotalsRow>);
 	const totalTasks = Number(t.total_tasks ?? 0);
 	const tasksDone = Number(t.tasks_done ?? 0);
 	const tasksFailed = Number(t.tasks_failed ?? 0);
@@ -314,13 +427,13 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
 			errorRate: totalEvents > 0 ? Math.round((totalErrors / totalEvents) * 1000) / 10 : 0,
 			activeDays: Number(t.active_days ?? 0),
 		},
-		agentUsage: agentUsage.map((r: any) => ({
+		agentUsage: agentUsage.map((r) => ({
 			agent: r.agent_name,
 			role: r.role,
 			count: Number(r.task_count),
 		})),
 		dailyActivity: dailyActivity
-			.map((r: any) => ({
+			.map((r) => ({
 				date: r.date,
 				events: Number(r.events),
 				errors: Number(r.errors),
@@ -328,36 +441,36 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
 			}))
 			.reverse(),
 		hourlyPattern: Array.from({ length: 24 }, (_, i) => {
-			const found = hourlyPattern.find((r: any) => Number(r.hour) === i);
+			const found = hourlyPattern.find((r) => Number(r.hour) === i);
 			return { hour: i, count: found ? Number(found.count) : 0 };
 		}),
-		projectActivity: projectActivity.map((r: any) => ({
+		projectActivity: projectActivity.map((r) => ({
 			projectName: r.project_name,
 			projectId: r.project_id,
 			status: r.status,
 			events: Number(r.events),
 			activeDays: Number(r.active_days),
 		})),
-		fileActivity: fileActivity.map((r: any) => ({
+		fileActivity: fileActivity.map((r) => ({
 			file: r.file,
 			count: Number(r.count),
 		})),
-		complexityDistribution: complexityDist.map((r: any) => ({
+		complexityDistribution: complexityDist.map((r) => ({
 			complexity: r.complexity,
 			count: Number(r.count),
 		})),
-		eventTypes: eventTypes.map((r: any) => ({
+		eventTypes: eventTypes.map((r) => ({
 			type: r.type,
 			count: Number(r.count),
 		})),
-		errorRates: errorRates.map((r: any) => ({
+		errorRates: errorRates.map((r) => ({
 			projectName: r.project_name,
 			projectId: r.project_id,
 			errors: Number(r.errors),
 			total: Number(r.total),
 			errorRate: Number(r.error_rate),
 		})),
-		costByModel: costByModel.map((r: any) => ({
+		costByModel: costByModel.map((r) => ({
 			model: r.model,
 			calls: Number(r.calls),
 			cost: Math.round(Number(r.cost) * 1000) / 1000,

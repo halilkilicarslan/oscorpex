@@ -8,9 +8,9 @@ import { getTask } from "./db.js";
 import { getProjectIdForTaskViaJoin } from "./db.js";
 import { createLogger } from "./logger.js";
 import { TaskApprovalManager } from "./task/approval-service.js";
-import { PhaseProgressTracker } from "./task/task-progress-service.js";
 import { TaskReviewManager } from "./task/review-loop-service.js";
 import { TaskLifecycle } from "./task/task-lifecycle-service.js";
+import { PhaseProgressTracker } from "./task/task-progress-service.js";
 import type { Phase, Task, TaskOutput } from "./types.js";
 
 const log = createLogger("task-engine");
@@ -34,9 +34,8 @@ class TaskEngine {
 		// Wire sub-modules — callbacks break circular dependencies at construction time
 		this.approval = new TaskApprovalManager(this._getProjectIdForTask.bind(this));
 
-		this.review = new TaskReviewManager(
-			this._notifyCompleted.bind(this),
-			(phaseId, projectId) => this.progress.checkAndAdvancePhase(phaseId, projectId),
+		this.review = new TaskReviewManager(this._notifyCompleted.bind(this), (phaseId, projectId) =>
+			this.progress.checkAndAdvancePhase(phaseId, projectId),
 		);
 
 		this.progress = new PhaseProgressTracker();
@@ -66,8 +65,9 @@ class TaskEngine {
 		for (const cb of this.completionCallbacks) {
 			try {
 				cb(taskId, projectId);
-			} catch {
-				/* callback hatası pipeline'ı durdurmamalı */
+			} catch (err) {
+				// Callback errors must not stop the pipeline
+				log.warn({ err }, "[task-engine] completion callback threw — continuing");
 			}
 		}
 	}

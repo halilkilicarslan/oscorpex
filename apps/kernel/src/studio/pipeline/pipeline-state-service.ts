@@ -121,8 +121,9 @@ export class PipelineStateManager {
 			try {
 				await advanceStageFn(projectId);
 				pipelineState = await this.getPipelineState(projectId);
-			} catch {
-				// status sorgusu sırasında hata olursa sessizce devam et
+			} catch (err) {
+				// Stage advance during status query — non-fatal, return current state
+				log.warn({ err }, "[pipeline-state-service] advanceStage failed during status enrichment");
 			}
 		}
 

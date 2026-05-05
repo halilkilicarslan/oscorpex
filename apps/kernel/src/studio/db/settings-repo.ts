@@ -26,16 +26,27 @@ export interface ProjectSetting {
 
 /** Get all settings for a project, optionally filtered by category. */
 export async function getProjectSettings(projectId: string, category?: string): Promise<ProjectSetting[]> {
-	let rows: any[];
+	interface ProjectSettingRow {
+		id: string;
+		project_id: string;
+		category: string;
+		key: string;
+		value: string;
+		updated_at: string;
+	}
+	let rows: ProjectSettingRow[];
 	if (category) {
-		rows = await query<any>(
+		rows = await query<ProjectSettingRow>(
 			"SELECT * FROM project_settings WHERE project_id = $1 AND category = $2 ORDER BY category, key",
 			[projectId, category],
 		);
 	} else {
-		rows = await query<any>("SELECT * FROM project_settings WHERE project_id = $1 ORDER BY category, key", [projectId]);
+		rows = await query<ProjectSettingRow>(
+			"SELECT * FROM project_settings WHERE project_id = $1 ORDER BY category, key",
+			[projectId],
+		);
 	}
-	return rows.map((r: any) => ({
+	return rows.map((r) => ({
 		id: r.id,
 		projectId: r.project_id,
 		category: r.category,
@@ -47,7 +58,7 @@ export async function getProjectSettings(projectId: string, category?: string): 
 
 /** Get a single setting value. Returns undefined if not set. */
 export async function getProjectSetting(projectId: string, category: string, key: string): Promise<string | undefined> {
-	const row = await queryOne<any>(
+	const row = await queryOne<{ value: string }>(
 		"SELECT value FROM project_settings WHERE project_id = $1 AND category = $2 AND key = $3",
 		[projectId, category, key],
 	);

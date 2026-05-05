@@ -237,7 +237,7 @@ export async function runTestGate(
 		});
 	} catch (err: any) {
 		exitCode = err.status ?? 1;
-		rawOutput = (err.stdout ?? "") + "\n" + (err.stderr ?? "");
+		rawOutput = `${err.stdout ?? ""}\n${err.stderr ?? ""}`;
 	}
 
 	const counts = parseTestCounts(rawOutput);
@@ -287,8 +287,9 @@ export async function runTestGate(
 			total: counts.total,
 			rawOutput: rawOutput.slice(0, 10_000), // cap storage
 		});
-	} catch {
-		// Non-blocking — don't fail the gate on persistence error
+	} catch (err) {
+		// Non-blocking — test gate result must not fail because of a persistence error
+		log.warn({ err }, "[test-gate] saveTestResult failed (non-blocking)");
 	}
 
 	const failureHint = firstMeaningfulOutputLine(rawOutput);

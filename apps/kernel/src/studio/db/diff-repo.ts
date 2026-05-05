@@ -95,15 +95,26 @@ export async function insertTaskDiffs(
 	return diffs.length;
 }
 
+interface TaskDiffRow {
+	id: string;
+	task_id: string;
+	file_path: string;
+	diff_content: string;
+	diff_type: "created" | "modified" | "deleted";
+	lines_added: string;
+	lines_removed: string;
+	created_at: string;
+}
+
 export async function getTaskDiffs(taskId: string): Promise<TaskDiff[]> {
-	const rows = await query<any>("SELECT * FROM task_diffs WHERE task_id = $1 ORDER BY file_path", [taskId]);
+	const rows = await query<TaskDiffRow>("SELECT * FROM task_diffs WHERE task_id = $1 ORDER BY file_path", [taskId]);
 	return rows.map(rowToTaskDiff);
 }
 
 export async function getTaskDiffSummary(
 	taskId: string,
 ): Promise<{ totalFiles: number; linesAdded: number; linesRemoved: number }> {
-	const row = await query<any>(
+	const row = await query<{ total_files: string; lines_added: string; lines_removed: string }>(
 		`SELECT COUNT(*) AS total_files,
 		        COALESCE(SUM(lines_added), 0) AS lines_added,
 		        COALESCE(SUM(lines_removed), 0) AS lines_removed
