@@ -2,52 +2,54 @@
 // Oscorpex — Studio API barrel export
 // ---------------------------------------------------------------------------
 
-export type { PaginatedResult } from './base.js';
-export * from './base.js';
-export * from './types.js';
-export * from './projects.js';
-export * from './plans.js';
-export * from './tasks.js';
-export * from './agents.js';
-export * from './chat.js';
-export * from './pipeline.js';
-export * from './messaging.js';
-export * from './analytics.js';
-export * from './providers.js';
-export * from './settings.js';
-export * from './git.js';
-export * from './app-runner.js';
-export * from './work-items.js';
-export * from './misc.js';
-export * from './auth.js';
-export * from './notifications.js';
-export * from './tests.js';
-export * from './templates.js';
-export * from './ci.js';
-export * from './collaboration.js';
-export * from './marketplace.js';
-export * from './telemetry.js';
+export type { PaginatedResult } from "./base.js";
+export * from "./base.js";
+export * from "./types.js";
+export * from "./projects.js";
+export * from "./plans.js";
+export * from "./tasks.js";
+export * from "./agents.js";
+export * from "./chat.js";
+export * from "./pipeline.js";
+export * from "./messaging.js";
+export * from "./analytics.js";
+export * from "./providers.js";
+export * from "./settings.js";
+export * from "./git.js";
+export * from "./app-runner.js";
+export * from "./work-items.js";
+export * from "./misc.js";
+export * from "./auth.js";
+export * from "./notifications.js";
+export * from "./tests.js";
+export * from "./templates.js";
+export * from "./ci.js";
+export * from "./collaboration.js";
+export * from "./marketplace.js";
+export * from "./telemetry.js";
 // v7.0: Agentic Platform API
-export * from './agentic.js';
-export * from './quality-gates.js';
+export * from "./agentic.js";
+export * from "./quality-gates.js";
 export {
 	registerArtifact,
 	verifyArtifact,
 	rejectArtifact,
 	supersedeArtifact,
 	getArtifacts,
-} from './artifacts.js';
+} from "./artifacts.js";
 export {
 	getPendingApprovals,
 	approveApproval,
 	rejectApproval,
 	getBlockingGates,
 	getApprovalArtifactCompleteness,
-} from './approvals.js';
+} from "./approvals.js";
 export {
 	evaluateRelease,
 	applyManualOverride,
 	triggerRollback,
-} from './releases.js';
+} from "./releases.js";
 // v8.1: Task Session Inspector
-export * from './inspector.js';
+export * from "./inspector.js";
+// v8.2: Skills management
+export * from "./skills.js";

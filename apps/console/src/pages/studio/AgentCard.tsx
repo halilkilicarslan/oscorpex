@@ -1,31 +1,22 @@
-import { memo, useState, useEffect, useRef, useCallback } from 'react';
-import { useWsEventRefresh } from '../../hooks/useWsEventRefresh';
+import { Clock, Loader2, MessageSquare, Pencil, Play, Square, Terminal, Trash2 } from "lucide-react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import AgentAvatar from "../../components/AgentAvatar";
+import AgentSkillBadges from "../../components/AgentSkillBadges";
+import { useWsEventRefresh } from "../../hooks/useWsEventRefresh";
+import type { ProjectAgent } from "../../lib/studio-api";
 import {
-	Play,
-	Square,
-	Loader2,
-	Terminal,
-	Pencil,
-	Trash2,
-	Clock,
-	MessageSquare,
-} from 'lucide-react';
-import type { ProjectAgent } from '../../lib/studio-api';
-import AgentAvatar from '../../components/AgentAvatar';
-import {
-	startAgentProcess,
-	stopAgentProcess,
-	getAgentStatus,
-	getAgentRunHistory,
-	fetchUnreadCount,
 	type AgentProcessInfo,
 	type AgentRunHistory,
+	fetchUnreadCount,
+	getAgentRunHistory,
+	getAgentStatus,
 	roleLabel,
-} from '../../lib/studio-api';
-import { AGENT_CARD_WS_EVENTS, STATUS_STYLES, type RuntimeStatus } from './agent-card/index.js';
-import HistoryPanel from './agent-card/history-panel.js';
-import SkillsList from './agent-card/skills-list.js';
-import EmbeddedTerminal from './agent-card/embedded-terminal.js';
+	startAgentProcess,
+	stopAgentProcess,
+} from "../../lib/studio-api";
+import EmbeddedTerminal from "./agent-card/embedded-terminal.js";
+import HistoryPanel from "./agent-card/history-panel.js";
+import { AGENT_CARD_WS_EVENTS, type RuntimeStatus, STATUS_STYLES } from "./agent-card/index.js";
 
 function AgentCard({
 	agent,
@@ -57,13 +48,9 @@ function AgentCard({
 	const historyRef = useRef<HTMLDivElement>(null);
 	const [unreadCount, setUnreadCount] = useState(0);
 
-	const status = actionLoading
-		? externalStatus === 'running'
-			? 'stopping'
-			: 'starting'
-		: externalStatus;
+	const status = actionLoading ? (externalStatus === "running" ? "stopping" : "starting") : externalStatus;
 	const s = STATUS_STYLES[status] ?? STATUS_STYLES.idle;
-	const isRunning = externalStatus === 'running';
+	const isRunning = externalStatus === "running";
 
 	const handleAction = async () => {
 		setActionLoading(true);
@@ -135,8 +122,8 @@ function AgentCard({
 				setShowHistory(false);
 			}
 		};
-		document.addEventListener('mousedown', handler);
-		return () => document.removeEventListener('mousedown', handler);
+		document.addEventListener("mousedown", handler);
+		return () => document.removeEventListener("mousedown", handler);
 	}, [showHistory]);
 
 	const handleToggleHistory = useCallback(async () => {
@@ -158,14 +145,11 @@ function AgentCard({
 
 	return (
 		<div
-			className={`bg-[#111111] border border-[#262626] border-l-4 rounded-xl overflow-hidden ${onClick ? 'hover:border-[#333] transition-colors' : ''}`}
-			style={{ borderLeftColor: agent.color ?? '#22c55e' }}
+			className={`bg-[#111111] border border-[#262626] border-l-4 rounded-xl overflow-hidden ${onClick ? "hover:border-[#333] transition-colors" : ""}`}
+			style={{ borderLeftColor: agent.color ?? "#22c55e" }}
 		>
 			{/* Kart ana satırı */}
-			<div
-				className={`flex items-center gap-3 px-4 py-3 ${onClick ? 'cursor-pointer' : ''}`}
-				onClick={onClick}
-			>
+			<div className={`flex items-center gap-3 px-4 py-3 ${onClick ? "cursor-pointer" : ""}`} onClick={onClick}>
 				{/* Avatar */}
 				<div className="relative shrink-0">
 					<AgentAvatar avatar={agent.avatar} name={agent.name} size="lg" />
@@ -174,7 +158,7 @@ function AgentCard({
 							className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-[#ef4444] text-[#fafafa] text-[8px] font-bold flex items-center justify-center leading-none"
 							title={`${unreadCount} okunmamış mesaj`}
 						>
-							{unreadCount > 9 ? '9+' : unreadCount}
+							{unreadCount > 9 ? "9+" : unreadCount}
 						</span>
 					)}
 				</div>
@@ -187,11 +171,11 @@ function AgentCard({
 						<span
 							className={`text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0 ${
 								agent.sourceAgentId
-									? 'bg-[#a3a3a3]/10 text-[#525252] border border-[#333]'
-									: 'bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20'
+									? "bg-[#a3a3a3]/10 text-[#525252] border border-[#333]"
+									: "bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20"
 							}`}
 						>
-							{agent.sourceAgentId ? 'Template' : 'Custom'}
+							{agent.sourceAgentId ? "Template" : "Custom"}
 						</span>
 					</div>
 					<div className="flex items-center gap-2">
@@ -237,7 +221,7 @@ function AgentCard({
 						<button
 							onClick={handleToggleHistory}
 							className={`p-1.5 rounded-lg transition-colors text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1f1f1f] ${
-								showHistory ? 'bg-[#1f1f1f] text-[#a3a3a3]' : ''
+								showHistory ? "bg-[#1f1f1f] text-[#a3a3a3]" : ""
 							}`}
 							title="Run history"
 						>
@@ -257,7 +241,7 @@ function AgentCard({
 						<button
 							onClick={() => setShowTerminal(!showTerminal)}
 							className={`p-1.5 rounded-lg text-[#525252] hover:text-[#22c55e] hover:bg-[#1f1f1f] transition-colors ${
-								showTerminal ? 'bg-[#1f1f1f] text-[#22c55e]' : ''
+								showTerminal ? "bg-[#1f1f1f] text-[#22c55e]" : ""
 							}`}
 							title="Terminal aç/kapat"
 						>
@@ -270,11 +254,9 @@ function AgentCard({
 						onClick={handleAction}
 						disabled={actionLoading}
 						className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
-							isRunning
-								? 'text-[#ef4444] hover:bg-[#ef4444]/10'
-								: 'text-[#22c55e] hover:bg-[#22c55e]/10'
+							isRunning ? "text-[#ef4444] hover:bg-[#ef4444]/10" : "text-[#22c55e] hover:bg-[#22c55e]/10"
 						}`}
-						title={isRunning ? 'Durdur' : 'Başlat'}
+						title={isRunning ? "Durdur" : "Başlat"}
 					>
 						{actionLoading ? (
 							<Loader2 size={14} className="animate-spin" />
@@ -287,7 +269,9 @@ function AgentCard({
 				</div>
 			</div>
 
-			<SkillsList skills={agent.skills} />
+			<div className="px-4 pb-3" onClick={(e) => e.stopPropagation()}>
+				<AgentSkillBadges agentId={agent.id} agentRole={agent.role} />
+			</div>
 
 			<EmbeddedTerminal
 				projectId={projectId}
