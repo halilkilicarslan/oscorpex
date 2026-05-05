@@ -10,5 +10,6 @@ export type {
 	EnvVarRequirement,
 	FrameworkDetection,
 	FrameworkType,
+	ProjectType,
 	RuntimeRequirements,
 } from "./runtime-analyzer/types.js";

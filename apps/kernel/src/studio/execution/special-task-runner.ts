@@ -7,8 +7,9 @@ import { startApp } from "../app-runner.js";
 import { getLatestPlan, listPhases, updateProject } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
+import { analyzeProject } from "../runtime-analyzer.js";
 import { taskEngine } from "../task-engine.js";
-import { runIntegrationTest } from "../task-runners.js";
+import { runCliDemo, runIntegrationTest } from "../task-runners.js";
 import type { Project, Task, TaskOutput } from "../types.js";
 
 const log = createLogger("special-task-runner");
@@ -38,13 +39,23 @@ export async function executeSpecialTask(
 			termLog("[task-executor] Running integration tests...");
 			output = await runIntegrationTest(projectId, project.repoPath, termLog, task);
 		} else {
+			// run-app task
 			termLog("[task-executor] Starting application...");
-			const result = await startApp(projectId, project.repoPath, termLog);
-			output = {
-				filesCreated: [],
-				filesModified: [],
-				logs: [`Started ${result.services.length} service(s). Preview: ${result.previewUrl}`],
-			};
+
+			const analysis = analyzeProject(project.repoPath);
+			if (analysis.projectType === "cli" || analysis.services.length === 0) {
+				// CLI Demo modu — web servisi bulunmayan ya da açıkça CLI tipi projeler
+				termLog("[task-executor] CLI project detected — running guided demo");
+				output = await runCliDemo(project.repoPath, task, termLog);
+			} else {
+				// Web uygulaması modu
+				const result = await startApp(projectId, project.repoPath, termLog);
+				output = {
+					filesCreated: [],
+					filesModified: [],
+					logs: [`Started ${result.services.length} service(s). Preview: ${result.previewUrl}`],
+				};
+			}
 		}
 
 		await taskEngine().completeTask(task.id, output, { executionRepoPath: project.repoPath });

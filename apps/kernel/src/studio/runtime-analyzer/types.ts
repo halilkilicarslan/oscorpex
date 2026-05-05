@@ -4,6 +4,8 @@
 
 export type DatabaseType = "postgresql" | "mysql" | "mongodb" | "redis" | "sqlite";
 
+export type ProjectType = "web" | "cli" | "library" | "unknown";
+
 export interface DetectedDatabase {
 	type: DatabaseType;
 	/** Docker image (ör. postgres:16-alpine) */
@@ -90,6 +92,8 @@ export interface RuntimeRequirements {
 	hasStudioConfig: boolean;
 	/** docker-compose.yml mevcut mu */
 	hasDockerCompose: boolean;
+	/** Proje tipi (web / cli / library / unknown) */
+	projectType: ProjectType;
 }
 
 /** Framework algılama sonucu (internal) */

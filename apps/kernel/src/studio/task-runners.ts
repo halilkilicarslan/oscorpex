@@ -203,3 +203,96 @@ function extractCliCommands(description: string): string[] {
 	}
 	return commands;
 }
+
+/**
+ * CLI projesini derler ve görev açıklamasındaki demo komutlarını çalıştırır.
+ * Web servisi bulunmayan (CLI araç) projelerde run-app task'ı için kullanılır.
+ */
+export async function runCliDemo(repoPath: string, task: Task, onLog: (msg: string) => void): Promise<TaskOutput> {
+	const { execSync } = await import("node:child_process");
+	const { readFile } = await import("node:fs/promises");
+	const { join } = await import("node:path");
+
+	const logs: string[] = [];
+	const emit = (msg: string) => {
+		logs.push(msg);
+		onLog(msg);
+	};
+
+	// Adım 1: Projeyi derle
+	emit("[cli-demo] Building project...");
+	const buildCommands = ["npm run build", "pnpm build", "npx tsc"];
+	let built = false;
+	for (const cmd of buildCommands) {
+		try {
+			execSync(cmd, { cwd: repoPath, timeout: 60_000, encoding: "utf8", stdio: "pipe" });
+			emit(`[cli-demo] Build successful: ${cmd}`);
+			built = true;
+			break;
+		} catch {
+			// Sonraki build komutunu dene
+		}
+	}
+	if (!built) {
+		emit("[cli-demo] No build step needed or build failed — continuing with source files");
+	}
+
+	// Adım 2: Demo komutlarını belirle
+	let demoCommands = extractCliCommands(task.description ?? "");
+
+	// Açıklamada komut yoksa package.json'daki bin alanından türet
+	if (demoCommands.length === 0) {
+		try {
+			const pkgRaw = await readFile(join(repoPath, "package.json"), "utf8");
+			const pkg = JSON.parse(pkgRaw) as {
+				name?: string;
+				bin?: string | Record<string, string>;
+			};
+			if (pkg.bin) {
+				const binName =
+					typeof pkg.bin === "string" ? (pkg.name ?? "app") : (Object.keys(pkg.bin)[0] ?? pkg.name ?? "app");
+				demoCommands = [`npx ${binName} --help`];
+				emit(`[cli-demo] Inferred demo command from package.json bin: npx ${binName} --help`);
+			}
+		} catch {
+			// package.json okunamazsa sessizce devam et
+		}
+	}
+
+	if (demoCommands.length === 0) {
+		emit("[cli-demo] No demo commands found in task description or package.json");
+		return { filesCreated: [], filesModified: [], logs };
+	}
+
+	// Adım 3: Demo komutlarını çalıştır
+	emit(`[cli-demo] Running ${demoCommands.length} demo command(s)...`);
+	const results: { cmd: string; output: string; success: boolean }[] = [];
+
+	for (const cmd of demoCommands) {
+		emit(`\n$ ${cmd}`);
+		try {
+			const cmdOutput = execSync(cmd, {
+				cwd: repoPath,
+				timeout: 30_000,
+				encoding: "utf8",
+				stdio: "pipe",
+			});
+			const trimmed = cmdOutput.trim().slice(0, 2000);
+			emit(trimmed);
+			results.push({ cmd, output: trimmed, success: true });
+		} catch (err) {
+			const raw =
+				err instanceof Error
+					? ((err as NodeJS.ErrnoException & { stderr?: string }).stderr ?? err.message)
+					: String(err);
+			const detail = String(raw).slice(0, 300);
+			emit(`ERROR: ${detail}`);
+			results.push({ cmd, output: detail, success: false });
+		}
+	}
+
+	const passed = results.filter((r) => r.success).length;
+	emit(`\n[cli-demo] Results: ${passed}/${results.length} commands succeeded`);
+
+	return { filesCreated: [], filesModified: [], logs };
+}

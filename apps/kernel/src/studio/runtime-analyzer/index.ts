@@ -8,9 +8,68 @@ import { createLogger } from "../logger.js";
 import { detectDatabasesFromCompose, detectDatabasesFromEnv } from "./db-detection.js";
 import { loadExistingEnv, parseEnvExample } from "./env-detection.js";
 import { detectFramework, detectPort } from "./framework-detection.js";
-import type { DetectedService, RuntimeRequirements } from "./types.js";
+import type { DetectedService, ProjectType, RuntimeRequirements } from "./types.js";
 
 const log = createLogger("runtime-analyzer");
+
+function detectProjectType(repoPath: string, services: DetectedService[]): ProjectType {
+	// Check package.json
+	const pkgPath = join(repoPath, "package.json");
+	try {
+		const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+
+		// CLI indicators
+		if (pkg.bin) return "cli";
+		if (pkg.keywords?.some((k: string) => ["cli", "command-line", "terminal"].includes(k))) return "cli";
+
+		// Library indicators
+		if (pkg.main && !pkg.scripts?.start && !pkg.scripts?.dev) return "library";
+		if (pkg.types || pkg.typings) {
+			if (!pkg.scripts?.start && !pkg.scripts?.dev) return "library";
+		}
+
+		// Web indicators (from detected services)
+		if (services.length > 0) return "web";
+
+		// Check for web frameworks in dependencies
+		const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+		const webFrameworks = [
+			"express",
+			"fastify",
+			"koa",
+			"hono",
+			"next",
+			"nuxt",
+			"react",
+			"vue",
+			"angular",
+			"svelte",
+			"django",
+			"flask",
+			"rails",
+		];
+		if (webFrameworks.some((fw) => allDeps?.[fw])) return "web";
+
+		// Check scripts for CLI patterns
+		const startScript: string = pkg.scripts?.start ?? "";
+		if (startScript.includes("node ") || startScript.includes("tsx ") || startScript.includes("ts-node ")) {
+			// Has a start script but no web framework → likely CLI
+			if (!webFrameworks.some((fw) => allDeps?.[fw])) return "cli";
+		}
+	} catch {
+		// No package.json — check for other indicators
+	}
+
+	// Python CLI detection
+	const pyproject = join(repoPath, "pyproject.toml");
+	const setupPy = join(repoPath, "setup.py");
+	try {
+		const content = readFileSync(existsSync(pyproject) ? pyproject : setupPy, "utf8");
+		if (content.includes("[project.scripts]") || content.includes("console_scripts")) return "cli";
+	} catch {}
+
+	return services.length > 0 ? "web" : "unknown";
+}
 
 /**
  * Proje dizinini analiz ederek tüm çalıştırma gereksinimlerini döndürür.
@@ -144,6 +203,7 @@ export function analyzeProject(repoPath: string): RuntimeRequirements {
 		hasDockerCompose: ["docker-compose.yml", "docker-compose.yaml", "compose.yml"].some((f) =>
 			existsSync(join(repoPath, f)),
 		),
+		projectType: detectProjectType(repoPath, services),
 	};
 }
 
