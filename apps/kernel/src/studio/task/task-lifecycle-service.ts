@@ -4,6 +4,7 @@
 // markTaskDone, beginExecution.
 // ---------------------------------------------------------------------------
 
+import { classifyRisk } from "../agent-runtime/agent-constraints.js";
 import {
 	getProject,
 	getTask,
@@ -14,7 +15,6 @@ import {
 	updateProject,
 	updateTask,
 } from "../db.js";
-import { classifyRisk } from "../agent-runtime/agent-constraints.js";
 import { taskNeedsApprovalFromEdges } from "../edge-hooks.js";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
@@ -23,10 +23,10 @@ import type { Task, TaskOutput } from "../types.js";
 import type { TaskApprovalManager } from "./approval-service.js";
 import { shouldRequireApproval } from "./approval-service.js";
 import type { TaskReviewManager } from "./review-loop-service.js";
-import type { PhaseProgressTracker } from "./task-progress-service.js";
-import { applyZeroFileGuard } from "./zero-file-guard.js";
 import { checkSubtaskRollup } from "./subtask-rollup-service.js";
 import { fireTaskCompletionEffects } from "./task-completion-effects.js";
+import type { PhaseProgressTracker } from "./task-progress-service.js";
+import { applyZeroFileGuard } from "./zero-file-guard.js";
 
 const log = createLogger("task-lifecycle");
 
@@ -107,7 +107,7 @@ export class TaskLifecycle {
 				await updateTask(taskId, { riskLevel });
 			}
 		} catch (err) {
-			log.warn("[task-lifecycle] Risk classification failed (non-blocking):" + " " + String(err));
+			log.warn(`[task-lifecycle] Risk classification failed (non-blocking): ${String(err)}`);
 		}
 
 		// v3.7: Policy enforcement — governance rules can block or warn before execution.
@@ -146,47 +146,50 @@ export class TaskLifecycle {
 				log.warn(`[task-lifecycle] Task ${taskId} policy warnings: ${policyResult.violations.join("; ")}`);
 			}
 		} catch (err) {
-			log.warn("[task-lifecycle] evaluatePolicies failed (non-blocking):" + " " + String(err));
+			log.warn(`[task-lifecycle] evaluatePolicies failed (non-blocking): ${String(err)}`);
 		}
 
 		// Human-in-the-Loop: Onay kontrolü — budget kontrolünden önce yapılır
 		// v3.1: Incoming "approval" edge on the agent also forces human approval
-		const edgeRequiresApproval = await taskNeedsApprovalFromEdges(projectId, task);
-		const needsApproval =
-			task.requiresApproval || (await shouldRequireApproval(projectId, task)) || edgeRequiresApproval;
+		// v8.2: Once approved, never re-evaluate — prevents approval→execute→waiting_approval loop
 		const alreadyApproved = task.approvalStatus === "approved";
-		if (needsApproval && !alreadyApproved) {
-			// Task'ı waiting_approval durumuna al ve kullanıcıdan onay iste
-			const waiting = (await updateTask(taskId, {
-				status: "waiting_approval",
-				startedAt: new Date().toISOString(),
-				requiresApproval: true,
-				approvalStatus: "pending",
-			}))!;
-			await releaseTaskClaim(taskId);
+		if (!alreadyApproved) {
+			const edgeRequiresApproval = await taskNeedsApprovalFromEdges(projectId, task);
+			const needsApproval =
+				task.requiresApproval || (await shouldRequireApproval(projectId, task)) || edgeRequiresApproval;
+			if (needsApproval) {
+				// Task'ı waiting_approval durumuna al ve kullanıcıdan onay iste
+				const waiting = (await updateTask(taskId, {
+					status: "waiting_approval",
+					startedAt: new Date().toISOString(),
+					requiresApproval: true,
+					approvalStatus: "pending",
+				}))!;
+				await releaseTaskClaim(taskId);
 
-			eventBus.emit({
-				projectId,
-				type: "task:approval_required",
-				taskId,
-				payload: {
-					title: task.title,
-					taskTitle: task.title,
-					agentName: task.assignedAgent,
-					complexity: task.complexity,
-					description: task.description,
-				},
-			});
+				eventBus.emit({
+					projectId,
+					type: "task:approval_required",
+					taskId,
+					payload: {
+						title: task.title,
+						taskTitle: task.title,
+						agentName: task.assignedAgent,
+						complexity: task.complexity,
+						description: task.description,
+					},
+				});
 
-			log.info(`[task-lifecycle] Task ${taskId} onay bekliyor: "${task.title}" (complexity: ${task.complexity})`);
-			return waiting;
-		}
+				log.info(`[task-lifecycle] Task ${taskId} onay bekliyor: "${task.title}" (complexity: ${task.complexity})`);
+				return waiting;
+			}
+		} // end if (!alreadyApproved)
 
 		// Budget limiti kontrolü — aşıldıysa task'ı blocked yap ve event emit et
 		const effectiveAgentId = task.assignedAgentId ?? task.assignedAgent;
 		const budgetStatus = await this.approval.checkProjectBudget(projectId, effectiveAgentId);
 
-		if (budgetStatus && budgetStatus.exceeded) {
+		if (budgetStatus?.exceeded) {
 			const blocked = (await updateTask(taskId, {
 				status: "failed",
 				error: budgetStatus.message,
@@ -360,7 +363,7 @@ export class TaskLifecycle {
 				return (await getTask(taskId))!;
 			}
 		} catch (err) {
-			log.warn("[task-lifecycle] Edge-type check failed in failTask:" + " " + String(err));
+			log.warn(`[task-lifecycle] Edge-type check failed in failTask: ${String(err)}`);
 		}
 
 		const updated = (await updateTask(taskId, { status: "failed", error }))!;
@@ -390,7 +393,7 @@ export class TaskLifecycle {
 				});
 			}
 		} catch (err) {
-			log.warn("[task-lifecycle] Auto work-item creation failed:" + " " + String(err));
+			log.warn(`[task-lifecycle] Auto work-item creation failed: ${String(err)}`);
 		}
 
 		// Only fail the phase when ALL tasks in it are terminal (done or failed).
