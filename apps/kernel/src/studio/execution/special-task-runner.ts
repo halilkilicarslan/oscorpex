@@ -36,7 +36,7 @@ export async function executeSpecialTask(
 
 		if (task.taskType === "integration-test") {
 			termLog("[task-executor] Running integration tests...");
-			output = await runIntegrationTest(projectId, project.repoPath, termLog);
+			output = await runIntegrationTest(projectId, project.repoPath, termLog, task);
 		} else {
 			termLog("[task-executor] Starting application...");
 			const result = await startApp(projectId, project.repoPath, termLog);

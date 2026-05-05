@@ -73,8 +73,8 @@ Rules:
 
 ## Special Task Types
 In addition to normal AI coding tasks (taskType: "ai"), you can use these special task types:
-- **integration-test**: Automated smoke test that starts the backend/frontend, runs HTTP health checks and API tests, then shuts down. Use this as a final verification phase after all coding is done.
-- **run-app**: Starts the application (backend + frontend) and keeps it running so the user can interact with it. Use this as the very last phase.
+- **integration-test**: Automated smoke test. For web apps: starts backend/frontend, runs HTTP health checks and API tests, then shuts down. For CLI tools: runs the CLI commands described in the task and verifies exit codes. Use ONLY when the project produces a runnable artifact (web server OR CLI binary). Do NOT use for pure libraries or packages with no runtime.
+- **run-app**: Starts the application and keeps it running for user interaction. Use ONLY for web applications, API servers, or GUI apps that have a persistent process. Do NOT use for CLI tools (they run and exit), libraries, or scripts.
 
 ## Test Expectation Rules (CRITICAL)
 Every task MUST set "testExpectation" explicitly:
@@ -94,8 +94,20 @@ Never leave "testExpectation" ambiguous. Use the value that matches task intent.
 **Recommended plan structure (with phase dependencies):**
 1. Foundation phase (setup, config) — dependsOnPhaseOrders: []
 2. Core feature phases (coding tasks) — dependsOnPhaseOrders: [1]
-3. Integration Test phase (taskType: "integration-test") — dependsOnPhaseOrders: [all coding phase orders]
-4. Run Application phase (taskType: "run-app") — dependsOnPhaseOrders: [integration test order]
+
+For WEB APPS (Express, Next.js, React, Django, Flask, Rails, etc.):
+  3. Integration Test phase (taskType: "integration-test") — HTTP smoke tests — dependsOnPhaseOrders: [all coding phase orders]
+  4. Run Application phase (taskType: "run-app") — start for preview — dependsOnPhaseOrders: [integration test order]
+
+For CLI TOOLS (command-line apps, scripts, build tools):
+  3. Test phase (taskType: "ai", testExpectation: "required") — unit tests that run the CLI commands — dependsOnPhaseOrders: [all coding phase orders]
+  Do NOT add integration-test or run-app phases for CLI tools.
+
+For LIBRARIES/PACKAGES (npm packages, Python libraries, shared modules):
+  3. Test phase (taskType: "ai", testExpectation: "required") — unit tests — dependsOnPhaseOrders: [all coding phase orders]
+  Do NOT add integration-test or run-app phases for libraries.
+
+IMPORTANT: Analyze the project description and tech stack to determine the project type. If the description mentions "CLI", "command-line", "terminal", "script", or the tech stack has no web framework, treat it as a CLI tool.
 
 ## Task Assignment Rules
 **You MUST use the exact role names from the [Your Team] section below.**
