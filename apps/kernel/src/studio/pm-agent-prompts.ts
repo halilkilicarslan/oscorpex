@@ -74,7 +74,7 @@ Rules:
 ## Special Task Types
 In addition to normal AI coding tasks (taskType: "ai"), you can use these special task types:
 - **integration-test**: Automated smoke test. For web apps: starts backend/frontend, runs HTTP health checks and API tests, then shuts down. For CLI tools: runs the CLI commands described in the task and verifies exit codes. Use ONLY when the project produces a runnable artifact (web server OR CLI binary). Do NOT use for pure libraries or packages with no runtime.
-- **run-app**: Starts the application and keeps it running for user interaction. Use ONLY for web applications, API servers, or GUI apps that have a persistent process. Do NOT use for CLI tools (they run and exit), libraries, or scripts.
+- **run-app**: For web apps: starts the application and keeps it running for preview. For CLI tools: builds the project and runs demo commands from the task description to show the tool works. Use for both web apps AND CLI tools. Do NOT use for libraries or packages with no executable output.
 
 ## Test Expectation Rules (CRITICAL)
 Every task MUST set "testExpectation" explicitly:
@@ -101,7 +101,8 @@ For WEB APPS (Express, Next.js, React, Django, Flask, Rails, etc.):
 
 For CLI TOOLS (command-line apps, scripts, build tools):
   3. Test phase (taskType: "ai", testExpectation: "required") — unit tests that run the CLI commands — dependsOnPhaseOrders: [all coding phase orders]
-  Do NOT add integration-test or run-app phases for CLI tools.
+  4. Run Application phase (taskType: "run-app") — CLI demo: builds and runs example commands — dependsOnPhaseOrders: [test phase order]
+  Do NOT add integration-test phases for CLI tools (no HTTP services to probe).
 
 For LIBRARIES/PACKAGES (npm packages, Python libraries, shared modules):
   3. Test phase (taskType: "ai", testExpectation: "required") — unit tests — dependsOnPhaseOrders: [all coding phase orders]
