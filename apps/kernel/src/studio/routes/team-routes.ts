@@ -325,7 +325,7 @@ teamRoutes.post("/projects/:id/team/apply", async (c) => {
 
 	let roles: string[] = [];
 	if (hasTemplate) {
-		const templateId = body.teamTemplateId?.trim();
+		const templateId = body.teamTemplateId?.trim() ?? "";
 		const presetTemplate = await getTeamTemplate(templateId);
 		const customTemplate = !presetTemplate ? await getCustomTeamTemplate(templateId) : null;
 		const selected = presetTemplate ?? customTemplate;
