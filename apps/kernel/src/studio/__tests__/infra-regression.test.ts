@@ -28,7 +28,7 @@ describe("EPIC 14 — Infra Regression Tests", () => {
 				const cfg = getDbPoolConfig();
 				expect(cfg.maxConnections).toBeGreaterThanOrEqual(1);
 			} finally {
-				if (original === undefined) delete process.env.OSCORPEX_DB_POOL_MAX;
+				if (original === undefined) process.env.OSCORPEX_DB_POOL_MAX = undefined;
 				else process.env.OSCORPEX_DB_POOL_MAX = original;
 			}
 		});
@@ -70,8 +70,13 @@ describe("EPIC 14 — Infra Regression Tests", () => {
 
 	describe("recovery behavior (smoke)", () => {
 		it("recoverStuckTasks is callable", async () => {
-			const { executionEngine } = await import("../execution-engine.js");
-			expect(typeof executionEngine.recoverStuckTasks).toBe("function");
+			const { initTaskEngine } = await import("../task-engine.js");
+			const { initPipelineEngine } = await import("../pipeline-engine.js");
+			const { executionEngine, initExecutionEngine } = await import("../execution-engine.js");
+			initTaskEngine();
+			initPipelineEngine();
+			initExecutionEngine();
+			expect(typeof executionEngine().recoverStuckTasks).toBe("function");
 		});
 	});
 
@@ -81,8 +86,13 @@ describe("EPIC 14 — Infra Regression Tests", () => {
 
 	describe("dispatch behavior (smoke)", () => {
 		it("dispatchReadyTasks exists on execution engine", async () => {
-			const { executionEngine } = await import("../execution-engine.js");
-			expect(executionEngine).toBeDefined();
+			const { executionEngine, initExecutionEngine } = await import("../execution-engine.js");
+			const { initTaskEngine } = await import("../task-engine.js");
+			const { initPipelineEngine } = await import("../pipeline-engine.js");
+			initTaskEngine();
+			initPipelineEngine();
+			initExecutionEngine();
+			expect(executionEngine()).toBeDefined();
 		});
 	});
 });

@@ -16,8 +16,12 @@ import {
 	updatePlanStatus,
 } from "../db.js";
 import { execute } from "../pg.js";
-import { pipelineEngine } from "../pipeline-engine.js";
+import { initPipelineEngine, pipelineEngine } from "../pipeline-engine.js";
+import { initTaskEngine } from "../task-engine.js";
 import type { AgentDependency, ProjectAgent } from "../types.js";
+
+initTaskEngine();
+initPipelineEngine();
 
 // ---- Fixture builders ------------------------------------------------------
 
@@ -175,26 +179,26 @@ describe("PipelineEngine — DB-backed lookups", () => {
 
 	it("findReviewerForAgent returns the reviewer linked via review dep", async () => {
 		const { project, dev, reviewer } = await setupProjectWithTeam();
-		const found = await pipelineEngine.findReviewerForAgent(project.id, dev.id);
+		const found = await pipelineEngine().findReviewerForAgent(project.id, dev.id);
 		expect(found?.id).toBe(reviewer.id);
 	});
 
 	it("findReviewerForAgent returns null when no review dep exists", async () => {
 		const { project, reviewer } = await setupProjectWithTeam();
 		// reviewer has no outgoing review dep
-		const found = await pipelineEngine.findReviewerForAgent(project.id, reviewer.id);
+		const found = await pipelineEngine().findReviewerForAgent(project.id, reviewer.id);
 		expect(found).toBeNull();
 	});
 
 	it("findDevForReviewer returns the dev linked via review dep", async () => {
 		const { project, dev, reviewer } = await setupProjectWithTeam();
-		const found = await pipelineEngine.findDevForReviewer(project.id, reviewer.id);
+		const found = await pipelineEngine().findDevForReviewer(project.id, reviewer.id);
 		expect(found?.id).toBe(dev.id);
 	});
 
 	it("findDevForReviewer returns null for agents with no incoming review dep", async () => {
 		const { project, dev } = await setupProjectWithTeam();
-		const found = await pipelineEngine.findDevForReviewer(project.id, dev.id);
+		const found = await pipelineEngine().findDevForReviewer(project.id, dev.id);
 		expect(found).toBeNull();
 	});
 
@@ -208,13 +212,13 @@ describe("PipelineEngine — DB-backed lookups", () => {
 			order: 1,
 			dependsOn: [],
 		});
-		const state = await pipelineEngine.buildPipeline(project.id);
+		const state = await pipelineEngine().buildPipeline(project.id);
 		expect(state.projectId).toBe(project.id);
 		expect(state.status).toBe("idle");
 		expect(state.stages.length).toBeGreaterThan(0);
 	});
 
 	it("buildPipeline throws when project is missing", async () => {
-		await expect(pipelineEngine.buildPipeline("nonexistent-project-id")).rejects.toThrow();
+		await expect(pipelineEngine().buildPipeline("nonexistent-project-id")).rejects.toThrow();
 	});
 });

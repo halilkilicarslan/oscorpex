@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { createPhase, createPlan, createProject, createTask, getProject, updatePlanStatus } from "../db.js";
 import { execute, query } from "../pg.js";
-import { taskEngine } from "../task-engine.js";
+import { initTaskEngine, taskEngine } from "../task-engine.js";
+
+initTaskEngine();
 
 // Skip entire suite if DB tables don't exist
 let dbReady = false;
@@ -57,23 +59,23 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 	describe("Task Lifecycle", () => {
 		it("should assign a queued task", async () => {
 			const { t1 } = await setupProjectWithPlan();
-			const updated = await taskEngine.assignTask(t1.id, "agent-123");
+			const updated = await taskEngine().assignTask(t1.id, "agent-123");
 			expect(updated.status).toBe("assigned");
 		});
 
 		it("should start an assigned task", async () => {
 			const { t1 } = await setupProjectWithPlan();
-			await taskEngine.assignTask(t1.id, "agent-123");
-			const updated = await taskEngine.startTask(t1.id);
+			await taskEngine().assignTask(t1.id, "agent-123");
+			const updated = await taskEngine().startTask(t1.id);
 			expect(updated.status).toBe("running");
 			expect(updated.startedAt).toBeTruthy();
 		});
 
 		it("should complete a running task", async () => {
 			const { t1 } = await setupProjectWithPlan();
-			await taskEngine.assignTask(t1.id, "agent-123");
-			await taskEngine.startTask(t1.id);
-			const updated = await taskEngine.completeTask(t1.id, {
+			await taskEngine().assignTask(t1.id, "agent-123");
+			await taskEngine().startTask(t1.id);
+			const updated = await taskEngine().completeTask(t1.id, {
 				filesCreated: ["src/index.ts"],
 				filesModified: [],
 				logs: ["done"],
@@ -85,28 +87,28 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 
 		it("should fail a running task", async () => {
 			const { t1 } = await setupProjectWithPlan();
-			await taskEngine.assignTask(t1.id, "agent-123");
-			await taskEngine.startTask(t1.id);
-			const updated = await taskEngine.failTask(t1.id, "compile error");
+			await taskEngine().assignTask(t1.id, "agent-123");
+			await taskEngine().startTask(t1.id);
+			const updated = await taskEngine().failTask(t1.id, "compile error");
 			expect(updated.status).toBe("failed");
 		});
 
 		it("should retry a failed task", async () => {
 			const { t1 } = await setupProjectWithPlan();
-			await taskEngine.assignTask(t1.id, "agent-123");
-			await taskEngine.startTask(t1.id);
-			await taskEngine.failTask(t1.id, "error");
-			const updated = await taskEngine.retryTask(t1.id);
+			await taskEngine().assignTask(t1.id, "agent-123");
+			await taskEngine().startTask(t1.id);
+			await taskEngine().failTask(t1.id, "error");
+			const updated = await taskEngine().retryTask(t1.id);
 			expect(updated.status).toBe("queued");
 			expect(updated.retryCount).toBe(1);
 		});
 
 		it("should retry a completed task back to queued", async () => {
 			const { t1 } = await setupProjectWithPlan();
-			await taskEngine.assignTask(t1.id, "agent-123");
-			await taskEngine.startTask(t1.id);
-			await taskEngine.completeTask(t1.id, { filesCreated: ["src/x.ts"], filesModified: [], logs: [] });
-			const updated = await taskEngine.retryTask(t1.id);
+			await taskEngine().assignTask(t1.id, "agent-123");
+			await taskEngine().startTask(t1.id);
+			await taskEngine().completeTask(t1.id, { filesCreated: ["src/x.ts"], filesModified: [], logs: [] });
+			const updated = await taskEngine().retryTask(t1.id);
 			expect(updated.status).toBe("queued");
 			expect(updated.retryCount).toBe(1);
 			expect(updated.completedAt).toBeUndefined();
@@ -115,13 +117,13 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 		it("should throw on invalid state transitions", async () => {
 			const { t1 } = await setupProjectWithPlan();
 			// Can't complete a queued task
-			await expect(taskEngine.completeTask(t1.id, { filesCreated: [], filesModified: [], logs: [] })).rejects.toThrow(
+			await expect(taskEngine().completeTask(t1.id, { filesCreated: [], filesModified: [], logs: [] })).rejects.toThrow(
 				"not running",
 			);
 			// Can't fail a queued task
-			await expect(taskEngine.failTask(t1.id, "err")).rejects.toThrow("cannot be failed");
+			await expect(taskEngine().failTask(t1.id, "err")).rejects.toThrow("cannot be failed");
 			// Can't retry a queued task
-			await expect(taskEngine.retryTask(t1.id)).rejects.toThrow("cannot be retried");
+			await expect(taskEngine().retryTask(t1.id)).rejects.toThrow("cannot be retried");
 		});
 	});
 
@@ -130,7 +132,7 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 	describe("Dependency Resolution", () => {
 		it("should return tasks with no dependencies as ready", async () => {
 			const { phase, t1 } = await setupProjectWithPlan();
-			const ready = await taskEngine.getReadyTasks(phase.id);
+			const ready = await taskEngine().getReadyTasks(phase.id);
 			expect(ready).toHaveLength(1);
 			expect(ready[0].id).toBe(t1.id);
 		});
@@ -139,17 +141,17 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 			const { phase, t1, t2 } = await setupProjectWithPlan();
 
 			// t2 depends on t1, so only t1 is ready
-			let ready = await taskEngine.getReadyTasks(phase.id);
+			let ready = await taskEngine().getReadyTasks(phase.id);
 			expect(ready).toHaveLength(1);
 			expect(ready[0].id).toBe(t1.id);
 
 			// Complete t1
-			await taskEngine.assignTask(t1.id, "agent-1");
-			await taskEngine.startTask(t1.id);
-			await taskEngine.completeTask(t1.id, { filesCreated: ["src/setup.ts"], filesModified: [], logs: [] });
+			await taskEngine().assignTask(t1.id, "agent-1");
+			await taskEngine().startTask(t1.id);
+			await taskEngine().completeTask(t1.id, { filesCreated: ["src/setup.ts"], filesModified: [], logs: [] });
 
 			// Now t2 should be ready
-			ready = await taskEngine.getReadyTasks(phase.id);
+			ready = await taskEngine().getReadyTasks(phase.id);
 			expect(ready).toHaveLength(1);
 			expect(ready[0].id).toBe(t2.id);
 		});
@@ -161,27 +163,27 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 		it("should detect phase completion", async () => {
 			const { phase, t1, t2 } = await setupProjectWithPlan();
 
-			expect(await taskEngine.isPhaseComplete(phase.id)).toBe(false);
+			expect(await taskEngine().isPhaseComplete(phase.id)).toBe(false);
 
 			// Complete both tasks
-			await taskEngine.assignTask(t1.id, "a1");
-			await taskEngine.startTask(t1.id);
-			await taskEngine.completeTask(t1.id, { filesCreated: ["src/setup.ts"], filesModified: [], logs: [] });
+			await taskEngine().assignTask(t1.id, "a1");
+			await taskEngine().startTask(t1.id);
+			await taskEngine().completeTask(t1.id, { filesCreated: ["src/setup.ts"], filesModified: [], logs: [] });
 
-			await taskEngine.assignTask(t2.id, "a2");
-			await taskEngine.startTask(t2.id);
-			await taskEngine.completeTask(t2.id, { filesCreated: ["src/config.ts"], filesModified: [], logs: [] });
+			await taskEngine().assignTask(t2.id, "a2");
+			await taskEngine().startTask(t2.id);
+			await taskEngine().completeTask(t2.id, { filesCreated: ["src/config.ts"], filesModified: [], logs: [] });
 
-			expect(await taskEngine.isPhaseComplete(phase.id)).toBe(true);
+			expect(await taskEngine().isPhaseComplete(phase.id)).toBe(true);
 		});
 
 		it("should detect phase failure", async () => {
 			const { phase, t1 } = await setupProjectWithPlan();
-			await taskEngine.assignTask(t1.id, "a1");
-			await taskEngine.startTask(t1.id);
-			await taskEngine.failTask(t1.id, "error");
+			await taskEngine().assignTask(t1.id, "a1");
+			await taskEngine().startTask(t1.id);
+			await taskEngine().failTask(t1.id, "error");
 
-			expect(await taskEngine.isPhaseFailed(phase.id)).toBe(true);
+			expect(await taskEngine().isPhaseFailed(phase.id)).toBe(true);
 		});
 	});
 
@@ -190,7 +192,7 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 	describe("Execution Flow", () => {
 		it("should begin execution and return ready tasks", async () => {
 			const { project } = await setupProjectWithPlan();
-			const readyTasks = await taskEngine.beginExecution(project.id);
+			const readyTasks = await taskEngine().beginExecution(project.id);
 			expect(readyTasks.length).toBeGreaterThan(0);
 
 			const proj = await getProject(project.id);
@@ -199,7 +201,7 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 
 		it("should throw if no approved plan", async () => {
 			const project = await createProject({ name: "No Plan", description: "", techStack: [], repoPath: "" });
-			await expect(taskEngine.beginExecution(project.id)).rejects.toThrow("no approved plan");
+			await expect(taskEngine().beginExecution(project.id)).rejects.toThrow("no approved plan");
 		});
 	});
 
@@ -208,9 +210,9 @@ describe.skipIf(!dbReady)("Task Engine", () => {
 	describe("Progress", () => {
 		it("should return progress summary", async () => {
 			const { project } = await setupProjectWithPlan();
-			await taskEngine.beginExecution(project.id);
+			await taskEngine().beginExecution(project.id);
 
-			const progress = await taskEngine.getProgress(project.id);
+			const progress = await taskEngine().getProgress(project.id);
 			expect(progress.phases).toHaveLength(1);
 			expect(progress.overall.total).toBe(2);
 			// t1 is queued (ready), t2 is queued (blocked)

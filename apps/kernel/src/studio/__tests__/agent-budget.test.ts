@@ -17,7 +17,9 @@ import {
 	updatePlanStatus,
 } from "../db.js";
 import { execute } from "../pg.js";
-import { taskEngine } from "../task-engine.js";
+import { initTaskEngine, taskEngine } from "../task-engine.js";
+
+initTaskEngine();
 
 // DB bağlantısı ve token_usage tablosu yoksa testleri atla
 const hasDb = await (async () => {
@@ -241,8 +243,8 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 				costUsd: 0.05,
 			});
 
-			await taskEngine.assignTask(task.id, agent.id);
-			const result = await taskEngine.startTask(task.id);
+			await taskEngine().assignTask(task.id, agent.id);
+			const result = await taskEngine().startTask(task.id);
 
 			// Task should be failed due to agent budget exceeded
 			expect(result.status).toBe("failed");
@@ -265,8 +267,8 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 				costUsd: 0.0001,
 			});
 
-			await taskEngine.assignTask(task.id, agent.id);
-			const result = await taskEngine.startTask(task.id);
+			await taskEngine().assignTask(task.id, agent.id);
+			const result = await taskEngine().startTask(task.id);
 
 			expect(result.status).toBe("running");
 		});
@@ -308,10 +310,10 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 
 			// Validate via the same db functions the endpoint uses
 			const settings = await getProjectSettingsMap(project.id);
-			const budgetSettings = settings["budget"] || {};
-			const maxCost = budgetSettings["maxCostUsd"] ? Number.parseFloat(budgetSettings["maxCostUsd"]) : null;
-			const agentMaxCost = budgetSettings["agent_max_cost_usd"]
-				? Number.parseFloat(budgetSettings["agent_max_cost_usd"])
+			const budgetSettings = settings.budget || {};
+			const maxCost = budgetSettings.maxCostUsd ? Number.parseFloat(budgetSettings.maxCostUsd) : null;
+			const agentMaxCost = budgetSettings.agent_max_cost_usd
+				? Number.parseFloat(budgetSettings.agent_max_cost_usd)
 				: null;
 
 			expect(maxCost).toBe(10);

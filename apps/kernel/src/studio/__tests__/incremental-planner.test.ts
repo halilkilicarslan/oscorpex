@@ -13,9 +13,10 @@ vi.mock("../event-bus.js", () => ({
 	eventBus: { emit: vi.fn() },
 }));
 
-vi.mock("../pipeline-engine.js", () => ({
-	pipelineEngine: { refreshPipeline: vi.fn() },
-}));
+vi.mock("../pipeline-engine.js", () => {
+	const instance = { refreshPipeline: vi.fn() };
+	return { pipelineEngine: () => instance };
+});
 
 import { createPhase, createTask, getLatestPlan, listProjectAgents, updateTask } from "../db.js";
 import { eventBus } from "../event-bus.js";
@@ -27,7 +28,7 @@ const mockCreatePhase = vi.mocked(createPhase);
 const mockCreateTask = vi.mocked(createTask);
 const mockListAgents = vi.mocked(listProjectAgents);
 const mockUpdateTask = vi.mocked(updateTask);
-const mockRefresh = vi.mocked(pipelineEngine.refreshPipeline);
+const mockRefresh = vi.mocked(pipelineEngine().refreshPipeline);
 const mockEmit = vi.mocked(eventBus.emit);
 
 function makeTask(overrides: Partial<Task> = {}): Task {

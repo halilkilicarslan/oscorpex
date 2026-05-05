@@ -21,8 +21,14 @@ import {
 	updateProject,
 	updateTask,
 } from "../db.js";
-import { executionEngine } from "../execution-engine.js";
+import { executionEngine, initExecutionEngine } from "../execution-engine.js";
 import { execute } from "../pg.js";
+import { initPipelineEngine } from "../pipeline-engine.js";
+import { initTaskEngine } from "../task-engine.js";
+
+initTaskEngine();
+initPipelineEngine();
+initExecutionEngine();
 
 describe("Execution Engine", () => {
 	beforeAll(async () => {
@@ -91,7 +97,7 @@ describe("Execution Engine", () => {
 				taskStatuses: ["running", "assigned"],
 			});
 
-			await executionEngine.recoverStuckTasks();
+			await executionEngine().recoverStuckTasks();
 
 			for (const t of tasks) {
 				const fresh = await getTask(t.id);
@@ -106,7 +112,7 @@ describe("Execution Engine", () => {
 				taskStatuses: ["running"],
 			});
 
-			await executionEngine.recoverStuckTasks();
+			await executionEngine().recoverStuckTasks();
 
 			const phases = await listPhases(plan.id);
 			const refreshed = phases.find((p) => p.id === phase.id);
@@ -121,7 +127,7 @@ describe("Execution Engine", () => {
 			// Intentionally mark phase completed + task queued (simulating a review
 			// task orphaned in a completed phase). recoverStuckTasks should not
 			// downgrade phase status, though it may dispatch the orphan.
-			await executionEngine.recoverStuckTasks();
+			await executionEngine().recoverStuckTasks();
 
 			const phases = await listPhases(plan.id);
 			const freshPhase = phases.find((p) => p.id === phase.id);
@@ -139,7 +145,7 @@ describe("Execution Engine", () => {
 			// Put the project into paused — recoverStuckTasks should skip it.
 			await updateProject(project.id, { status: "paused" });
 
-			await executionEngine.recoverStuckTasks();
+			await executionEngine().recoverStuckTasks();
 
 			const fresh = await getTask(tasks[0].id);
 			expect(fresh?.status).toBe("running"); // unchanged
@@ -155,7 +161,7 @@ describe("Execution Engine", () => {
 				taskStatuses: ["queued"],
 			});
 
-			const status = await executionEngine.getExecutionStatus(project.id);
+			const status = await executionEngine().getExecutionStatus(project.id);
 
 			expect(status.projectId).toBe(project.id);
 			expect(status.runtimes).toEqual([]);

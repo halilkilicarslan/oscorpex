@@ -21,9 +21,14 @@ import {
 	updatePlanStatus,
 	updateProject,
 } from "../db.js";
-import { executionEngine } from "../execution-engine.js";
+import { executionEngine, initExecutionEngine } from "../execution-engine.js";
 import { execute, query } from "../pg.js";
-import { taskEngine } from "../task-engine.js";
+import { initPipelineEngine } from "../pipeline-engine.js";
+import { initTaskEngine } from "../task-engine.js";
+
+initTaskEngine();
+initPipelineEngine();
+initExecutionEngine();
 
 // ---------------------------------------------------------------------------
 // Mock: CLI adapter — prevents real AI calls
@@ -264,7 +269,7 @@ async function waitUntil(assertion: () => Promise<void>, timeoutMs: number, inte
 
 async function runExecutionWithDoneRaceTolerance(projectId: string): Promise<void> {
 	try {
-		await executionEngine.startProjectExecution(projectId);
+		await executionEngine().startProjectExecution(projectId);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		// Task engine can surface a benign race in some runs: a retry path calls
@@ -477,7 +482,7 @@ describe.skipIf(!dbReady)("E2E Pipeline", { timeout: E2E_TEST_TIMEOUT_MS }, () =
 
 			// Phase 2 task should be done or at least started
 			// (parallel test suites may cause agent cleanup race conditions)
-			const task3 = await getTask(t3!.id);
+			const task3 = await getTask(t3?.id);
 			expect(["done", "running", "assigned"]).toContain(task3?.status);
 
 			// Phase 1 should be completed
@@ -485,7 +490,7 @@ describe.skipIf(!dbReady)("E2E Pipeline", { timeout: E2E_TEST_TIMEOUT_MS }, () =
 			expect(ph1[0]?.status).toBe("completed");
 
 			// Phase 2 should be at least running
-			const ph2 = await query("SELECT status FROM phases WHERE id = $1", [p2!.id]);
+			const ph2 = await query("SELECT status FROM phases WHERE id = $1", [p2?.id]);
 			expect(["running", "completed"]).toContain(ph2[0]?.status);
 		});
 
@@ -498,11 +503,11 @@ describe.skipIf(!dbReady)("E2E Pipeline", { timeout: E2E_TEST_TIMEOUT_MS }, () =
 			await runExecutionWithDoneRaceTolerance(project.id);
 
 			// Phase 2 task should never have started
-			const task3 = await getTask(t3!.id);
+			const task3 = await getTask(t3?.id);
 			expect(task3?.status).toBe("queued");
 
 			// Phase 2 should still be pending
-			const ph2 = await query("SELECT status FROM phases WHERE id = $1", [p2!.id]);
+			const ph2 = await query("SELECT status FROM phases WHERE id = $1", [p2?.id]);
 			expect(ph2[0]?.status).toBe("pending");
 		});
 	});
@@ -676,7 +681,7 @@ describe.skipIf(!dbReady)("E2E Pipeline", { timeout: E2E_TEST_TIMEOUT_MS }, () =
 			const { project } = await setupE2EProject();
 			getMockExecute().mockResolvedValue(cliSuccess(["src/index.ts"]));
 
-			await executionEngine.startProjectExecution(project.id);
+			await executionEngine().startProjectExecution(project.id);
 
 			// recordStep should be called for each task: action_executed, result_inspected, verification, test gate
 			expect(mockRecordStep).toHaveBeenCalled();

@@ -5,20 +5,26 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
-import { executionEngine } from "../execution-engine.js";
+import { executionEngine, initExecutionEngine } from "../execution-engine.js";
+import { initPipelineEngine } from "../pipeline-engine.js";
+import { initTaskEngine } from "../task-engine.js";
+
+initTaskEngine();
+initPipelineEngine();
+initExecutionEngine();
 
 describe("Execution Engine Telemetry Wiring", () => {
 	it("exposes a telemetry collector instance", () => {
-		expect(executionEngine.telemetry).toBeDefined();
-		expect(typeof executionEngine.telemetry.startExecution).toBe("function");
-		expect(typeof executionEngine.telemetry.finishExecution).toBe("function");
-		expect(typeof executionEngine.telemetry.getRecord).toBe("function");
-		expect(typeof executionEngine.telemetry.getRecentRecords).toBe("function");
-		expect(typeof executionEngine.telemetry.getLatencySnapshot).toBe("function");
+		expect(executionEngine().telemetry).toBeDefined();
+		expect(typeof executionEngine().telemetry.startExecution).toBe("function");
+		expect(typeof executionEngine().telemetry.finishExecution).toBe("function");
+		expect(typeof executionEngine().telemetry.getRecord).toBe("function");
+		expect(typeof executionEngine().telemetry.getRecentRecords).toBe("function");
+		expect(typeof executionEngine().telemetry.getLatencySnapshot).toBe("function");
 	});
 
 	it("latency snapshot returns valid shape even when empty", () => {
-		const snapshot = executionEngine.telemetry.getLatencySnapshot("claude-code");
+		const snapshot = executionEngine().telemetry.getLatencySnapshot("claude-code");
 		expect(snapshot).toHaveProperty("providerId", "claude-code");
 		expect(snapshot).toHaveProperty("totalExecutions");
 		expect(snapshot).toHaveProperty("successfulExecutions");
@@ -29,7 +35,7 @@ describe("Execution Engine Telemetry Wiring", () => {
 	});
 
 	it("getRecentRecords returns an array", () => {
-		const records = executionEngine.telemetry.getRecentRecords(10);
+		const records = executionEngine().telemetry.getRecentRecords(10);
 		expect(Array.isArray(records)).toBe(true);
 	});
 });

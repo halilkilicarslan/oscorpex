@@ -53,6 +53,7 @@ beforeAll(async () => {
 		console.error("[test setup] Failed to apply scripts/init.sql:", err);
 		throw err;
 	}
+
 });
 
 afterAll(async () => {

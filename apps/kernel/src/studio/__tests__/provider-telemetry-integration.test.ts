@@ -37,8 +37,14 @@ import {
 	updateProject,
 	updateTask,
 } from "../db.js";
-import { executionEngine } from "../execution-engine.js";
+import { executionEngine, initExecutionEngine } from "../execution-engine.js";
 import { execute, query } from "../pg.js";
+import { initPipelineEngine } from "../pipeline-engine.js";
+import { initTaskEngine } from "../task-engine.js";
+
+initTaskEngine();
+initPipelineEngine();
+initExecutionEngine();
 
 describe("Execution Engine Provider Telemetry", () => {
 	beforeEach(async () => {
@@ -56,7 +62,7 @@ describe("Execution Engine Provider Telemetry", () => {
 		// Cancel any tasks that might still be running from failed tests
 		const projects = await query<{ id: string }>("SELECT id FROM projects WHERE name LIKE 'PTel%'");
 		for (const row of projects) {
-			await executionEngine.cancelRunningTasks(row.id);
+			await executionEngine().cancelRunningTasks(row.id);
 		}
 	});
 
@@ -125,14 +131,14 @@ describe("Execution Engine Provider Telemetry", () => {
 			}),
 		});
 
-		await executionEngine.executeTask(project.id, task);
+		await executionEngine().executeTask(project.id, task);
 
-		const record = executionEngine.telemetry.getRecord(project.id, task.id);
+		const record = executionEngine().telemetry.getRecord(project.id, task.id);
 		expect(record).toBeDefined();
-		expect(record!.success).toBe(true);
-		expect(record!.primaryProvider).toBe("claude-code");
-		expect(record!.fallbackCount).toBe(0);
-		expect(record!.errorClassification).toBeUndefined();
+		expect(record?.success).toBe(true);
+		expect(record?.primaryProvider).toBe("claude-code");
+		expect(record?.fallbackCount).toBe(0);
+		expect(record?.errorClassification).toBeUndefined();
 	});
 
 	it("writes telemetry fallback when primary fails and secondary succeeds", async () => {
@@ -191,16 +197,16 @@ describe("Execution Engine Provider Telemetry", () => {
 			}),
 		});
 
-		await executionEngine.executeTask(project.id, task);
+		await executionEngine().executeTask(project.id, task);
 
-		const record = executionEngine.telemetry.getRecord(project.id, task.id);
+		const record = executionEngine().telemetry.getRecord(project.id, task.id);
 		expect(record).toBeDefined();
-		expect(record!.success).toBe(true);
-		expect(record!.fallbackCount).toBe(1);
-		expect(record!.fallbackTimeline).toHaveLength(1);
-		expect(record!.fallbackTimeline[0]!.fromProvider).toBe("claude-code");
-		expect(record!.fallbackTimeline[0]!.toProvider).toBe("cursor");
-		expect(record!.fallbackTimeline[0]!.errorClassification).toBe("cli_error");
+		expect(record?.success).toBe(true);
+		expect(record?.fallbackCount).toBe(1);
+		expect(record?.fallbackTimeline).toHaveLength(1);
+		expect(record?.fallbackTimeline[0]?.fromProvider).toBe("claude-code");
+		expect(record?.fallbackTimeline[0]?.toProvider).toBe("cursor");
+		expect(record?.fallbackTimeline[0]?.errorClassification).toBe("cli_error");
 	});
 
 	it("writes telemetry error when all adapters fail", async () => {
@@ -233,12 +239,12 @@ describe("Execution Engine Provider Telemetry", () => {
 			},
 		});
 
-		await executionEngine.executeTask(project.id, task);
+		await executionEngine().executeTask(project.id, task);
 
-		const record = executionEngine.telemetry.getRecord(project.id, task.id);
+		const record = executionEngine().telemetry.getRecord(project.id, task.id);
 		expect(record).toBeDefined();
-		expect(record!.success).toBe(false);
-		expect(record!.errorMessage).toContain("fail");
+		expect(record?.success).toBe(false);
+		expect(record?.errorMessage).toContain("fail");
 	});
 
 	it("writes telemetry cancel when task is cancelled mid-flight", async () => {
@@ -302,10 +308,10 @@ describe("Execution Engine Provider Telemetry", () => {
 			},
 		});
 
-		const execPromise = executionEngine.executeTask(project.id, task);
+		const execPromise = executionEngine().executeTask(project.id, task);
 		// Give executeTask time to reach the adapter and start telemetry
 		await new Promise((resolve) => setTimeout(resolve, 500));
-		await executionEngine.cancelRunningTasks(project.id);
+		await executionEngine().cancelRunningTasks(project.id);
 
 		try {
 			await execPromise;
@@ -313,11 +319,11 @@ describe("Execution Engine Provider Telemetry", () => {
 			// expected
 		}
 
-		const record = executionEngine.telemetry.getRecord(project.id, task.id);
+		const record = executionEngine().telemetry.getRecord(project.id, task.id);
 		expect(record).toBeDefined();
 		// Cancel audit may or may not be recorded depending on timing;
 		// the key requirement is that a record exists for the execution.
-		expect(record!.primaryProvider).toBe("claude-code");
+		expect(record?.primaryProvider).toBe("claude-code");
 	});
 
 	it("latency snapshot aggregates after multiple executions", async () => {
@@ -363,10 +369,10 @@ describe("Execution Engine Provider Telemetry", () => {
 				}),
 			});
 
-			await executionEngine.executeTask(project.id, task);
+			await executionEngine().executeTask(project.id, task);
 		}
 
-		const snapshot = executionEngine.telemetry.getLatencySnapshot("claude-code");
+		const snapshot = executionEngine().telemetry.getLatencySnapshot("claude-code");
 		// Snapshot includes executions from all tests sharing this engine instance
 		expect(snapshot.totalExecutions).toBeGreaterThanOrEqual(1);
 		expect(snapshot.averageLatencyMs).toBeGreaterThanOrEqual(0);
