@@ -13,12 +13,7 @@ import {
 	normalizeProviderPolicyProfile,
 	selectPrimaryProvider,
 } from "./provider-policy-profiles.js";
-import {
-	getDefaultRoutingConfig,
-	getModelContextLimit,
-	type Tier,
-	TIERS,
-} from "./providers/provider-model-catalog.js";
+import { TIERS, type Tier, getDefaultRoutingConfig, getModelContextLimit } from "./providers/provider-model-catalog.js";
 import {
 	effortForTier,
 	resolveEscalatedTier,
@@ -94,6 +89,22 @@ export async function resolveModel(
 
 	const routingConfig = { ...getDefaultRoutingConfig(), ...configOverrides };
 
+	// Token optimization: review tasks always use cheapest model (haiku)
+	// Reviews read and evaluate — they don't generate complex code, so expensive models waste tokens.
+	const isReviewTask = task.title?.startsWith("Code Review:") || task.assignedAgent?.includes("reviewer");
+	if (isReviewTask) {
+		const cheapModel = "claude-haiku-4-5-20251001";
+		log.info(`[model-router] ${task.id} → ${cheapModel} (review_task_downgrade, profile=${resolvedProfile})`);
+		return {
+			provider: "anthropic",
+			model: cheapModel,
+			effort: "low",
+			cliTool: cliTool ?? "claude-code",
+			decisionReason: `review_task_downgrade | profile=${resolvedProfile}`,
+			selectedProfile: resolvedProfile,
+		};
+	}
+
 	// 2. Determine base tier from task complexity
 	let baseTier: Tier = (task.complexity as Tier) ?? "M";
 	if (!TIERS.includes(baseTier)) {
@@ -137,7 +148,7 @@ export async function resolveModel(
 	}
 
 	// Default: anthropic / claude-code
-	const baseModel = routingConfig[tier] ?? routingConfig["M"] ?? "claude-sonnet-4-6";
+	const baseModel = routingConfig[tier] ?? routingConfig.M ?? "claude-sonnet-4-6";
 	const { model, reason } = selectCostAwareModel({
 		provider: "anthropic",
 		tier,

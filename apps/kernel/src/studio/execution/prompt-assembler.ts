@@ -7,16 +7,12 @@
 // Extracted from task-executor.ts — pure extraction, no behaviour changes.
 // ---------------------------------------------------------------------------
 
-import {
-	acknowledgeMessages,
-	initSession,
-	loadProtocolContext,
-} from "../agent-runtime/index.js";
+import { acknowledgeMessages, initSession, loadProtocolContext } from "../agent-runtime/index.js";
+import { updateTask } from "../db.js";
+import { eventBus } from "../event-bus.js";
 import { formatGoalPrompt, getGoalForTask } from "../goal-engine.js";
 import { createLogger } from "../logger.js";
 import { buildTaskPrompt } from "../prompt-builder.js";
-import { updateTask } from "../db.js";
-import { eventBus } from "../event-bus.js";
 import type { AgentConfig, Project, Task } from "../types.js";
 
 const log = createLogger("prompt-assembler");
@@ -69,7 +65,13 @@ export async function assemblePrompt(
 	try {
 		const sessionCtx = await initSession(projectId, agent.id, agent.role, task);
 		sessionId = sessionCtx.session.id;
-		promptSuffix += sessionCtx.behavioralPrompt;
+
+		// Token optimization: cap behavioral context to prevent prompt bloat
+		let behavioralSection = sessionCtx.behavioralPrompt;
+		if (behavioralSection.length > 2000) {
+			behavioralSection = `${behavioralSection.slice(0, 2000)}\n[...behavioral context truncated for token efficiency]`;
+		}
+		promptSuffix += behavioralSection;
 
 		// Strategy prompt addendum
 		if (sessionCtx.strategySelection.strategy.promptAddendum) {
@@ -96,25 +98,39 @@ export async function assemblePrompt(
 			return { prompt: "", sessionId, goalId: undefined, blocked: true };
 		}
 		if (protocolCtx.prompt) {
-			promptSuffix += protocolCtx.prompt;
+			// Token optimization: cap cross-agent context
+			let crossAgentSection = protocolCtx.prompt;
+			if (crossAgentSection.length > 1500) {
+				crossAgentSection = `${crossAgentSection.slice(0, 1500)}\n[...cross-agent context truncated]`;
+			}
+			promptSuffix += crossAgentSection;
 			await acknowledgeMessages(protocolCtx.messageIds);
 		}
 	} catch (err) {
-		log.warn("[prompt-assembler] Agent runtime init failed (non-blocking):" + " " + String(err));
+		log.warn(`[prompt-assembler] Agent runtime init failed (non-blocking): ${String(err)}`);
 	}
 
 	// --- Goal-based execution: inject goal prompt if task has an associated goal ---
 	try {
 		const goal = await getGoalForTask(task.id);
 		if (goal && goal.status !== "achieved") {
-			promptSuffix += "\n" + formatGoalPrompt(goal);
+			promptSuffix += `\n${formatGoalPrompt(goal)}`;
 			goalId = goal.id;
 		}
 	} catch (err) {
-		log.warn("[prompt-assembler] Goal lookup failed (non-blocking):" + " " + String(err));
+		log.warn(`[prompt-assembler] Goal lookup failed (non-blocking): ${String(err)}`);
 	}
 
 	const prompt = (await buildTaskPrompt(task, project, agent.role)) + promptSuffix;
+
+	log.info(
+		{
+			taskId: task.id,
+			promptLength: prompt.length,
+			estimatedTokens: Math.ceil(prompt.length / 4),
+		},
+		"[prompt-assembler] Prompt assembled",
+	);
 
 	return { prompt, sessionId, goalId, blocked: false };
 }
