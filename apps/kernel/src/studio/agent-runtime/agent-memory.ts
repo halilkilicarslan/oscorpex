@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { getBestStrategies, getFailureEpisodes, getRecentEpisodes } from "../db.js";
+import { sanitizeForPrompt } from "../learning-governance.js";
 import { createLogger } from "../logger.js";
 import type { AgentEpisode, AgentStrategyPattern } from "../types.js";
 const log = createLogger("agent-memory");
@@ -59,7 +60,10 @@ export function formatBehavioralPrompt(ctx: BehavioralContext): string {
 	if (ctx.failureLessons.length > 0) {
 		const lessons = ctx.failureLessons
 			.filter((e) => e.failureReason)
-			.map((e) => `- Strategy "${e.strategy}" on ${e.taskType}: FAILED — ${e.failureReason}`)
+			.map(
+				(e) =>
+					`- Strategy "${sanitizeForPrompt(e.strategy, 100)}" on ${e.taskType}: FAILED — ${sanitizeForPrompt(e.failureReason ?? "", 300)}`,
+			)
 			.join("\n");
 		if (lessons) {
 			sections.push(`## LESSONS FROM PAST FAILURES — AVOID THESE MISTAKES\n${lessons}`);
@@ -71,7 +75,7 @@ export function formatBehavioralPrompt(ctx: BehavioralContext): string {
 		const recs = ctx.bestStrategies
 			.map(
 				(p) =>
-					`- "${p.strategy}": ${(p.successRate * 100).toFixed(0)}% success rate (${p.sampleCount} samples${p.avgQuality != null ? `, avg quality ${p.avgQuality.toFixed(1)}` : ""})`,
+					`- "${sanitizeForPrompt(String(p.strategy), 100)}": ${(p.successRate * 100).toFixed(0)}% success rate (${p.sampleCount} samples${p.avgQuality != null ? `, avg quality ${p.avgQuality.toFixed(1)}` : ""})`,
 			)
 			.join("\n");
 		sections.push(`## RECOMMENDED STRATEGIES (ranked by success rate)\n${recs}`);

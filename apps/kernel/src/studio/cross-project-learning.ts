@@ -6,6 +6,7 @@
 
 import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "./db.js";
+import { detectPromptInjection, validatePatternContent } from "./learning-governance.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("cross-project-learning");
 
@@ -63,6 +64,15 @@ export async function upsertLearningPattern(params: {
 	successRate: number;
 	isGlobal?: boolean;
 }): Promise<LearningPattern> {
+	const validation = validatePatternContent(params.pattern);
+	if (!validation.valid && validation.score < 0.3) {
+		log.warn(
+			{ issues: validation.issues, score: validation.score },
+			"[cross-project-learning] Pattern rejected by governance",
+		);
+		throw new Error(`Pattern rejected: ${validation.issues.join("; ")}`);
+	}
+
 	const id = randomUUID();
 	const row = await queryOne(
 		`INSERT INTO learning_patterns (id, tenant_id, learning_type, task_type, agent_role, pattern, sample_count, success_rate, is_global)
@@ -175,6 +185,16 @@ export async function extractPatternsFromEpisodes(tenantId: string): Promise<num
 	);
 
 	for (const row of failureRows) {
+		const failureReason = row.failure_reason as string;
+		const injections = detectPromptInjection(failureReason);
+		if (injections.length > 0) {
+			log.warn(
+				{ injections, taskType: row.task_type },
+				"[cross-project-learning] Skipping episode with injected failure_reason",
+			);
+			continue;
+		}
+
 		await upsertLearningPattern({
 			tenantId,
 			learningType: "failure_signature",
@@ -200,6 +220,8 @@ export async function extractPatternsFromEpisodes(tenantId: string): Promise<num
 /**
  * v8.0: Auto-promote patterns that meet quality threshold.
  * Patterns with ≥10 samples and ≥70% success are automatically promoted to global.
+ * v8.2: Governance gate — each candidate is content-validated before promotion.
+ *       Patterns that fail (invalid content OR score < 0.5) are blocked and audited.
  */
 export async function autoPromotePatterns(tenantId: string): Promise<number> {
 	const candidates = await query(
@@ -211,6 +233,30 @@ export async function autoPromotePatterns(tenantId: string): Promise<number> {
 
 	let promoted = 0;
 	for (const row of candidates) {
+		// Fetch full pattern to run governance validation before promoting
+		const candidate = await queryOne("SELECT * FROM learning_patterns WHERE id = $1", [row.id as string]);
+		if (!candidate) continue;
+
+		const candidatePattern = (candidate.pattern as Record<string, unknown>) ?? {};
+		const validation = validatePatternContent(candidatePattern);
+		if (!validation.valid || validation.score < 0.5) {
+			log.warn(
+				{ patternId: candidate.id, issues: validation.issues, score: validation.score },
+				"[cross-project-learning] Pattern blocked from promotion — failed governance check",
+			);
+			const { eventBus } = await import("./event-bus.js");
+			eventBus.emit({
+				projectId: (candidate.tenant_id as string) ?? "global",
+				type: "learning:promotion_blocked" as any, // New event type — not yet in EventType union
+				payload: {
+					patternId: candidate.id,
+					reason: validation.issues.join("; "),
+					score: validation.score,
+				},
+			});
+			continue; // skip this pattern
+		}
+
 		const result = await promoteToGlobal(row.id as string);
 		if (result) promoted++;
 	}
@@ -228,12 +274,33 @@ export async function autoPromotePatterns(tenantId: string): Promise<number> {
 }
 
 export async function promoteToGlobal(patternId: string): Promise<LearningPattern | null> {
-	const pattern = await queryOne(`SELECT * FROM learning_patterns WHERE id = $1`, [patternId]);
+	const pattern = await queryOne("SELECT * FROM learning_patterns WHERE id = $1", [patternId]);
 	if (!pattern) return null;
 
+	// Governance gate: validate content before allowing manual promotion
+	const patternData = (pattern.pattern as Record<string, unknown>) ?? {};
+	const validation = validatePatternContent(patternData);
+	if (!validation.valid) {
+		log.warn(
+			{ patternId, issues: validation.issues },
+			"[cross-project-learning] Manual promotion blocked — pattern failed governance check",
+		);
+		const { eventBus } = await import("./event-bus.js");
+		eventBus.emit({
+			projectId: (pattern.tenant_id as string) ?? "global",
+			type: "learning:promotion_blocked" as any, // New event type — not yet in EventType union
+			payload: {
+				patternId,
+				reason: validation.issues.join("; "),
+				score: validation.score,
+			},
+		});
+		return null; // Return null to indicate promotion was blocked
+	}
+
 	// Anonymize: strip tenant_id, keep only aggregated metrics
-	const anonymized = (pattern.pattern as Record<string, unknown>) ?? {};
-	delete anonymized.tenantSpecific;
+	const anonymized = { ...patternData };
+	anonymized.tenantSpecific = undefined;
 
 	const globalPattern = await upsertLearningPattern({
 		tenantId: undefined,
