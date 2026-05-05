@@ -289,29 +289,83 @@ export class TaskExecutor {
 			// Sandbox pre-execution gate: in hard mode, verify tools before spawning CLI
 			enforceSandboxHardPreflight(sandboxPolicy, allowedTools);
 
-			const providerRun = await runProviderTask({
-				projectId,
-				task,
-				agent,
-				runtimeRepoPath,
-				prompt,
-				routedModel,
-				primaryCliTool,
-				allowedTools,
-				timeoutMs,
-				signal: taskController.signal,
-				queueWaitMs,
-				isColdStart,
-				sessionId,
-				telemetry: this.telemetry,
-				executeTask,
-				formatTaskLog,
-			});
-			if (providerRun.deferred) {
-				return;
+			// --- Container pool branch: route to Docker container if isolation=container and pool is ready ---
+			let containerResult: import("./provider-execution-service.js").NormalizedProviderResult | null = null;
+			if (sandboxPolicy?.isolationLevel === "container") {
+				try {
+					const { containerPool } = await import("../container-pool.js");
+					if (containerPool.isReady()) {
+						log.info({ taskId: task.id }, "[task-executor] Routing to container pool (isolation=container)");
+
+						const poolResult = await containerPool.executeTask(
+							projectId,
+							agent.id,
+							agent.name,
+							agent.role,
+							runtimeRepoPath,
+							{ taskId: task.id, prompt, timeout: timeoutMs },
+						);
+
+						containerResult = {
+							text: poolResult.output ?? "",
+							filesCreated: poolResult.filesCreated ?? [],
+							filesModified: poolResult.filesModified ?? [],
+							logs: poolResult.logs ?? [],
+							inputTokens: 0,
+							outputTokens: 0,
+							cacheCreationTokens: 0,
+							cacheReadTokens: 0,
+							costUsd: 0,
+							durationMs: 0,
+							model: "container",
+							provider: "container-pool",
+						};
+
+						log.info(
+							{
+								taskId: task.id,
+								files: containerResult.filesCreated.length + containerResult.filesModified.length,
+							},
+							"[task-executor] Container pool execution completed",
+						);
+					} else {
+						log.info({ taskId: task.id }, "[task-executor] Container pool not ready, falling back to CLI adapter");
+					}
+				} catch (err) {
+					log.warn(
+						{ err, taskId: task.id },
+						"[task-executor] Container pool execution failed, falling back to CLI adapter",
+					);
+				}
 			}
 
-			const cliResult = providerRun.result!;
+			let providerRun: import("./provider-task-runner.js").ProviderTaskRunResult | null = null;
+			if (!containerResult) {
+				providerRun = await runProviderTask({
+					projectId,
+					task,
+					agent,
+					runtimeRepoPath,
+					prompt,
+					routedModel,
+					primaryCliTool,
+					allowedTools,
+					timeoutMs,
+					signal: taskController.signal,
+					queueWaitMs,
+					isColdStart,
+					sessionId,
+					telemetry: this.telemetry,
+					executeTask,
+					formatTaskLog,
+				});
+				if (providerRun.deferred) {
+					return;
+				}
+			}
+
+			// biome-ignore lint/style/noNonNullAssertion: providerRun is non-null when containerResult is null (branch above guarantees it)
+			const cliResult = containerResult ?? providerRun!.result!;
 			lastFailureClassification = undefined;
 
 			const output = await buildTaskOutput(cliResult, runtimeRepoPath, isolatedWorkspace);

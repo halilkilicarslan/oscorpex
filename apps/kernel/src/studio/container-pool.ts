@@ -70,7 +70,6 @@ export function resolveNetworkMode(networkPolicy?: string): string {
 			return "none";
 		case "project_only":
 			return INTERNAL_NETWORK;
-		case "unrestricted":
 		default:
 			return INTERNAL_NETWORK;
 	}
@@ -239,6 +238,50 @@ class ContainerPool {
 		}
 	}
 
+	/**
+	 * Acquire an idle container for workspace use (e.g. execution-workspace binding).
+	 * Caller is responsible for calling releaseContainer() when done.
+	 */
+	async acquireContainer(taskId: string): Promise<PoolContainer | undefined> {
+		return this.acquire("workspace", "workspace-agent", taskId);
+	}
+
+	/** Release a workspace-bound container back to the pool */
+	releaseContainer(containerId: string): void {
+		this.release(containerId);
+	}
+
+	/**
+	 * Execute a command inside a container and return stdout as a string.
+	 * Uses array-based Cmd to prevent shell injection.
+	 */
+	async execInContainer(containerId: string, cmd: string[]): Promise<string> {
+		const container = this.docker.getContainer(containerId);
+		const exec = await container.exec({
+			Cmd: cmd,
+			AttachStdout: true,
+			AttachStderr: false,
+		});
+
+		return new Promise<string>((resolve, reject) => {
+			exec.start({ Detach: false, Tty: false }, (err: Error | null, stream: NodeJS.ReadableStream | undefined) => {
+				if (err) {
+					reject(err);
+					return;
+				}
+				if (!stream) {
+					resolve("");
+					return;
+				}
+
+				const chunks: Buffer[] = [];
+				stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+				stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+				stream.on("error", reject);
+			});
+		});
+	}
+
 	/** Create a new container and add to pool */
 	private async addContainer(): Promise<PoolContainer | undefined> {
 		const port = this.nextPort();
@@ -249,7 +292,7 @@ class ContainerPool {
 				Image: AGENT_IMAGE,
 				name,
 				ExposedPorts: { "9900/tcp": {} },
-				Env: [`WORKER_PORT=9900`, `WORKSPACE=/workspace`, `HOST_API=http://host.docker.internal:3141`],
+				Env: ["WORKER_PORT=9900", "WORKSPACE=/workspace", "HOST_API=http://host.docker.internal:3141"],
 				HostConfig: {
 					PortBindings: { "9900/tcp": [{ HostPort: String(port) }] },
 					Memory: parseMemoryLimit(this.config.memoryLimit),
@@ -505,9 +548,9 @@ class ContainerPool {
 		unhealthy: number;
 		containers: PoolContainer[];
 	} {
-		let ready = 0,
-			busy = 0,
-			unhealthy = 0;
+		let ready = 0;
+		let busy = 0;
+		let unhealthy = 0;
 		for (const c of this.containers.values()) {
 			if (c.status === "ready") ready++;
 			else if (c.status === "busy") busy++;
@@ -531,7 +574,7 @@ class ContainerPool {
 	async bindWorkspace(containerId: string, repoPath: string): Promise<void> {
 		// Validate repoPath to prevent command injection
 		if (!/^[a-zA-Z0-9/_.\-]+$/.test(repoPath)) {
-			throw new Error(`Invalid repoPath: contains unsafe characters`);
+			throw new Error("Invalid repoPath: contains unsafe characters");
 		}
 		// Docker doesn't support live mount changes, so we use a workaround:
 		// Copy the workspace content or use a shared volume
