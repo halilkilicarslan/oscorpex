@@ -11,6 +11,7 @@ import {
 	Settings2,
 	Smartphone,
 	Tablet,
+	Terminal,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -26,6 +27,11 @@ import RuntimePanel from "./RuntimePanel";
 
 type DeviceSize = "mobile" | "tablet" | "desktop";
 type ViewMode = "preview" | "api";
+
+type TerminalEntry = {
+	type: "cmd" | "output" | "error" | "info";
+	text: string;
+};
 
 const DEVICE_SIZES: Record<DeviceSize, { width: string; label: string; icon: React.ReactNode }> = {
 	mobile: { width: "375px", label: "Mobile", icon: <Smartphone size={14} /> },
@@ -53,6 +59,16 @@ export default function LivePreview({
 	const [isApiOnly, setIsApiOnly] = useState(false);
 	const apiDetectedOnce = useRef(false);
 
+	// Interactive terminal state
+	const [terminalHistory, setTerminalHistory] = useState<TerminalEntry[]>([]);
+	const [currentCmd, setCurrentCmd] = useState("");
+	const [executing, setExecuting] = useState(false);
+	const [terminalInfoLoaded, setTerminalInfoLoaded] = useState(false);
+	const [repoExists, setRepoExists] = useState(false);
+	const [repoCwd, setRepoCwd] = useState<string>("");
+	const terminalRef = useRef<HTMLDivElement>(null);
+	const inputRef = useRef<HTMLInputElement>(null);
+
 	// Fetch CLI demo logs when app is not running (CLI projects)
 	useEffect(() => {
 		if (appStatus.running) return;
@@ -67,6 +83,78 @@ export default function LivePreview({
 			})
 			.catch(() => {});
 	}, [projectId, appStatus.running]);
+
+	// Fetch terminal info (repo path existence) once
+	useEffect(() => {
+		if (terminalInfoLoaded) return;
+		fetch(`/api/studio/projects/${projectId}/terminal/info`)
+			.then((r) => r.json())
+			.then((data: { cwd?: string; exists?: boolean }) => {
+				setRepoExists(Boolean(data.exists));
+				setRepoCwd(data.cwd ?? "");
+				setTerminalInfoLoaded(true);
+			})
+			.catch(() => {
+				setTerminalInfoLoaded(true);
+			});
+	}, [projectId, terminalInfoLoaded]);
+
+	// Load CLI demo logs as initial terminal history (only once, when history is empty)
+	useEffect(() => {
+		if (cliDemoLogs.length === 0 || terminalHistory.length > 0) return;
+		setTerminalHistory(
+			cliDemoLogs.map(
+				(line): TerminalEntry => ({
+					type: line.startsWith("$ ")
+						? "cmd"
+						: line.startsWith("ERROR")
+							? "error"
+							: line.startsWith("[cli-demo]")
+								? "info"
+								: "output",
+					text: line,
+				}),
+			),
+		);
+	}, [cliDemoLogs, terminalHistory.length]);
+
+	// Auto-scroll terminal to bottom on new entries
+	useEffect(() => {
+		if (terminalRef.current) {
+			terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+		}
+	}, [terminalHistory, executing]);
+
+	const executeCommand = async () => {
+		if (!currentCmd.trim() || executing) return;
+		const cmd = currentCmd.trim();
+		setCurrentCmd("");
+		setTerminalHistory((h) => [...h, { type: "cmd", text: `$ ${cmd}` }]);
+		setExecuting(true);
+
+		try {
+			const res = await fetch(`/api/studio/projects/${projectId}/terminal/exec`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ command: cmd }),
+			});
+			const data: { output?: string; exitCode?: number } = await res.json();
+			if (data.output) {
+				setTerminalHistory((h) => [
+					...h,
+					{
+						type: data.exitCode === 0 ? "output" : "error",
+						text: data.output!,
+					},
+				]);
+			}
+		} catch (err) {
+			setTerminalHistory((h) => [...h, { type: "error", text: `Network error: ${err}` }]);
+		}
+
+		setExecuting(false);
+		inputRef.current?.focus();
+	};
 
 	// Determine preview URL
 	const services = appStatus.services || [];
@@ -131,52 +219,108 @@ export default function LivePreview({
 		setLoading(false);
 	};
 
-	// CLI Demo mode — run-app task tamamlandıysa terminal çıktısını göster
-	if ((!appStatus.running || !previewUrl) && cliDemoLogs && cliDemoLogs.length > 0) {
-		return (
-			<div className="flex flex-col h-full bg-[#0a0a0a]">
-				{/* Header */}
-				<div className="flex items-center justify-between px-4 py-2 border-b border-[#262626] bg-[#111111] shrink-0">
-					<div className="flex items-center gap-2">
-						<span className="w-2 h-2 rounded-full bg-[#22c55e]" />
-						<span className="text-[12px] text-[#e5e5e5] font-medium">CLI Demo</span>
-						<span className="text-[10px] text-[#525252]">run-app completed</span>
-					</div>
+	// Interactive terminal section renderer
+	const renderTerminal = () => (
+		<div className="flex flex-col h-full bg-[#0a0a0a]">
+			{/* Header */}
+			<div className="flex items-center justify-between px-4 py-2 border-b border-[#262626] bg-[#111111] shrink-0">
+				<div className="flex items-center gap-2">
+					<Terminal size={12} className="text-[#22c55e]" />
+					<span className="text-[12px] text-[#e5e5e5] font-medium">Terminal</span>
+					{repoCwd && (
+						<span className="text-[10px] text-[#525252] font-mono truncate max-w-[240px]" title={repoCwd}>
+							{repoCwd}
+						</span>
+					)}
+					{executing && (
+						<span className="flex items-center gap-1 text-[10px] text-[#f59e0b]">
+							<Loader2 size={10} className="animate-spin" />
+							running…
+						</span>
+					)}
 				</div>
-				{/* Terminal output */}
-				<div className="flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed">
-					{cliDemoLogs.map((line, i) => {
-						const isCommand = line.startsWith("$ ");
-						const isTag = line.startsWith("[cli-demo]");
-						const isError = line.startsWith("ERROR");
-						return (
-							<div
-								key={i}
-								className={`${
-									isCommand
-										? "text-[#22c55e] font-semibold mt-3"
-										: isTag
-											? "text-[#525252] text-[11px]"
-											: isError
-												? "text-[#ef4444]"
-												: "text-[#d4d4d4]"
-								} whitespace-pre-wrap`}
-							>
-								{line}
-							</div>
-						);
-					})}
-				</div>
+				<button
+					type="button"
+					onClick={() => {
+						setTerminalHistory([]);
+						setCliDemoLogs([]);
+					}}
+					className="text-[10px] text-[#525252] hover:text-[#a3a3a3] px-2 py-1 rounded hover:bg-[#1a1a1a] transition-colors"
+				>
+					Clear
+				</button>
 			</div>
-		);
+
+			{/* Terminal output */}
+			<div
+				ref={terminalRef}
+				className="flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed cursor-text"
+				onClick={() => inputRef.current?.focus()}
+			>
+				{terminalHistory.length === 0 && !executing && (
+					<div className="text-[#333] text-[12px]">
+						{repoExists
+							? "Type a command below to get started."
+							: "Project repository directory not found. Run the pipeline first."}
+					</div>
+				)}
+				{terminalHistory.map((entry, i) => (
+					<div
+						key={i}
+						className={`whitespace-pre-wrap break-all ${
+							entry.type === "cmd"
+								? "text-[#22c55e] font-semibold mt-2"
+								: entry.type === "error"
+									? "text-[#ef4444]"
+									: entry.type === "info"
+										? "text-[#525252] text-[11px]"
+										: "text-[#d4d4d4]"
+						}`}
+					>
+						{entry.text}
+					</div>
+				))}
+				{executing && <div className="text-[#525252] animate-pulse mt-1 text-[12px]">Running…</div>}
+			</div>
+
+			{/* Command input */}
+			<div className="flex items-center gap-2 px-4 py-3 border-t border-[#262626] bg-[#111111] shrink-0">
+				<span className="text-[#22c55e] font-mono text-[13px] select-none">$</span>
+				<input
+					ref={inputRef}
+					type="text"
+					value={currentCmd}
+					onChange={(e) => setCurrentCmd(e.target.value)}
+					onKeyDown={(e) => {
+						if (e.key === "Enter") executeCommand();
+					}}
+					placeholder={repoExists ? "Type a command and press Enter…" : "Repository not ready"}
+					disabled={executing || !repoExists}
+					className="flex-1 bg-transparent text-[#d4d4d4] font-mono text-[13px] outline-none placeholder-[#333] disabled:opacity-40"
+				/>
+			</div>
+		</div>
+	);
+
+	// Show terminal when:
+	// 1. App is not running and there are CLI demo logs, OR
+	// 2. App is not running, no preview URL, and repo exists (user can still use terminal), OR
+	// 3. Terminal has history from user commands (even after demo logs cleared)
+	const shouldShowTerminal =
+		!appStatus.running &&
+		!previewUrl &&
+		(cliDemoLogs.length > 0 || terminalHistory.length > 0 || (terminalInfoLoaded && repoExists));
+
+	if (shouldShowTerminal) {
+		return renderTerminal();
 	}
 
-	// App not running — RuntimePanel
+	// App not running and no repo available — show RuntimePanel
 	if (!appStatus.running || !previewUrl) {
 		return <RuntimePanel projectId={projectId} onAppStarted={(status) => onStatusChange(status)} />;
 	}
 
-	// App running
+	// App running — show full toolbar + content
 	return (
 		<div className={`flex flex-col h-full ${fullscreen ? "fixed inset-0 z-50 bg-[#0a0a0a]" : ""}`}>
 			{/* Toolbar */}
@@ -185,6 +329,7 @@ export default function LivePreview({
 					{/* View mode toggle */}
 					<div className="flex items-center bg-[#0a0a0a] rounded-lg p-0.5 mr-2">
 						<button
+							type="button"
 							onClick={() => setViewMode("preview")}
 							className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] transition-colors ${
 								viewMode === "preview" ? "bg-[#1a1a1a] text-[#e5e5e5]" : "text-[#525252] hover:text-[#a3a3a3]"
@@ -194,6 +339,7 @@ export default function LivePreview({
 							Preview
 						</button>
 						<button
+							type="button"
 							onClick={() => setViewMode("api")}
 							className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] transition-colors ${
 								viewMode === "api" ? "bg-[#3b82f6]/10 text-[#3b82f6]" : "text-[#525252] hover:text-[#a3a3a3]"
@@ -209,6 +355,7 @@ export default function LivePreview({
 						(Object.entries(DEVICE_SIZES) as [DeviceSize, typeof DEVICE_SIZES.mobile][]).map(([key, val]) => (
 							<button
 								key={key}
+								type="button"
 								onClick={() => setDevice(key)}
 								className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] transition-colors ${
 									device === key
@@ -228,6 +375,7 @@ export default function LivePreview({
 						{services.map((s) => (
 							<button
 								key={s.name}
+								type="button"
 								onClick={() => handleSwitchService(s.name)}
 								className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] transition-colors ${
 									s.name === activeService?.name
@@ -251,6 +399,7 @@ export default function LivePreview({
 				<div className="flex items-center gap-1">
 					{viewMode === "preview" && (
 						<button
+							type="button"
 							onClick={() => setIframeKey((k) => k + 1)}
 							className="p-1.5 rounded-lg text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1a1a1a] transition-colors"
 							title="Yenile"
@@ -268,6 +417,7 @@ export default function LivePreview({
 						<ExternalLink size={14} />
 					</a>
 					<button
+						type="button"
 						onClick={() => setFullscreen((f) => !f)}
 						className="p-1.5 rounded-lg text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1a1a1a] transition-colors"
 						title={fullscreen ? "Kucult" : "Tam ekran"}
@@ -275,6 +425,7 @@ export default function LivePreview({
 						{fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
 					</button>
 					<button
+						type="button"
 						onClick={() => setShowRuntime((r) => !r)}
 						className={`p-1.5 rounded-lg transition-colors ${
 							showRuntime ? "text-[#3b82f6] bg-[#3b82f6]/10" : "text-[#525252] hover:text-[#a3a3a3] hover:bg-[#1a1a1a]"
@@ -284,6 +435,7 @@ export default function LivePreview({
 						<Settings2 size={14} />
 					</button>
 					<button
+						type="button"
 						onClick={handleStop}
 						disabled={loading}
 						className="ml-1 flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors disabled:opacity-50"

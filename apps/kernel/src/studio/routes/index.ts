@@ -60,6 +60,7 @@ import { taskRoutes } from "./task-routes.js";
 import { teamRoutes } from "./team-routes.js";
 import { telemetryRoutes } from "./telemetry-routes.js";
 import { templateRoutes } from "./template-routes.js";
+import { terminalRoutes } from "./terminal-routes.js";
 import { workItemRoutes } from "./work-item-routes.js";
 
 const studio = new Hono();
@@ -176,6 +177,9 @@ studio.route("/", memoryRoutes);
 
 // CLI usage routes (used by console CLI usage monitor page)
 studio.route("/", cliUsageRoutes);
+
+// Terminal routes (interactive CLI terminal in preview tab)
+studio.route("/", terminalRoutes);
 
 // Control Plane — Phase 1
 studio.route("/", cpRegistryRoutes);
