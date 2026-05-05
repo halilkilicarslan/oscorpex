@@ -136,15 +136,16 @@ export async function extractPatternsFromEpisodes(tenantId: string): Promise<num
 	// Strategy success patterns — which strategies work best for which task types
 	const strategyRows = await query(
 		`SELECT
-			ae.agent_role,
-			ae.strategy_used,
+			COALESCE(pa.role, 'unknown') AS agent_role,
+			ae.strategy AS strategy_used,
 			ae.task_type,
 			COUNT(*) as total,
 			COUNT(*) FILTER (WHERE ae.outcome = 'success') as successes
 		 FROM agent_episodes ae
 		 JOIN projects p ON p.id = ae.project_id
-		 WHERE p.tenant_id = $1
-		 GROUP BY ae.agent_role, ae.strategy_used, ae.task_type
+		 LEFT JOIN project_agents pa ON pa.id = ae.agent_id
+		 WHERE (p.tenant_id = $1 OR (p.tenant_id IS NULL AND $1 = 'default'))
+		 GROUP BY COALESCE(pa.role, 'unknown'), ae.strategy, ae.task_type
 		 HAVING COUNT(*) >= 3`,
 		[tenantId],
 	);
@@ -172,14 +173,15 @@ export async function extractPatternsFromEpisodes(tenantId: string): Promise<num
 	// Failure signature patterns — common failure reasons by task type
 	const failureRows = await query(
 		`SELECT
-			ae.agent_role,
+			COALESCE(pa.role, 'unknown') AS agent_role,
 			ae.task_type,
 			ae.failure_reason,
 			COUNT(*) as total
 		 FROM agent_episodes ae
 		 JOIN projects p ON p.id = ae.project_id
-		 WHERE p.tenant_id = $1 AND ae.outcome = 'failure' AND ae.failure_reason IS NOT NULL
-		 GROUP BY ae.agent_role, ae.task_type, ae.failure_reason
+		 LEFT JOIN project_agents pa ON pa.id = ae.agent_id
+		 WHERE (p.tenant_id = $1 OR (p.tenant_id IS NULL AND $1 = 'default')) AND ae.outcome = 'failure' AND ae.failure_reason IS NOT NULL
+		 GROUP BY COALESCE(pa.role, 'unknown'), ae.task_type, ae.failure_reason
 		 HAVING COUNT(*) >= 2`,
 		[tenantId],
 	);
