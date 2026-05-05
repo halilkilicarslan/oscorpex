@@ -195,6 +195,13 @@ export class TaskExecutor {
 		// so no concurrent dispatch race is possible. Transition status based on current state.
 		let lastFailureClassification: import("@oscorpex/provider-sdk").ProviderErrorClassification | undefined;
 		const startedTask = await this.startTaskForExecution(task, agent.id);
+
+		// Task went to waiting_approval — don't proceed with execution, wait for human approval
+		if (startedTask?.status === "waiting_approval") {
+			log.info({ taskId: task.id, title: task.title }, "[task-executor] Task requires approval — execution paused");
+			return;
+		}
+
 		const queueWaitMs = startedTask ? computeQueueWaitMs(startedTask) : 0;
 
 		// --- Prompt assembly (delegated to prompt-assembler.ts) ---

@@ -44,7 +44,7 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 	server: ReturnType<typeof serve>;
 	port: number;
 }> {
-	const port = options.port ?? Number(process.env.PORT) ?? 3141;
+	const port = options.port ?? (Number(process.env.PORT) || 3141);
 
 	log.info(`[boot] Starting Oscorpex kernel on port ${port}...`);
 
@@ -126,5 +126,5 @@ export async function bootAndServe(options?: KernelBootOptions): Promise<void> {
 	process.on("SIGINT", shutdown);
 	process.on("SIGTERM", shutdown);
 
-	log.info(`[boot] Press Ctrl+C to stop`);
+	log.info("[boot] Press Ctrl+C to stop");
 }

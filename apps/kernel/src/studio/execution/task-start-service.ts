@@ -20,6 +20,11 @@ export async function startTaskForExecution(task: Task, agentId: string): Promis
 		return taskEngine().startTask(task.id);
 	}
 
+	// waiting_approval → return current task so caller can check status and bail
+	if (currentStatus === "waiting_approval") {
+		return currentTask ?? task;
+	}
+
 	// status === "running" -> already started (e.g. revision restart)
 	return undefined;
 }
