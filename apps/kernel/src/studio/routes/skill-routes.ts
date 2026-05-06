@@ -136,4 +136,65 @@ skillRoutes.delete("/projects/:projectId/skills/:skillId", async (c) => {
 	return c.json({ ok: true });
 });
 
+// ---------------------------------------------------------------------------
+// Auto-detection
+// ---------------------------------------------------------------------------
+
+// Auto-detect skills for a project and assign them
+skillRoutes.post("/projects/:projectId/skills/auto-detect", async (c) => {
+	const projectId = c.req.param("projectId");
+	const { getProject, listProjectAgents } = await import("../db.js");
+	const { autoAssignDetectedSkills } = await import("../skill-auto-detector.js");
+
+	const project = await getProject(projectId);
+	if (!project) return c.json({ error: "Project not found" }, 404);
+
+	const agents = await listProjectAgents(projectId);
+	const body = (await c.req.json().catch(() => ({}))) as { minConfidence?: number };
+	const minConfidence = body.minConfidence ?? 0.5;
+
+	log.info({ projectId, minConfidence }, "auto-detecting skills for project");
+	const result = await autoAssignDetectedSkills(project, agents, minConfidence);
+
+	return c.json({
+		assigned: result.assigned,
+		suggestions: result.suggestions.map((s) => ({
+			skillId: s.skill.id,
+			skillName: s.skill.name,
+			agentId: s.agent.id,
+			agentName: s.agent.name,
+			agentRole: s.agent.role,
+			confidence: s.confidence,
+			reason: s.reason,
+		})),
+	});
+});
+
+// Get skill suggestions without assigning
+skillRoutes.get("/projects/:projectId/skills/suggestions", async (c) => {
+	const projectId = c.req.param("projectId");
+	const { getProject, listProjectAgents } = await import("../db.js");
+	const { detectSkillsForProject } = await import("../skill-auto-detector.js");
+
+	const project = await getProject(projectId);
+	if (!project) return c.json({ error: "Project not found" }, 404);
+
+	const agents = await listProjectAgents(projectId);
+
+	log.info({ projectId }, "fetching skill suggestions for project");
+	const suggestions = await detectSkillsForProject(project, agents);
+
+	return c.json(
+		suggestions.map((s) => ({
+			skillId: s.skill.id,
+			skillName: s.skill.name,
+			agentId: s.agent.id,
+			agentName: s.agent.name,
+			agentRole: s.agent.role,
+			confidence: s.confidence,
+			reason: s.reason,
+		})),
+	);
+});
+
 export { skillRoutes };

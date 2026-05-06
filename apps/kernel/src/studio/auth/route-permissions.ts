@@ -233,6 +233,8 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: /^\/skills\/[^/]+$/, permission: "projects:update", methods: ["PUT", "DELETE"] },
 	{ pattern: /^\/agents\/[^/]+\/skills/, permission: "team:read", methods: ["GET"] },
 	{ pattern: /^\/agents\/[^/]+\/skills/, permission: "team:write", methods: ["POST", "DELETE"] },
+	{ pattern: /^\/projects\/[^/]+\/skills\/auto-detect$/, permission: "projects:update", methods: ["POST"] },
+	{ pattern: /^\/projects\/[^/]+\/skills\/suggestions$/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/skills/, permission: "projects:read", methods: ["GET"] },
 	{ pattern: /^\/projects\/[^/]+\/skills/, permission: "projects:update", methods: ["POST", "DELETE"] },
 
