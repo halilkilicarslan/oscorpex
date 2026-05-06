@@ -26,27 +26,37 @@ export async function buildTaskPrompt(task: Task, project: Project, agentRole?: 
 	const lines: string[] = [
 		`# Task: ${task.title}`,
 		"",
-		`## Project`,
+		"## Project",
 		`- Name: ${project.name}`,
 		`- Tech Stack: ${techStack}`,
 		`- Description: ${project.description || "No description provided"}`,
 		"",
 	];
 
-	// FTS-backed compact cross-agent context
+	// FTS-backed compact cross-agent context (smart: targetFiles + complexity budget)
 	try {
 		const compact = await compactCrossAgentContext({
 			projectId: project.id,
 			taskTitle: task.title,
 			taskDescription: safeDescription,
-			maxTokens: 3000,
 			maxFiles: 10,
+			targetFiles: task.targetFiles,
+			taskComplexity: task.complexity,
 		});
 		if (compact.prompt) {
+			log.info(
+				{
+					taskId: task.id,
+					contextTokens: Math.ceil(compact.prompt.length / 4),
+					totalFiles: compact.totalFiles,
+					relevantFiles: compact.relevantFiles,
+				},
+				"[prompt-builder] Smart context selected",
+			);
 			lines.push(compact.prompt, "");
 		}
 	} catch (err) {
-		log.warn("[prompt-builder] compactCrossAgentContext failed (non-blocking):" + " " + String(err));
+		log.warn(`[prompt-builder] compactCrossAgentContext failed (non-blocking): ${String(err)}`);
 	}
 
 	// RAG Context
@@ -56,7 +66,7 @@ export async function buildTaskPrompt(task: Task, project: Project, agentRole?: 
 			lines.push(formatRAGContext(ragContext));
 		}
 	} catch (err) {
-		log.warn("[prompt-builder] RAG context fetch failed (non-blocking):" + " " + String(err));
+		log.warn(`[prompt-builder] RAG context fetch failed (non-blocking): ${String(err)}`);
 	}
 
 	// Resume snapshot for retried/revised tasks
@@ -68,14 +78,14 @@ export async function buildTaskPrompt(task: Task, project: Project, agentRole?: 
 				lines.push(formatResumeSnapshot(snapshot), "");
 			}
 		} catch (err) {
-			log.warn("[prompt-builder] Resume snapshot failed (non-blocking):" + " " + String(err));
+			log.warn(`[prompt-builder] Resume snapshot failed (non-blocking): ${String(err)}`);
 		}
 	}
 
 	// Self-healing: inject previous error
 	if (task.error) {
 		lines.push(
-			`## Previous Attempt Failed`,
+			"## Previous Attempt Failed",
 			"",
 			"This task was attempted before but failed with the following error. Please fix the issue and try again:",
 			"",
@@ -89,16 +99,16 @@ export async function buildTaskPrompt(task: Task, project: Project, agentRole?: 
 	}
 
 	lines.push(
-		`## Task Details`,
+		"## Task Details",
 		`- ID: ${task.id}`,
 		`- Complexity: ${task.complexity}`,
 		`- Branch: ${task.branch || "main"}`,
 		`- Retry: ${task.retryCount > 0 ? `#${task.retryCount}` : "first attempt"}`,
 		"",
-		`## Instructions`,
+		"## Instructions",
 		safeDescription,
 		"",
-		`## Available Tools`,
+		"## Available Tools",
 		"You have the following tools to complete this task:",
 		"- **listFiles**: List files in a directory",
 		"- **readFile**: Read file contents",
@@ -106,19 +116,19 @@ export async function buildTaskPrompt(task: Task, project: Project, agentRole?: 
 		"- **runCommand**: Run shell commands (npm/pnpm install, tests, builds, etc.)",
 		"- **commitChanges**: Git commit your changes",
 		"",
-		`## Workflow`,
+		"## Workflow",
 		"1. First, use listFiles to understand the current project structure",
 		"2. Read any relevant existing files to understand the codebase",
 		"3. Create or modify the necessary files using writeFile",
 		"4. Run any relevant commands (install deps, run tests, etc.)",
 		"5. Commit your changes with a descriptive message",
 		"",
-		`## Important`,
+		"## Important",
 		"- Read existing files before modifying them to maintain consistency",
 		"- Follow the same patterns and conventions used in existing code",
 		"- Do not overwrite files created by other agents unless necessary for your task",
 		"",
-		`## Output`,
+		"## Output",
 		"After completing all tool calls, provide a brief summary of what you did.",
 	);
 

@@ -85,12 +85,14 @@ export async function indexTaskOutput(
 // Compact Cross-Agent Context
 // ---------------------------------------------------------------------------
 
-interface CompactContextOptions {
+export interface CompactContextOptions {
 	projectId: string;
 	taskTitle: string;
-	taskDescription: string;
+	taskDescription?: string;
 	maxTokens?: number;
 	maxFiles?: number;
+	targetFiles?: string[]; // files this task will modify — scored higher in context
+	taskComplexity?: string; // S/M/L/XL — drives token budget
 }
 
 interface CompactContext {
@@ -101,7 +103,16 @@ interface CompactContext {
 }
 
 export async function compactCrossAgentContext(opts: CompactContextOptions): Promise<CompactContext> {
-	const { projectId, taskTitle, taskDescription, maxTokens = 3000, maxFiles = 10 } = opts;
+	const { projectId, taskTitle, taskDescription, maxTokens, maxFiles = 10, targetFiles, taskComplexity } = opts;
+
+	// Dynamic token budget based on task complexity
+	const complexityBudget: Record<string, number> = {
+		S: 2000,
+		M: 3000,
+		L: 5000,
+		XL: 8000,
+	};
+	const effectiveMaxTokens = maxTokens ?? complexityBudget[taskComplexity ?? "M"] ?? 3000;
 
 	// Gather completed tasks for raw file count
 	const allTasks = await listProjectTasks(projectId);
@@ -118,6 +129,44 @@ export async function compactCrossAgentContext(opts: CompactContextOptions): Pro
 		return { prompt: "", totalFiles: 0, relevantFiles: 0, totalCompletedTasks: completedTasks.length };
 	}
 
+	const lines: string[] = [];
+
+	lines.push(`## Cross-Agent Context (${completedTasks.length} tasks completed, ${allFiles.size} files)`, "");
+
+	// Prioritize targetFiles: find completed tasks that touched the same files
+	if (targetFiles && targetFiles.length > 0) {
+		const targetSet = new Set(targetFiles.map((f) => f.toLowerCase()));
+
+		const relevantTasks = completedTasks.filter((ct) => {
+			const ctFiles = [...(ct.output?.filesCreated ?? []), ...(ct.output?.filesModified ?? [])];
+			return ctFiles.some((f) => targetSet.has(f.toLowerCase()));
+		});
+
+		if (relevantTasks.length > 0) {
+			lines.push("### Files You Will Modify (context from previous tasks)", "");
+			for (const rt of relevantTasks.slice(0, 5)) {
+				const rtFiles = [...(rt.output?.filesCreated ?? []), ...(rt.output?.filesModified ?? [])];
+				const overlap = rtFiles.filter((f) => targetSet.has(f.toLowerCase()));
+				lines.push(`- **${rt.title}** (${rt.assignedAgent}) modified: ${overlap.join(", ")}`);
+			}
+			lines.push("");
+		}
+	}
+
+	// Summarize what the last 5 completed tasks did (instead of a raw file listing)
+	if (completedTasks.length > 0) {
+		lines.push("### Recent Completed Work", "");
+		for (const ct of completedTasks.slice(-5)) {
+			const files = [...(ct.output?.filesCreated ?? []), ...(ct.output?.filesModified ?? [])];
+			if (files.length > 0) {
+				const preview = files.slice(0, 5).join(", ");
+				const extra = files.length > 5 ? ` (+${files.length - 5} more)` : "";
+				lines.push(`- **${ct.title}**: created/modified ${preview}${extra}`);
+			}
+		}
+		lines.push("");
+	}
+
 	// FTS search for relevant context
 	const descSnippet = (taskDescription ?? "").slice(0, 200);
 	const queries = [taskTitle, descSnippet].filter(Boolean);
@@ -128,36 +177,22 @@ export async function compactCrossAgentContext(opts: CompactContextOptions): Pro
 			projectId,
 			queries,
 			limit: maxFiles,
-			maxTokens,
+			maxTokens: effectiveMaxTokens,
 		});
 	} catch {
-		// FTS unavailable — fall back to raw listing
+		// FTS unavailable — fall back to a compact file listing
 	}
 
-	const lines: string[] = [];
-
 	if (searchResults.length > 0) {
-		lines.push(
-			`## Cross-Agent Context (${completedTasks.length} tasks completed, ${allFiles.size} files)`,
-			"",
-			`### Relevant Context (search: "${taskTitle}")`,
-			"",
-		);
-
+		lines.push(`### Relevant Context (search: "${taskTitle}")`, "");
 		for (const r of searchResults) {
 			lines.push(`#### ${r.title} (${r.source})`);
 			lines.push(r.content);
 			lines.push("");
 		}
 	} else {
-		// Fallback: compact file listing (no FTS results)
-		lines.push(
-			`## Cross-Agent Context (${completedTasks.length} tasks completed, ${allFiles.size} files)`,
-			"",
-			"The following files already exist in the project. Read them with readFile before making changes:",
-			"",
-		);
-
+		// Fallback: compact alphabetical file listing (no FTS results)
+		lines.push("The following files already exist in the project. Read them with readFile before making changes:", "");
 		const sorted = [...allFiles.entries()].sort(([a], [b]) => a.localeCompare(b));
 		for (const [filePath, info] of sorted.slice(0, maxFiles)) {
 			lines.push(`- \`${filePath}\` (by ${info.agent}: ${info.task})`);
@@ -165,15 +200,16 @@ export async function compactCrossAgentContext(opts: CompactContextOptions): Pro
 		if (allFiles.size > maxFiles) {
 			lines.push(`- ... and ${allFiles.size - maxFiles} more files`);
 		}
+		lines.push("");
 	}
 
 	// Recent errors for context
 	const recentFailed = allTasks.filter((t) => t.status === "failed" && t.error).slice(-2);
 
 	if (recentFailed.length > 0) {
-		lines.push("", "### Recent Errors", "");
+		lines.push("### Recent Errors", "");
 		for (const ft of recentFailed) {
-			lines.push(`- **${ft.title}** (${ft.assignedAgent}): ${ft.error!.slice(0, 150)}`);
+			lines.push(`- **${ft.title}** (${ft.assignedAgent}): ${ft.error?.slice(0, 150)}`);
 		}
 	}
 
