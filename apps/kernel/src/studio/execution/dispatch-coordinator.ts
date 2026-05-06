@@ -4,14 +4,14 @@
 // tasks, runs the watchdog, and resolves running project phases.
 // ---------------------------------------------------------------------------
 
-import { type AdaptiveSemaphore, type ConcurrencyTracker } from "../adaptive-concurrency.js";
+import type { AdaptiveSemaphore, ConcurrencyTracker } from "../adaptive-concurrency.js";
 import { evaluateReplan } from "../adaptive-replanner.js";
 import {
+	getRunningProjectPhases as dbGetRunningProjectPhases,
 	getFailedTaskCountInPhase,
 	getLatestPlan,
 	getPipelineRun,
 	getProject,
-	getRunningProjectPhases as dbGetRunningProjectPhases,
 	listPhases,
 	reclaimStaleQueuedClaimsForProject,
 } from "../db.js";
@@ -139,10 +139,8 @@ export class TaskDispatcher {
 			payload: { readyTaskCount: readyTasks.length },
 		});
 
-		// Dispatch tasks sequentially to avoid AI provider rate limits
-		for (const task of readyTasks) {
-			await this._executeTask(projectId, task);
-		}
+		// Dispatch tasks concurrently — semaphore controls max parallelism
+		await Promise.allSettled(readyTasks.map((task) => this._executeTask(projectId, task)));
 	}
 
 	/**
@@ -168,10 +166,8 @@ export class TaskDispatcher {
 		// TASK 9: Fair scheduling — short tasks first to prevent head-of-line blocking
 		const fairOrder = sortTasksByFairness(toDispatch);
 
-		// Execute tasks sequentially to avoid rate-limit issues with AI providers
-		for (const task of fairOrder) {
-			await this._executeTask(projectId, task);
-		}
+		// Dispatch concurrently — adaptive semaphore controls max parallelism
+		await Promise.allSettled(fairOrder.map((task) => this._executeTask(projectId, task)));
 	}
 
 	/**
@@ -184,7 +180,7 @@ export class TaskDispatcher {
 			const phaseFailures = await getFailedTaskCountInPhase(task.phaseId);
 			if (phaseFailures >= 3) {
 				evaluateReplan({ projectId, trigger: "repeated_review_failure", phaseId: task.phaseId }).catch((err) =>
-					log.warn("[task-dispatcher] Replan trigger failed (non-blocking):" + " " + String(err)),
+					log.warn(`[task-dispatcher] Replan trigger failed (non-blocking): ${String(err)}`),
 				);
 			}
 		}
