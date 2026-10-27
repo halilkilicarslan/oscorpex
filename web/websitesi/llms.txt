@@ -1,0 +1,32 @@
+# Oscorpex
+
+> Oscorpex is an autonomous software engineering company. We turn product ideas into working software built by a 12-role AI agent team (PM, backend, frontend, reviewer, QA) that plans, writes, reviews, and ships through an auditable DAG pipeline. Powered by the Claude API within a multi-provider architecture, with a human in control at every gate via approval queues, audit trails, sandboxing, and budget guards.
+
+## Company
+- Name: Oscorpex
+- Founded: 2022
+- Location: İstanbul, Türkiye
+- Website: https://oscorpex.com
+- Contact: hello@oscorpex.com
+- LinkedIn: https://www.linkedin.com/company/oscorpex/
+
+## What we do
+- Autonomous software delivery: from idea to working code, planned, built, and tested by an agent team, with live preview and a cost breakdown.
+- The Oscorpex platform: DAG pipeline, automatic replan, skills and RAG memory, observability.
+- AI agent orchestration: 12-role Scrum team architecture, review loops, and multi-provider, cost-aware model routing.
+- Integration & consulting: secure agent workflows for existing engineering teams.
+- Governance & cost control: operator approval queue, audit trail, and a budget circuit breaker.
+
+## Approach
+- Security first: sandbox, command policy, and prompt-injection defense.
+- Transparent & auditable: full traces, audit logs, and an agent session inspector.
+- Human-controlled autonomy: risky steps go through an approval queue.
+- Scalable engineering: adaptive concurrency, scheduling, and budget protection.
+
+## Technology
+- Core model: Claude API (multi-provider: Claude, Codex, Cursor, Gemini, Ollama)
+- Architecture: DAG-based pipeline, 12 role-based agents, review loops, quality gates
+
+## Contact
+- Email: hello@oscorpex.com
+- For partnerships and projects, reach out via the website contact form at https://oscorpex.com/#contact

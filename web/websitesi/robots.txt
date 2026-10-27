@@ -1,0 +1,17 @@
+# Oscorpex — https://oscorpex.com
+User-agent: *
+Allow: /
+
+# AI / LLM crawlers are welcome
+User-agent: GPTBot
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: anthropic-ai
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://oscorpex.com/sitemap.xml

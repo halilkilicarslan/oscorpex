@@ -1,0 +1,9 @@
+name = "oscorpex-contact"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# Binds the Worker to a clean, predictable endpoint on your Cloudflare zone.
+# Cloudflare manages the DNS record and TLS cert for this subdomain.
+routes = [
+  { pattern = "api.oscorpex.com", custom_domain = true }
+]

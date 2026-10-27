@@ -170,6 +170,10 @@ packages/*/src/**/*.js.map
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map
 
+# web/: local tool state (Serena memories may hold credentials) and Firebase deploy cache
+web/**/.serena/
+web/**/.firebase/
+
 # cursor
 .cursor
 .playwright-mcp/

@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Oscorpex — Autonomous Software Engineering</title>
+  <meta name="description" content="Oscorpex is an autonomous engineering company that builds software with AI agent teams. Secure, auditable, and scalable autonomous development.">
+  <link rel="icon" href="logo-icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ===== NAV ===== -->
+  <header class="nav" id="top">
+    <div class="shell nav-inner">
+      <a class="brand" href="#top" aria-label="Oscorpex home">
+        <img class="brand-logo" src="logo-icon.svg" alt="" aria-hidden="true">
+        <img class="brand-word" src="app-logo.svg" alt="Oscorpex">
+      </a>
+      <nav class="nav-links" aria-label="Main menu">
+        <a href="#about">About</a>
+        <a href="#solutions">Solutions</a>
+        <a href="#approach">Approach</a>
+        <a href="#industries">Industries</a>
+      </nav>
+      <div class="nav-cta">
+        <a class="btn btn-primary" href="#contact">Get in touch</a>
+      </div>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    <nav class="nav-mobile" id="navMobile" aria-label="Mobile menu" hidden>
+      <a href="#about">About</a>
+      <a href="#solutions">Solutions</a>
+      <a href="#approach">Approach</a>
+      <a href="#industries">Industries</a>
+      <a class="btn btn-primary" href="#contact">Get in touch</a>
+    </nav>
+  </header>
+
+  <main>
+
+    <!-- ===== HERO ===== -->
+    <section class="hero-v2">
+      <canvas class="hero-mesh" id="heroMesh" aria-hidden="true"></canvas>
+      <div class="hero-orbs" aria-hidden="true"></div>
+      <div class="shell hero-inner">
+        <span class="eyebrow pill-live"><span class="pulse"></span>Autonomous engineering · live</span>
+        <h1>We build software with<br><span class="grad">autonomous AI agent teams.</span></h1>
+        <p class="hero-sub">From a single brief, a 12-role agent team plans, builds, reviews, and ships — with a human in control at every gate.</p>
+        <div class="hero-actions center">
+          <a class="btn btn-primary btn-lg" href="#contact">Work with us</a>
+          <a class="btn btn-outline btn-lg" href="#engine">See how it works</a>
+        </div>
+        <div class="hero-partners">
+          <span class="mono">Powered by</span>
+          <div class="hp-logos">
+            <span>Claude</span><span>Codex</span><span>Cursor</span><span>Gemini</span><span>Ollama</span>
+          </div>
+        </div>
+
+        <!-- floating live activity chips -->
+        <div class="float-chip fc-1" aria-hidden="true"><span class="fc-dot green"></span>PM · planning</div>
+        <div class="float-chip fc-2" aria-hidden="true"><span class="fc-dot blue"></span>agents · building</div>
+        <div class="float-chip fc-3" aria-hidden="true"><span class="fc-dot purple"></span>reviewer · approved</div>
+        <div class="float-chip fc-4" aria-hidden="true"><span class="fc-dot amber"></span>gate · awaiting approval</div>
+      </div>
+    </section>
+
+    <!-- ===== STATS / COMPANY FACTS ===== -->
+    <section class="stats-band">
+      <div class="shell stats-grid">
+        <div class="stat" data-reveal><div class="snum" data-count="12">12</div><div class="slabel">Role-based agents</div></div>
+        <div class="stat" data-reveal data-delay="80"><div class="snum" data-count="5">5</div><div class="slabel">Model providers</div></div>
+        <div class="stat" data-reveal data-delay="160"><div class="snum" data-count="93.5" data-decimals="1" data-suffix="%">93.5%</div><div class="slabel">Cache efficiency</div></div>
+        <div class="stat" data-reveal data-delay="240"><div class="snum">24/7</div><div class="slabel">End-to-end autonomous</div></div>
+      </div>
+    </section>
+
+    <!-- ===== CAPABILITIES MARQUEE ===== -->
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track">
+        <span>DAG Pipeline</span><span class="sep">◆</span><span>Automatic Replan</span><span class="sep">◆</span><span>Multi-Provider Routing</span><span class="sep">◆</span><span>Sandbox Isolation</span><span class="sep">◆</span><span>RAG Memory</span><span class="sep">◆</span><span>Skills System</span><span class="sep">◆</span><span>Quality Gates</span><span class="sep">◆</span><span>Audit Trail</span><span class="sep">◆</span><span>Budget Guard</span><span class="sep">◆</span><span>Operator Approvals</span><span class="sep">◆</span>
+        <span>DAG Pipeline</span><span class="sep">◆</span><span>Automatic Replan</span><span class="sep">◆</span><span>Multi-Provider Routing</span><span class="sep">◆</span><span>Sandbox Isolation</span><span class="sep">◆</span><span>RAG Memory</span><span class="sep">◆</span><span>Skills System</span><span class="sep">◆</span><span>Quality Gates</span><span class="sep">◆</span><span>Audit Trail</span><span class="sep">◆</span><span>Budget Guard</span><span class="sep">◆</span><span>Operator Approvals</span><span class="sep">◆</span>
+      </div>
+    </div>
+
+    <!-- ===== LIVE ENGINE VISUALIZATION ===== -->
+    <section class="section alt engine" id="engine">
+      <div class="shell">
+        <div class="sec-head center" data-reveal>
+          <span class="eyebrow mono">The engine, live</span>
+          <h2>Watch the pipeline run</h2>
+          <p class="sec-sub">Every project flows through the same auditable DAG. Agents pick up tasks in parallel, hand off through review, and deliver — with a human in the loop at every gate.</p>
+        </div>
+        <div class="engine-stage" data-reveal data-delay="120">
+          <div class="engine-canvas">
+            <svg class="dag" viewBox="0 0 640 320" role="img" aria-label="Oscorpex pipeline: intake, plan, parallel build, review, delivery">
+              <defs>
+                <path id="tokenPath" d="M70 160 L190 160 C250 160 270 90 330 90 C390 90 410 160 470 160 L590 160" fill="none"/>
+              </defs>
+              <g class="edges">
+                <path class="edge" d="M70 160 L190 160"/>
+                <path class="edge" d="M190 160 C250 160 270 90 330 90"/>
+                <path class="edge" d="M190 160 C250 160 270 230 330 230"/>
+                <path class="edge" d="M330 90 C390 90 410 160 470 160"/>
+                <path class="edge" d="M330 230 C390 230 410 160 470 160"/>
+                <path class="edge" d="M470 160 L590 160"/>
+              </g>
+              <circle class="token" r="5.5">
+                <animateMotion dur="4.4s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1" keyTimes="0;1">
+                  <mpath href="#tokenPath"/>
+                </animateMotion>
+              </circle>
+              <g class="nodes">
+                <g class="node green" style="--d:0s"><circle cx="70" cy="160" r="14"/><circle class="core" cx="70" cy="160" r="4"/><text x="70" y="192">Intake</text></g>
+                <g class="node green" style="--d:.7s"><circle cx="190" cy="160" r="14"/><circle class="core" cx="190" cy="160" r="4"/><text x="190" y="192">Plan</text></g>
+                <g class="node blue" style="--d:1.5s"><circle cx="330" cy="90" r="14"/><circle class="core" cx="330" cy="90" r="4"/><text x="330" y="70">Backend</text></g>
+                <g class="node blue" style="--d:1.7s"><circle cx="330" cy="230" r="14"/><circle class="core" cx="330" cy="230" r="4"/><text x="330" y="262">Frontend</text></g>
+                <g class="node purple" style="--d:2.8s"><circle cx="470" cy="160" r="14"/><circle class="core" cx="470" cy="160" r="4"/><text x="470" y="192">Review</text></g>
+                <g class="node green" style="--d:3.8s"><circle cx="590" cy="160" r="14"/><circle class="core" cx="590" cy="160" r="4"/><text x="590" y="192">Deliver</text></g>
+              </g>
+            </svg>
+          </div>
+          <aside class="engine-side">
+            <div class="es-head"><span class="pulse"></span><span class="mono">live · pipeline</span></div>
+            <ul class="es-log" id="engineLog">
+              <li>PM agent — plan generated · 17 tasks</li>
+              <li>backend-dev — API scaffolded</li>
+              <li>frontend-dev — UI components built</li>
+              <li>reviewer — 2 changes requested</li>
+              <li>qa — test suite passing</li>
+              <li>pipeline — quality gate passed</li>
+            </ul>
+            <div class="es-progress">
+              <span class="mono">build</span>
+              <span class="es-track"><span class="es-bar"></span></span>
+              <span class="mono es-pct">72%</span>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== ABOUT ===== -->
+    <section class="section" id="about">
+      <div class="shell about-grid">
+        <div class="about-copy" data-reveal>
+          <span class="eyebrow mono">Who we are</span>
+          <h2>A company redefining the engineering team</h2>
+          <p class="sec-sub">We automate software delivery with a full agent team that plans, writes, reviews, and ships — not a single model call.</p>
+          <div class="chips">
+            <span class="chip"><i></i>Autonomous, human-controlled</span>
+            <span class="chip"><i></i>Auditable by design</span>
+            <span class="chip"><i></i>Provider-agnostic</span>
+          </div>
+          <dl class="facts">
+            <div><dt>Founded</dt><dd>2022</dd></div>
+            <div><dt>Based in</dt><dd>İstanbul, Türkiye</dd></div>
+            <div><dt>Contact</dt><dd><a href="mailto:hello@oscorpex.com">hello@oscorpex.com</a></dd></div>
+          </dl>
+          <a class="link-arrow" href="#approach">Explore our approach →</a>
+        </div>
+        <div class="orbit-viz" data-reveal data-delay="120" aria-hidden="true">
+          <svg viewBox="0 0 360 360" role="img" aria-label="Agent team orbiting the Oscorpex core">
+            <circle class="orbit-ring" cx="180" cy="180" r="150"/>
+            <circle class="orbit-ring" cx="180" cy="180" r="96"/>
+            <g class="orbit-rot">
+              <line class="orbit-link" x1="180" y1="180" x2="180" y2="30"/>
+              <line class="orbit-link" x1="180" y1="180" x2="310" y2="105"/>
+              <line class="orbit-link" x1="180" y1="180" x2="310" y2="255"/>
+              <line class="orbit-link" x1="180" y1="180" x2="180" y2="330"/>
+              <line class="orbit-link" x1="180" y1="180" x2="50" y2="255"/>
+              <line class="orbit-link" x1="180" y1="180" x2="50" y2="105"/>
+              <circle class="sat green" style="--d:0s" cx="180" cy="30" r="10"/>
+              <circle class="sat blue" style="--d:.4s" cx="310" cy="105" r="10"/>
+              <circle class="sat purple" style="--d:.8s" cx="310" cy="255" r="10"/>
+              <circle class="sat green" style="--d:1.2s" cx="180" cy="330" r="10"/>
+              <circle class="sat blue" style="--d:1.6s" cx="50" cy="255" r="10"/>
+              <circle class="sat purple" style="--d:2s" cx="50" cy="105" r="10"/>
+            </g>
+            <circle class="core-halo" cx="180" cy="180" r="42"/>
+            <circle class="core" cx="180" cy="180" r="28"/>
+            <circle class="core-dot" cx="180" cy="180" r="8"/>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SOLUTIONS ===== -->
+    <section class="section alt" id="solutions">
+      <div class="shell">
+        <div class="sec-head" data-reveal>
+          <span class="eyebrow mono">Solutions</span>
+          <h2>The engineering services we offer</h2>
+          <p class="sec-sub">Autonomous development from idea to production — and the platform layers that make it possible, under one roof.</p>
+        </div>
+        <div class="bento-v2">
+          <!-- Feature: autonomous delivery -->
+          <article class="card b-a accent-green" data-reveal data-delay="0">
+            <div class="b-a-top">
+              <div class="card-ic">
+                <svg class="ic-flow" viewBox="0 0 48 48" aria-hidden="true">
+                  <circle cx="8" cy="24" r="3.5"/><circle cx="24" cy="24" r="3.5"/><circle cx="40" cy="24" r="3.5"/>
+                  <path class="flow-line" d="M11.5 24 H20.5 M27.5 24 H36.5"/>
+                </svg>
+              </div>
+              <div class="b-a-copy">
+                <h3>Autonomous software delivery</h3>
+                <p>From idea to working code — planned, built, and tested by an agent team, with live preview and a cost breakdown.</p>
+              </div>
+            </div>
+            <div class="feature-viz" aria-hidden="true">
+              <svg class="fviz" viewBox="0 0 520 128">
+                <defs><path id="fpath" d="M46 64 H474" fill="none"/></defs>
+                <line class="fedge" x1="46" y1="64" x2="474" y2="64"/>
+                <circle class="ftoken" r="6"><animateMotion dur="3.6s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1" keyTimes="0;1"><mpath href="#fpath"/></animateMotion></circle>
+                <g class="fnode" style="--d:0s"><circle class="fo" cx="46" cy="64" r="17"/><circle class="fc" cx="46" cy="64" r="5"/><text x="46" y="102">Idea</text></g>
+                <g class="fnode" style="--d:.9s"><circle class="fo" cx="189" cy="64" r="17"/><circle class="fc" cx="189" cy="64" r="5"/><text x="189" y="102">Plan</text></g>
+                <g class="fnode" style="--d:1.8s"><circle class="fo" cx="332" cy="64" r="17"/><circle class="fc" cx="332" cy="64" r="5"/><text x="332" y="102">Code</text></g>
+                <g class="fnode ship" style="--d:2.7s"><circle class="fo" cx="474" cy="64" r="17"/><circle class="fc" cx="474" cy="64" r="5"/><text x="474" y="102">Ship</text></g>
+              </svg>
+            </div>
+          </article>
+
+          <!-- Tall: platform -->
+          <article class="card b-b accent-purple" data-reveal data-delay="80">
+            <div class="card-ic">
+              <svg class="ic-layers" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M24 8 L40 16 L24 24 L8 16 Z"/>
+                <path d="M9 24 L24 31 L39 24"/>
+                <path d="M9 31 L24 38 L39 31"/>
+              </svg>
+            </div>
+            <h3>The Oscorpex platform</h3>
+            <p>The infrastructure of autonomous development.</p>
+            <div class="sol-stack" aria-hidden="true">
+              <span class="layer" style="--i:0">DAG Pipeline</span>
+              <span class="layer" style="--i:1">Multi-Provider Routing</span>
+              <span class="layer" style="--i:2">Skills &amp; RAG Memory</span>
+              <span class="layer" style="--i:3">Observability</span>
+              <span class="layer" style="--i:4">Quality Gates</span>
+            </div>
+          </article>
+
+          <!-- Small: orchestration -->
+          <article class="card b-c accent-blue" data-reveal data-delay="160">
+            <div class="card-ic">
+              <svg class="ic-graph" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M22 21 L12 14 M26 21 L36 14 M22 27 L12 34 M26 27 L36 34"/>
+                <circle cx="11" cy="12" r="3"/><circle cx="37" cy="12" r="3"/>
+                <circle cx="11" cy="36" r="3"/><circle cx="37" cy="36" r="3"/>
+                <circle class="node-core" cx="24" cy="24" r="5"/>
+              </svg>
+            </div>
+            <h3>AI agent orchestration</h3>
+            <p>12-role Scrum team, review loops &amp; cost-aware routing.</p>
+            <div class="sol-agents" aria-hidden="true">
+              <span class="ag" style="--i:0"><i></i>PM</span>
+              <span class="ag" style="--i:1"><i></i>Backend</span>
+              <span class="ag" style="--i:2"><i></i>Frontend</span>
+              <span class="ag" style="--i:3"><i></i>QA</span>
+              <span class="ag" style="--i:4"><i></i>Review</span>
+            </div>
+          </article>
+
+          <!-- Small: integration -->
+          <article class="card b-d accent-purple" data-reveal data-delay="240">
+            <div class="card-ic">
+              <svg class="ic-link" viewBox="0 0 48 48" aria-hidden="true">
+                <rect x="7" y="18.5" width="17" height="11" rx="5.5"/>
+                <rect x="24" y="18.5" width="17" height="11" rx="5.5"/>
+                <path d="M19 24 H29"/>
+              </svg>
+            </div>
+            <h3>Integration &amp; consulting</h3>
+            <p>Secure agent workflows for your existing teams.</p>
+            <div class="sol-connect" aria-hidden="true">
+              <span class="endp">Your team</span>
+              <span class="wire"><span class="pulse-dot"></span></span>
+              <span class="endp oscor">Oscorpex</span>
+            </div>
+          </article>
+
+          <!-- Wide: governance -->
+          <article class="card b-e accent-green" data-reveal data-delay="320">
+            <div class="gov-grid">
+              <div class="gov-copy">
+                <div class="card-ic">
+                  <svg class="ic-shield" viewBox="0 0 48 48" aria-hidden="true">
+                    <path d="M24 7 L39 13 V24 C39 32.5 32.5 38.5 24 41.5 C15.5 38.5 9 32.5 9 24 V13 Z"/>
+                    <path class="check" d="M18 24 L22.5 28.5 L31 18.5"/>
+                  </svg>
+                </div>
+                <h3>Governance &amp; cost control</h3>
+                <p>Approval queue, audit trail, and a budget circuit breaker that auto-pauses the pipeline.</p>
+              </div>
+              <div class="gov-visual" aria-hidden="true">
+                <div class="sol-meter">
+                  <div class="meter-row"><span class="mono">budget usage</span><span class="meter-track"><span class="meter-fill"></span></span><span class="mono mval">64%</span></div>
+                </div>
+                <div class="gov-queue">
+                  <div class="gq"><span class="gq-dot warn"></span><span class="gq-name">DB migration</span><span class="gq-tag mono">approve</span></div>
+                  <div class="gq"><span class="gq-dot warn"></span><span class="gq-name">External API key</span><span class="gq-tag mono">approve</span></div>
+                  <div class="gq"><span class="gq-dot ok"></span><span class="gq-name">Dependency added</span><span class="gq-tag mono ok">auto</span></div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== APPROACH / VALUES ===== -->
+    <section class="section" id="approach">
+      <div class="shell">
+        <div class="sec-head" data-reveal>
+          <span class="eyebrow mono">Our approach</span>
+          <h2>Autonomous, but framed by principles</h2>
+          <p class="sec-sub">Four principles that balance speed with responsibility form the foundation of every project.</p>
+        </div>
+        <div class="values">
+          <div class="value" data-reveal data-delay="0">
+            <span class="v-ic"><svg class="vic" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 5 L33 10 V20 C33 27 27.5 32 20 34.5 C12.5 32 7 27 7 20 V10 Z"/><path class="vdraw" d="M14.5 20 L18.5 24 L26 15"/></svg></span>
+            <h3>Security first</h3><p>Sandbox, command policy &amp; injection defense.</p>
+            <div class="apx apx-checks" aria-hidden="true">
+              <span class="apx-chip" style="--i:0"><i></i>Sandbox</span>
+              <span class="apx-chip" style="--i:1"><i></i>Policy</span>
+              <span class="apx-chip" style="--i:2"><i></i>Injection</span>
+            </div>
+          </div>
+          <div class="value" data-reveal data-delay="80">
+            <span class="v-ic"><svg class="vic vic-scan" viewBox="0 0 40 40" aria-hidden="true"><path d="M9 13 H31 M9 20 H31 M9 27 H23"/><line class="scanline" x1="9" y1="8.5" x2="9" y2="31.5"/></svg></span>
+            <h3>Transparent &amp; auditable</h3><p>Full traces, audit logs &amp; session inspector.</p>
+            <div class="apx apx-spark" aria-hidden="true">
+              <svg viewBox="0 0 200 30">
+                <polyline class="spark-line" points="0,22 25,15 50,19 75,8 100,14 125,5 150,12 175,4 200,10"/>
+                <circle class="spark-dot" cx="200" cy="10" r="3"/>
+              </svg>
+            </div>
+          </div>
+          <div class="value" data-reveal data-delay="160">
+            <span class="v-ic"><svg class="vic vic-approve" viewBox="0 0 40 40" aria-hidden="true"><circle class="ring" cx="20" cy="20" r="13"/><path d="M14.5 20 L18.5 24 L26 15"/></svg></span>
+            <h3>Human-controlled autonomy</h3><p>Approval queue on every risky step.</p>
+            <div class="apx apx-approve-row" aria-hidden="true">
+              <span class="apx-label mono">operator gate</span>
+              <span class="apx-toggle"><span class="knob"></span></span>
+            </div>
+          </div>
+          <div class="value" data-reveal data-delay="240">
+            <span class="v-ic"><svg class="vic vic-bars" viewBox="0 0 40 40" aria-hidden="true"><rect class="bar b1" x="9" y="22" width="5" height="9" rx="1.5"/><rect class="bar b2" x="17.5" y="16" width="5" height="15" rx="1.5"/><rect class="bar b3" x="26" y="11" width="5" height="20" rx="1.5"/></svg></span>
+            <h3>Scalable engineering</h3><p>Adaptive concurrency, scheduling &amp; budget guard.</p>
+            <div class="apx apx-segs" aria-hidden="true">
+              <span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span><span style="--i:5"></span><span style="--i:6"></span><span style="--i:7"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== INDUSTRIES ===== -->
+    <section class="section alt" id="industries">
+      <div class="shell">
+        <div class="sec-head center" data-reveal>
+          <span class="eyebrow mono">Industries</span>
+          <h2>Where we work</h2>
+          <p class="sec-sub">Our autonomous development approach adapts to any sector where speed and reliability are both required.</p>
+        </div>
+        <div class="ind-grid">
+          <div class="ind" data-reveal data-delay="0"><span class="ind-ic">▰</span>Fintech &amp; payments</div>
+          <div class="ind" data-reveal data-delay="60"><span class="ind-ic">▰</span>SaaS &amp; platforms</div>
+          <div class="ind" data-reveal data-delay="120"><span class="ind-ic">▰</span>E-commerce</div>
+          <div class="ind" data-reveal data-delay="180"><span class="ind-ic">▰</span>Health tech</div>
+          <div class="ind" data-reveal data-delay="240"><span class="ind-ic">▰</span>Logistics &amp; operations</div>
+          <div class="ind" data-reveal data-delay="300"><span class="ind-ic">▰</span>Public &amp; enterprise</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== CONTACT ===== -->
+    <section class="contact" id="contact">
+      <div class="shell contact-inner">
+        <div class="contact-copy" data-reveal>
+          <span class="eyebrow mono">Contact</span>
+          <h2>Let's talk about your idea</h2>
+          <p>Whether it's a product from scratch or autonomous workflows for your existing team — the first step is a short conversation. Tell us about your project in a few lines and we'll get back to you within one business day.</p>
+          <ul class="contact-points">
+            <li><span class="cp-ic">✉</span><div><span class="cp-label mono">Email</span><a href="mailto:hello@oscorpex.com">hello@oscorpex.com</a></div></li>
+            <li><span class="cp-ic">◉</span><div><span class="cp-label mono">Location</span><span>İstanbul, Türkiye</span></div></li>
+            <li><span class="cp-ic">in</span><div><span class="cp-label mono">LinkedIn</span><a href="https://www.linkedin.com/company/oscorpex/" target="_blank" rel="noopener">Oscorpex ↗</a></div></li>
+            <li><span class="cp-ic">↺</span><div><span class="cp-label mono">Response time</span><span>Within 1 business day</span></div></li>
+          </ul>
+        </div>
+
+        <form class="contact-form" id="contactForm" novalidate data-reveal data-delay="120">
+          <div class="field">
+            <label for="cf-name">Full name</label>
+            <input type="text" id="cf-name" name="name" autocomplete="name" placeholder="Your name" required>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="cf-email">Email</label>
+              <input type="email" id="cf-email" name="email" autocomplete="email" placeholder="you@company.com" required>
+            </div>
+            <div class="field">
+              <label for="cf-company">Company <span class="opt">(optional)</span></label>
+              <input type="text" id="cf-company" name="company" autocomplete="organization" placeholder="Your company">
+            </div>
+          </div>
+          <div class="field">
+            <label for="cf-message">Your project</label>
+            <textarea id="cf-message" name="message" rows="4" placeholder="What do you want to build? A couple of sentences is enough." required></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary btn-lg form-submit">Send message</button>
+          <p class="form-status" id="formStatus" role="status" aria-live="polite" hidden></p>
+          <p class="form-note mono">When you hit Send, the details open as a ready draft in your email app.</p>
+        </form>
+      </div>
+      <div class="cta-glow" aria-hidden="true"></div>
+    </section>
+
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="footer">
+    <div class="shell footer-inner">
+      <div class="foot-brand">
+        <a class="brand" href="#top" aria-label="Oscorpex">
+          <img class="brand-logo" src="logo-icon.svg" alt="" aria-hidden="true">
+          <img class="brand-word" src="app-logo.svg" alt="Oscorpex">
+        </a>
+        <p class="mono">Autonomous software engineering.</p>
+        <p class="foot-meta mono">İstanbul, Türkiye · Founded 2022<br><a href="mailto:hello@oscorpex.com">hello@oscorpex.com</a></p>
+      </div>
+      <nav class="foot-cols" aria-label="Footer menu">
+        <div><h4>Company</h4><a href="#about">About</a><a href="#approach">Approach</a><a href="#contact">Contact</a><a href="https://www.linkedin.com/company/oscorpex/" target="_blank" rel="noopener">LinkedIn ↗</a></div>
+        <div><h4>Solutions</h4><a href="#solutions">Autonomous delivery</a><a href="#solutions">Platform</a><a href="#industries">Industries</a></div>
+        <div><h4>Resources</h4><a href="#">Documentation</a><a href="#">Blog</a><a href="#">Careers</a></div>
+      </nav>
+    </div>
+    <div class="shell foot-base mono">
+      <span>© 2026 Oscorpex · İstanbul, Türkiye · hello@oscorpex.com</span>
+      <span class="foot-legal"><a href="#">Privacy</a><a href="#">Terms</a></span>
+    </div>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>
