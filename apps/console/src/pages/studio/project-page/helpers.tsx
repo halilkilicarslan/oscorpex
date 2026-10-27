@@ -12,7 +12,6 @@ import {
 	Settings,
 	Package,
 	CalendarDays,
-	Users2,
 	FileBarChart,
 	Cpu,
 } from 'lucide-react';

@@ -15,7 +15,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "paths": {
-      "@oscorpex/control-plane": ["../../../packages/control-plane/src/index.ts"]
+      "@oscorpex/control-plane": ["../../packages/control-plane/src/index.ts"]
     },
 
     /* Linting */

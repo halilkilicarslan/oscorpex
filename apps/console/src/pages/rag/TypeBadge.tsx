@@ -1,4 +1,3 @@
-import React from 'react';
 import { TYPE_CONFIG } from './constants.js';
 
 export function TypeBadge({ type }: { type: string }) {

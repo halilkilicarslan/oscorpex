@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import StudioHomePage from '../pages/studio/StudioHomePage';
 import * as studioApi from '../lib/studio-api';
-import type { Project, TeamTemplate } from '../lib/studio-api';
+import type { Project } from '../lib/studio-api';
 
 // studio-api modulunu mockla
 vi.mock('../lib/studio-api', () => ({

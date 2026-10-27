@@ -8,8 +8,6 @@ import {
 	getAgentPresence,
 	insertRuntimeHeartbeat,
 	listRuntimeHeartbeats,
-	getLatestHeartbeat,
-	 type AgentPresenceRow,
 	 type RuntimeHeartbeatRow,
 } from "./repo.js";
 import type { PresenceState } from "./index.js";
@@ -21,13 +19,6 @@ export interface PresenceSummary {
 	state: PresenceState;
 	lastHeartbeatAt: string | null;
 	stale: boolean;
-}
-
-function computeState(row: { state: string; last_heartbeat_at: string | null }): PresenceState {
-	const last = row.last_heartbeat_at ? new Date(row.last_heartbeat_at).getTime() : 0;
-	const stale = Date.now() - last > STALE_THRESHOLD_MS;
-	if (stale) return "offline";
-	return (row.state as PresenceState) ?? "unknown";
 }
 
 export async function recordHeartbeat(data: {

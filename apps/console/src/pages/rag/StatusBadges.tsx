@@ -1,4 +1,3 @@
-import React from 'react';
 import { STATUS_COLORS } from './constants.js';
 
 export function StatusDot({ status }: { status: string }) {

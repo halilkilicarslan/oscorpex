@@ -254,7 +254,7 @@ export default function ProjectPage() {
 		[projectAgents],
 	);
 	const teamInitialized = projectAgents.length > 0;
-	const TEAM_REQUIRED_TABS = new Set<Tab>(['chat', 'board', 'preview', 'dashboard', 'logs', 'backlog', 'sprint', 'ceremonies', 'report', 'agentic']);
+	const TEAM_REQUIRED_TABS = new Set<Tab>(['chat', 'board', 'preview', 'dashboard', 'logs', 'backlog', 'sprint', 'report', 'agentic']);
 	const requiresTeamSetup = TEAM_REQUIRED_TABS.has(activeTab) && !teamInitialized;
 	const visibleTabs = useMemo(
 		() => (previewEnabled ? STATIC_TABS : STATIC_TABS.filter((tab) => tab.id !== 'preview')),

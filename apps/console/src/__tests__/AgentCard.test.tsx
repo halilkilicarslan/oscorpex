@@ -20,6 +20,13 @@ vi.mock('../pages/studio/AgentTerminal', () => ({
   default: () => <div data-testid="agent-terminal">Terminal Mock</div>,
 }));
 
+// AgentSkillBadges kendi API cagrilarini yapar — burada sadece dogru props ile mount edildigini dogrula
+vi.mock('../components/AgentSkillBadges', () => ({
+  default: ({ agentId, agentRole }: { agentId: string; agentRole: string }) => (
+    <div data-testid="agent-skill-badges">{`${agentId}:${agentRole}`}</div>
+  ),
+}));
+
 const ORNEK_AJAN: ProjectAgent = {
   id: 'agent-1',
   projectId: 'proj-1',
@@ -102,23 +109,9 @@ describe('AgentCard — ajan bilgisi', () => {
     expect(screen.getByText('Template')).toBeInTheDocument();
   });
 
-  it('ilk 4 yetenegi gostermeli', () => {
+  it('skill rozetlerini ajan id ve rolu ile gostermeli', () => {
     renderAgentCard();
-    expect(screen.getByText('React')).toBeInTheDocument();
-    expect(screen.getByText('TypeScript')).toBeInTheDocument();
-    expect(screen.getByText('CSS')).toBeInTheDocument();
-    expect(screen.getByText('Testing')).toBeInTheDocument();
-  });
-
-  it('4\'ten fazla yetenek varsa "+N" gostermeli', () => {
-    renderAgentCard();
-    // 5 yetenek var (React, TypeScript, CSS, Testing, GraphQL), 4'u gosterilir
-    expect(screen.getByText('+1')).toBeInTheDocument();
-  });
-
-  it('yetenek yoksa skill bolumu gosterilmemeli', () => {
-    renderAgentCard({ agent: { ...ORNEK_AJAN, skills: [] } });
-    expect(screen.queryByText('+1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('agent-skill-badges')).toHaveTextContent('agent-1:frontend-developer');
   });
 
   it('sol border rengi ajan rengini yansitmali', () => {

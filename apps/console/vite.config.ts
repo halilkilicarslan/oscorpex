@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -16,15 +17,16 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@oscorpex/control-plane': '/Users/iamhk/development/personal/oscorpex/packages/control-plane/src/index.ts',
+        '@oscorpex/control-plane': fileURLToPath(new URL('../../packages/control-plane/src/index.ts', import.meta.url)),
       },
     },
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-recharts': ['recharts'],
+          // Vite 8 (Rolldown) only accepts the function form
+          manualChunks(id) {
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/.test(id)) return 'vendor-react'
+            if (/[\\/]node_modules[\\/]recharts[\\/]/.test(id)) return 'vendor-recharts'
           },
         },
       },
