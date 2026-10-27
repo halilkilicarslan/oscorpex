@@ -11,9 +11,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
+import { execute, query, queryOne } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
-import { execute, query, queryOne } from "./db.js";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 import type { AgentProcessRecord, AgentProcessStatus, AgentRun } from "./types.js";
 const log = createLogger("agent-runtime");
 
@@ -104,13 +105,12 @@ function buildCommand(
 			}
 			return { cmd: "cursor", args: ["agent"] };
 
-		case "custom":
+		case "custom": {
 			// systemPrompt komutu ikiye böl: ilk kelime = program, geri kalanı = argümanlar
 			if (!systemPrompt?.trim()) return null;
 			const parts = systemPrompt.trim().split(/\s+/);
 			return { cmd: parts[0], args: parts.slice(1) };
-
-		case "none":
+		}
 		default:
 			return null;
 	}
@@ -167,12 +167,14 @@ export async function startAgent(
 	// Alt süreci oluştur
 	const child: ChildProcess = spawn(cmdSpec.cmd, cmdSpec.args, {
 		cwd,
-		env: {
-			...process.env,
+		env: buildSafeChildEnv({
+			profile: "provider",
 			// API anahtarlarını ortam üzerinden geçir
-			...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
-			...(process.env.OPENAI_API_KEY ? { OPENAI_API_KEY: process.env.OPENAI_API_KEY } : {}),
-		},
+			extra: {
+				...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
+				...(process.env.OPENAI_API_KEY ? { OPENAI_API_KEY: process.env.OPENAI_API_KEY } : {}),
+			},
+		}),
 		// stdio akışlarını ayrı tutarak stdout/stderr'ı dinle
 		stdio: ["pipe", "pipe", "pipe"],
 	});
@@ -376,7 +378,7 @@ export function streamAgentOutput(projectId: string, agentId: string): ReadableS
 			if (!outputListeners.has(key)) {
 				outputListeners.set(key, []);
 			}
-			outputListeners.get(key)!.push(listener);
+			outputListeners.get(key)?.push(listener);
 
 			const removeListener = () => {
 				const listeners = outputListeners.get(key);
@@ -478,7 +480,7 @@ function _createRunInDb(record: AgentProcessRecord, taskPrompt?: string): void {
 		],
 	).catch((err) => {
 		// DB hatası agent'ı durdurmasın — sadece logla
-		log.error("[agent-runtime] DB kaydı oluşturulamadı:" + " " + String(err));
+		log.error(`[agent-runtime] DB kaydı oluşturulamadı: ${String(err)}`);
 	});
 }
 
@@ -493,7 +495,7 @@ function _syncRunToDb(record: AgentProcessRecord): void {
   `,
 		[record.status, summary || null, record.exitCode ?? null, record.stoppedAt ?? null, record.id],
 	).catch((err) => {
-		log.error("[agent-runtime] DB kaydı güncellenemedi:" + " " + String(err));
+		log.error(`[agent-runtime] DB kaydı güncellenemedi: ${String(err)}`);
 	});
 }
 

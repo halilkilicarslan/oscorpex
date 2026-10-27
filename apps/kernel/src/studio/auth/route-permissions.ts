@@ -332,6 +332,32 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: "/cli-usage/", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/cli-usage/", permission: "projects:update", methods: ["POST", "PUT"] },
 
+	// MCP Bridge
+	{ pattern: "/mcp/tools", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/mcp/invoke", permission: "projects:update", methods: ["POST"] },
+	{ pattern: "/mcp/metrics", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/mcp/approvals", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/mcp/audit", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/mcp/write/apply", permission: "projects:update", methods: ["POST"] },
+
+	// Gateway
+	{ pattern: "/gateway/invoke", permission: "projects:update", methods: ["POST"] },
+	{ pattern: "/gateway/tools", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/gateway/health", permission: "projects:read", methods: ["GET"] },
+
+	// Hermes
+	{ pattern: "/hermes/invoke", permission: "projects:update", methods: ["POST"] },
+	{ pattern: "/hermes/session", permission: "projects:update", methods: ["POST"] },
+	{ pattern: "/hermes/tools", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/hermes/keys", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/hermes/keys", permission: "projects:update", methods: ["POST", "DELETE"] },
+	{ pattern: "/hermes/metrics", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/hermes/soak", permission: "projects:update", methods: ["POST"] },
+
+	// Scheduler
+	{ pattern: "/scheduler/jobs", permission: "projects:read", methods: ["GET"] },
+	{ pattern: "/scheduler/soak", permission: "projects:update", methods: ["POST"] },
+
 	// Platform-wide endpoints
 	{ pattern: "/platform/stats", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/platform/analytics", permission: "projects:read", methods: ["GET"] },

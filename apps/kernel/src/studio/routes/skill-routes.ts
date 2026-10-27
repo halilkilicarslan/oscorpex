@@ -18,6 +18,7 @@ import {
 	updateSkill,
 } from "../db.js";
 import { createLogger } from "../logger.js";
+import { CreateSkillSchema, UpdateSkillSchema, parseBody } from "./validation-schemas.js";
 
 const log = createLogger("skill-routes");
 const skillRoutes = new Hono();
@@ -44,17 +45,17 @@ skillRoutes.get("/skills/:id", async (c) => {
 });
 
 skillRoutes.post("/skills", async (c) => {
-	const body = await c.req.json();
-	if (!body.name?.trim() || !body.description?.trim()) {
-		return c.json({ error: "name and description are required" }, 400);
-	}
+	const rawBody = await c.req.json();
+	const parsed = parseBody(CreateSkillSchema, rawBody);
+	if (!parsed.success) return c.json({ error: parsed.error }, 400);
+	const body = parsed.data;
 	log.info({ name: body.name }, "creating skill");
 	const skill = await createSkill({
 		name: body.name.trim(),
-		description: body.description.trim(),
+		description: "",
 		contentMd: body.contentMd ?? "",
-		triggers: Array.isArray(body.triggers) ? body.triggers : [],
-		applicableRoles: Array.isArray(body.applicableRoles) ? body.applicableRoles : [],
+		triggers: body.triggers ?? [],
+		applicableRoles: body.applicableRoles ?? [],
 		providerHint: body.providerHint,
 		modelHint: body.modelHint,
 		category: body.category ?? "custom",
@@ -66,9 +67,11 @@ skillRoutes.post("/skills", async (c) => {
 
 skillRoutes.put("/skills/:id", async (c) => {
 	const id = c.req.param("id");
-	const body = await c.req.json();
+	const rawBody = await c.req.json();
+	const parsed = parseBody(UpdateSkillSchema, rawBody);
+	if (!parsed.success) return c.json({ error: parsed.error }, 400);
 	log.info({ id }, "updating skill");
-	const updated = await updateSkill(id, body);
+	const updated = await updateSkill(id, parsed.data);
 	if (!updated) return c.json({ error: "Skill not found" }, 404);
 	return c.json(updated);
 });

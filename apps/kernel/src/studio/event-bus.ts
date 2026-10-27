@@ -30,7 +30,7 @@ class EventBus {
 	// --- EventPublisher contract (BaseEvent with typed payloads) ---
 
 	/** Publish a typed event — persists to DB, notifies subscribers, returns the stored event */
-	async publish<T extends EventType>(event: BaseEvent<T, EventPayloadMap[T]>): Promise<void> {
+	async publish<T extends keyof EventPayloadMap>(event: BaseEvent<T, EventPayloadMap[T]>): Promise<void> {
 		const legacyData: Omit<StudioEvent, "id" | "timestamp"> = {
 			projectId: event.projectId,
 			type: event.type,
@@ -44,7 +44,7 @@ class EventBus {
 	}
 
 	/** Publish a transient typed event — in-process only, no DB persistence */
-	publishTransient<T extends EventType>(event: BaseEvent<T, EventPayloadMap[T]>): void {
+	publishTransient<T extends keyof EventPayloadMap>(event: BaseEvent<T, EventPayloadMap[T]>): void {
 		const legacyData: Omit<StudioEvent, "id" | "timestamp"> = {
 			projectId: event.projectId,
 			type: event.type,
@@ -63,7 +63,7 @@ class EventBus {
 	onProject(projectId: string, handler: Handler): () => void {
 		const key = `project:${projectId}`;
 		if (!this.handlers.has(key)) this.handlers.set(key, new Set());
-		this.handlers.get(key)!.add(handler);
+		this.handlers.get(key)?.add(handler);
 		return () => {
 			const set = this.handlers.get(key);
 			set?.delete(handler);
@@ -75,7 +75,7 @@ class EventBus {
 	on(type: EventType, handler: Handler): () => void {
 		const key = `type:${type}`;
 		if (!this.handlers.has(key)) this.handlers.set(key, new Set());
-		this.handlers.get(key)!.add(handler);
+		this.handlers.get(key)?.add(handler);
 		return () => {
 			const set = this.handlers.get(key);
 			set?.delete(handler);
@@ -110,8 +110,12 @@ class EventBus {
 					for (const handler of projectHandlers) {
 						try {
 							handler(event);
-						} catch {
-							/* subscriber error — ignore */
+						} catch (handlerErr) {
+							// P0-10: Log handler errors instead of silently swallowing
+							log.warn(
+								{ err: handlerErr, eventType: event.type, eventId: event.id },
+								"[event-bus] subscriber handler threw",
+							);
 						}
 					}
 				}
@@ -122,8 +126,12 @@ class EventBus {
 					for (const handler of typeHandlers) {
 						try {
 							handler(event);
-						} catch {
-							/* subscriber error — ignore */
+						} catch (handlerErr) {
+							// P0-10: Log handler errors instead of silently swallowing
+							log.warn(
+								{ err: handlerErr, eventType: event.type, eventId: event.id },
+								"[event-bus] subscriber handler threw",
+							);
 						}
 					}
 				}
@@ -153,8 +161,11 @@ class EventBus {
 			for (const handler of projectHandlers) {
 				try {
 					handler(event);
-				} catch {
-					/* subscriber error — ignore */
+				} catch (handlerErr: unknown) {
+					log.warn(
+						{ err: handlerErr, eventType: event.type, eventId: event.id },
+						"[event-bus] subscriber handler threw",
+					);
 				}
 			}
 		}
@@ -165,8 +176,11 @@ class EventBus {
 			for (const handler of typeHandlers) {
 				try {
 					handler(event);
-				} catch {
-					/* subscriber error — ignore */
+				} catch (handlerErr: unknown) {
+					log.warn(
+						{ err: handlerErr, eventType: event.type, eventId: event.id },
+						"[event-bus] subscriber handler threw",
+					);
 				}
 			}
 		}
@@ -191,8 +205,11 @@ class EventBus {
 			for (const handler of projectHandlers) {
 				try {
 					handler(event);
-				} catch {
-					/* subscriber error — ignore */
+				} catch (handlerErr: unknown) {
+					log.warn(
+						{ err: handlerErr, eventType: event.type, eventId: event.id },
+						"[event-bus] subscriber handler threw",
+					);
 				}
 			}
 		}
@@ -203,8 +220,11 @@ class EventBus {
 			for (const handler of typeHandlers) {
 				try {
 					handler(event);
-				} catch {
-					/* subscriber error — ignore */
+				} catch (handlerErr: unknown) {
+					log.warn(
+						{ err: handlerErr, eventType: event.type, eventId: event.id },
+						"[event-bus] subscriber handler threw",
+					);
 				}
 			}
 		}
@@ -235,8 +255,11 @@ class EventBus {
 						for (const handler of projectHandlers) {
 							try {
 								handler(event);
-							} catch {
-								/* subscriber error — ignore */
+							} catch (handlerErr: unknown) {
+								log.warn(
+									{ err: handlerErr, eventType: event.type, eventId: event.id },
+									"[event-bus] subscriber handler threw",
+								);
 							}
 						}
 					}
@@ -247,8 +270,11 @@ class EventBus {
 						for (const handler of typeHandlers) {
 							try {
 								handler(event);
-							} catch {
-								/* subscriber error — ignore */
+							} catch (handlerErr: unknown) {
+								log.warn(
+									{ err: handlerErr, eventType: event.type, eventId: event.id },
+									"[event-bus] subscriber handler threw",
+								);
 							}
 						}
 					}

@@ -36,6 +36,7 @@ import {
 } from "../db.js";
 import { createLogger } from "../logger.js";
 import type { MessageStatus, MessageType } from "../types.js";
+import { CreateAgentSchema, parseBody } from "./validation-schemas.js";
 const log = createLogger("agent-routes");
 
 function matchesTaskFilter(line: string, taskId?: string): boolean {
@@ -66,8 +67,13 @@ agentRoutes.get("/avatars", (c) => {
 });
 
 agentRoutes.post("/agents", async (c) => {
-	const body = await c.req.json();
-	const agent = await createAgentConfig({ ...body, isPreset: false });
+	const rawBody = await c.req.json();
+	// P1-6: Validate with Zod — rejects unknown fields (strict mode) and enforces size limits
+	const parsed = parseBody(CreateAgentSchema, rawBody);
+	if (!parsed.success) return c.json({ error: parsed.error }, 400);
+	// P1-6: Only pass validated data — prevents mass assignment of isPreset, tenant_id, etc.
+	// biome-ignore lint/suspicious/noExplicitAny: createAgentConfig accepts flexible Omit<AgentConfig,"id">
+	const agent = await createAgentConfig({ ...parsed.data, isPreset: false } as any);
 	return c.json(agent, 201);
 });
 

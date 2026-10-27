@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { streamWithCLI } from "./legacy/cli-runtime.js";
 import { createLogger } from "./logger.js";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 const log = createLogger("planner-cli");
 
 export type PlannerCLIProvider = "claude-code" | "codex" | "gemini";
@@ -101,7 +102,7 @@ function probeBinary(binary: string, args: string[]): Promise<{ available: boole
 		const proc = spawn(binary, args, {
 			stdio: ["ignore", "pipe", "pipe"],
 			shell: false,
-			env: { ...process.env, PATH: process.env.PATH },
+			env: buildSafeChildEnv({ profile: "provider" }),
 		});
 
 		proc.stdout?.on("data", (chunk: Buffer) => {
@@ -197,7 +198,7 @@ function streamWithCodex(
 			cwd: repoPath,
 			stdio: ["pipe", "pipe", "pipe"],
 			shell: false,
-			env: { ...process.env, PATH: process.env.PATH },
+			env: buildSafeChildEnv({ profile: "provider" }),
 		},
 	);
 
@@ -276,7 +277,7 @@ function streamWithGemini(
 		cwd: repoPath,
 		stdio: ["ignore", "pipe", "pipe"],
 		shell: false,
-		env: { ...process.env, PATH: process.env.PATH },
+		env: buildSafeChildEnv({ profile: "provider" }),
 	});
 
 	let fullText = "";
@@ -348,7 +349,6 @@ export function streamPlannerWithCLI(
 			return streamWithCodex(opts, callbacks);
 		case "gemini":
 			return streamWithGemini(opts, callbacks);
-		case "claude-code":
 		default:
 			return streamWithCLI(
 				{

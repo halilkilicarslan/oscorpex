@@ -22,6 +22,7 @@ import { eventBus } from "../event-bus.js";
 import { kernel } from "../kernel/index.js";
 import { createLogger } from "../logger.js";
 import { ensureProjectTeamInitialized } from "./team-init-guard.js";
+import { UpdateTaskSchema, parseBody } from "./validation-schemas.js";
 const log = createLogger("task-routes");
 
 export const taskRoutes = new Hono();
@@ -74,14 +75,11 @@ taskRoutes.patch("/projects/:id/tasks/:taskId", async (c) => {
 	try {
 		const teamGuard = await ensureProjectTeamInitialized(c, c.req.param("id"));
 		if (teamGuard) return teamGuard;
-		const body = await c.req.json();
-		const ALLOWED_PATCH_FIELDS = new Set(["description", "complexity", "assignedAgent", "testExpectation"]);
-		const safeBody: Record<string, unknown> = {};
-		for (const [key, value] of Object.entries(body)) {
-			if (ALLOWED_PATCH_FIELDS.has(key)) safeBody[key] = value;
-		}
-		if (Object.keys(safeBody).length === 0) return c.json({ error: "No valid fields to update" }, 400);
-		const task = await updateTask(c.req.param("taskId"), safeBody);
+		const raw = await c.req.json();
+		// P4-5: Validate with Zod schema — strip unknown fields, enforce enum
+		const parsed = parseBody(UpdateTaskSchema, raw);
+		if (!parsed.success) return c.json({ error: parsed.error }, 400);
+		const task = await updateTask(c.req.param("taskId"), parsed.data as Record<string, unknown>);
 		if (!task) return c.json({ error: "Task not found" }, 404);
 		return c.json(task);
 	} catch (err) {

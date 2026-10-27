@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createLogger } from "./logger.js";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 
 const log = createLogger("repo-dependency-sync");
 
@@ -105,7 +106,7 @@ export function syncDeclaredDependencies(repoRoot: string, timeoutMs = 420_000):
 			encoding: "utf-8",
 			timeout: timeoutMs,
 			stdio: "pipe",
-			env: process.env as NodeJS.ProcessEnv,
+			env: buildSafeChildEnv({ profile: "build_tool" }),
 		});
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);

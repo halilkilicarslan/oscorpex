@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { getProjectSetting } from "./db.js";
 import { execute, query, queryOne } from "./db.js";
 import { createLogger } from "./logger.js";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 const log = createLogger("sonar-runner");
 
 // ---------------------------------------------------------------------------
@@ -86,7 +87,7 @@ function exec(
 				cwd,
 				timeout: 120_000,
 				maxBuffer: 5 * 1024 * 1024,
-				env: { ...process.env, ...env },
+				env: buildSafeChildEnv({ profile: "build_tool", extra: env }),
 			},
 			(err, stdout, stderr) => {
 				const code = err && "code" in err ? (err as NodeJS.ErrnoException).code : 0;

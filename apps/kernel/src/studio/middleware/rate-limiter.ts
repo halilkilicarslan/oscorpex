@@ -27,8 +27,13 @@ export function rateLimiter(opts: { windowMs?: number; max?: number } = {}): Mid
 	const max = opts.max ?? 100;
 
 	return async (c, next) => {
+		// P1-5: Use authenticated actor ID as primary key when available
+		const actorId = c.get?.("userId") || c.get?.("tenantId");
 		const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-		const key = `${ip}:${c.req.path}`;
+		// P1-5: Prefer actor-based keying; fall back to IP only when trusted proxy enabled
+		const key = actorId
+			? `actor:${actorId}:${c.req.path}`
+			: `${process.env.OSCORPEX_TRUSTED_PROXY === "true" ? ip : "anon"}:${c.req.path}`;
 		const now = Date.now();
 
 		let entry = store.get(key);

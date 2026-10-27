@@ -5,6 +5,7 @@ import {
 	approvalService,
 } from "../approval-service.js";
 import { getTenantContext, logTenantActivity } from "../auth/tenant-context.js";
+import { ApprovalDecisionSchema, parseBody } from "./validation-schemas.js";
 
 const approvalRoutes = new Hono();
 
@@ -74,7 +75,10 @@ approvalRoutes.post("/approvals/request", async (c) => {
 
 approvalRoutes.post("/approvals/:id/approve", async (c) => {
 	const id = c.req.param("id");
-	const body = await c.req.json().catch(() => ({}));
+	const rawBody = await c.req.json().catch(() => ({}));
+	const parsed = parseBody(ApprovalDecisionSchema, rawBody);
+	if (!parsed.success) return badRequest(c, parsed.error);
+	const body = parsed.data;
 	const tenant = getTenantContext(c);
 	if (!id) return badRequest(c, "approval id is required");
 	if (!tenant.userId || !tenant.userRole) return c.json({ error: "missing actor context" }, 403);
@@ -85,9 +89,9 @@ approvalRoutes.post("/approvals/:id/approve", async (c) => {
 			tenantId: tenant.tenantId,
 			actorId: tenant.userId,
 			actorRoles: [tenant.userRole],
-			reason: typeof body.reason === "string" ? body.reason : "",
-			artifactIds: Array.isArray(body.artifactIds) ? body.artifactIds : [],
-			metadata: typeof body.metadata === "object" && body.metadata ? body.metadata : {},
+			reason: body.comment ?? "",
+			artifactIds: [],
+			metadata: {},
 		});
 		if (tenant.tenantId) {
 			await logTenantActivity(tenant.tenantId, tenant.userId, "approvals:approve", {
@@ -106,7 +110,10 @@ approvalRoutes.post("/approvals/:id/approve", async (c) => {
 
 approvalRoutes.post("/approvals/:id/reject", async (c) => {
 	const id = c.req.param("id");
-	const body = await c.req.json().catch(() => ({}));
+	const rawBody = await c.req.json().catch(() => ({}));
+	const parsed = parseBody(ApprovalDecisionSchema, rawBody);
+	if (!parsed.success) return badRequest(c, parsed.error);
+	const body = parsed.data;
 	const tenant = getTenantContext(c);
 	if (!id) return badRequest(c, "approval id is required");
 	if (!tenant.userId || !tenant.userRole) return c.json({ error: "missing actor context" }, 403);
@@ -117,9 +124,9 @@ approvalRoutes.post("/approvals/:id/reject", async (c) => {
 			tenantId: tenant.tenantId,
 			actorId: tenant.userId,
 			actorRoles: [tenant.userRole],
-			reason: typeof body.reason === "string" ? body.reason : "",
-			artifactIds: Array.isArray(body.artifactIds) ? body.artifactIds : [],
-			metadata: typeof body.metadata === "object" && body.metadata ? body.metadata : {},
+			reason: body.comment ?? "",
+			artifactIds: [],
+			metadata: {},
 		});
 		if (tenant.tenantId) {
 			await logTenantActivity(tenant.tenantId, tenant.userId, "approvals:reject", {

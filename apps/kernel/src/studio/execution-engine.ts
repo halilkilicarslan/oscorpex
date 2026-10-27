@@ -7,11 +7,11 @@
 import { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import { AdaptiveConcurrencyController, AdaptiveSemaphore, ConcurrencyTracker } from "./adaptive-concurrency.js";
 import { claimTask, releaseTaskClaim } from "./db.js";
-import { createLogger } from "./logger.js";
 import { TaskDispatcher } from "./execution/dispatch-coordinator.js";
 import { ExecutionRecovery, runStartupRecoveryWithRetry } from "./execution/execution-recovery.js";
 import { ExecutionWatchdog } from "./execution/execution-watchdog.js";
 import { TaskExecutor } from "./execution/task-executor.js";
+import { createLogger } from "./logger.js";
 import { taskEngine } from "./task-engine.js";
 import type { Task } from "./types.js";
 
@@ -77,10 +77,7 @@ class ExecutionEngine {
 
 		// Wire sub-modules (must happen after fields are initialised)
 		this.executor = new TaskExecutor(this._activeControllers, this.telemetry);
-		this.dispatcher = new TaskDispatcher(
-			this._semaphore,
-			(projectId, task) => this.executeTask(projectId, task),
-		);
+		this.dispatcher = new TaskDispatcher(this._semaphore, (projectId, task) => this.executeTask(projectId, task));
 		this.recovery = new ExecutionRecovery(
 			this._activeControllers,
 			this.dispatcher.dispatchingTasks,
@@ -201,7 +198,12 @@ class ExecutionEngine {
 					title: freshTask.title,
 				});
 				const constraint = await checkConstraints(projectId, "execute_task", riskLevel);
-				if (!constraint.allowed && constraint.requiresApproval) {
+				// Pipeline task execution is system-orchestrated — approval is handled by
+				// task-lifecycle-service.ts which checks approvalStatus before reaching here.
+				// Only block if task explicitly requires approval AND has not been approved yet.
+				const alreadyApproved = freshTask.approvalStatus === "approved";
+				const approvalHandledByLifecycle = freshTask.status === "queued" || freshTask.status === "assigned";
+				if (!alreadyApproved && !approvalHandledByLifecycle && !constraint.allowed && constraint.requiresApproval) {
 					log.warn(
 						`[execution-engine] Task "${freshTask.title}" blocked by constraints (${riskLevel} risk — requires approval)`,
 					);
@@ -220,7 +222,7 @@ class ExecutionEngine {
 					return;
 				}
 			} catch (err) {
-				log.warn("[execution-engine] Constraint check failed (non-blocking):" + " " + String(err));
+				log.warn(`[execution-engine] Constraint check failed (non-blocking): ${String(err)}`);
 			}
 
 			// v3.0: Auto-decompose L/XL tasks into micro-tasks
@@ -238,14 +240,14 @@ class ExecutionEngine {
 							// Dispatch sub-tasks
 							for (const sub of subTasks) {
 								this.executeTask(projectId, sub).catch((err) =>
-									log.error(`[execution-engine] Sub-task "${sub.title}" dispatch hatası:` + " " + String(err)),
+									log.error(`[execution-engine] Sub-task "${sub.title}" dispatch hatası: ${String(err)}`),
 								);
 							}
 							return;
 						}
 					}
 				} catch (err) {
-					log.warn("[execution-engine] Task decomposition failed, executing as-is:" + " " + String(err));
+					log.warn(`[execution-engine] Task decomposition failed, executing as-is: ${String(err)}`);
 				}
 			}
 

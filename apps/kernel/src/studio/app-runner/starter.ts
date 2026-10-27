@@ -6,6 +6,7 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createCheckpoint } from "../checkpoint/index.js";
 import { getDbConnectionInfo, provisionDatabase } from "../db-provisioner.js";
 import { createLogger } from "../logger.js";
 import { analyzeProject, generateStudioConfig, writeEnvFile } from "../runtime-analyzer.js";
@@ -187,6 +188,21 @@ export async function startApp(
 								? "db:migrate"
 								: "db:setup";
 						onLog(`[app-runner] Migration çalıştırılıyor: npm run ${scriptName}`);
+						// P4-1: Checkpoint before migration script
+						try {
+							await createCheckpoint({
+								tenantId: "system",
+								projectId,
+								type: "filesystem",
+								reason: `pre-migration: ${scriptName}`,
+								createdBy: "system",
+								riskLevel: "high",
+							});
+						} catch (err) {
+							onLog(
+								`[app-runner] checkpoint creation failed (non-blocking): ${err instanceof Error ? err.message : String(err)}`,
+							);
+						}
 						const pmCmd = existsSync(join(repoPath, "pnpm-lock.yaml"))
 							? "pnpm"
 							: existsSync(join(repoPath, "yarn.lock"))

@@ -1,8 +1,10 @@
 // ---------------------------------------------------------------------------
-// Terminal Routes — Interactive CLI terminal for project repo directories
+// Terminal Routes — Restricted CLI terminal for project repo directories
+// P0 Hardening: allowlist-only commands, disabled in production,
+// requires explicit OSCORPEX_ENABLE_TERMINAL_EXEC=true opt-in.
 // ---------------------------------------------------------------------------
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { Hono } from "hono";
 import { getProject } from "../db.js";
@@ -12,48 +14,64 @@ const log = createLogger("terminal-routes");
 
 export const terminalRoutes = new Hono();
 
-// Security: block commands that could cause irreversible system damage
-const BLOCKED_PATTERNS = [
-	"rm -rf /",
-	"rm -rf ~",
-	"rm -rf $HOME",
-	"sudo ",
-	"chmod 777 /",
-	"> /dev/",
-	"mkfs",
-	"dd if=",
-	":(){ :|:& };:", // fork bomb
-	"curl | sh",
-	"curl | bash",
-	"wget | sh",
-	"wget | bash",
-];
+// ---------------------------------------------------------------------------
+// Allowlisted commands — never pass raw user strings to shell
+// ---------------------------------------------------------------------------
+const ALLOWED_COMMANDS: Record<string, { bin: string; args: string[] }> = {
+	git_status: { bin: "git", args: ["status"] },
+	git_diff: { bin: "git", args: ["diff"] },
+	git_log: { bin: "git", args: ["log", "--oneline", "-20"] },
+	pnpm_typecheck: { bin: "pnpm", args: ["typecheck"] },
+	pnpm_test: { bin: "pnpm", args: ["test"] },
+	pnpm_build: { bin: "pnpm", args: ["build"] },
+	pnpm_lint: { bin: "pnpm", args: ["lint"] },
+	ls_files: { bin: "ls", args: ["-la"] },
+	node_version: { bin: "node", args: ["--version"] },
+};
 
-function isCommandBlocked(command: string): boolean {
-	const lower = command.toLowerCase();
-	return BLOCKED_PATTERNS.some((pattern) => lower.includes(pattern.toLowerCase()));
+export type AllowedTerminalCommand = keyof typeof ALLOWED_COMMANDS;
+
+/**
+ * P0 gate: terminal exec is disabled unless explicitly enabled AND not in production.
+ */
+export function isTerminalExecEnabled(): boolean {
+	if (process.env.NODE_ENV === "production") return false;
+	return process.env.OSCORPEX_ENABLE_TERMINAL_EXEC === "true";
 }
 
-// POST /projects/:id/terminal/exec — execute a command in the project repo directory
+// POST /projects/:id/terminal/exec — execute an allowlisted command in the project repo directory
 terminalRoutes.post("/projects/:id/terminal/exec", async (c) => {
+	// P0: hard block in production, require explicit opt-in otherwise
+	if (!isTerminalExecEnabled()) {
+		return c.json(
+			{ error: "Terminal execution is disabled. Set OSCORPEX_ENABLE_TERMINAL_EXEC=true in non-production." },
+			403,
+		);
+	}
+
 	const projectId = c.req.param("id");
 
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
-	let body: { command?: string };
+	let body: { command?: string; args?: string[] };
 	try {
-		body = await c.req.json<{ command?: string }>();
+		body = await c.req.json<{ command?: string; args?: string[] }>();
 	} catch {
 		return c.json({ error: "Invalid JSON body" }, 400);
 	}
 
-	const command = body.command?.trim();
-	if (!command) return c.json({ error: "Command required" }, 400);
+	const commandName = body.command?.trim();
+	if (!commandName) return c.json({ error: "Command name required" }, 400);
 
-	if (isCommandBlocked(command)) {
-		log.warn({ projectId, command }, "[terminal] blocked dangerous command");
-		return c.json({ output: "Command blocked for safety.", exitCode: 1 });
+	// P0: strict allowlist — reject anything not in the registry
+	const allowed = ALLOWED_COMMANDS[commandName];
+	if (!allowed) {
+		log.warn({ projectId, commandName }, "[terminal] rejected unknown command");
+		return c.json(
+			{ error: `Unknown command: '${commandName}'. Allowed: ${Object.keys(ALLOWED_COMMANDS).join(", ")}` },
+			400,
+		);
 	}
 
 	const cwd = project.repoPath;
@@ -61,10 +79,11 @@ terminalRoutes.post("/projects/:id/terminal/exec", async (c) => {
 		return c.json({ output: `Working directory not found: ${cwd || "(unset)"}`, exitCode: 1 });
 	}
 
-	log.info({ projectId, cwd, command }, "[terminal] executing command");
+	log.info({ projectId, cwd, commandName }, "[terminal] executing allowlisted command");
 
 	try {
-		const output = execSync(command, {
+		// P0: use execFileSync with array args — no shell interpolation
+		const output = execFileSync(allowed.bin, allowed.args, {
 			cwd,
 			timeout: 30_000,
 			encoding: "utf8",
@@ -72,12 +91,11 @@ terminalRoutes.post("/projects/:id/terminal/exec", async (c) => {
 			env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
 		});
 		return c.json({ output: output.slice(0, 10_000), exitCode: 0 });
-	} catch (err: any) {
-		const stderr: string = err.stderr ?? "";
-		const stdout: string = err.stdout ?? "";
-		const combined = (stdout + stderr).trim() || err.message || String(err);
-		log.warn({ projectId, command, exitCode: err.status }, "[terminal] command failed");
-		return c.json({ output: combined.slice(0, 10_000), exitCode: err.status ?? 1 });
+	} catch (err: unknown) {
+		const execErr = err as { stderr?: string; stdout?: string; status?: number; message?: string };
+		const combined = ((execErr.stdout ?? "") + (execErr.stderr ?? "")).trim() || execErr.message || String(err);
+		log.warn({ projectId, commandName, exitCode: execErr.status }, "[terminal] command failed");
+		return c.json({ output: combined.slice(0, 10_000), exitCode: execErr.status ?? 1 });
 	}
 });
 

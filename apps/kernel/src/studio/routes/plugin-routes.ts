@@ -8,6 +8,7 @@ import { requirePermission } from "../auth/rbac.js";
 import { deletePlugin, getPlugin, getPluginExecutions, listPlugins, updatePlugin } from "../db.js";
 import { createLogger } from "../logger.js";
 import { pluginRegistry } from "../plugin-registry.js";
+import { UpdatePluginSchema, parseBody } from "./validation-schemas.js";
 const log = createLogger("plugin-routes");
 
 const router = new Hono();
@@ -45,7 +46,11 @@ router.get("/:name", async (c) => {
 router.patch("/:name", requirePermission("plugins:write"), async (c) => {
 	try {
 		const name = c.req.param("name") ?? "";
-		const body = await c.req.json<{ enabled?: boolean; configJson?: Record<string, unknown> }>();
+		const raw = await c.req.json();
+		// P4-5: Validate with Zod schema — enforce allowed fields only
+		const parsed = parseBody(UpdatePluginSchema, raw);
+		if (!parsed.success) return c.json({ error: parsed.error }, 400);
+		const body = parsed.data;
 		if (body.enabled !== undefined) {
 			if (body.enabled) {
 				await pluginRegistry.enable(name);

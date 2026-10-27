@@ -16,6 +16,9 @@ process.env.DATABASE_URL =
 	process.env.DATABASE_URL || "postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex_test";
 
 beforeAll(async () => {
+	// SKIP_DB_SETUP=1 allows pure unit-test files (e.g. schema validation) to run without a DB.
+	if (process.env.SKIP_DB_SETUP === "1") return;
+
 	const initSqlPath = join(process.cwd(), "scripts", "init.sql");
 	let sql: string;
 	try {

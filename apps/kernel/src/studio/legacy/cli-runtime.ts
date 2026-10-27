@@ -10,6 +10,7 @@ import { resolve } from "node:path";
 import { agentRuntime } from "../agent-runtime.js";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import type { TaskOutput } from "../types.js";
 const log = createLogger("cli-runtime");
 
@@ -153,7 +154,7 @@ export async function isClaudeCliAvailable(): Promise<boolean> {
 		const proc = spawn(CLAUDE_BIN, ["--version"], {
 			stdio: ["ignore", "pipe", "pipe"],
 			shell: false,
-			env: { ...process.env, PATH: process.env.PATH },
+			env: buildSafeChildEnv({ profile: "provider" }),
 		});
 
 		let output = "";
@@ -249,10 +250,7 @@ export function executeWithCLI(opts: {
 			cwd: repoPath,
 			stdio: ["pipe", "pipe", "pipe"],
 			shell: false,
-			env: {
-				...process.env,
-				PATH: process.env.PATH,
-			},
+			env: buildSafeChildEnv({ profile: "provider" }),
 		});
 
 		// Send prompt via stdin then close — avoids shell escaping and arg length issues
@@ -310,7 +308,7 @@ export function executeWithCLI(opts: {
 		}
 
 		// Process stdout (stream-json lines)
-		proc.stdout!.on("data", (chunk: Buffer) => {
+		proc.stdout?.on("data", (chunk: Buffer) => {
 			buffer += chunk.toString();
 			const lines = buffer.split("\n");
 			buffer = lines.pop()!; // keep incomplete line in buffer
@@ -341,7 +339,7 @@ export function executeWithCLI(opts: {
 			/you[''\u2019]ve hit your limit|rate limit|resets?\s+\d{1,2}[:.]\d{2}\s*(am|pm)|too many requests|quota exceeded/i;
 
 		// Process stderr
-		proc.stderr!.on("data", (chunk: Buffer) => {
+		proc.stderr?.on("data", (chunk: Buffer) => {
 			const text = chunk.toString().trim();
 			if (text) {
 				termLog(`[${agentName}][stderr] ${text}`);
@@ -437,9 +435,9 @@ function processStreamEvent(
 
 			for (const block of msg.content) {
 				if (block.type === "text" && block.text) {
-					result.text += block.text + "\n";
+					result.text += `${block.text}\n`;
 					// Show text output (truncate long lines for terminal)
-					const preview = block.text.length > 300 ? block.text.slice(0, 300) + "..." : block.text;
+					const preview = block.text.length > 300 ? `${block.text.slice(0, 300)}...` : block.text;
 					for (const line of preview.split("\n")) {
 						if (line.trim()) termLog(`  ${line}`);
 					}
@@ -461,7 +459,7 @@ function processStreamEvent(
 						termLog(`[${agentName}] >> Read: ${filePath}`);
 					} else if (toolName === "Bash") {
 						const cmd = (input.command as string) || "";
-						const preview = cmd.length > 100 ? cmd.slice(0, 100) + "..." : cmd;
+						const preview = cmd.length > 100 ? `${cmd.slice(0, 100)}...` : cmd;
 						termLog(`[${agentName}] >> Bash: ${preview}`);
 					} else if (toolName === "Glob" || toolName === "Grep") {
 						const pattern = (input.pattern as string) || "";
@@ -485,7 +483,7 @@ function processStreamEvent(
 			if (toolText) {
 				// Show first line of tool result (truncated)
 				const firstLine = toolText.split("\n")[0];
-				const preview = firstLine.length > 120 ? firstLine.slice(0, 120) + "..." : firstLine;
+				const preview = firstLine.length > 120 ? `${firstLine.slice(0, 120)}...` : firstLine;
 				termLog(`  [result] ${preview}`);
 			}
 			break;
@@ -498,11 +496,11 @@ function processStreamEvent(
 
 			// Extract model usage — sum across all models
 			if (res.modelUsage) {
-				let totalIn = 0,
-					totalOut = 0,
-					totalCacheCreate = 0,
-					totalCacheRead = 0,
-					totalCost = 0;
+				let totalIn = 0;
+				let totalOut = 0;
+				let totalCacheCreate = 0;
+				let totalCacheRead = 0;
+				let totalCost = 0;
 				for (const [modelName, usage] of Object.entries(res.modelUsage)) {
 					result.model = modelName;
 					totalIn += usage.inputTokens ?? 0;
@@ -580,7 +578,7 @@ export function streamWithCLI(
 		cwd: repoPath,
 		stdio: ["pipe", "pipe", "pipe"],
 		shell: false,
-		env: { ...process.env, PATH: process.env.PATH },
+		env: buildSafeChildEnv({ profile: "provider" }),
 	});
 
 	proc.stdin?.write(prompt);
@@ -601,7 +599,7 @@ export function streamWithCLI(
 		}
 	}, timeoutMs);
 
-	proc.stdout!.on("data", (chunk: Buffer) => {
+	proc.stdout?.on("data", (chunk: Buffer) => {
 		buffer += chunk.toString();
 		const lines = buffer.split("\n");
 		buffer = lines.pop()!;
@@ -630,9 +628,9 @@ export function streamWithCLI(
 					const res = event as CLIResultEvent;
 					costUsd = res.total_cost_usd ?? 0;
 					if (res.modelUsage) {
-						let totalIn = 0,
-							totalOut = 0,
-							totalCost = 0;
+						let totalIn = 0;
+						let totalOut = 0;
+						let totalCost = 0;
 						for (const usage of Object.values(res.modelUsage)) {
 							totalIn += usage.inputTokens ?? 0;
 							totalOut += usage.outputTokens ?? 0;
@@ -649,7 +647,7 @@ export function streamWithCLI(
 		}
 	});
 
-	proc.stderr!.on("data", () => {
+	proc.stderr?.on("data", () => {
 		// Ignore stderr for chat — it's mainly progress info
 	});
 

@@ -46,7 +46,16 @@ export async function getProject(id: string): Promise<Project | undefined> {
 	return row ? rowToProject(row) : undefined;
 }
 
-export async function listProjects(): Promise<Project[]> {
+/**
+ * P0-8: List projects — relies on RLS (FORCE ROW LEVEL SECURITY) for tenant filtering.
+ * When RLS is active, only projects for the current tenant context are returned.
+ * Optional tenantId parameter provides defense-in-depth for non-RLS scenarios.
+ */
+export async function listProjects(tenantId?: string): Promise<Project[]> {
+	if (tenantId) {
+		const rows = await query<any>("SELECT * FROM projects WHERE tenant_id = $1 ORDER BY created_at DESC", [tenantId]);
+		return rows.map(rowToProject);
+	}
 	const rows = await query<any>("SELECT * FROM projects ORDER BY created_at DESC");
 	return rows.map(rowToProject);
 }
@@ -255,7 +264,7 @@ export async function listPhases(planId: string): Promise<Phase[]> {
 		}
 		// LEFT JOIN produces a NULL task row when the phase has no tasks
 		if (row.id !== null) {
-			phaseMap.get(phaseId)!.taskRows.push(row);
+			phaseMap.get(phaseId)?.taskRows.push(row);
 		}
 	}
 
@@ -396,7 +405,7 @@ export async function getRunningProjectsWithPlans(): Promise<
 							version: row.plan_version,
 							status: row.plan_status,
 							created_at: row.plan_created_at,
-					  }
+						}
 					: null,
 				phaseMap: new Map(),
 			});
@@ -424,7 +433,7 @@ export async function getRunningProjectsWithPlans(): Promise<
 
 		// LEFT JOIN produces a NULL task row when the phase has no tasks
 		if (row.t_id !== null) {
-			bucket.phaseMap.get(phaseId)!.taskRows.push({
+			bucket.phaseMap.get(phaseId)?.taskRows.push({
 				id: row.t_id,
 				phase_id: row.t_phase_id,
 				title: row.t_title,
@@ -474,7 +483,7 @@ export async function getRunningProjectsWithPlans(): Promise<
 					status: planRow.status as PlanStatus,
 					phases,
 					createdAt: planRow.created_at,
-			  }
+				}
 			: null;
 
 		return {

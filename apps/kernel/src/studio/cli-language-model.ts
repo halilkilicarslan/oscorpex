@@ -16,6 +16,7 @@ import type {
 	LanguageModelV3StreamResult,
 } from "@ai-sdk/provider";
 import { createLogger } from "./logger.js";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 import type { ProviderCliTool } from "./types.js";
 const log = createLogger("cli-language-model");
 
@@ -202,7 +203,7 @@ async function runCli(
 	return new Promise((resolvePromise, rejectPromise) => {
 		const proc = spawn(bin, args, {
 			stdio: ["pipe", "pipe", "pipe"],
-			env: { ...process.env },
+			env: buildSafeChildEnv({ profile: "provider" }),
 		});
 
 		let stdout = "";

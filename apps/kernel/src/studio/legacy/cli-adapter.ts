@@ -17,6 +17,7 @@ import { executeWithCLI, isClaudeCliAvailable } from "../cli-runtime.js";
 import { createLogger } from "../logger.js";
 import { getFeatureFlags } from "../performance-config.js";
 import type { ProviderCapabilities } from "../provider-runtime-cache.js";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import type { AgentCliTool } from "../types.js";
 const log = createLogger("cli-adapter");
 
@@ -100,7 +101,7 @@ export class CodexAdapter implements CLIAdapter {
 			const proc = spawn("codex", args, {
 				cwd: opts.repoPath,
 				stdio: ["pipe", "pipe", "pipe"],
-				env: { ...process.env },
+				env: buildSafeChildEnv({ profile: "provider" }),
 			});
 
 			let stdout = "";
@@ -124,7 +125,7 @@ export class CodexAdapter implements CLIAdapter {
 
 			// Send system prompt via stdin if provided
 			if (opts.systemPrompt) {
-				proc.stdin?.write(opts.systemPrompt + "\n\n");
+				proc.stdin?.write(`${opts.systemPrompt}\n\n`);
 			}
 			proc.stdin?.end();
 
@@ -219,7 +220,7 @@ export class CursorAdapter implements CLIAdapter {
 			const proc = spawn("cursor", args, {
 				cwd: opts.repoPath,
 				stdio: ["pipe", "pipe", "pipe"],
-				env: { ...process.env },
+				env: buildSafeChildEnv({ profile: "provider" }),
 			});
 
 			let stdout = "";

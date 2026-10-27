@@ -22,6 +22,7 @@ import {
 import { getAgentConfig, getProjectAgent, listProjectTasks } from "../db.js";
 import { checkDocsFreshness, generateReadme, regenerateAllDocs } from "../docs-generator.js";
 import { createLogger } from "../logger.js";
+import { type TokenUsageRecord, aggregateCostBreakdowns } from "../providers/model-pricing.js";
 import {
 	fetchQualityGate,
 	getLatestSonarScan,
@@ -30,7 +31,7 @@ import {
 	recordSonarScan,
 	runSonarScan,
 } from "../sonar-runner.js";
-import { aggregateCostBreakdowns, type TokenUsageRecord } from "../providers/model-pricing.js";
+import { UpdateSettingsSchema, parseBody } from "./validation-schemas.js";
 const log = createLogger("analytics-routes");
 
 export const analyticsRoutes = new Hono();
@@ -338,7 +339,7 @@ analyticsRoutes.get("/projects/:id/analytics/agents/heatmap", async (c) => {
 		const data = await getAgentHeatMap(projectId, days);
 		return c.json({ data });
 	} catch (err) {
-		log.error("[analytics] agent heatmap failed:" + " " + String(err));
+		log.error(`[analytics] agent heatmap failed: ${String(err)}`);
 		return c.json({ error: "Failed to get agent heatmap" }, 500);
 	}
 });
@@ -352,7 +353,7 @@ analyticsRoutes.get("/projects/:id/analytics/agents/:agentId/timeline", async (c
 		const data = await getAgentPerformanceTimeline(projectId, agentId, days);
 		return c.json({ data });
 	} catch (err) {
-		log.error("[analytics] agent timeline failed:" + " " + String(err));
+		log.error(`[analytics] agent timeline failed: ${String(err)}`);
 		return c.json({ error: "Failed to get agent timeline" }, 500);
 	}
 });
@@ -364,7 +365,7 @@ analyticsRoutes.get("/projects/:id/analytics/agents/comparison", async (c) => {
 		const data = await getAgentComparison(projectId);
 		return c.json({ data });
 	} catch (err) {
-		log.error("[analytics] agent comparison failed:" + " " + String(err));
+		log.error(`[analytics] agent comparison failed: ${String(err)}`);
 		return c.json({ error: "Failed to get agent comparison" }, 500);
 	}
 });
@@ -381,7 +382,7 @@ analyticsRoutes.get("/projects/:id/analytics/context/observability", async (c) =
 		const data = await getSearchObservability(projectId, days);
 		return c.json(data);
 	} catch (err) {
-		log.error("[analytics] search observability failed:" + " " + String(err));
+		log.error(`[analytics] search observability failed: ${String(err)}`);
 		return c.json({ error: "Failed to get search observability" }, 500);
 	}
 });

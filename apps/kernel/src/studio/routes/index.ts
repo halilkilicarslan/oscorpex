@@ -55,6 +55,9 @@ import { releaseRoutes } from "./releases.js";
 import { replayRoutes } from "./replay-routes.js";
 import { runtimeRoutes } from "./runtime-routes.js";
 import { sandboxRoutes } from "./sandbox-routes.js";
+import { gatewayRoutes } from "./gateway-routes.js";
+import { hermesRoutes } from "./hermes-routes.js";
+import { mcpRoutes } from "./mcp-routes.js";
 import { skillRoutes } from "./skill-routes.js";
 import { sprintRoutes } from "./sprint-routes.js";
 import { taskRoutes } from "./task-routes.js";
@@ -118,6 +121,15 @@ studio.use("/auth/*", rateLimiter({ windowMs: 60_000, max: 10 }));
 studio.use("/projects/*/pipeline/start*", rateLimiter({ windowMs: 60_000, max: 30 }));
 studio.use("/projects/*/execute*", rateLimiter({ windowMs: 60_000, max: 60 }));
 studio.use("/projects/*/runtime/install*", rateLimiter({ windowMs: 60_000, max: 10 }));
+
+// P1-5: Stricter limits for dangerous routes (must come before global default)
+studio.use("/projects/*/terminal/*", rateLimiter({ windowMs: 60_000, max: 5 }));
+studio.use("/webhooks*", rateLimiter({ windowMs: 60_000, max: 20 }));
+studio.use("/agents*", rateLimiter({ windowMs: 60_000, max: 30 }));
+studio.use("/projects/*/settings*", rateLimiter({ windowMs: 60_000, max: 20 }));
+
+// P1-5: Global default rate limiting (200 req/min)
+studio.use("*", rateLimiter({ windowMs: 60_000, max: 200 }));
 
 // ---------------------------------------------------------------------------
 // Unified Access Guard — default deny, explicit public routes
@@ -201,6 +213,15 @@ studio.route("/", artifactRoutes);
 
 // Skills — CRUD + agent/project assignments
 studio.route("/", skillRoutes);
+
+// MCP — JSON-RPC 2.0 protocol server (P5)
+studio.route("/", mcpRoutes);
+
+// Gateway — read-only external API proxy (P11)
+studio.route("/", gatewayRoutes);
+
+// Hermes — LLM-mediated read-only bridge for external AI agents (P12)
+studio.route("/", hermesRoutes);
 
 // YAGNI-deferred: marketplace, cluster, collaboration
 // Re-enable when needed.

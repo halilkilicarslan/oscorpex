@@ -50,9 +50,10 @@ export async function runIntegrationTest(
 	const analysis = analyzeProject(repoPath);
 	if (analysis.services.length === 0) {
 		// CLI fallback: task açıklamasındaki komutları çalıştır
-		log("[integration-test] No HTTP services detected — attempting CLI smoke test");
+		// P0-2: Never execute LLM-extracted commands on host.
+		// Commands from task descriptions are stored as proposals only.
+		log("[integration-test] No HTTP services detected — CLI commands will be proposed (not executed)");
 
-		const { execSync } = await import("node:child_process");
 		const cliCommands = extractCliCommands(task?.description ?? "");
 
 		if (cliCommands.length === 0) {
@@ -62,33 +63,28 @@ export async function runIntegrationTest(
 			);
 		}
 
-		const cliResults: { cmd: string; passed: boolean; detail: string }[] = [];
-		for (const cmd of cliCommands) {
-			try {
-				const output = execSync(cmd, { cwd: repoPath, timeout: 30000, encoding: "utf8" });
-				cliResults.push({ cmd, passed: true, detail: output.slice(0, 200) });
-				log(`[integration-test] CLI: ${cmd} → PASS`);
-			} catch (err) {
-				const msg = err instanceof Error ? err.message.slice(0, 200) : String(err);
-				cliResults.push({ cmd, passed: false, detail: msg });
-				log(`[integration-test] CLI: ${cmd} → FAIL: ${msg}`);
-			}
+		// P0-2: Store as proposed commands — never execute directly
+		const proposed = cliCommands.map((cmd) => ({
+			commandText: cmd,
+			source: "llm_task_description" as const,
+			status: "proposed" as const,
+			requiresApproval: true,
+			riskLevel: "execute" as const,
+		}));
+
+		for (const p of proposed) {
+			log(`[integration-test] PROPOSED (not executed): ${p.commandText}`);
 		}
 
-		const passed = cliResults.filter((r) => r.passed).length;
-		const failed = cliResults.filter((r) => !r.passed).length;
-		log(`[integration-test] CLI Results: ${passed}/${cliResults.length} passed`);
-
-		if (failed > 0) {
-			throw new Error(`CLI smoke tests failed: ${failed}/${cliResults.length}`);
-		}
+		log(`[integration-test] ${proposed.length} command(s) proposed — awaiting approval`);
 
 		return {
 			filesCreated: [],
 			filesModified: [],
-			testResults: { passed, failed, total: cliResults.length },
+			testResults: { passed: 0, failed: 0, total: proposed.length },
 			logs,
-		};
+			proposedCommands: proposed,
+		} as TaskOutput;
 	}
 
 	const results: { name: string; passed: boolean; detail: string }[] = [];
@@ -150,26 +146,26 @@ export async function runIntegrationTest(
 		log(`[integration-test] HTTP test failed: ${httpErr instanceof Error ? httpErr.message : String(httpErr)}`);
 		log("[integration-test] Falling back to CLI smoke test...");
 
-		const { execSync } = await import("node:child_process");
+		// P0-2: Do not execute LLM-extracted commands — propose only
 		const cliCommands = extractCliCommands(task?.description ?? "");
 		if (cliCommands.length > 0) {
-			const cliResults: { cmd: string; passed: boolean; detail: string }[] = [];
-			for (const cmd of cliCommands) {
-				try {
-					const output = execSync(cmd, { cwd: repoPath, timeout: 30000, encoding: "utf8" });
-					cliResults.push({ cmd, passed: true, detail: output.slice(0, 200) });
-					log(`[integration-test] CLI: ${cmd} → PASS`);
-				} catch (err) {
-					const msg = err instanceof Error ? err.message.slice(0, 200) : String(err);
-					cliResults.push({ cmd, passed: false, detail: msg });
-					log(`[integration-test] CLI: ${cmd} → FAIL: ${msg}`);
-				}
+			const proposed = cliCommands.map((cmd) => ({
+				commandText: cmd,
+				source: "llm_task_description" as const,
+				status: "proposed" as const,
+				requiresApproval: true,
+				riskLevel: "execute" as const,
+			}));
+			for (const p of proposed) {
+				log(`[integration-test] PROPOSED (not executed): ${p.commandText}`);
 			}
-			const passed = cliResults.filter((r) => r.passed).length;
-			const failed = cliResults.filter((r) => !r.passed).length;
-			log(`[integration-test] CLI Results: ${passed}/${cliResults.length} passed`);
-			if (failed > 0) throw new Error(`CLI smoke tests failed: ${failed}/${cliResults.length}`);
-			return { filesCreated: [], filesModified: [], testResults: { passed, failed, total: cliResults.length }, logs };
+			return {
+				filesCreated: [],
+				filesModified: [],
+				testResults: { passed: 0, failed: 0, total: proposed.length },
+				logs,
+				proposedCommands: proposed,
+			} as TaskOutput;
 		}
 		throw httpErr;
 	} finally {
@@ -208,8 +204,12 @@ function extractCliCommands(description: string): string[] {
  * CLI projesini derler ve görev açıklamasındaki demo komutlarını çalıştırır.
  * Web servisi bulunmayan (CLI araç) projelerde run-app task'ı için kullanılır.
  */
+/**
+ * P0-2: CLI demo now only proposes commands — never executes LLM-extracted commands on host.
+ * Build step uses a fixed allowlist of build commands (not from LLM output).
+ */
 export async function runCliDemo(repoPath: string, task: Task, onLog: (msg: string) => void): Promise<TaskOutput> {
-	const { execSync } = await import("node:child_process");
+	const { execFileSync } = await import("node:child_process");
 	const { readFile } = await import("node:fs/promises");
 	const { join } = await import("node:path");
 
@@ -219,14 +219,18 @@ export async function runCliDemo(repoPath: string, task: Task, onLog: (msg: stri
 		onLog(msg);
 	};
 
-	// Adım 1: Projeyi derle
+	// Adım 1: Projeyi derle — fixed allowlist, not from LLM output
 	emit("[cli-demo] Building project...");
-	const buildCommands = ["npm run build", "pnpm build", "npx tsc"];
+	const buildSteps: { bin: string; args: string[] }[] = [
+		{ bin: "pnpm", args: ["build"] },
+		{ bin: "npm", args: ["run", "build"] },
+		{ bin: "npx", args: ["tsc"] },
+	];
 	let built = false;
-	for (const cmd of buildCommands) {
+	for (const step of buildSteps) {
 		try {
-			execSync(cmd, { cwd: repoPath, timeout: 60_000, encoding: "utf8", stdio: "pipe" });
-			emit(`[cli-demo] Build successful: ${cmd}`);
+			execFileSync(step.bin, step.args, { cwd: repoPath, timeout: 60_000, encoding: "utf8", stdio: "pipe" });
+			emit(`[cli-demo] Build successful: ${step.bin} ${step.args.join(" ")}`);
 			built = true;
 			break;
 		} catch {
@@ -237,10 +241,9 @@ export async function runCliDemo(repoPath: string, task: Task, onLog: (msg: stri
 		emit("[cli-demo] No build step needed or build failed — continuing with source files");
 	}
 
-	// Adım 2: Demo komutlarını belirle
+	// Adım 2: Demo komutlarını belirle — propose only, never execute
 	let demoCommands = extractCliCommands(task.description ?? "");
 
-	// Açıklamada komut yoksa package.json'daki bin alanından türet
 	if (demoCommands.length === 0) {
 		try {
 			const pkgRaw = await readFile(join(repoPath, "package.json"), "utf8");
@@ -264,35 +267,21 @@ export async function runCliDemo(repoPath: string, task: Task, onLog: (msg: stri
 		return { filesCreated: [], filesModified: [], logs };
 	}
 
-	// Adım 3: Demo komutlarını çalıştır
-	emit(`[cli-demo] Running ${demoCommands.length} demo command(s)...`);
-	const results: { cmd: string; output: string; success: boolean }[] = [];
+	// P0-2: Propose commands — do NOT execute them
+	emit(`[cli-demo] Proposing ${demoCommands.length} demo command(s) (not executing)...`);
+	const proposed = demoCommands.map((cmd) => ({
+		commandText: cmd,
+		source: "llm_task_description" as const,
+		status: "proposed" as const,
+		requiresApproval: true,
+		riskLevel: "execute" as const,
+	}));
 
-	for (const cmd of demoCommands) {
-		emit(`\n$ ${cmd}`);
-		try {
-			const cmdOutput = execSync(cmd, {
-				cwd: repoPath,
-				timeout: 30_000,
-				encoding: "utf8",
-				stdio: "pipe",
-			});
-			const trimmed = cmdOutput.trim().slice(0, 2000);
-			emit(trimmed);
-			results.push({ cmd, output: trimmed, success: true });
-		} catch (err) {
-			const raw =
-				err instanceof Error
-					? ((err as NodeJS.ErrnoException & { stderr?: string }).stderr ?? err.message)
-					: String(err);
-			const detail = String(raw).slice(0, 300);
-			emit(`ERROR: ${detail}`);
-			results.push({ cmd, output: detail, success: false });
-		}
+	for (const p of proposed) {
+		emit(`[cli-demo] PROPOSED: ${p.commandText}`);
 	}
 
-	const passed = results.filter((r) => r.success).length;
-	emit(`\n[cli-demo] Results: ${passed}/${results.length} commands succeeded`);
+	emit(`\n[cli-demo] ${proposed.length} command(s) proposed — awaiting approval`);
 
-	return { filesCreated: [], filesModified: [], logs };
+	return { filesCreated: [], filesModified: [], logs, proposedCommands: proposed } as TaskOutput;
 }

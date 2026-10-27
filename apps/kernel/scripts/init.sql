@@ -247,7 +247,7 @@ CREATE TABLE IF NOT EXISTS token_usage (
   input_tokens           INTEGER NOT NULL DEFAULT 0,
   output_tokens          INTEGER NOT NULL DEFAULT 0,
   total_tokens           INTEGER NOT NULL DEFAULT 0,
-  cost_usd               REAL NOT NULL DEFAULT 0,
+  cost_usd               NUMERIC(12,6) NOT NULL DEFAULT 0,
   cache_creation_tokens  INTEGER NOT NULL DEFAULT 0,
   cache_read_tokens      INTEGER NOT NULL DEFAULT 0,
   created_at             TIMESTAMPTZ NOT NULL
@@ -930,7 +930,7 @@ CREATE TABLE IF NOT EXISTS agent_daily_stats (
   tasks_completed INTEGER NOT NULL DEFAULT 0,
   tasks_failed    INTEGER NOT NULL DEFAULT 0,
   tokens_used     INTEGER NOT NULL DEFAULT 0,
-  cost_usd        REAL NOT NULL DEFAULT 0,
+  cost_usd        NUMERIC(12,6) NOT NULL DEFAULT 0,
   avg_task_time_ms INTEGER NOT NULL DEFAULT 0,
   created_at      TIMESTAMPTZ NOT NULL,
   UNIQUE(project_id, agent_id, stat_date)
@@ -1187,8 +1187,7 @@ DO $$ BEGIN
 	) THEN
 		CREATE POLICY projects_tenant_isolation ON projects
 			USING (
-				tenant_id IS NULL
-				OR tenant_id = current_setting('app.current_tenant_id', true)
+				tenant_id = current_setting('app.current_tenant_id', true)
 			);
 	END IF;
 END $$;
@@ -1358,91 +1357,105 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_id TEXT;
 
 -- Enable RLS on core tenant-scoped tables
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE projects FORCE ROW LEVEL SECURITY;
 ALTER TABLE project_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_plans FORCE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks FORCE ROW LEVEL SECURITY;
 ALTER TABLE phases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE phases FORCE ROW LEVEL SECURITY;
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE events FORCE ROW LEVEL SECURITY;
 ALTER TABLE project_agents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_agents FORCE ROW LEVEL SECURITY;
 ALTER TABLE agent_dependencies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_dependencies FORCE ROW LEVEL SECURITY;
 ALTER TABLE pipeline_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pipeline_runs FORCE ROW LEVEL SECURITY;
 ALTER TABLE token_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE token_usage FORCE ROW LEVEL SECURITY;
 ALTER TABLE work_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE work_items FORCE ROW LEVEL SECURITY;
 ALTER TABLE sprints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sprints FORCE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications FORCE ROW LEVEL SECURITY;
 ALTER TABLE agent_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_messages FORCE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_messages FORCE ROW LEVEL SECURITY;
 
 -- RLS policies: allow access when tenant matches OR when no tenant context set (backward compat)
 DO $$ BEGIN
   -- projects
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_projects') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_projects ON projects
-      USING (tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true))';
+      USING (tenant_id = current_setting(''app.current_tenant_id'', true))';
   END IF;
   -- project_plans (via project join)
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_project_plans') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_project_plans ON project_plans
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
-  -- tasks (via phase → plan → project)
+  -- tasks (direct tenant_id column — O(1) index lookup)
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_tasks') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_tasks ON tasks
-      USING (project_id IS NULL OR project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
   -- phases
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_phases') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_phases ON phases
-      USING (plan_id IN (SELECT id FROM project_plans WHERE project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true))))';
+      USING (plan_id IN (SELECT id FROM project_plans WHERE project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true))))';
   END IF;
   -- events
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_events') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_events ON events
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
   -- project_agents
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_project_agents') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_project_agents ON project_agents
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
   -- agent_dependencies
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_agent_deps') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_agent_deps ON agent_dependencies
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
   -- pipeline_runs
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_pipeline_runs') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_pipeline_runs ON pipeline_runs
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
   -- token_usage
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_token_usage') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_token_usage ON token_usage
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
   -- work_items
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_work_items') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_work_items ON work_items
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
   -- sprints
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_sprints') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_sprints ON sprints
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
   -- notifications
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_notifications') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_notifications ON notifications
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
   -- agent_messages
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_agent_messages') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_agent_messages ON agent_messages
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
   -- chat_messages
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_chat_messages') THEN
     EXECUTE 'CREATE POLICY tenant_isolation_chat_messages ON chat_messages
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id IS NULL OR tenant_id = current_setting(''app.current_tenant_id'', true)))';
+      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
   END IF;
 END $$;
 
@@ -1492,7 +1505,7 @@ CREATE TABLE IF NOT EXISTS agent_episodes (
   outcome           TEXT NOT NULL,
   failure_reason    TEXT,
   quality_score     REAL,
-  cost_usd          REAL,
+  cost_usd          NUMERIC(12,6),
   duration_ms       INTEGER,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -1507,7 +1520,7 @@ CREATE TABLE IF NOT EXISTS agent_strategy_patterns (
   task_type         TEXT NOT NULL,
   strategy          TEXT NOT NULL,
   success_rate      REAL NOT NULL DEFAULT 0,
-  avg_cost_usd      REAL,
+  avg_cost_usd      NUMERIC(12,6),
   avg_quality       REAL,
   sample_count      INTEGER NOT NULL DEFAULT 0,
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -2400,7 +2413,7 @@ WHERE t.project_id = p.id
 -- Replace subquery-based RLS with direct column match
 DROP POLICY IF EXISTS tenant_isolation_tasks ON tasks;
 CREATE POLICY tenant_isolation_tasks ON tasks
-  USING (tenant_id IS NULL OR tenant_id = current_setting('app.current_tenant_id', true));
+  USING (tenant_id = current_setting('app.current_tenant_id', true));
 
 -- 2. project_plans.tenant_id -----------------------------------------------
 DO $$ BEGIN
@@ -2421,7 +2434,7 @@ WHERE pp.project_id = pr.id
 -- Replace subquery-based RLS with direct column match
 DROP POLICY IF EXISTS tenant_isolation_project_plans ON project_plans;
 CREATE POLICY tenant_isolation_project_plans ON project_plans
-  USING (tenant_id IS NULL OR tenant_id = current_setting('app.current_tenant_id', true));
+  USING (tenant_id = current_setting('app.current_tenant_id', true));
 
 -- 3. phases.tenant_id -------------------------------------------------------
 DO $$ BEGIN
@@ -2443,7 +2456,7 @@ WHERE ph.plan_id = pp.id
 -- Replace double-subquery RLS with direct column match
 DROP POLICY IF EXISTS tenant_isolation_phases ON phases;
 CREATE POLICY tenant_isolation_phases ON phases
-  USING (tenant_id IS NULL OR tenant_id = current_setting('app.current_tenant_id', true));
+  USING (tenant_id = current_setting('app.current_tenant_id', true));
 
 -- ---------------------------------------------------------------------------
 -- Skills system — reusable agent capabilities
@@ -2489,3 +2502,191 @@ CREATE TABLE IF NOT EXISTS project_skills (
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_project_status ON agent_sessions(project_id, status);
+
+-- ---------------------------------------------------------------------------
+-- P0-9: Convert float money columns to NUMERIC for precision
+-- Handles existing databases where columns were previously REAL.
+-- New installations already get NUMERIC(12,6) from CREATE TABLE above.
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+  ALTER TABLE token_usage ALTER COLUMN cost_usd TYPE NUMERIC(12,6);
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE agent_daily_stats ALTER COLUMN cost_usd TYPE NUMERIC(12,6);
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE agent_episodes ALTER COLUMN cost_usd TYPE NUMERIC(12,6);
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE agent_strategy_patterns ALTER COLUMN avg_cost_usd TYPE NUMERIC(12,6);
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- P3-1: Checkpoint tables
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS checkpoints (
+	id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+	tenant_id   UUID        NOT NULL,
+	project_id  UUID        NOT NULL,
+	run_id      UUID,
+	task_id     UUID,
+	type        TEXT        NOT NULL CHECK (type IN ('git', 'filesystem', 'task-state', 'pipeline-state', 'provider-output')),
+	ref         TEXT        NOT NULL,
+	metadata    JSONB       NOT NULL DEFAULT '{}',
+	created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+	created_by  TEXT        NOT NULL CHECK (created_by IN ('system', 'user', 'agent')),
+	reason      TEXT        NOT NULL,
+	risk_level  TEXT        NOT NULL CHECK (risk_level IN ('low', 'medium', 'high')),
+	status      TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'rolled_back', 'expired', 'failed'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_checkpoints_project ON checkpoints(project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_task    ON checkpoints(task_id) WHERE task_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_checkpoints_tenant  ON checkpoints(tenant_id);
+
+ALTER TABLE checkpoints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE checkpoints FORCE ROW LEVEL SECURITY;
+DO $$ BEGIN
+	CREATE POLICY checkpoint_tenant_isolation ON checkpoints
+		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS rollback_requests (
+	id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+	checkpoint_id  UUID        NOT NULL REFERENCES checkpoints(id) ON DELETE CASCADE,
+	tenant_id      UUID        NOT NULL,
+	project_id     UUID        NOT NULL,
+	requested_by   TEXT        NOT NULL,
+	reason         TEXT        NOT NULL,
+	dry_run        BOOLEAN     NOT NULL DEFAULT false,
+	status         TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'applied', 'failed', 'rejected', 'blocked')),
+	result         JSONB,
+	created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+	resolved_at    TIMESTAMPTZ
+);
+
+ALTER TABLE rollback_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rollback_requests FORCE ROW LEVEL SECURITY;
+DO $$ BEGIN
+	CREATE POLICY rollback_tenant_isolation ON rollback_requests
+		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- P9-A/P9-B: Git commit workflow tables
+CREATE TABLE IF NOT EXISTS git_checkpoints (
+	id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+	tenant_id           UUID        NOT NULL,
+	project_id          UUID        NOT NULL,
+	pipeline_id         UUID,
+	head_sha            TEXT        NOT NULL,
+	branch_name         TEXT        NOT NULL DEFAULT 'main',
+	staged_files        JSONB       NOT NULL DEFAULT '[]',
+	created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+	expires_at          TIMESTAMPTZ NOT NULL DEFAULT now() + INTERVAL '24 hours',
+	invalidated_at      TIMESTAMPTZ,
+	invalidation_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS git_checkpoints_project_idx ON git_checkpoints (tenant_id, project_id);
+CREATE INDEX IF NOT EXISTS git_checkpoints_pipeline_idx ON git_checkpoints (pipeline_id) WHERE pipeline_id IS NOT NULL;
+
+ALTER TABLE git_checkpoints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE git_checkpoints FORCE ROW LEVEL SECURITY;
+DO $$ BEGIN
+	CREATE POLICY git_checkpoint_tenant ON git_checkpoints
+		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS commit_proposals (
+	id                    UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+	tenant_id             UUID        NOT NULL,
+	project_id            UUID        NOT NULL,
+	checkpoint_id         UUID        NOT NULL REFERENCES git_checkpoints(id) ON DELETE CASCADE,
+	message               TEXT        NOT NULL,
+	staged_files          JSONB       NOT NULL DEFAULT '[]',
+	diff_snapshot         TEXT        NOT NULL DEFAULT '',
+	diff_size_bytes       INTEGER     NOT NULL DEFAULT 0,
+	secret_scan_passed    BOOLEAN     NOT NULL DEFAULT false,
+	test_gate_passed      BOOLEAN     NOT NULL DEFAULT false,
+	status                TEXT        NOT NULL DEFAULT 'pending'
+	                                  CHECK (status IN ('pending', 'approved', 'rejected', 'applied', 'failed', 'expired')),
+	proposed_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+	decided_at            TIMESTAMPTZ,
+	applied_at            TIMESTAMPTZ,
+	result_sha            TEXT,
+	decided_by            TEXT,
+	rejection_reason      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS commit_proposals_project_idx ON commit_proposals (tenant_id, project_id);
+CREATE INDEX IF NOT EXISTS commit_proposals_checkpoint_idx ON commit_proposals (checkpoint_id);
+CREATE INDEX IF NOT EXISTS commit_proposals_status_idx ON commit_proposals (status) WHERE status IN ('pending', 'approved');
+
+ALTER TABLE commit_proposals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE commit_proposals FORCE ROW LEVEL SECURITY;
+DO $$ BEGIN
+	CREATE POLICY commit_proposal_tenant ON commit_proposals
+		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- ============================================================
+-- P12-A: Hermes external-agent API tables
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS hermes_api_keys (
+	id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+	tenant_id       UUID        NOT NULL,
+	name            TEXT        NOT NULL,
+	key_hash        TEXT        NOT NULL UNIQUE,
+	scopes          JSONB       NOT NULL DEFAULT '[]',
+	rate_limit      INTEGER     NOT NULL DEFAULT 30,
+	session_budget  INTEGER     NOT NULL DEFAULT 100,
+	enabled         BOOLEAN     NOT NULL DEFAULT true,
+	created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+	expires_at      TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS hermes_api_keys_tenant_idx ON hermes_api_keys (tenant_id);
+
+ALTER TABLE hermes_api_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hermes_api_keys FORCE ROW LEVEL SECURITY;
+DO $$ BEGIN
+	CREATE POLICY hermes_key_tenant ON hermes_api_keys
+		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS hermes_sessions (
+	id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+	api_key_id       UUID        NOT NULL REFERENCES hermes_api_keys(id) ON DELETE CASCADE,
+	tenant_id        UUID        NOT NULL,
+	project_id       UUID        NOT NULL,
+	tool_call_count  INTEGER     NOT NULL DEFAULT 0,
+	max_tool_calls   INTEGER     NOT NULL DEFAULT 100,
+	status           TEXT        NOT NULL DEFAULT 'active'
+	                             CHECK (status IN ('active', 'exhausted', 'expired', 'revoked')),
+	created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+	expires_at       TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '1 hour')
+);
+
+CREATE INDEX IF NOT EXISTS hermes_sessions_tenant_idx ON hermes_sessions (tenant_id);
+CREATE INDEX IF NOT EXISTS hermes_sessions_key_idx   ON hermes_sessions (api_key_id);
+
+ALTER TABLE hermes_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hermes_sessions FORCE ROW LEVEL SECURITY;
+DO $$ BEGIN
+	CREATE POLICY hermes_session_tenant ON hermes_sessions
+		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

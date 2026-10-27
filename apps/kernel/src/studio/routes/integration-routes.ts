@@ -21,6 +21,8 @@ import { GitHubIntegration } from "../github-integration.js";
 import { createLogger } from "../logger.js";
 import { decrypt, encrypt, isEncrypted } from "../secret-vault.js";
 import { sendWebhookNotification } from "../webhook-sender.js";
+import { parseBody } from "./validation-schemas.js";
+import { z } from "zod";
 const log = createLogger("integration-routes");
 
 export const integrationRoutes = new Hono();
@@ -154,42 +156,52 @@ integrationRoutes.get("/projects/:id/webhooks", async (c) => {
 	return c.json(await listWebhooks(projectId));
 });
 
+const CreateWebhookBodySchema = z
+	.object({
+		name: z.string().min(1).max(120),
+		url: z.string().max(2000).refine((u) => u.startsWith("https://") || u.startsWith("http://"), {
+			message: "url must start with https:// (or http:// for local dev)",
+		}),
+		type: z.enum(["slack", "discord", "generic"]).optional().default("generic"),
+		events: z.array(z.string().max(80)).max(50).optional().default([]),
+	})
+	.strict();
+
 integrationRoutes.post("/projects/:id/webhooks", async (c) => {
 	const projectId = c.req.param("id");
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
-	const body = (await c.req.json()) as {
-		name?: string;
-		url?: string;
-		type?: string;
-		events?: string[];
-	};
-
-	if (!body.name?.trim()) return c.json({ error: "name is required" }, 400);
-	if (!body.url?.trim()) return c.json({ error: "url is required" }, 400);
-
-	const url = body.url.trim();
-	if (!url.startsWith("https://") && !url.startsWith("http://")) {
-		return c.json({ error: "url must start with https:// (or http:// for local dev)" }, 400);
-	}
-
-	const validTypes: Webhook["type"][] = ["slack", "discord", "generic"];
-	const type = (body.type ?? "generic") as Webhook["type"];
-	if (!validTypes.includes(type)) {
-		return c.json({ error: `type must be one of: ${validTypes.join(", ")}` }, 400);
-	}
+	const parsed = parseBody(CreateWebhookBodySchema, await c.req.json());
+	if (!parsed.success) return c.json({ error: parsed.error }, 400);
+	const body = parsed.data;
 
 	const webhook = await createWebhook({
 		projectId,
 		name: body.name.trim(),
-		url,
-		type,
-		events: Array.isArray(body.events) ? body.events : [],
+		url: body.url.trim(),
+		type: (body.type ?? "generic") as Webhook["type"],
+		events: body.events ?? [],
 	});
 
 	return c.json(webhook, 201);
 });
+
+const UpdateWebhookBodySchema = z
+	.object({
+		name: z.string().min(1).max(120).optional(),
+		url: z
+			.string()
+			.max(2000)
+			.refine((u) => u.startsWith("https://") || u.startsWith("http://"), {
+				message: "url must start with https:// (or http:// for local dev)",
+			})
+			.optional(),
+		type: z.enum(["slack", "discord", "generic"]).optional(),
+		events: z.array(z.string().max(80)).max(50).optional(),
+		active: z.boolean().optional(),
+	})
+	.strict();
 
 integrationRoutes.put("/projects/:id/webhooks/:webhookId", async (c) => {
 	const projectId = c.req.param("id");
@@ -200,20 +212,9 @@ integrationRoutes.put("/projects/:id/webhooks/:webhookId", async (c) => {
 		return c.json({ error: "Webhook not found" }, 404);
 	}
 
-	const body = (await c.req.json()) as {
-		name?: string;
-		url?: string;
-		type?: string;
-		events?: string[];
-		active?: boolean;
-	};
-
-	if (body.url !== undefined) {
-		const url = body.url.trim();
-		if (!url.startsWith("https://") && !url.startsWith("http://")) {
-			return c.json({ error: "url must start with https:// (or http:// for local dev)" }, 400);
-		}
-	}
+	const parsed = parseBody(UpdateWebhookBodySchema, await c.req.json());
+	if (!parsed.success) return c.json({ error: parsed.error }, 400);
+	const body = parsed.data;
 
 	const updated = await updateWebhook(webhookId, {
 		name: body.name?.trim(),

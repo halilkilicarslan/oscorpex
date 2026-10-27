@@ -31,13 +31,7 @@ export interface CLIRunResult {
 	killedBySignal: boolean;
 }
 
-export type ExitClassification =
-	| "success"
-	| "cli_error"
-	| "timeout"
-	| "killed"
-	| "spawn_failure"
-	| "unknown";
+export type ExitClassification = "success" | "cli_error" | "timeout" | "killed" | "spawn_failure" | "unknown";
 
 export interface ClassifiedExit {
 	classification: ExitClassification;
@@ -55,7 +49,7 @@ export function runCLI(opts: CLIRunOptions): Promise<CLIRunResult> {
 		const proc = spawn(opts.binary, opts.args, {
 			cwd: opts.cwd,
 			stdio: ["pipe", "pipe", "pipe"],
-			env: opts.env ?? process.env,
+			env: opts.env ?? {}, // P2-3: callers must provide env explicitly via buildSafeChildEnv()
 		});
 
 		let stdout = "";

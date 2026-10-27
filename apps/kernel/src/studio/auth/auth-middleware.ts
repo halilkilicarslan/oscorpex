@@ -28,10 +28,13 @@ export interface AuthVariables {
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: Hono Context is generic — use any to avoid requiring explicit Env param everywhere
-export async function authMiddleware(c: Context<{ Variables: AuthVariables }>, next: Next): Promise<void | Response>;
-export async function authMiddleware(c: Context, next: Next): Promise<void | Response>;
+export async function authMiddleware(
+	c: Context<{ Variables: AuthVariables }>,
+	next: Next,
+): Promise<undefined | Response>;
+export async function authMiddleware(c: Context, next: Next): Promise<undefined | Response>;
 // biome-ignore lint/suspicious/noExplicitAny: implementation signature
-export async function authMiddleware(c: Context<any>, next: Next): Promise<void | Response> {
+export async function authMiddleware(c: Context<any>, next: Next): Promise<undefined | Response> {
 	const authHeader = c.req.header("Authorization") ?? c.req.header("authorization");
 	const envApiKey = process.env.OSCORPEX_API_KEY;
 
@@ -40,7 +43,8 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<void 
 	// ------------------------------------------------------------------
 	if (envApiKey && authHeader === `Bearer ${envApiKey}`) {
 		c.set("authType", "api-key");
-		return next();
+		await next();
+		return undefined;
 	}
 
 	// ------------------------------------------------------------------
@@ -58,7 +62,8 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<void 
 			if (payload.tenantId) {
 				await setTenantContext(payload.tenantId);
 			}
-			return next();
+			await next();
+			return undefined;
 		}
 	}
 
@@ -98,20 +103,33 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<void 
 			if (row.tenant_id) {
 				await setTenantContext(row.tenant_id);
 			}
-			return next();
+			await next();
+			return undefined;
 		}
 	}
 
 	// ------------------------------------------------------------------
-	// 4. No valid auth — if no env key configured, allow (backward compat)
+	// 4. No valid auth — P0-5: require explicit opt-in for auth bypass
 	// ------------------------------------------------------------------
 	if (!envApiKey) {
 		if (process.env.NODE_ENV === "production") {
 			log.error("[auth] OSCORPEX_API_KEY not configured in production — rejecting request");
 			return c.json({ error: "Unauthorized — authentication not configured" }, 500);
 		}
-		c.set("authType", "none");
-		return next();
+		// P0-5: Dev auth bypass requires explicit opt-in flag
+		if (process.env.OSCORPEX_DEV_NO_AUTH === "true") {
+			log.warn("[auth] Auth disabled via OSCORPEX_DEV_NO_AUTH=true — using dev tenant context");
+			c.set("authType", "none");
+			c.set("userId", "00000000-0000-0000-0000-000000000002");
+			c.set("tenantId", "00000000-0000-0000-0000-000000000001");
+			c.set("userRole", "owner");
+			c.set("email", "dev@oscorpex.local");
+			await next();
+			return undefined;
+		}
+		// P0-5: No auth configured and no explicit bypass — reject
+		log.error("[auth] No auth configured. Set OSCORPEX_API_KEY or OSCORPEX_DEV_NO_AUTH=true for development");
+		return c.json({ error: "Unauthorized — set OSCORPEX_API_KEY or OSCORPEX_DEV_NO_AUTH=true" }, 401);
 	}
 
 	return c.json({ error: "Unauthorized" }, 401);

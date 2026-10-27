@@ -47,3 +47,13 @@ export {
 	parseCommandsFromLog,
 } from "./command-enforcement.js";
 export type { CommandCheckResult, CommandAuditResult } from "./command-enforcement.js";
+
+// Tool-policy pre-execution enforcement (P1-7)
+export { evaluateToolPolicy } from "./tool-policy.js";
+export type {
+	ToolRiskLevel,
+	ToolSource,
+	ToolInvocationRequest,
+	ToolPolicyContext,
+	ToolPolicyDecision,
+} from "./tool-policy.js";

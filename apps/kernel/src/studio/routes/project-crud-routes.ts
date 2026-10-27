@@ -25,6 +25,7 @@ import { initLintConfig } from "../lint-runner.js";
 import { createLogger } from "../logger.js";
 import { getProjectTemplate, listProjectTemplates, scaffoldFromTemplate } from "../project-templates.js";
 import { initSonarConfig, isSonarEnabled } from "../sonar-runner.js";
+import { UpdateProjectSchema, parseBody } from "./validation-schemas.js";
 
 const log = createLogger("project-crud-routes");
 
@@ -236,9 +237,12 @@ projectCrudRoutes.get("/projects/:id", async (c) => {
 });
 
 projectCrudRoutes.patch("/projects/:id", requirePermission("projects:update"), async (c) => {
-	const body = await c.req.json();
+	const rawBody = await c.req.json();
 	const id = c.req.param("id") ?? "";
-	const project = await updateProject(id, body);
+	// P1-6: Validate with Zod — rejects unknown fields (strict mode) and enforces size limits
+	const parsed = parseBody(UpdateProjectSchema, rawBody);
+	if (!parsed.success) return c.json({ error: parsed.error }, 400);
+	const project = await updateProject(id, parsed.data);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 	return c.json(project);
 });

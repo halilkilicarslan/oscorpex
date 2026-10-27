@@ -7,6 +7,7 @@ import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/pro
 import { basename, dirname, join, normalize, relative, sep } from "node:path";
 import { type SimpleGit, simpleGit } from "simple-git";
 import { createLogger } from "./logger.js";
+import { enforceGitPolicy } from "./security/git-file-policy.js";
 import type { FileTreeNode, GitLogEntry, GitStatus, MergeResult } from "./types.js";
 const log = createLogger("git-manager");
 
@@ -57,7 +58,16 @@ class GitManager {
 		await git.checkoutLocalBranch(branchName);
 	}
 
-	async checkout(projectPath: string, branch: string): Promise<void> {
+	async checkout(projectPath: string, branch: string, projectId = "system"): Promise<void> {
+		// P4-2: Policy enforcement before git mutation
+		enforceGitPolicy({
+			operation: "checkout",
+			ref: branch,
+			source: "system",
+			actorId: "system",
+			tenantId: "system",
+			projectId,
+		});
 		const git = this.getGit(projectPath);
 		await git.checkout(branch);
 	}
@@ -78,14 +88,30 @@ class GitManager {
 	// Commit operations
 	// -------------------------------------------------------------------------
 
-	async commit(projectPath: string, message: string): Promise<string> {
+	async commit(projectPath: string, message: string, projectId = "system"): Promise<string> {
+		// P4-2: Policy enforcement before git mutation
+		enforceGitPolicy({
+			operation: "commit",
+			source: "system",
+			actorId: "system",
+			tenantId: "system",
+			projectId,
+		});
 		const git = this.getGit(projectPath);
 		await git.add(".");
 		const result = await git.commit(message);
 		return result.commit;
 	}
 
-	async commitFiles(projectPath: string, files: string[], message: string): Promise<string> {
+	async commitFiles(projectPath: string, files: string[], message: string, projectId = "system"): Promise<string> {
+		// P4-2: Policy enforcement before git mutation
+		enforceGitPolicy({
+			operation: "commit",
+			source: "system",
+			actorId: "system",
+			tenantId: "system",
+			projectId,
+		});
 		const git = this.getGit(projectPath);
 		await git.add(files);
 		const result = await git.commit(message);
@@ -96,7 +122,16 @@ class GitManager {
 	// Merge operations
 	// -------------------------------------------------------------------------
 
-	async merge(projectPath: string, source: string, target: string): Promise<MergeResult> {
+	async merge(projectPath: string, source: string, target: string, projectId = "system"): Promise<MergeResult> {
+		// P4-2: Policy enforcement before git mutation
+		enforceGitPolicy({
+			operation: "merge",
+			ref: source,
+			source: "system",
+			actorId: "system",
+			tenantId: "system",
+			projectId,
+		});
 		const git = this.getGit(projectPath);
 
 		await git.checkout(target);
@@ -138,7 +173,16 @@ class GitManager {
 	 * `git revert --no-edit {hash}` komutuyla yeni bir revert commit oluşturur.
 	 * Orijinal commit'i silmez; güvenli bir geri alma yöntemidir.
 	 */
-	async revertCommit(projectPath: string, commitHash: string): Promise<string> {
+	async revertCommit(projectPath: string, commitHash: string, projectId = "system"): Promise<string> {
+		// P4-2: Policy enforcement before git mutation
+		enforceGitPolicy({
+			operation: "reset-soft",
+			ref: commitHash,
+			source: "system",
+			actorId: "system",
+			tenantId: "system",
+			projectId,
+		});
 		const git = this.getGit(projectPath);
 
 		// Hash formatını doğrula — sadece hex karakterlere izin ver
@@ -363,7 +407,15 @@ class GitManager {
 	 * - `files` belirtilmezse tüm değişiklikler (git add .) eklenir.
 	 * - Stage edilecek değişiklik yoksa hata fırlatır.
 	 */
-	async commitChanges(projectPath: string, message: string, files?: string[]): Promise<string> {
+	async commitChanges(projectPath: string, message: string, files?: string[], projectId = "system"): Promise<string> {
+		// P4-2: Policy enforcement before git mutation
+		enforceGitPolicy({
+			operation: "commit",
+			source: "system",
+			actorId: "system",
+			tenantId: "system",
+			projectId,
+		});
 		const git = this.getGit(projectPath);
 
 		if (files && files.length > 0) {

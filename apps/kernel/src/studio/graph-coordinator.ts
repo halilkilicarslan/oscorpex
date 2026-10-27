@@ -20,6 +20,7 @@ import {
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
 import type { Task } from "./types.js";
+import { createCheckpoint } from "./checkpoint/index.js";
 
 const log = createLogger("graph-coordinator");
 
@@ -302,6 +303,21 @@ export async function insertNode(
 		dependsOn?: string[];
 	},
 ): Promise<MutationResult> {
+	// P5-C: Checkpoint before graph mutation
+	try {
+		await createCheckpoint({
+			tenantId: "system",
+			projectId: ctx.projectId,
+			type: "task-state",
+			reason: "graph_mutation_pre_insert_node",
+			createdBy: ctx.causedByAgentId ? "agent" : "system",
+			riskLevel: "medium",
+			metadata: { operation: "insertNode", phaseId: params.phaseId, title: params.title },
+		});
+	} catch (err) {
+		log.warn({ err }, "[graph-coordinator] checkpoint creation failed (non-blocking)");
+	}
+
 	const detail = await applyInsertNode(ctx.projectId, params);
 
 	const mutation = await recordGraphMutation({
@@ -340,6 +356,21 @@ export async function splitTask(
 		}>;
 	},
 ): Promise<MutationResult> {
+	// P5-C: Checkpoint before graph mutation
+	try {
+		await createCheckpoint({
+			tenantId: "system",
+			projectId: ctx.projectId,
+			type: "task-state",
+			reason: "graph_mutation_pre_split_task",
+			createdBy: ctx.causedByAgentId ? "agent" : "system",
+			riskLevel: "medium",
+			metadata: { operation: "splitTask", parentTaskId: params.parentTaskId, childCount: params.children.length },
+		});
+	} catch (err) {
+		log.warn({ err }, "[graph-coordinator] checkpoint creation failed (non-blocking)");
+	}
+
 	const detail = await applySplitTask(ctx.projectId, params);
 
 	const mutation = await recordGraphMutation({
@@ -370,6 +401,21 @@ export async function addEdge(
 	ctx: MutationContext,
 	params: { fromTaskId: string; toTaskId: string },
 ): Promise<MutationResult> {
+	// P5-C: Checkpoint before graph mutation
+	try {
+		await createCheckpoint({
+			tenantId: "system",
+			projectId: ctx.projectId,
+			type: "task-state",
+			reason: "graph_mutation_pre_add_edge",
+			createdBy: ctx.causedByAgentId ? "agent" : "system",
+			riskLevel: "medium",
+			metadata: { operation: "addEdge", fromTaskId: params.fromTaskId, toTaskId: params.toTaskId },
+		});
+	} catch (err) {
+		log.warn({ err }, "[graph-coordinator] checkpoint creation failed (non-blocking)");
+	}
+
 	const detail = await applyAddEdge(params, ctx.projectId);
 
 	const mutation = await recordGraphMutation({

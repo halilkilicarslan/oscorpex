@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { getLatestPlan, getProject, listPhases, listProjectAgents } from "./db.js";
 import { gitManager } from "./git-manager.js";
 import { createLogger } from "./logger.js";
+import { enforceFilePolicy } from "./security/git-file-policy.js";
 import type { AgentConfig, Phase, Project, Task } from "./types.js";
 const log = createLogger("docs-generator");
 
@@ -177,7 +178,16 @@ async function generateProjectMd(project: Project, docsDir: string, log?: (msg: 
 		"",
 	];
 
-	await writeFile(join(docsDir, "PROJECT.md"), lines.join("\n"), "utf-8");
+	const projectMdPath = join(docsDir, "PROJECT.md");
+	// P4-3: File policy enforcement before writing generated doc
+	enforceFilePolicy({
+		operation: "write",
+		path: projectMdPath,
+		scope: { tenantId: "system", projectId: project.id },
+		source: "system",
+		actorId: "system",
+	});
+	await writeFile(projectMdPath, lines.join("\n"), "utf-8");
 	log?.("[docs] PROJECT.md guncellendi");
 }
 
@@ -389,6 +399,15 @@ async function appendChangelog(
 
 	// Avoid duplicate entries for the same task
 	if (existing.includes(task.id)) return;
+
+	// P4-3: File policy enforcement before writing changelog
+	enforceFilePolicy({
+		operation: "write",
+		path: changelogPath,
+		scope: { tenantId: "system", projectId: project.id },
+		source: "system",
+		actorId: "system",
+	});
 
 	// Insert after header line
 	const headerEnd = existing.indexOf("\n\n");

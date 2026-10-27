@@ -2,17 +2,30 @@
 // Oscorpex — JWT sign/verify (HMAC-SHA256, no external deps)
 // ---------------------------------------------------------------------------
 
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createLogger } from "../logger.js";
 const log = createLogger("jwt");
 
-const JWT_SECRET =
-	process.env.OSCORPEX_JWT_SECRET ??
-	(process.env.NODE_ENV === "production"
-		? (() => {
-				throw new Error("OSCORPEX_JWT_SECRET must be set in production");
-			})()
-		: "oscorpex-dev-secret-change-in-production");
+// P0-4: Never use a hardcoded fallback secret.
+// Production: fail fast if missing. Non-production: generate ephemeral random secret.
+const JWT_SECRET = (() => {
+	const envSecret = process.env.OSCORPEX_JWT_SECRET;
+	if (envSecret) {
+		if (process.env.NODE_ENV === "production" && envSecret.length < 32) {
+			throw new Error("OSCORPEX_JWT_SECRET must be at least 32 characters in production");
+		}
+		return envSecret;
+	}
+	if (process.env.NODE_ENV === "production") {
+		throw new Error("OSCORPEX_JWT_SECRET must be set in production");
+	}
+	// Ephemeral random secret for non-production — changes every restart
+	const ephemeral = randomBytes(32).toString("hex");
+	log.warn(
+		"[jwt] No OSCORPEX_JWT_SECRET set — using ephemeral random secret (non-production only). Tokens will not survive restarts.",
+	);
+	return ephemeral;
+})();
 const JWT_EXPIRY = 24 * 60 * 60; // 24 saat (saniye)
 
 export interface JwtPayload {

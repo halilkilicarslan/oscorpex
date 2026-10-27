@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createLogger } from "./logger.js";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 const log = createLogger("test-runner");
 
 // ---------------------------------------------------------------------------
@@ -222,7 +223,7 @@ export class TestRunner {
 			const child = spawn(cmd, args, {
 				cwd: repoPath,
 				shell: process.platform === "win32",
-				env: { ...process.env, CI: "true", FORCE_COLOR: "0" },
+				env: buildSafeChildEnv({ profile: "test", extra: { CI: "true", FORCE_COLOR: "0" } }),
 				timeout: 120_000, // 2 min hard cap
 			});
 

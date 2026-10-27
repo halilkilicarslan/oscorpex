@@ -63,6 +63,16 @@ const CONTAINER_PREFIX = "studio-pool-";
 const INTERNAL_NETWORK = "studio-agent-net";
 const BASE_PORT = 9900;
 
+/** P0-3: Safe identifier pattern — alphanumeric, hyphens, underscores, max 80 chars */
+const SAFE_ID = /^[a-zA-Z0-9_\-]{1,80}$/;
+
+/** P0-3: Validate that an identifier is safe for use in container exec calls */
+function validateSafeId(value: string, label: string): void {
+	if (!SAFE_ID.test(value)) {
+		throw new Error(`[pool] Invalid ${label}: must match ${SAFE_ID} (got ${JSON.stringify(value.slice(0, 40))})`);
+	}
+}
+
 /** Map sandbox NetworkPolicy to Docker NetworkMode */
 export function resolveNetworkMode(networkPolicy?: string): string {
 	switch (networkPolicy) {
@@ -107,6 +117,18 @@ class ContainerPool {
 
 	async initialize(): Promise<void> {
 		if (this.initialized) return;
+
+		// P1-1: Container runtime requires explicit opt-in
+		if (process.env.OSCORPEX_ENABLE_CONTAINER_RUNTIME !== "true") {
+			log.info("[pool] Container runtime disabled. Set OSCORPEX_ENABLE_CONTAINER_RUNTIME=true to enable.");
+			return;
+		}
+
+		// P1-1: Refuse Docker socket in production unless explicitly overridden
+		if (process.env.NODE_ENV === "production" && !process.env.OSCORPEX_ALLOW_DOCKER_SOCKET_IN_PROD) {
+			log.warn("[pool] Docker socket access in production requires OSCORPEX_ALLOW_DOCKER_SOCKET_IN_PROD=true");
+			return;
+		}
 
 		// Ensure Docker is available
 		try {
@@ -161,6 +183,12 @@ class ContainerPool {
 		repoPath: string,
 		task: TaskRequest,
 	): Promise<TaskResult> {
+		// P0-3: Validate identifiers before any container interaction
+		validateSafeId(agentId, "agentId");
+		validateSafeId(agentName, "agentName");
+		validateSafeId(agentRole, "agentRole");
+		validateSafeId(projectId, "projectId");
+
 		const container = await this.acquire(projectId, agentId, task.taskId);
 		if (!container) {
 			throw new Error("[pool] No container available — pool exhausted");
@@ -369,17 +397,18 @@ class ContainerPool {
 
 	private async configureContainer(poolContainer: PoolContainer, env: Record<string, string>): Promise<void> {
 		const container = this.docker.getContainer(poolContainer.id);
-		// Write env vars to a file using env command (no shell interpolation)
-		// This avoids shell injection via env values containing $(), backticks, etc.
-		const envArgs = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
 
-		// Write env file for the worker to source safely
+		// P0-3: Build KEY=VALUE env file content, then base64-encode in JS.
+		// Decoding inside the container via `base64 -d` avoids all shell
+		// metacharacter / heredoc-termination injection vectors.
 		const envFileContent = Object.entries(env)
 			.map(([k, v]) => `${k}=${v}`)
 			.join("\n");
 
+		const encoded = Buffer.from(envFileContent, "utf-8").toString("base64");
+
 		const exec = await container.exec({
-			Cmd: ["sh", "-c", `cat > /tmp/.agent-env << 'ENVEOF'\n${envFileContent}\nENVEOF`],
+			Cmd: ["sh", "-c", `echo '${encoded}' | base64 -d > /tmp/.agent-env`],
 			AttachStdout: true,
 			AttachStderr: true,
 		});

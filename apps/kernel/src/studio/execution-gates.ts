@@ -42,9 +42,7 @@ export async function runVerificationGate(
 	if (!dependencyCheck.passed) {
 		const missing = dependencyCheck.missingDependencies.join(", ");
 		const checked = dependencyCheck.checkedFiles.join(", ");
-		const failedChecks =
-			`dependency_declared: missing package.json entries for [${missing}]` +
-			(checked ? ` (checked files: ${checked})` : "");
+		const failedChecks = `dependency_declared: missing package.json entries for [${missing}]${checked ? ` (checked files: ${checked})` : ""}`;
 
 		log.warn(`[execution-gates] Dependency declaration failed for "${task.title}": ${failedChecks}`);
 		eventBus.emitTransient({
@@ -85,9 +83,8 @@ export async function runVerificationGate(
 		});
 
 		const hasEmptyFail = verification.results.some((r) => !r.passed && r.type === "output_non_empty");
-		const hasFileFail = verification.results.some(
-			(r) => !r.passed && (r.type === "files_exist" || r.type === "files_modified"),
-		);
+		// P0-11: files_exist is always mandatory; files_modified is separate (relaxed in lenient)
+		const hasFileFail = verification.results.some((r) => !r.passed && r.type === "files_exist");
 
 		if (sessionId) {
 			recordStep(sessionId, { step: 3, type: "decision_made", summary: "Verification: failed" }).catch((err) =>
@@ -95,7 +92,10 @@ export async function runVerificationGate(
 			);
 		}
 
-		if (hasEmptyFail || (strictness === "strict" && hasFileFail)) {
+		// P0-11: files_exist and output_non_empty are always mandatory regardless of strictness.
+		// Only files_modified is relaxed in lenient mode.
+		const hasModifiedFail = verification.results.some((r) => !r.passed && r.type === "files_modified");
+		if (hasEmptyFail || hasFileFail || (strictness === "strict" && hasModifiedFail)) {
 			return { passed: false, failedChecks };
 		}
 	} else if (sessionId) {

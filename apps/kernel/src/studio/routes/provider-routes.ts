@@ -20,6 +20,7 @@ import { createLogger } from "../logger.js";
 import { isAnyPlannerCLIAvailable, listPlannerCLIProviders } from "../planner-cli.js";
 import { providerState } from "../provider-state.js";
 import type { AIProviderType, ProviderCliTool } from "../types.js";
+import { UpdateProviderSchema, parseBody } from "./validation-schemas.js";
 const log = createLogger("provider-routes");
 
 export const providerRoutes = new Hono();
@@ -38,7 +39,7 @@ providerRoutes.get("/config/status", async (c) => {
 			plannerAvailable,
 		});
 	} catch (err) {
-		log.error("[provider-routes] config status failed:" + " " + String(err));
+		log.error(`[provider-routes] config status failed: ${String(err)}`);
 		return c.json({ error: "Failed to get config status" }, 500);
 	}
 });
@@ -53,7 +54,7 @@ providerRoutes.get("/providers", async (c) => {
 	try {
 		return c.json(await listProviders());
 	} catch (err) {
-		log.error("[provider-routes] list providers failed:" + " " + String(err));
+		log.error(`[provider-routes] list providers failed: ${String(err)}`);
 		return c.json({ error: "Failed to list providers" }, 500);
 	}
 });
@@ -92,7 +93,7 @@ providerRoutes.get("/providers/fallback-chain", async (c) => {
 	try {
 		return c.json(await getFallbackChain());
 	} catch (err) {
-		log.error("[provider-routes] get fallback chain failed:" + " " + String(err));
+		log.error(`[provider-routes] get fallback chain failed: ${String(err)}`);
 		return c.json({ error: "Failed to get fallback chain" }, 500);
 	}
 });
@@ -141,6 +142,18 @@ providerRoutes.put("/providers/:id", async (c) => {
 		cliTool: body.cliTool as ProviderCliTool | undefined,
 	});
 
+	if (!provider) return c.json({ error: "Provider not found" }, 404);
+	return c.json(provider);
+});
+
+providerRoutes.patch("/providers/:id", async (c) => {
+	const rawBody = await c.req.json();
+	const parsed = parseBody(UpdateProviderSchema, rawBody);
+	if (!parsed.success) return c.json({ error: parsed.error }, 400);
+	const { enabled } = parsed.data;
+	const provider = await updateProvider(c.req.param("id"), {
+		...(enabled !== undefined ? { isActive: enabled } : {}),
+	});
 	if (!provider) return c.json({ error: "Provider not found" }, 404);
 	return c.json(provider);
 });

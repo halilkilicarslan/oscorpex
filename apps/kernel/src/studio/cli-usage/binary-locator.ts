@@ -8,6 +8,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "../logger.js";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import type { CLIProviderDef } from "./types.js";
 
 const log = createLogger("cli-usage:binary-locator");
@@ -77,7 +78,7 @@ export function locateBinary(binary: string): Promise<string | undefined> {
 		const shell = process.env.SHELL || "/bin/zsh";
 		const proc = spawn(shell, ["-lc", `command -v ${binary}`], {
 			stdio: ["ignore", "pipe", "ignore"],
-			env: { ...process.env, PATH: process.env.PATH },
+			env: buildSafeChildEnv({ profile: "build_tool" }),
 		});
 		let output = "";
 		proc.stdout?.on("data", (chunk: Buffer) => {
@@ -105,9 +106,9 @@ export function runCommand(
 	options?: { input?: string; timeoutMs?: number; envExclusions?: string[] },
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
 	return new Promise((resolve, reject) => {
-		const env = { ...process.env };
+		const env = buildSafeChildEnv({ profile: "build_tool" });
 		for (const key of options?.envExclusions ?? []) {
-			delete env[key];
+			delete (env as Record<string, string | undefined>)[key];
 		}
 
 		const proc = spawn(binary, args, {

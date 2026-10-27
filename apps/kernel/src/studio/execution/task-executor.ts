@@ -8,6 +8,7 @@ import type { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import { persistAgentLog } from "../agent-log-store.js";
 import { agentRuntime } from "../agent-runtime.js";
 import { completeSession, failSession } from "../agent-runtime/index.js";
+import { createCheckpoint } from "../checkpoint/index.js";
 import { enforceCommandPolicy, getDefaultPolicy } from "../command-policy.js";
 import {
 	claimTask,
@@ -24,6 +25,7 @@ import { markExecutionStarted } from "../preflight-warmup.js";
 import { syncDeclaredDependencies } from "../repo-dependency-sync.js";
 import { MAX_AUTO_RETRIES, evaluateRetry } from "../retry-policy.js";
 import { SandboxViolationError } from "../sandbox-manager.js";
+import { ToolPolicyDeniedError, enforceToolPolicy } from "../security/tool-policy-enforcer.js";
 import { taskEngine } from "../task-engine.js";
 import { TIMEOUT_WARNING_THRESHOLD, resolveTaskTimeoutMs } from "../timeout-policy.js";
 import type { AgentCliTool, Task } from "../types.js";
@@ -298,6 +300,20 @@ export class TaskExecutor {
 			// Sandbox pre-execution gate: in hard mode, verify tools before spawning CLI
 			enforceSandboxHardPreflight(sandboxPolicy, allowedTools);
 
+			// P2-1: Pre-execution tool policy enforcement
+			// source: "system" — kernel orchestrates task execution, not LLM directly
+			enforceToolPolicy({
+				request: {
+					actorId: agent?.id ?? "unknown",
+					tenantId: "system",
+					projectId,
+					source: "system",
+					tool: "provider",
+					action: "execute",
+					riskLevel: "execute",
+				},
+			});
+
 			// --- Container pool branch: route to Docker container if isolation=container and pool is ready ---
 			let containerResult: import("./provider-execution-service.js").NormalizedProviderResult | null = null;
 			if (sandboxPolicy?.isolationLevel === "container") {
@@ -346,6 +362,21 @@ export class TaskExecutor {
 						"[task-executor] Container pool execution failed, falling back to CLI adapter",
 					);
 				}
+			}
+
+			// P4-1: Create checkpoint before provider execution
+			try {
+				await createCheckpoint({
+					tenantId: "system",
+					projectId,
+					taskId: task.id,
+					type: "git",
+					reason: `pre-task: ${task.title?.slice(0, 80) ?? task.id}`,
+					createdBy: "system",
+					riskLevel: task.complexity === "L" || task.complexity === "XL" ? "high" : "medium",
+				});
+			} catch (err) {
+				log.warn({ err, taskId: task.id }, "[task-executor] checkpoint creation failed (non-blocking)");
 			}
 
 			let providerRun: import("./provider-task-runner.js").ProviderTaskRunResult | null = null;
