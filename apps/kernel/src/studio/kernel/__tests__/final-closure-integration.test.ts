@@ -74,14 +74,14 @@ describe("FINAL INTEGRATION: All 8 closure tasks acceptance", () => {
 
 	it("Task 7: VoltAgent boundary docs removed", async () => {
 		const fs = await import("node:fs");
-		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/docs/voltagent-boundary.md")).toBe(
+		expect(fs.existsSync(`${process.cwd()}/docs/voltagent-boundary.md`)).toBe(
 			false,
 		);
 	});
 
 	it("Task 8: Smoke checklist script exists", async () => {
 		const fs = await import("node:fs");
-		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/scripts/smoke-checklist.sh")).toBe(
+		expect(fs.existsSync(`${process.cwd()}/scripts/smoke-checklist.sh`)).toBe(
 			true,
 		);
 	});
@@ -132,7 +132,7 @@ describe("EPIC 1 — Kernel Boot Integration (IT-01..IT-03)", () => {
 describe("EPIC 5 — VoltAgent Removed (IT-16..IT-17)", () => {
 	it("IT-16: kernel package no longer lists VoltAgent as optional dependency", async () => {
 		const fs = await import("node:fs");
-		const pkgRaw = fs.readFileSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/package.json", "utf-8");
+		const pkgRaw = fs.readFileSync(`${process.cwd()}/package.json`, "utf-8");
 		const pkg = JSON.parse(pkgRaw);
 		if (pkg.optionalDependencies) {
 			expect(pkg.optionalDependencies["@voltagent/core"] ?? null).toBeNull();
@@ -141,7 +141,7 @@ describe("EPIC 5 — VoltAgent Removed (IT-16..IT-17)", () => {
 
 	it("IT-17: VoltAgent boundary docs removed", async () => {
 		const fs = await import("node:fs");
-		expect(fs.existsSync("/Users/iamhk/development/personal/oscorpex/apps/kernel/docs/voltagent-boundary.md")).toBe(
+		expect(fs.existsSync(`${process.cwd()}/docs/voltagent-boundary.md`)).toBe(
 			false,
 		);
 	});
