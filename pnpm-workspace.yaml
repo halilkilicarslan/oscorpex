@@ -2,3 +2,9 @@ packages:
   - "apps/*"
   - "packages/*"
   - "adapters/*"
+allowBuilds:
+  '@biomejs/biome': true
+  cpu-features: true
+  esbuild: true
+  protobufjs: true
+  ssh2: true

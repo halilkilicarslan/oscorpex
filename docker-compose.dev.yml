@@ -1,0 +1,23 @@
+# ---------------------------------------------------------------------------
+# Oscorpex — Docker Compose Development Override
+# ---------------------------------------------------------------------------
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# This override enables:
+#   - Docker socket mount (required for container pool management)
+#   - Open agent network (for provider API access)
+#
+# WARNING: Do NOT use this file in production deployments.
+# ---------------------------------------------------------------------------
+
+services:
+  backend:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - OSCORPEX_ENABLE_CONTAINER_RUNTIME=true
+
+networks:
+  studio-agents:
+    internal: false

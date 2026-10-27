@@ -14,6 +14,27 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    # P2-5: PostgreSQL service for DB-backed tests
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: oscorpex
+          POSTGRES_PASSWORD: oscorpex_dev
+          POSTGRES_DB: oscorpex_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oscorpex -d oscorpex_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex_test
+      NODE_ENV: test
+      OSCORPEX_DEV_NO_AUTH: "true"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,14 +57,67 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
+      - name: Initialize test database
+        run: psql "$DATABASE_URL" -f apps/kernel/scripts/init.sql
+        env:
+          PGPASSWORD: oscorpex_dev
 
-      - name: Build
-        run: pnpm build
+      - name: Kernel tests
+        run: pnpm --filter @oscorpex/kernel test
+
+      - name: P0 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p0.config.ts
+
+      - name: P1 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p1.config.ts
+
+      - name: P2 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p2.config.ts
+
+      - name: P3 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p3.config.ts
+
+      - name: P4 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p4.config.ts
+
+      - name: P5 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p5.config.ts
+
+      - name: P6 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p6.config.ts
+
+      - name: P7 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p7.config.ts
+
+      - name: P8 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p8.config.ts
+
+      - name: P9 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p9.config.ts
+
+      - name: P10 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p10.config.ts
+
+      - name: P11 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p11-unit.config.ts
+
+      - name: P12 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p12.config.ts
+
+      - name: P13 hardening tests
+        run: cd apps/kernel && npx vitest run --config vitest.p13.config.ts
+
+      - name: RC1 stabilization tests
+        run: cd apps/kernel && npx vitest run --config vitest.rc1.config.ts
+
+      - name: Policy-kit tests
+        run: pnpm --filter @oscorpex/policy-kit test
 
       - name: Console tests
         run: pnpm --filter console test:run
+
+      - name: Build
+        run: pnpm build
 
       - name: Docker Compose config validation
         run: docker compose config

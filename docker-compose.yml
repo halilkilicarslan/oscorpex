@@ -47,7 +47,9 @@ services:
     volumes:
       - studio-data:/app/.voltagent
       - repos:/app/.voltagent/repos
-      - /var/run/docker.sock:/var/run/docker.sock  # Docker-in-Docker for pool management
+      # P1-1: Docker socket removed from default. Use docker-compose.dev.yml override
+      # for local development: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+      # - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - studio-frontend
       - studio-agents
@@ -189,7 +191,9 @@ networks:
   # Agents cannot reach the internet or frontend
   studio-agents:
     driver: bridge
-    internal: false  # Needs host.docker.internal for API keys
+    # P1-4: Agent network isolated by default. API keys injected via env vars.
+    # Set OSCORPEX_ALLOW_AGENT_EGRESS=true and use docker-compose.dev.yml for open network.
+    internal: true
 
 # ---------------------------------------------------------------------------
 # Volumes
