@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development Workflow (mandatory for every feature, bug, or improvement)
+
+**Fast track** — single file, small diff, and a quick impact check confirms no schema/auth/security/API impact: brief scope confirmation → test → code → review. Skips subagent discussion and plan mode.
+
+**Full process:**
+1. **Scope analysis** — Clarify via interactive Q&A until unambiguous. Output: in-scope / out-of-scope + measurable acceptance criteria.
+2. **Impact analysis** — Map everything the change touches: modules and callers (`find_referencing_symbols`), DB schema/migrations, API contracts + console consumers, pipeline/execution behavior, existing tests, performance, security surface, backward compatibility. Output: affected files + risk level per area. If impact exceeds what the scope implied, revisit scope with the user (split or reduce).
+3. **Subagent discussion** — Challenge scope + impact with `architect-reviewer`, `security-auditor`, and one domain specialist (backend / frontend / postgres). Relay their changes and suggestions to the user → get scope approval.
+4. **Plan mode** — Detailed plan split into phases. Each phase lists its **test scenarios**: happy path, edge cases, error/negative cases, security cases, and a regression scenario for every impacted area from step 2. Save scope + impact + plan to `docs/plans/YYYY-MM-DD-<slug>.md`. Present it and wait for approval — test scenarios are approved with the plan.
+5. **Implementation (per phase, via subagents)** — test → code → security-review → code-review.
+   - Tests first: approved scenarios become failing tests before any code; bugs start with a test that reproduces the failure.
+   - Scenarios discovered mid-phase are added and flagged in the phase report.
+   - Test writer, implementer, and reviewers are separate agents. Reviewers get the diff, not the implementer's conclusions.
+   - Code review verifies every approved scenario has a test; a missing scenario is a blocking finding.
+   - Review findings → fix → re-review, max 2 rounds; unresolved critical findings escalate to the user.
+   - Gate: `pnpm typecheck && pnpm lint && pnpm test` (+ `pnpm --filter console test:run` if console changed) must pass.
+6. **Phase close** — Report changes, per-scenario test results, and review findings → wait for approval → one commit per approved phase.
+
 ## Commands
 
 ```bash
