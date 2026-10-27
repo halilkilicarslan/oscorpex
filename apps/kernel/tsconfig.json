@@ -1,10 +1,11 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "paths": {
-      "@oscorpex/control-plane": ["../../packages/control-plane/src/index.ts"]
-    }
-  },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"paths": {
+			"@oscorpex/control-plane": ["../../packages/control-plane/src/index.ts"]
+		}
+	},
+	"include": ["src"],
+	"exclude": ["node_modules", "dist"]
 }

@@ -160,6 +160,16 @@ apps/kernel/.tmp/**
 **/integration-temp/**
 **/*.scratch.tmp
 
+# Stray tsc emit next to sources (kernel builds via tsdown into dist/; stale .js can shadow .ts imports)
+apps/kernel/src/**/*.js
+apps/kernel/src/**/*.js.map
+apps/kernel/src/**/*.d.ts
+apps/kernel/src/**/*.d.ts.map
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+
 # cursor
 .cursor
 .playwright-mcp/
