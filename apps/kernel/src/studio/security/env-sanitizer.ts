@@ -10,8 +10,10 @@ const log = createLogger("env-sanitizer");
 
 /** Sensitive env var patterns — these are DENIED by default */
 const SENSITIVE_PATTERNS = [
-	/^DATABASE_URL$/i,
-	/^POSTGRES_URL$/i,
+	/DATABASE_URL/i,
+	/^PG[A-Z_]*$/,
+	/_DSN$/i,
+	/^POSTGRES/i,
 	/^OSCORPEX_JWT_SECRET$/i,
 	/^OSCORPEX_API_KEY$/i,
 	/^OSCORPEX_VAULT_KEY$/i,
@@ -49,7 +51,13 @@ const ALWAYS_ALLOWED = new Set([
 	"npm_lifecycle_event",
 ]);
 
-export type ChildProcessEnvProfile = "provider" | "app_runner" | "db_provisioner" | "container_runtime" | "test" | "build_tool";
+export type ChildProcessEnvProfile =
+	| "provider"
+	| "app_runner"
+	| "db_provisioner"
+	| "container_runtime"
+	| "test"
+	| "build_tool";
 
 export interface BuildChildEnvOptions {
 	profile: ChildProcessEnvProfile;

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CreateCheckpointInput, RollbackRequest } from "../checkpoint/types.js";
+import { expectTenantRlsInCatalog } from "./helpers/rls-catalog.js";
 
 // Mock DB
 vi.mock("../db.js", () => ({
@@ -65,8 +66,8 @@ describe("P3-1: Checkpoint service", () => {
 		const sql = readFileSync(join(process.cwd(), "scripts/init.sql"), "utf8");
 		expect(sql).toContain("CREATE TABLE IF NOT EXISTS checkpoints");
 		expect(sql).toContain("CREATE TABLE IF NOT EXISTS rollback_requests");
-		expect(sql).toContain("checkpoint_tenant_isolation");
-		expect(sql).toContain("rollback_tenant_isolation");
+		await expectTenantRlsInCatalog("checkpoints");
+		await expectTenantRlsInCatalog("rollback_requests");
 	});
 });
 

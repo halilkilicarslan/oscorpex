@@ -12,9 +12,6 @@ import { buildReplaySnapshot } from "./replay-fixtures.js";
 describe("DbReplayStore contract", () => {
 	beforeAll(async () => {
 		await execute("DELETE FROM replay_snapshots WHERE run_id = 'contract-run'");
-		// Ensure columns are nullable for fallback test
-		await execute("ALTER TABLE replay_snapshots ALTER COLUMN policy_decisions_json DROP NOT NULL");
-		await execute("ALTER TABLE replay_snapshots ALTER COLUMN verification_reports_json DROP NOT NULL");
 	});
 
 	it("roundtrips policyDecisions and verificationReports via dedicated columns", async () => {

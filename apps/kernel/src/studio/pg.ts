@@ -21,9 +21,11 @@ let _pool: pg.Pool | null = null;
  */
 export function getPool(): pg.Pool {
 	if (!_pool) {
+		const connectionString = process.env.DATABASE_URL;
+		if (!connectionString) throw new Error("DATABASE_URL is not set");
 		const poolCfg = getDbPoolConfig();
 		_pool = new Pool({
-			connectionString: process.env.DATABASE_URL || "postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex",
+			connectionString,
 			min: poolCfg.minConnections,
 			max: poolCfg.maxConnections,
 			idleTimeoutMillis: poolCfg.idleTimeoutMs,
@@ -83,16 +85,21 @@ export async function execute(sql: string, params?: unknown[]): Promise<{ rowCou
  */
 export async function withTransaction<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
 	const client = await getPool().connect();
+	let releaseErr: Error | undefined;
 	try {
 		await client.query("BEGIN");
 		const result = await fn(client);
 		await client.query("COMMIT");
 		return result;
 	} catch (err) {
-		await client.query("ROLLBACK");
+		try {
+			await client.query("ROLLBACK");
+		} catch (rollbackErr) {
+			releaseErr = rollbackErr instanceof Error ? rollbackErr : new Error(String(rollbackErr));
+		}
 		throw err;
 	} finally {
-		client.release();
+		client.release(releaseErr);
 	}
 }
 

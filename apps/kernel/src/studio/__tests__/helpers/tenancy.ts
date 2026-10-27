@@ -2,7 +2,7 @@
 // Tenancy test helpers (F0): tenant seeding and tenant-scoped transactions.
 // ---------------------------------------------------------------------------
 
-import type { PoolClient } from "pg";
+import pg, { type PoolClient } from "pg";
 import { getPool } from "../../pg.js";
 
 export const TENANT_LOCAL = "00000000-0000-0000-0000-000000000001";
@@ -158,7 +158,10 @@ export async function withAppRole<T>(
 	}>(
 		`SELECT r.rolsuper, r.rolbypassrls,
 		        pg_has_role(current_user, $1, 'MEMBER') AS can_set_role,
-		        CASE WHEN $3::boolean THEN pg_has_role($1, $2, 'MEMBER') ELSE false END AS member_of_owner
+		        (CASE WHEN $3::boolean THEN pg_has_role($1, $2, 'MEMBER') ELSE false END
+		         OR EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+		                    WHERE n.nspname = 'public' AND c.relrowsecurity
+		                      AND pg_has_role($1, c.relowner, 'USAGE'))) AS member_of_owner
 		 FROM pg_roles r WHERE r.rolname = $1`,
 		[APP_ROLE, OWNER_ROLE, ownerExists],
 	);
@@ -170,4 +173,21 @@ export async function withAppRole<T>(
 		canSetRole: row.can_set_role,
 	});
 	return withTenantTx(tenantId, fn, { ...opts, role: APP_ROLE });
+}
+
+/**
+ * Run fn on a dedicated client connected as the migration user
+ * (OSCORPEX_MIGRATION_DATABASE_URL, falling back to DATABASE_URL). For test setup that needs
+ * owner/superuser rights, e.g. SET ROLE oscorpex_owner.
+ */
+export async function withMigrator<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {
+	const connectionString = process.env.OSCORPEX_MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
+	if (!connectionString) throw new Error("DATABASE_URL is not set");
+	const client = new pg.Client({ connectionString });
+	await client.connect();
+	try {
+		return await fn(client);
+	} finally {
+		await client.end();
+	}
 }

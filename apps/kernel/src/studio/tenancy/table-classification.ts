@@ -198,6 +198,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableClassification> = {
 	operator_actions: other("system", "platform-admin", "operator-actions/service.ts; operator action audit"),
 	operator_flags: other("system", "platform-admin", "operator-actions/service.ts; platform kill-switch flags"),
 	provider_state: other("system", "system-only", "provider-state.ts; host-level cooldown state per adapter"),
+	schema_meta: other("system", "system-only", "db-bootstrap.ts; hash of the last applied init.sql"),
 
 	// --- legacy: unused --------------------------------------------------------
 	jobs: other("legacy", "system-only", "job-queue and /jobs routes to be deleted in F3"),

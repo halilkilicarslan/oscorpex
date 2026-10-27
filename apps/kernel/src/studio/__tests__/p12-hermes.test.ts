@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { expectTenantRlsInCatalog } from "./helpers/rls-catalog.js";
 
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before any dynamic imports
@@ -401,17 +402,11 @@ describe("P12-G: init.sql schema", () => {
 	});
 
 	it("hermes_api_keys has tenant isolation policy", async () => {
-		const { readFileSync } = await import("node:fs");
-		const { join } = await import("node:path");
-		const sql = readFileSync(join(process.cwd(), "scripts/init.sql"), "utf8");
-		expect(sql).toContain("hermes_key_tenant");
+		await expectTenantRlsInCatalog("hermes_api_keys");
 	});
 
 	it("hermes_sessions has tenant isolation policy", async () => {
-		const { readFileSync } = await import("node:fs");
-		const { join } = await import("node:path");
-		const sql = readFileSync(join(process.cwd(), "scripts/init.sql"), "utf8");
-		expect(sql).toContain("hermes_session_tenant");
+		await expectTenantRlsInCatalog("hermes_sessions");
 	});
 });
 

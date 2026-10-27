@@ -3,6 +3,52 @@
 -- Schema for studio tables and observability tables
 -- ---------------------------------------------------------------------------
 
+-- ---------------------------------------------------------------------------
+-- Roles and schema privileges (idempotent; needs CREATEROLE or superuser on
+-- first run). Tables end up owned by oscorpex_owner (see the end of this file);
+-- the runtime connects as a member of oscorpex_app, which has DML only.
+-- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+	IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oscorpex_owner') THEN
+		CREATE ROLE oscorpex_owner NOLOGIN;
+	END IF;
+	IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oscorpex_migrator') THEN
+		CREATE ROLE oscorpex_migrator NOLOGIN;
+	END IF;
+	IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oscorpex_sysread') THEN
+		CREATE ROLE oscorpex_sysread NOLOGIN;
+	END IF;
+	IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oscorpex_app') THEN
+		CREATE ROLE oscorpex_app LOGIN NOSUPERUSER NOBYPASSRLS;
+	END IF;
+END $$;
+
+DO $$
+DECLARE
+	r RECORD;
+BEGIN
+	FOR r IN SELECT rolname FROM pg_roles WHERE rolname = 'oscorpex_app' AND (rolsuper OR rolbypassrls) LOOP
+		RAISE EXCEPTION 'oscorpex_app must be NOSUPERUSER NOBYPASSRLS (RLS would not apply to it)';
+	END LOOP;
+
+	-- The migrating user may hand objects to these roles (SET ROLE), but does not inherit their privileges.
+	FOR r IN SELECT unnest(ARRAY['oscorpex_owner', 'oscorpex_sysread']) AS role LOOP
+		IF current_user <> r.role THEN
+			IF current_setting('server_version_num')::int >= 160000 THEN
+				EXECUTE format('GRANT %I TO %I WITH INHERIT FALSE, SET TRUE', r.role, current_user);
+			ELSE
+				EXECUTE format('GRANT %I TO %I', r.role, current_user);
+			END IF;
+		END IF;
+	END LOOP;
+END $$;
+
+GRANT USAGE, CREATE ON SCHEMA public TO oscorpex_owner;
+GRANT USAGE ON SCHEMA public TO oscorpex_app, oscorpex_sysread;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+REVOKE CREATE ON SCHEMA public FROM oscorpex_app, oscorpex_sysread;
+
 -- pgvector extension (pre-installed in pgvector/pgvector:pg16 image)
 CREATE EXTENSION IF NOT EXISTS vector;
 
@@ -1138,6 +1184,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ DEFAULT now(),
   updated_at    TIMESTAMPTZ DEFAULT now()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_platform_admin BOOLEAN NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS idx_users_email  ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
 
@@ -1172,25 +1219,7 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_id  TEXT REFERENCES users(id
 CREATE INDEX IF NOT EXISTS idx_projects_tenant   ON projects(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_projects_owner    ON projects(owner_id);
 
--- ---------------------------------------------------------------------------
--- M6.4: Row Level Security Policies (policy tanımları — şimdilik ENABLE EDİLMEDİ)
--- NOT: ALTER TABLE ... ENABLE ROW LEVEL SECURITY komutları kasıtlı olarak
--- dahil edilmedi. Testler app.current_tenant_id set etmediğinden RLS etkinleştirilmesi
--- mevcut test suite'ini bozar. Bu policy'ler gelecekte ayrı bir migration'da
--- etkinleştirilecek.
--- ---------------------------------------------------------------------------
-
-DO $$ BEGIN
-	IF NOT EXISTS (
-		SELECT 1 FROM pg_policies
-		WHERE policyname = 'projects_tenant_isolation' AND tablename = 'projects'
-	) THEN
-		CREATE POLICY projects_tenant_isolation ON projects
-			USING (
-				tenant_id = current_setting('app.current_tenant_id', true)
-			);
-	END IF;
-END $$;
+-- (M6.4 policy definitions moved to the Tenancy section at the end of this file.)
 
 -- ---------------------------------------------------------------------------
 -- V6 M1: In-App Notification System
@@ -1385,79 +1414,7 @@ ALTER TABLE agent_messages FORCE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages FORCE ROW LEVEL SECURITY;
 
--- RLS policies: allow access when tenant matches OR when no tenant context set (backward compat)
-DO $$ BEGIN
-  -- projects
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_projects') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_projects ON projects
-      USING (tenant_id = current_setting(''app.current_tenant_id'', true))';
-  END IF;
-  -- project_plans (via project join)
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_project_plans') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_project_plans ON project_plans
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- tasks (direct tenant_id column — O(1) index lookup)
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_tasks') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_tasks ON tasks
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- phases
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_phases') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_phases ON phases
-      USING (plan_id IN (SELECT id FROM project_plans WHERE project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true))))';
-  END IF;
-  -- events
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_events') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_events ON events
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- project_agents
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_project_agents') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_project_agents ON project_agents
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- agent_dependencies
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_agent_deps') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_agent_deps ON agent_dependencies
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- pipeline_runs
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_pipeline_runs') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_pipeline_runs ON pipeline_runs
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- token_usage
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_token_usage') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_token_usage ON token_usage
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- work_items
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_work_items') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_work_items ON work_items
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- sprints
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_sprints') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_sprints ON sprints
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- notifications
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_notifications') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_notifications ON notifications
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- agent_messages
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_agent_messages') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_agent_messages ON agent_messages
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-  -- chat_messages
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation_chat_messages') THEN
-    EXECUTE 'CREATE POLICY tenant_isolation_chat_messages ON chat_messages
-      USING (project_id IN (SELECT id FROM projects WHERE tenant_id = current_setting(''app.current_tenant_id'', true)))';
-  END IF;
-END $$;
+-- RLS policies live in the Tenancy section at the end of this file.
 
 -- ---------------------------------------------------------------------------
 -- v8.0: Provider State Persistence
@@ -1754,6 +1711,9 @@ CREATE TABLE IF NOT EXISTS replay_snapshots (
 -- Migration: ensure columns exist for existing tables
 ALTER TABLE replay_snapshots ADD COLUMN IF NOT EXISTS policy_decisions_json TEXT DEFAULT '[]';
 ALTER TABLE replay_snapshots ADD COLUMN IF NOT EXISTS verification_reports_json TEXT DEFAULT '[]';
+-- Earlier schema versions declared these NOT NULL; legacy rows rely on NULL fallback.
+ALTER TABLE replay_snapshots ALTER COLUMN policy_decisions_json DROP NOT NULL;
+ALTER TABLE replay_snapshots ALTER COLUMN verification_reports_json DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_replay_run ON replay_snapshots(run_id);
 CREATE INDEX IF NOT EXISTS idx_replay_checkpoint ON replay_snapshots(run_id, checkpoint_id);
@@ -2410,10 +2370,6 @@ WHERE t.project_id = p.id
   AND t.tenant_id IS NULL
   AND p.tenant_id IS NOT NULL;
 
--- Replace subquery-based RLS with direct column match
-DROP POLICY IF EXISTS tenant_isolation_tasks ON tasks;
-CREATE POLICY tenant_isolation_tasks ON tasks
-  USING (tenant_id = current_setting('app.current_tenant_id', true));
 
 -- 2. project_plans.tenant_id -----------------------------------------------
 DO $$ BEGIN
@@ -2431,10 +2387,6 @@ WHERE pp.project_id = pr.id
   AND pp.tenant_id IS NULL
   AND pr.tenant_id IS NOT NULL;
 
--- Replace subquery-based RLS with direct column match
-DROP POLICY IF EXISTS tenant_isolation_project_plans ON project_plans;
-CREATE POLICY tenant_isolation_project_plans ON project_plans
-  USING (tenant_id = current_setting('app.current_tenant_id', true));
 
 -- 3. phases.tenant_id -------------------------------------------------------
 DO $$ BEGIN
@@ -2453,10 +2405,6 @@ WHERE ph.plan_id = pp.id
   AND ph.tenant_id IS NULL
   AND pr.tenant_id IS NOT NULL;
 
--- Replace double-subquery RLS with direct column match
-DROP POLICY IF EXISTS tenant_isolation_phases ON phases;
-CREATE POLICY tenant_isolation_phases ON phases
-  USING (tenant_id = current_setting('app.current_tenant_id', true));
 
 -- ---------------------------------------------------------------------------
 -- Skills system — reusable agent capabilities
@@ -2553,11 +2501,6 @@ CREATE INDEX IF NOT EXISTS idx_checkpoints_tenant  ON checkpoints(tenant_id);
 
 ALTER TABLE checkpoints ENABLE ROW LEVEL SECURITY;
 ALTER TABLE checkpoints FORCE ROW LEVEL SECURITY;
-DO $$ BEGIN
-	CREATE POLICY checkpoint_tenant_isolation ON checkpoints
-		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
 
 CREATE TABLE IF NOT EXISTS rollback_requests (
 	id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2575,11 +2518,6 @@ CREATE TABLE IF NOT EXISTS rollback_requests (
 
 ALTER TABLE rollback_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rollback_requests FORCE ROW LEVEL SECURITY;
-DO $$ BEGIN
-	CREATE POLICY rollback_tenant_isolation ON rollback_requests
-		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
 
 -- P9-A/P9-B: Git commit workflow tables
 CREATE TABLE IF NOT EXISTS git_checkpoints (
@@ -2601,11 +2539,6 @@ CREATE INDEX IF NOT EXISTS git_checkpoints_pipeline_idx ON git_checkpoints (pipe
 
 ALTER TABLE git_checkpoints ENABLE ROW LEVEL SECURITY;
 ALTER TABLE git_checkpoints FORCE ROW LEVEL SECURITY;
-DO $$ BEGIN
-	CREATE POLICY git_checkpoint_tenant ON git_checkpoints
-		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
 
 CREATE TABLE IF NOT EXISTS commit_proposals (
 	id                    UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2634,11 +2567,6 @@ CREATE INDEX IF NOT EXISTS commit_proposals_status_idx ON commit_proposals (stat
 
 ALTER TABLE commit_proposals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE commit_proposals FORCE ROW LEVEL SECURITY;
-DO $$ BEGIN
-	CREATE POLICY commit_proposal_tenant ON commit_proposals
-		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
 
 -- ============================================================
 -- P12-A: Hermes external-agent API tables
@@ -2661,11 +2589,6 @@ CREATE INDEX IF NOT EXISTS hermes_api_keys_tenant_idx ON hermes_api_keys (tenant
 
 ALTER TABLE hermes_api_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hermes_api_keys FORCE ROW LEVEL SECURITY;
-DO $$ BEGIN
-	CREATE POLICY hermes_key_tenant ON hermes_api_keys
-		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
 
 CREATE TABLE IF NOT EXISTS hermes_sessions (
 	id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2685,8 +2608,456 @@ CREATE INDEX IF NOT EXISTS hermes_sessions_key_idx   ON hermes_sessions (api_key
 
 ALTER TABLE hermes_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hermes_sessions FORCE ROW LEVEL SECURITY;
-DO $$ BEGIN
-	CREATE POLICY hermes_session_tenant ON hermes_sessions
-		USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-EXCEPTION WHEN duplicate_object THEN NULL;
+
+-- Bookkeeping for scripts/init.sql application (hash of the last applied script).
+CREATE TABLE IF NOT EXISTS schema_meta (
+	key        TEXT PRIMARY KEY,
+	value      TEXT NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------------------
+-- Tenancy (F1): app_tenant(), strict RLS policies, composite tenant FKs,
+-- immutable tenant_id. Single source of truth for the 20 RLS tables.
+-- Only the uuid->text conversion and the one-time NULL adoption are gated by the
+-- 'rls-f1-r1' marker (comment on app_tenant()); constraints and policies are
+-- re-created on every apply. Every statement is idempotent.
+-- The migration user must be a superuser or have BYPASSRLS: FORCE RLS applies
+-- to table owners and the backfill would otherwise silently touch 0 rows.
+-- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+	IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND (rolsuper OR rolbypassrls)) THEN
+		RAISE EXCEPTION 'the migration user (%) must be a superuser or have BYPASSRLS to apply the tenancy schema', current_user;
+	END IF;
 END $$;
+
+CREATE OR REPLACE FUNCTION app_tenant() RETURNS text
+	LANGUAGE sql STABLE PARALLEL SAFE SET search_path = pg_catalog, pg_temp
+	AS $fn$ SELECT NULLIF(pg_catalog.current_setting('app.current_tenant_id', true), '') $fn$;
+
+REVOKE ALL ON FUNCTION app_tenant() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_tenant() TO oscorpex_app, oscorpex_sysread, oscorpex_owner;
+
+-- ---------------------------------------------------------------------------
+-- F1c: SECURITY DEFINER sys_* functions — the only sanctioned cross-tenant
+-- read path. Owned by oscorpex_sysread (SELECT only), pinned search_path,
+-- EXECUTE for oscorpex_app only. oscorpex_app is NOT a member of sysread.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION sys_project_tenant(p_project_id text) RETURNS text
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+	AS $fn$ SELECT p.tenant_id FROM public.projects p WHERE p.id = p_project_id $fn$;
+
+CREATE OR REPLACE FUNCTION sys_event_tenant(p_event_id text) RETURNS text
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+	AS $fn$
+		SELECT p.tenant_id FROM public.events e JOIN public.projects p ON p.id = e.project_id WHERE e.id = p_event_id
+	$fn$;
+
+CREATE OR REPLACE FUNCTION sys_running_project_phases()
+	RETURNS TABLE (project_id text, phase_id text, tenant_id text)
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+	AS $fn$
+		SELECT p.id, ph.id, p.tenant_id
+		FROM public.projects p
+		JOIN public.pipeline_runs pr ON pr.project_id = p.id AND pr.status = 'running'
+		JOIN public.project_plans pp ON pp.project_id = p.id AND pp.status = 'approved'
+		JOIN public.phases ph ON ph.plan_id = pp.id AND ph.status IN ('running', 'queued')
+		WHERE p.status = 'running'
+		ORDER BY p.id, ph."order"
+	$fn$;
+
+CREATE OR REPLACE FUNCTION sys_running_projects()
+	RETURNS TABLE (project_id text, tenant_id text)
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+	AS $fn$
+		SELECT p.id, p.tenant_id FROM public.projects p
+		WHERE p.status = 'running'
+		  AND EXISTS (SELECT 1 FROM public.pipeline_runs pr WHERE pr.project_id = p.id AND pr.status = 'running')
+		ORDER BY p.id
+	$fn$;
+
+CREATE OR REPLACE FUNCTION sys_api_key_lookup(p_key_hash text)
+	RETURNS TABLE (id text, user_id text, tenant_id text, scopes text[], role text)
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+	AS $fn$
+		SELECT k.id, k.user_id, k.tenant_id, k.scopes::text[], r.role
+		FROM public.api_keys k
+		LEFT JOIN public.user_roles r ON r.user_id = k.user_id AND r.tenant_id = k.tenant_id
+		WHERE k.key_hash = p_key_hash AND (k.expires_at IS NULL OR k.expires_at > pg_catalog.now())
+	$fn$;
+
+CREATE OR REPLACE FUNCTION sys_platform_stats() RETURNS jsonb
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+	AS $fn$
+		SELECT pg_catalog.jsonb_build_object(
+			'total_projects', (SELECT count(*) FROM public.projects),
+			'total_tasks', (SELECT count(*) FROM public.tasks),
+			'tasks_done', (SELECT count(*) FROM public.tasks WHERE status = 'done'),
+			'tasks_failed', (SELECT count(*) FROM public.tasks WHERE status = 'failed'),
+			'total_cost_usd', (SELECT coalesce(sum(cost_usd), 0)::float8 FROM public.token_usage)
+		)
+	$fn$;
+
+DO $$
+DECLARE
+	fn TEXT;
+BEGIN
+	-- ALTER OWNER needs CREATE on the schema for the new owner; grant it only for the duration.
+	GRANT CREATE ON SCHEMA public TO oscorpex_sysread;
+	FOREACH fn IN ARRAY ARRAY['sys_project_tenant(text)', 'sys_event_tenant(text)', 'sys_running_project_phases()',
+	                          'sys_running_projects()', 'sys_api_key_lookup(text)', 'sys_platform_stats()']
+	LOOP
+		EXECUTE format('ALTER FUNCTION public.%s OWNER TO oscorpex_sysread', fn);
+		EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);
+		EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO oscorpex_app', fn);
+	END LOOP;
+	REVOKE CREATE ON SCHEMA public FROM oscorpex_sysread;
+END $$;
+
+-- Part A (gated by the marker): drop every legacy policy, convert uuid tenant/project ids to text.
+DO $$
+DECLARE
+	pol RECORD;
+	t   TEXT;
+	col TEXT;
+BEGIN
+	IF coalesce(obj_description('public.app_tenant()'::regprocedure, 'pg_proc'), '') = 'rls-f1-r1' THEN
+		RETURN;
+	END IF;
+
+	FOR pol IN
+		SELECT policyname, tablename FROM pg_policies
+		WHERE schemaname = 'public'
+		  AND tablename IN ('projects','project_plans','tasks','phases','events','project_agents','agent_dependencies',
+		                    'pipeline_runs','token_usage','work_items','sprints','notifications','agent_messages',
+		                    'chat_messages','checkpoints','rollback_requests','git_checkpoints','commit_proposals',
+		                    'hermes_api_keys','hermes_sessions')
+	LOOP
+		EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', pol.policyname, pol.tablename);
+	END LOOP;
+
+	FOREACH t IN ARRAY ARRAY['checkpoints','rollback_requests','git_checkpoints','commit_proposals','hermes_api_keys','hermes_sessions']
+	LOOP
+		FOREACH col IN ARRAY ARRAY['tenant_id','project_id']
+		LOOP
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = t AND column_name = col AND data_type = 'uuid'
+			) THEN
+				EXECUTE format('ALTER TABLE public.%I ALTER COLUMN %I TYPE text USING %I::text', t, col, col);
+			END IF;
+		END LOOP;
+	END LOOP;
+END $$;
+
+-- Trigger functions (pinned search_path, schema-qualified references).
+CREATE OR REPLACE FUNCTION tenancy_fill_tenant_id() RETURNS trigger
+	LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+	AS $fn$
+BEGIN
+	IF NEW.tenant_id IS NULL THEN
+		IF TG_TABLE_NAME = 'phases' THEN
+			SELECT pp.tenant_id INTO NEW.tenant_id FROM public.project_plans pp WHERE pp.id = NEW.plan_id;
+		ELSE
+			SELECT p.tenant_id INTO NEW.tenant_id FROM public.projects p WHERE p.id = NEW.project_id;
+			IF NEW.tenant_id IS NULL AND TG_TABLE_NAME = 'tasks' THEN
+				SELECT ph.tenant_id INTO NEW.tenant_id FROM public.phases ph WHERE ph.id = NEW.phase_id;
+			END IF;
+		END IF;
+	END IF;
+	RETURN NEW;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION tenancy_forbid_tenant_change() RETURNS trigger
+	LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+	AS $fn$
+BEGIN
+	-- NULL -> value is allowed (legacy rows being adopted); any other change is not, for every role.
+	IF OLD.tenant_id IS NOT NULL AND NEW.tenant_id IS DISTINCT FROM OLD.tenant_id THEN
+		RAISE EXCEPTION 'tenant_id is immutable on %', TG_TABLE_NAME USING ERRCODE = '42501';
+	END IF;
+	RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION tenancy_fill_tenant_id() FROM PUBLIC;
+REVOKE ALL ON FUNCTION tenancy_forbid_tenant_change() FROM PUBLIC;
+
+DO $$
+DECLARE
+	t TEXT;
+BEGIN
+	FOREACH t IN ARRAY ARRAY['projects','tasks','phases','project_plans','notifications','checkpoints',
+	                         'rollback_requests','git_checkpoints','commit_proposals','hermes_api_keys','hermes_sessions']
+	LOOP
+		IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = format('public.%I', t)::regclass
+		               AND tgname = 'tenancy_forbid_tenant_change') THEN
+			EXECUTE format('CREATE TRIGGER tenancy_forbid_tenant_change BEFORE UPDATE ON public.%I
+			                FOR EACH ROW EXECUTE FUNCTION tenancy_forbid_tenant_change()', t);
+		END IF;
+	END LOOP;
+	FOREACH t IN ARRAY ARRAY['tasks','phases','project_plans','notifications','checkpoints','rollback_requests',
+	                         'git_checkpoints','commit_proposals','hermes_sessions']
+	LOOP
+		IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = format('public.%I', t)::regclass
+		               AND tgname = 'tenancy_fill_tenant_id') THEN
+			EXECUTE format('CREATE TRIGGER tenancy_fill_tenant_id BEFORE INSERT ON public.%I
+			                FOR EACH ROW EXECUTE FUNCTION tenancy_fill_tenant_id()', t);
+		END IF;
+	END LOOP;
+END $$;
+
+INSERT INTO tenants (id, name, slug)
+VALUES ('00000000-0000-0000-0000-000000000001', 'Local', 'local')
+ON CONFLICT DO NOTHING;
+
+-- One-time adoption of legacy NULL-tenant rows (only on a database that never ran F1: no marker).
+-- Project owner's tenant first, then the local tenant; children follow their parents.
+DO $$
+BEGIN
+	IF obj_description('public.app_tenant()'::regprocedure, 'pg_proc') IS NOT NULL THEN
+		RETURN;
+	END IF;
+	UPDATE projects p SET tenant_id = u.tenant_id FROM users u
+		WHERE p.tenant_id IS NULL AND p.owner_id = u.id AND u.tenant_id IS NOT NULL;
+	UPDATE projects SET tenant_id = '00000000-0000-0000-0000-000000000001' WHERE tenant_id IS NULL;
+END $$;
+
+-- Every apply: fill NULL children from their parents (never overwrites a non-NULL tenant_id) and
+-- report what could not be reconciled.
+DO $$
+DECLARE
+	n BIGINT;
+	t TEXT;
+BEGIN
+	UPDATE project_plans c SET tenant_id = p.tenant_id FROM projects p
+		WHERE c.tenant_id IS NULL AND c.project_id = p.id AND p.tenant_id IS NOT NULL;
+	UPDATE phases c SET tenant_id = pp.tenant_id FROM project_plans pp
+		WHERE c.tenant_id IS NULL AND c.plan_id = pp.id AND pp.tenant_id IS NOT NULL;
+	UPDATE tasks c SET tenant_id = p.tenant_id FROM projects p
+		WHERE c.tenant_id IS NULL AND c.project_id = p.id AND p.tenant_id IS NOT NULL;
+	UPDATE tasks c SET tenant_id = ph.tenant_id FROM phases ph
+		WHERE c.tenant_id IS NULL AND c.project_id IS NULL AND c.phase_id = ph.id AND ph.tenant_id IS NOT NULL;
+	UPDATE notifications c SET tenant_id = p.tenant_id FROM projects p
+		WHERE c.tenant_id IS NULL AND c.project_id = p.id AND p.tenant_id IS NOT NULL;
+
+	FOREACH t IN ARRAY ARRAY['projects','tasks','phases','project_plans','notifications'] LOOP
+		EXECUTE format('SELECT count(*) FROM public.%I WHERE tenant_id IS NULL', t) INTO n;
+		IF n > 0 THEN RAISE WARNING 'tenancy: % rows in % have a NULL tenant_id (invisible to the app role)', n, t; END IF;
+	END LOOP;
+
+	SELECT count(*) INTO n FROM tasks c JOIN projects p ON p.id = c.project_id
+		WHERE c.tenant_id IS NOT NULL AND p.tenant_id IS NOT NULL AND c.tenant_id <> p.tenant_id;
+	IF n > 0 THEN RAISE WARNING 'tenancy: % tasks have a different tenant_id than their project', n; END IF;
+	SELECT count(*) INTO n FROM project_plans c JOIN projects p ON p.id = c.project_id
+		WHERE c.tenant_id IS NOT NULL AND p.tenant_id IS NOT NULL AND c.tenant_id <> p.tenant_id;
+	IF n > 0 THEN RAISE WARNING 'tenancy: % project_plans have a different tenant_id than their project', n; END IF;
+	SELECT count(*) INTO n FROM phases c JOIN project_plans pp ON pp.id = c.plan_id
+		WHERE c.tenant_id IS NOT NULL AND pp.tenant_id IS NOT NULL AND c.tenant_id <> pp.tenant_id;
+	IF n > 0 THEN RAISE WARNING 'tenancy: % phases have a different tenant_id than their plan', n; END IF;
+	SELECT count(*) INTO n FROM tasks c JOIN phases ph ON ph.id = c.phase_id
+		WHERE c.tenant_id IS NOT NULL AND ph.tenant_id IS NOT NULL AND c.tenant_id <> ph.tenant_id;
+	IF n > 0 THEN RAISE WARNING 'tenancy: % tasks have a different tenant_id than their phase', n; END IF;
+	SELECT count(*) INTO n FROM notifications c JOIN projects p ON p.id = c.project_id
+		WHERE c.tenant_id IS NOT NULL AND p.tenant_id IS NOT NULL AND c.tenant_id <> p.tenant_id;
+	IF n > 0 THEN RAISE WARNING 'tenancy: % notifications have a different tenant_id than their project', n; END IF;
+END $$;
+
+-- One-time (databases that never ran F1: no marker): remaining NULL-tenant rows join the local tenant.
+-- A database that already ran F1 keeps its NULLs; they stay invisible to the app role.
+DO $$
+DECLARE
+	t TEXT;
+BEGIN
+	IF obj_description('public.app_tenant()'::regprocedure, 'pg_proc') IS NOT NULL THEN
+		RETURN;
+	END IF;
+	FOREACH t IN ARRAY ARRAY['tasks','phases','project_plans','notifications'] LOOP
+		EXECUTE format('UPDATE public.%I SET tenant_id = %L WHERE tenant_id IS NULL', t,
+		               '00000000-0000-0000-0000-000000000001');
+	END LOOP;
+END $$;
+
+-- Every apply: composite-FK targets, composite FKs, defaults, RLS flags and the tenant policies.
+DO $$
+DECLARE
+	t TEXT;
+	def TEXT;
+	cname TEXT;
+	pol RECORD;
+	direct_tables TEXT[] := ARRAY['projects','tasks','phases','project_plans','notifications','checkpoints',
+	                              'rollback_requests','git_checkpoints','commit_proposals','hermes_api_keys',
+	                              'hermes_sessions'];
+	subq_tables TEXT[] := ARRAY['events','project_agents','agent_dependencies','pipeline_runs','token_usage',
+	                            'work_items','sprints','agent_messages','chat_messages'];
+	-- table|constraint|child columns|parent table|parent columns
+	fks TEXT[] := ARRAY[
+		'tasks|tasks_project_tenant_fk|project_id, tenant_id|projects|id, tenant_id',
+		'project_plans|project_plans_project_tenant_fk|project_id, tenant_id|projects|id, tenant_id',
+		'notifications|notifications_project_tenant_fk|project_id, tenant_id|projects|id, tenant_id',
+		'checkpoints|checkpoints_project_tenant_fk|project_id, tenant_id|projects|id, tenant_id',
+		'rollback_requests|rollback_requests_project_tenant_fk|project_id, tenant_id|projects|id, tenant_id',
+		'git_checkpoints|git_checkpoints_project_tenant_fk|project_id, tenant_id|projects|id, tenant_id',
+		'commit_proposals|commit_proposals_project_tenant_fk|project_id, tenant_id|projects|id, tenant_id',
+		'hermes_sessions|hermes_sessions_project_tenant_fk|project_id, tenant_id|projects|id, tenant_id',
+		'phases|phases_plan_tenant_fk|plan_id, tenant_id|project_plans|id, tenant_id',
+		'tasks|tasks_phase_tenant_fk|phase_id, tenant_id|phases|id, tenant_id'];
+BEGIN
+	IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'projects_id_tenant_uniq') THEN
+		ALTER TABLE projects ADD CONSTRAINT projects_id_tenant_uniq UNIQUE (id, tenant_id);
+	END IF;
+	IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'project_plans_id_tenant_uniq') THEN
+		ALTER TABLE project_plans ADD CONSTRAINT project_plans_id_tenant_uniq UNIQUE (id, tenant_id);
+	END IF;
+	IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'phases_id_tenant_uniq') THEN
+		ALTER TABLE phases ADD CONSTRAINT phases_id_tenant_uniq UNIQUE (id, tenant_id);
+	END IF;
+
+	-- Composite FKs (NOT VALID: new rows are enforced, legacy orphans do not block boot).
+	FOREACH def IN ARRAY fks LOOP
+		t := split_part(def, '|', 1);
+		cname := split_part(def, '|', 2);
+		IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = cname) THEN
+			EXECUTE format('ALTER TABLE public.%I ADD CONSTRAINT %I FOREIGN KEY (%s) REFERENCES public.%I (%s)
+			                ON DELETE CASCADE NOT VALID',
+			               t, cname, split_part(def, '|', 3), split_part(def, '|', 4), split_part(def, '|', 5));
+		END IF;
+		BEGIN
+			EXECUTE format('ALTER TABLE public.%I VALIDATE CONSTRAINT %I', t, cname);
+		EXCEPTION WHEN foreign_key_violation THEN
+			RAISE WARNING 'tenancy: constraint % on % left NOT VALID (existing rows violate it): %', cname, t, SQLERRM;
+		END;
+	END LOOP;
+
+	-- Defaults: the request's tenant (NULL, i.e. fail-closed, when unset).
+	FOREACH t IN ARRAY direct_tables LOOP
+		EXECUTE format('ALTER TABLE public.%I ALTER COLUMN tenant_id SET DEFAULT app_tenant()', t);
+	END LOOP;
+
+	-- Any policy other than the two managed ones would widen access: remove it.
+	FOR pol IN
+		SELECT policyname, tablename FROM pg_policies
+		WHERE schemaname = 'public' AND tablename = ANY (direct_tables || subq_tables)
+		  AND policyname NOT IN ('tenant_isolation', 'sysread_select')
+	LOOP
+		EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', pol.policyname, pol.tablename);
+	END LOOP;
+
+	-- RLS flags and exactly one tenant policy per table, re-created on every apply.
+	FOREACH t IN ARRAY direct_tables LOOP
+		EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+		EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', t);
+		EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON public.%I', t);
+		EXECUTE format('CREATE POLICY tenant_isolation ON public.%I FOR ALL
+		                USING (tenant_id = (SELECT app_tenant()))
+		                WITH CHECK (tenant_id = (SELECT app_tenant()))', t);
+	END LOOP;
+	FOREACH t IN ARRAY subq_tables LOOP
+		EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+		EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', t);
+		EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON public.%I', t);
+		EXECUTE format('CREATE POLICY tenant_isolation ON public.%I FOR ALL
+		                USING (project_id IN (SELECT id FROM projects WHERE tenant_id = (SELECT app_tenant())))
+		                WITH CHECK (project_id IN (SELECT id FROM projects WHERE tenant_id = (SELECT app_tenant())))', t);
+	END LOOP;
+END $$;
+
+DROP TABLE IF EXISTS model_routing_policies;
+
+-- sysread: SELECT-only on what the sys_* functions read. FORCE RLS applies to it as well, so it gets
+-- SELECT-only policies, re-created on every apply after the tenant policies.
+DO $$
+DECLARE
+	t TEXT;
+BEGIN
+	FOREACH t IN ARRAY ARRAY['projects','pipeline_runs','project_plans','phases','tasks','events','token_usage',
+	                         'api_keys','user_roles']
+	LOOP
+		EXECUTE format('GRANT SELECT ON public.%I TO oscorpex_sysread', t);
+	END LOOP;
+	IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oscorpex_sysread' AND rolbypassrls) THEN
+		ALTER ROLE oscorpex_sysread NOBYPASSRLS;
+	END IF;
+	FOREACH t IN ARRAY ARRAY['projects','pipeline_runs','project_plans','phases','tasks','events','token_usage']
+	LOOP
+		EXECUTE format('DROP POLICY IF EXISTS sysread_select ON public.%I', t);
+		EXECUTE format('CREATE POLICY sysread_select ON public.%I FOR SELECT TO oscorpex_sysread USING (true)', t);
+	END LOOP;
+END $$;
+
+COMMENT ON FUNCTION app_tenant() IS 'rls-f1-r1';
+
+-- ---------------------------------------------------------------------------
+-- Ownership and runtime privileges (idempotent). Everything in public that
+-- belongs to the schema moves to oscorpex_owner; oscorpex_app gets DML only.
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE
+	obj RECORD;
+BEGIN
+	FOR obj IN
+		SELECT c.relname, c.relkind
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = 'public'
+		  AND c.relkind IN ('r', 'p', 'S')
+		  AND pg_get_userbyid(c.relowner) <> 'oscorpex_owner'
+		  AND NOT EXISTS (
+			SELECT 1 FROM pg_depend d
+			WHERE d.objid = c.oid AND d.classid = 'pg_class'::regclass AND d.deptype IN ('e', 'a', 'i')
+		  )
+	LOOP
+		IF obj.relkind = 'S' THEN
+			EXECUTE format('ALTER SEQUENCE public.%I OWNER TO oscorpex_owner', obj.relname);
+		ELSE
+			EXECUTE format('ALTER TABLE public.%I OWNER TO oscorpex_owner', obj.relname);
+		END IF;
+	END LOOP;
+
+	-- Functions defined by this schema (extension-provided functions are skipped).
+	FOR obj IN
+		SELECT p.oid::regprocedure AS sig
+		FROM pg_proc p
+		JOIN pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = 'public'
+		  AND p.prokind IN ('f', 'p')
+		  AND pg_get_userbyid(p.proowner) <> 'oscorpex_owner'
+		  AND p.proname NOT LIKE 'sys\_%'
+		  AND NOT EXISTS (
+			SELECT 1 FROM pg_depend d
+			WHERE d.objid = p.oid AND d.classid = 'pg_proc'::regclass AND d.deptype = 'e'
+		  )
+	LOOP
+		EXECUTE format('ALTER ROUTINE %s OWNER TO oscorpex_owner', obj.sig);
+	END LOOP;
+END $$;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO oscorpex_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO oscorpex_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE oscorpex_owner IN SCHEMA public
+	GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO oscorpex_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE oscorpex_owner IN SCHEMA public
+	GRANT USAGE, SELECT ON SEQUENCES TO oscorpex_app;
+
+-- Functions created later by the owner/sysread roles are not executable by PUBLIC by default.
+ALTER DEFAULT PRIVILEGES FOR ROLE oscorpex_owner REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE oscorpex_sysread REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+
+-- users.is_platform_admin is not writable by the runtime role: table-level INSERT/UPDATE are replaced by
+-- column-level grants on every other column (recomputed on every apply).
+REVOKE INSERT, UPDATE ON public.users FROM oscorpex_app;
+DO $$
+DECLARE
+	cols TEXT;
+BEGIN
+	SELECT string_agg(quote_ident(a.attname), ', ' ORDER BY a.attnum) INTO cols
+	FROM pg_attribute a
+	WHERE a.attrelid = 'public.users'::regclass AND a.attnum > 0 AND NOT a.attisdropped
+	  AND a.attname <> 'is_platform_admin';
+	EXECUTE format('GRANT INSERT (%s), UPDATE (%s) ON public.users TO oscorpex_app', cols, cols);
+END $$;
+
+-- schema_meta is bookkeeping for the migrator only; revoked after the blanket DML grant above.
+REVOKE ALL ON public.schema_meta FROM oscorpex_app;

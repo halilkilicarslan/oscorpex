@@ -15,9 +15,9 @@ services:
     environment:
       POSTGRES_DB: oscorpex
       POSTGRES_USER: oscorpex
-      POSTGRES_PASSWORD: oscorpex_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./apps/kernel/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -41,7 +41,9 @@ services:
       - "3141:3141"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://oscorpex:oscorpex_dev@postgres:5432/oscorpex
+      - DATABASE_URL=postgresql://oscorpex:${POSTGRES_PASSWORD}@postgres:5432/oscorpex
+      # Schema migrations: same superuser as the runtime until F4 introduces a dedicated migrator login.
+      - OSCORPEX_MIGRATION_DATABASE_URL=postgresql://oscorpex:${POSTGRES_PASSWORD}@postgres:5432/oscorpex
     env_file:
       - .env
     volumes:

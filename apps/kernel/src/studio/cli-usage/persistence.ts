@@ -11,51 +11,6 @@ import type { CLIProbeEvent, CLIProviderId, CLIUsageSnapshot, CLIUsageTrendPoint
 
 const log = createLogger("cli-usage:persistence");
 
-let ensureTablesPromise: Promise<void> | null = null;
-
-export function ensureCLIUsageTables(): Promise<void> {
-	if (!ensureTablesPromise) {
-		ensureTablesPromise = (async () => {
-			await execute(`
-				CREATE TABLE IF NOT EXISTS cli_probe_settings (
-					provider_id TEXT PRIMARY KEY,
-					enabled INTEGER NOT NULL DEFAULT 0,
-					allow_auth_file_read INTEGER NOT NULL DEFAULT 0,
-					allow_network_probe INTEGER NOT NULL DEFAULT 0,
-					refresh_interval_sec INTEGER NOT NULL DEFAULT 300,
-					updated_at TEXT NOT NULL
-				)
-			`);
-			await execute(`
-				CREATE TABLE IF NOT EXISTS cli_usage_snapshots (
-					id TEXT PRIMARY KEY,
-					provider_id TEXT NOT NULL,
-					snapshot_json TEXT NOT NULL,
-					captured_at TEXT NOT NULL,
-					source TEXT NOT NULL DEFAULT 'unavailable',
-					confidence TEXT NOT NULL DEFAULT 'low'
-				)
-			`);
-			await execute(`
-				CREATE TABLE IF NOT EXISTS cli_probe_events (
-					id TEXT PRIMARY KEY,
-					provider_id TEXT NOT NULL,
-					status TEXT NOT NULL,
-					message TEXT NOT NULL DEFAULT '',
-					created_at TEXT NOT NULL
-				)
-			`);
-			await execute("CREATE INDEX IF NOT EXISTS idx_cli_usage_snapshots_provider ON cli_usage_snapshots(provider_id)");
-			await execute("CREATE INDEX IF NOT EXISTS idx_cli_usage_snapshots_captured ON cli_usage_snapshots(captured_at)");
-			await execute("CREATE INDEX IF NOT EXISTS idx_cli_probe_events_provider ON cli_probe_events(provider_id)");
-		})().catch((err) => {
-			ensureTablesPromise = null;
-			throw err;
-		});
-	}
-	return ensureTablesPromise;
-}
-
 function now(): string {
 	return new Date().toISOString();
 }
@@ -80,7 +35,6 @@ function lowestPercentRemaining(quotas: import("./types.js").UsageQuota[]): numb
 }
 
 export async function getCLIProbeSettings(providerId: CLIProviderId): Promise<ProviderProbePermission> {
-	await ensureCLIUsageTables();
 	const row = await queryOne<Record<string, unknown>>(
 		"SELECT * FROM cli_probe_settings WHERE provider_id = $1",
 		[providerId],
@@ -97,7 +51,6 @@ export async function setCLIProbeSettings(
 	providerId: CLIProviderId,
 	settings: Partial<ProviderProbePermission>,
 ): Promise<ProviderProbePermission> {
-	await ensureCLIUsageTables();
 	const existing = await getCLIProbeSettings(providerId);
 	const next = {
 		enabled: settings.enabled ?? existing.enabled,
@@ -127,7 +80,6 @@ export async function setCLIProbeSettings(
 }
 
 export async function recordProbeEvent(providerId: CLIProviderId, status: string, message: string): Promise<void> {
-	await ensureCLIUsageTables();
 	await execute(
 		"INSERT INTO cli_probe_events (id, provider_id, status, message, created_at) VALUES ($1, $2, $3, $4, $5)",
 		[randomUUID(), providerId, status, message.slice(0, 500), now()],
@@ -135,7 +87,6 @@ export async function recordProbeEvent(providerId: CLIProviderId, status: string
 }
 
 export async function persistSnapshot(snapshot: CLIUsageSnapshot): Promise<void> {
-	await ensureCLIUsageTables();
 	assertNoTokenishValues(snapshot.global);
 	await execute(
 		"INSERT INTO cli_usage_snapshots (id, provider_id, snapshot_json, captured_at, source, confidence) VALUES ($1, $2, $3, $4, $5, $6)",
@@ -151,7 +102,6 @@ export async function persistSnapshot(snapshot: CLIUsageSnapshot): Promise<void>
 }
 
 export async function latestCLIUsageSnapshots(): Promise<CLIUsageSnapshot[]> {
-	await ensureCLIUsageTables();
 	const rows = await query<Record<string, string>>(
 		`SELECT DISTINCT ON (provider_id) provider_id, snapshot_json
 		 FROM cli_usage_snapshots
@@ -161,7 +111,6 @@ export async function latestCLIUsageSnapshots(): Promise<CLIUsageSnapshot[]> {
 }
 
 export async function getCLIUsageHistory(providerId?: CLIProviderId, limit = 100): Promise<CLIUsageTrendPoint[]> {
-	await ensureCLIUsageTables();
 	const cappedLimit = Math.min(Math.max(limit, 1), 500);
 	const rows = providerId
 		? await query<Record<string, string>>(
@@ -195,7 +144,6 @@ export async function getCLIUsageHistory(providerId?: CLIProviderId, limit = 100
 }
 
 export async function getCLIProbeEvents(providerId?: CLIProviderId, limit = 50): Promise<CLIProbeEvent[]> {
-	await ensureCLIUsageTables();
 	const cappedLimit = Math.min(Math.max(limit, 1), 200);
 	const rows = providerId
 		? await query<Record<string, string>>(

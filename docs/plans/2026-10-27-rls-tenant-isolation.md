@@ -56,6 +56,17 @@ test → kod → security-review → code-review (ayrı agent'lar; reviewer'a di
 - F2: `/approvals/:id/approve|reject` ve `GET /approvals/:id` iki sistem tarafından tanımlı; önce bağlanan control-plane rotaları quality-gate rotalarını yutuyor (`routes/index.ts:200` vs `:210`). Karar: control-plane onayları `/control-plane/approvals/...` yoluna taşınır (`control-plane/approvals/approval-routes.ts`, console `lib/studio-api/control-plane.ts`, rota izinleri). Control-plane approve/reject/escalate `actor`'ü istek gövdesinden alıyor (OWASP A01) → tenant bağlamından alınır. Gerçek `studio` router'ını bağlayan bir rota çakışma testi eklenir.
 - F5-2: onay kararındaki `artifactIds`'in aynı tenant'a ait olduğu doğrulanır.
 
+**F1 uygulamasından devredilenler**
+- F2: `tenant_id NOT NULL` (CI superuser + tenant kapsamı olmadan F1'de uygulanamaz); `projects.tenant_id → tenants` FK'si `ON DELETE SET NULL` → NOT NULL ile çakışır, `RESTRICT` olmalı.
+- F4: `oscorpex_migrator` `BYPASSRLS` gerektirir (backfill FORCE RLS altında tablo sahibine de uygulanır); migrator kimlik bilgisi çalışma zamanına asla verilmez.
+- Bilgi: F1 ağır DDL bloğu `schema_migrations` tablosu yerine `COMMENT ON FUNCTION app_tenant()` işaretiyle bir kez çalışır; blok içeriği yine de idempotenttir. Kompozit FK'ler `NOT VALID` eklenip veri izin veriyorsa doğrulanır (eski yetim satırlar açılışı engellemez).
+- F1 review düzeltmeleri: şema yalnızca `init.sql` hash'i değiştiğinde veya katalog kayması (drift) olduğunda uygulanır (`schema_meta`); `local`'e backfill yalnızca bir kez; migrator üyelikleri `INHERIT FALSE`; `is_platform_admin` sütun yetkisiyle korunur; `notifications` doğrudan `tenant_id` tablosu; `(phase_id, tenant_id)` kompozit FK; fonksiyonlarda `search_path = pg_catalog, pg_temp`.
+- F2: `sys_project_tenant` / `sys_event_tenant` istekten gelen bir ID ile tenant kapsamı seçmek için kullanılmaz (yalnızca sistem yolları); `sys_api_key_lookup` NULL tenant döndürürse anahtar reddedilir.
+- F2: `OSCORPEX_PLATFORM_ADMIN_EMAILS` ile admin ataması yalnızca önceden var olan ve e-postası doğrulanmış hesaplara yapılır (kayıt açık, e-posta doğrulaması yok; operatörden önce o e-postayla kayıt olan kişi admin olamamalı).
+- F4: çalışma zamanı kullanıcısının superuser olması ya da migrator ile aynı olması F1'de yalnızca hata olarak loglanır (Docker F4'e kadar superuser); F4'te açılışı durdurur.
+- F4: superuser olmayan migrator, sahip olunan tablolarda DDL için `SET ROLE oscorpex_owner` kullanmalı; `vector` eklentisi superuser ya da önceden kurulmuş olmalı. Production'da ayrı `OSCORPEX_MIGRATION_DATABASE_URL` zorunludur.
+- Kullanıcı (manuel): `.env.example`'daki eski `oscorpex_dev` şifresi yer tutucuyla değiştirilmeli; `.env`'e `POSTGRES_PASSWORD` ve yerelde `OSCORPEX_MIGRATION_DATABASE_URL` eklenmeli (hook `.env` dosyalarını koruyor).
+
 ---
 
 ## F0 — Kararlar ve test altyapısı
@@ -80,7 +91,7 @@ test → kod → security-review → code-review (ayrı agent'lar; reviewer'a di
   - `tenant_id DEFAULT app_tenant()` + BEFORE INSERT trigger (eksikse projeden kopyalar) → plan/faz/öneri/import yazmaları kod değişmeden düzelir.
   - **Kompozit FK (#3):** `projects UNIQUE(id, tenant_id)`; `(project_id, tenant_id) → projects(id, tenant_id)`; `tenant_id` değiştirilemez trigger'ı.
   - 20 tablonun politikaları **DROP + CREATE** (mevcut DB'lerde de güncellenir), USING + WITH CHECK; `projects` kopya politikası silinir.
-- **`sys_*` fonksiyonları:** `sys_project_tenant(id)`, `sys_event_tenant(id)`, `sys_runnable_projects()`, `sys_stuck_tasks()`, `sys_api_key_lookup(hash)`, `sys_platform_stats()` — sahibi `oscorpex_sysread`, sabit `search_path`, `REVOKE … FROM PUBLIC`, `GRANT EXECUTE TO oscorpex_app`.
+- **`sys_*` fonksiyonları:** `sys_project_tenant(id)`, `sys_event_tenant(id)`, `sys_running_project_phases()` (watchdog), `sys_running_projects()` (açılış kurtarma), `sys_api_key_lookup(hash)`, `sys_platform_stats()` (yalnızca toplamlar) — sahibi `oscorpex_sysread`, sabit `search_path`, `REVOKE … FROM PUBLIC`, `GRANT EXECUTE TO oscorpex_app`.
 - **Bootstrap:** `db-bootstrap.ts` ve `__tests__/setup.ts` → `OSCORPEX_MIGRATION_DATABASE_URL` (dev'de `DATABASE_URL` fallback), `pg_advisory_lock`, `lock_timeout`; ağır DDL şema-sürüm satırıyla korunur (her açılışta ACCESS EXCLUSIVE kilit alınmaz).
 - `pg.ts` `withTransaction`: ROLLBACK başarısızsa `release(err)` (#7b).
 
@@ -127,7 +138,7 @@ test → kod → security-review → code-review (ayrı agent'lar; reviewer'a di
 ## F3 — Arka plan ve gerçek zamanlı yollar (#4)
 
 - **Event bus** (`event-bus.ts:96,242`): `emit` olaya `tenantId` damgalar (kapsamdan veya `sys_project_tenant`); kayıt o tenant'ta yapılır; her dinleyici `runInTenant(event.tenantId)` içinde çalışır; kayıt hatası error log + metrik (sessiz değil); NOTIFY yükü `tenantId + id` taşır, yeniden okuma kapsamlı.
-- **Watchdog / kurtarma** (`execution/dispatch-coordinator.ts:49`, `execution-recovery.ts:35`): keşif `runAsSystem` + `sys_runnable_projects/sys_stuck_tasks`; proje işi `runInTenant(row.tenant_id)`.
+- **Watchdog / kurtarma** (`execution/dispatch-coordinator.ts:49`, `execution-recovery.ts:35`): keşif `runAsSystem` + `sys_running_project_phases` / `sys_running_projects`; proje işi `runInTenant(row.tenant_id)`.
 - **`pg-listener.ts`:** yük yalnızca ID; yeniden okuma kapsamlı.
 - **WebSocket** (`ws-manager.ts:205-213,319-329`, `ws-server.ts:83`): tenant'sız bağlantı yalnızca auth kapalıyken `local`, aksi halde red; abonelikte proje tenant kontrolü; giden olaylar `event.tenantId` ile filtrelenir; Origin izin listesi.
 - **SSE** (`task-routes.ts:256,287,297`, `project-execution-routes.ts:122`): `task.projectId === :id` ve tenant doğrulaması; dinleyiciler istek tenant'ında.

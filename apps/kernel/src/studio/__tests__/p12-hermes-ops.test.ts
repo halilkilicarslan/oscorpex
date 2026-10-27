@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { expectTenantRlsInCatalog } from "./helpers/rls-catalog.js";
 
 vi.mock("../logger.js", () => ({
 	createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -70,7 +71,7 @@ describe("P12-A: Hermes DB tables", () => {
 		const sql = readFileSync(join(process.cwd(), "scripts/init.sql"), "utf8");
 		expect(sql).toContain("hermes_api_keys");
 		expect(sql).toContain("hermes_sessions");
-		expect(sql).toContain("hermes_key_tenant");
-		expect(sql).toContain("hermes_session_tenant");
+		await expectTenantRlsInCatalog("hermes_api_keys");
+		await expectTenantRlsInCatalog("hermes_sessions");
 	});
 });

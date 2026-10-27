@@ -93,21 +93,10 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("JobQueue.init()", () => {
-	it("creates the jobs table via execute()", async () => {
+	it("issues no SQL (the jobs table comes from init.sql) and resolves", async () => {
 		const q = new JobQueue();
-		await q.init();
-		expect(mockExecute).toHaveBeenCalledOnce();
-		const sql = mockExecute.mock.calls[0][0] as string;
-		expect(sql).toContain("CREATE TABLE IF NOT EXISTS jobs");
-		expect(sql).toContain("CREATE INDEX IF NOT EXISTS idx_jobs_queue_status");
-		expect(sql).toContain("CREATE INDEX IF NOT EXISTS idx_jobs_status");
-	});
-
-	it("is idempotent — IF NOT EXISTS guards prevent errors on second call", async () => {
-		const q = new JobQueue();
-		await q.init();
-		await q.init();
-		expect(mockExecute).toHaveBeenCalledTimes(2);
+		await expect(q.init()).resolves.toBeUndefined();
+		expect(mockExecute).not.toHaveBeenCalled();
 	});
 });
 

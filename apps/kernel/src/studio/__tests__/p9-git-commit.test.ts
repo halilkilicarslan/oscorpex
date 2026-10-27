@@ -7,9 +7,10 @@
 // where needed.
 // ---------------------------------------------------------------------------
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { expectTenantRlsInCatalog } from "./helpers/rls-catalog.js";
 
 // ---------------------------------------------------------------------------
 // Mocks — declared before module imports (vi.mock is hoisted by Vitest)
@@ -66,10 +67,10 @@ vi.mock("../security/workspace-resolver.js", () => ({
 // ---------------------------------------------------------------------------
 
 import { validateCommitMessage } from "../git/commit-message-policy.js";
-import { scanStagedForSecrets } from "../git/secret-scan.js";
-import { issueTestPassToken, verifyTestPassToken, _clearTokenStore } from "../git/test-pass-token.js";
 import { isCheckpointValid } from "../git/git-checkpoint-service.js";
 import type { GitCheckpoint } from "../git/git-types.js";
+import { scanStagedForSecrets } from "../git/secret-scan.js";
+import { _clearTokenStore, issueTestPassToken, verifyTestPassToken } from "../git/test-pass-token.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -152,9 +153,11 @@ describe("validateCommitMessage", () => {
 	});
 
 	it("accepts a multi-line message with valid subject", () => {
-		const msg = ["refactor(pipeline): extract stage advance orchestrator", "", "Moves StageAdvanceOrchestrator out of pipeline-engine.ts"].join(
-			"\n",
-		);
+		const msg = [
+			"refactor(pipeline): extract stage advance orchestrator",
+			"",
+			"Moves StageAdvanceOrchestrator out of pipeline-engine.ts",
+		].join("\n");
 		const result = validateCommitMessage(msg);
 		expect(result.valid).toBe(true);
 	});
@@ -206,7 +209,9 @@ describe("scanStagedForSecrets", () => {
 	});
 
 	it("detects a PEM private key header", () => {
-		mockReadFileSync.mockReturnValue("-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----");
+		mockReadFileSync.mockReturnValue(
+			"-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----",
+		);
 		const result = scanStagedForSecrets("/repo", ["key.pem"]);
 		expect(result.passed).toBe(false);
 		expect(result.findings[0].category).toBe("private_key");
@@ -447,12 +452,12 @@ describe("init.sql schema — P9 tables", () => {
 		expect(sqlContent).toMatch(/ALTER TABLE commit_proposals FORCE ROW LEVEL SECURITY/);
 	});
 
-	it("git_checkpoints has tenant isolation policy", () => {
-		expect(sqlContent).toContain("CREATE POLICY git_checkpoint_tenant ON git_checkpoints");
+	it("git_checkpoints has tenant isolation policy", async () => {
+		await expectTenantRlsInCatalog("git_checkpoints");
 	});
 
-	it("commit_proposals has tenant isolation policy", () => {
-		expect(sqlContent).toContain("CREATE POLICY commit_proposal_tenant ON commit_proposals");
+	it("commit_proposals has tenant isolation policy", async () => {
+		await expectTenantRlsInCatalog("commit_proposals");
 	});
 
 	it("git_checkpoints columns include head_sha, branch_name, staged_files, expires_at", () => {

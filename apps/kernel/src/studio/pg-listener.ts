@@ -42,7 +42,8 @@ class PgListener {
 	}
 
 	private async _connect(): Promise<void> {
-		const connectionString = process.env.DATABASE_URL ?? "postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex";
+		const connectionString = process.env.DATABASE_URL;
+		if (!connectionString) throw new Error("DATABASE_URL is not set");
 
 		const client = new pg.Client({ connectionString });
 

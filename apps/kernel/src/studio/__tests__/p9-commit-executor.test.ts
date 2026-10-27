@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { expectTenantRlsInCatalog } from "./helpers/rls-catalog.js";
 
 vi.mock("../security/tool-policy-enforcer.js", () => ({
 	enforceToolPolicy: vi.fn(),
@@ -132,7 +133,7 @@ describe("P9-K: Git commit tables with RLS", () => {
 		const { join } = await import("node:path");
 		const sql = readFileSync(join(process.cwd(), "scripts/init.sql"), "utf8");
 		expect(sql).toContain("CREATE TABLE IF NOT EXISTS git_checkpoints");
-		expect(sql).toContain("git_checkpoint_tenant");
+		await expectTenantRlsInCatalog("git_checkpoints");
 	});
 
 	it("init.sql contains commit_proposals table", async () => {
@@ -140,7 +141,7 @@ describe("P9-K: Git commit tables with RLS", () => {
 		const { join } = await import("node:path");
 		const sql = readFileSync(join(process.cwd(), "scripts/init.sql"), "utf8");
 		expect(sql).toContain("CREATE TABLE IF NOT EXISTS commit_proposals");
-		expect(sql).toContain("commit_proposal_tenant");
+		await expectTenantRlsInCatalog("commit_proposals");
 	});
 
 	it("staging script includes p8 and p9 suites", async () => {

@@ -22,7 +22,6 @@ import {
 	listJobs,
 	resetStaleJobs,
 	updateJobStatus,
-	execute,
 } from "./db.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("job-queue");
@@ -65,31 +64,8 @@ export class JobQueue {
 	private _activeWorkerJobs = new Set<string>();
 	private _stopping = false;
 
-	// ---------------------------------------------------------------------------
-	// init — ensure jobs table exists (idempotent, called on startup)
-	// ---------------------------------------------------------------------------
-
-	async init(): Promise<void> {
-		await execute(`
-			CREATE TABLE IF NOT EXISTS jobs (
-			  id          TEXT PRIMARY KEY,
-			  queue       TEXT NOT NULL DEFAULT 'task-execution',
-			  data        JSONB NOT NULL DEFAULT '{}',
-			  status      TEXT NOT NULL DEFAULT 'created',
-			  output      JSONB,
-			  error       TEXT,
-			  retry_count INTEGER DEFAULT 0,
-			  max_retries INTEGER DEFAULT 3,
-			  started_at  TIMESTAMPTZ,
-			  completed_at TIMESTAMPTZ,
-			  created_at  TIMESTAMPTZ DEFAULT now(),
-			  updated_at  TIMESTAMPTZ DEFAULT now()
-			);
-			CREATE INDEX IF NOT EXISTS idx_jobs_queue_status ON jobs(queue, status);
-			CREATE INDEX IF NOT EXISTS idx_jobs_status       ON jobs(status);
-			CREATE INDEX IF NOT EXISTS idx_jobs_created      ON jobs(created_at);
-		`);
-	}
+	// init — the jobs table and indexes are created by scripts/init.sql.
+	async init(): Promise<void> {}
 
 	// ---------------------------------------------------------------------------
 	// enqueue — add a new job to the queue

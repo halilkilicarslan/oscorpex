@@ -16,8 +16,10 @@ export function initPool(pool: pg.Pool): void {
 
 export function getPool(): pg.Pool {
 	if (!_pool) {
+		const connectionString = process.env.DATABASE_URL;
+		if (!connectionString) throw new Error("DATABASE_URL is not set");
 		_pool = new Pool({
-			connectionString: process.env.DATABASE_URL || "postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex",
+			connectionString,
 			max: 20,
 			idleTimeoutMillis: 30_000,
 			connectionTimeoutMillis: 5_000,

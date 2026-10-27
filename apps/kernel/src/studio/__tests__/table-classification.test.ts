@@ -40,6 +40,7 @@ const EXPECTED_SYSTEM = [
 	"operator_actions",
 	"operator_flags",
 	"provider_state",
+	"schema_meta",
 ];
 const EXPECTED_LEGACY = [
 	"jobs",
@@ -89,12 +90,16 @@ const T = new Set<string>([...initSqlNames, ...runtimeNames]);
 interface DbState {
 	columns: Map<string, Set<string>>;
 	rls: Set<string>;
+	forceRls: Set<string>;
+	publicTables: Set<string>;
 }
 
 async function loadCatalog(): Promise<DbState> {
 	const pool = getPool();
 	const cols = await pool.query<{ table_name: string; column_name: string }>(
-		"SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'",
+		`SELECT c.relname AS table_name, a.attname AS column_name
+		 FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+		 WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped`,
 	);
 	const columns = new Map<string, Set<string>>();
 	for (const r of cols.rows) {
@@ -108,7 +113,9 @@ async function loadCatalog(): Promise<DbState> {
 		 WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')`,
 	);
 	const rls = new Set(rlsRes.rows.filter((r) => r.relrowsecurity && T.has(r.relname)).map((r) => r.relname));
-	return { columns, rls };
+	const forceRls = new Set(rlsRes.rows.filter((r) => r.relforcerowsecurity && T.has(r.relname)).map((r) => r.relname));
+	const pt = await pool.query<{ tablename: string }>("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
+	return { columns, rls, forceRls, publicTables: new Set(pt.rows.map((r) => r.tablename)) };
 }
 
 function expectedTenantKey(cols: Set<string>): Entry["tenantKey"] {
@@ -122,12 +129,6 @@ describe("source of truth", () => {
 	it("init.sql CREATE TABLE count matches grep -c style line count with no duplicates", () => {
 		expect(new Set(initSqlNames).size).toBe(initSqlNames.length);
 		expect(initSqlNames.length).toBe(initSqlLineCount);
-	});
-
-	it("finds runtime-created tables in non-test sources", () => {
-		for (const t of ["cli_probe_settings", "cli_usage_snapshots", "cli_probe_events", "rag_knowledge_bases"]) {
-			expect(runtimeNames.has(t), `runtime table ${t} not detected`).toBe(true);
-		}
 	});
 });
 
@@ -146,7 +147,7 @@ describe("table classification", () => {
 		const present = new Set(
 			(
 				await pool.query<{ table_name: string }>(
-					"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
+					"SELECT c.relname AS table_name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')",
 				)
 			).rows.map((r) => r.table_name),
 		);
@@ -189,6 +190,25 @@ describe("table classification", () => {
 		const classifiedNotRls = [...enforced].filter((t) => T.has(t) && !rls.has(t)).sort();
 		expect(rlsNotClassified, `RLS enabled in DB but phase not enforced: ${rlsNotClassified.join(", ")}`).toEqual([]);
 		expect(classifiedNotRls, `phase enforced but no RLS in DB: ${classifiedNotRls.join(", ")}`).toEqual([]);
+	});
+
+	it("FORCE RLS in the DB equals rlsPhase in RLS_ENFORCED_PHASES (both directions)", async () => {
+		const { forceRls } = await loadCatalog();
+		const enforced = new Set(
+			Object.entries(classification)
+				.filter(([, e]) => e.rlsPhase !== null && (RLS_ENFORCED_PHASES as readonly string[]).includes(e.rlsPhase))
+				.map(([t]) => t),
+		);
+		const forcedNotClassified = [...forceRls].filter((t) => !enforced.has(t)).sort();
+		const classifiedNotForced = [...enforced].filter((t) => T.has(t) && !forceRls.has(t)).sort();
+		expect(forcedNotClassified, `FORCE RLS but phase not enforced: ${forcedNotClassified.join(", ")}`).toEqual([]);
+		expect(classifiedNotForced, `phase enforced but no FORCE RLS: ${classifiedNotForced.join(", ")}`).toEqual([]);
+	});
+
+	it("every public table in the DB is in T (allow-list: transient f1a_ probe tables)", async () => {
+		const { publicTables } = await loadCatalog();
+		const stray = [...publicTables].filter((t) => !T.has(t) && !t.startsWith("f1a_")).sort();
+		expect(stray, `public tables not in T: ${stray.join(", ")}`).toEqual([]);
 	});
 
 	it("RLS_ENFORCED_PHASES is currently exactly F1", () => {
@@ -243,7 +263,13 @@ describe("table classification", () => {
 		]) {
 			expect(classification[t]?.writer, t).toBe("platform-admin");
 		}
-		for (const t of ["cli_probe_events", "cli_probe_settings", "cli_usage_snapshots", "provider_state"]) {
+		for (const t of [
+			"cli_probe_events",
+			"cli_probe_settings",
+			"cli_usage_snapshots",
+			"provider_state",
+			"schema_meta",
+		]) {
 			expect(classification[t]?.writer, t).toBe("system-only");
 		}
 	});

@@ -412,42 +412,6 @@ async function autoIndexProject(projectId: string, projectPath: string, projectN
 
 	log.info(`[DocumentIndexer] Auto-indexing project "${projectName}" (${projectId})`);
 
-	// Ensure RAG tables exist (idempotent)
-	await execute(`
-    CREATE TABLE IF NOT EXISTS rag_knowledge_bases (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT DEFAULT '',
-      type TEXT NOT NULL DEFAULT 'text',
-      embedding_model TEXT NOT NULL DEFAULT 'text-embedding-3-small',
-      chunk_size INTEGER NOT NULL DEFAULT 512,
-      chunk_overlap INTEGER NOT NULL DEFAULT 50,
-      status TEXT NOT NULL DEFAULT 'active',
-      document_count INTEGER NOT NULL DEFAULT 0,
-      total_chunks INTEGER NOT NULL DEFAULT 0,
-      last_indexed_at TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )
-  `);
-
-	await execute(`
-    CREATE TABLE IF NOT EXISTS rag_documents (
-      id TEXT PRIMARY KEY,
-      kb_id TEXT NOT NULL REFERENCES rag_knowledge_bases(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      source TEXT DEFAULT '',
-      content_preview TEXT DEFAULT '',
-      chunk_count INTEGER NOT NULL DEFAULT 0,
-      size_bytes INTEGER NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'pending',
-      metadata TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL
-    )
-  `);
-
-	await execute(`CREATE INDEX IF NOT EXISTS idx_rag_docs_kb ON rag_documents(kb_id)`);
-
 	// Create the knowledge base record
 	await execute(
 		`INSERT INTO rag_knowledge_bases (id, name, description, type, embedding_model, chunk_size, chunk_overlap, status, document_count, total_chunks, last_indexed_at, created_at, updated_at)
