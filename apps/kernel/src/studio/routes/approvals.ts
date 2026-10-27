@@ -89,9 +89,9 @@ approvalRoutes.post("/approvals/:id/approve", async (c) => {
 			tenantId: tenant.tenantId,
 			actorId: tenant.userId,
 			actorRoles: [tenant.userRole],
-			reason: body.comment ?? "",
-			artifactIds: [],
-			metadata: {},
+			reason: body.reason ?? body.comment ?? "",
+			artifactIds: body.artifactIds ?? [],
+			metadata: body.metadata ?? {},
 		});
 		if (tenant.tenantId) {
 			await logTenantActivity(tenant.tenantId, tenant.userId, "approvals:approve", {
@@ -99,7 +99,7 @@ approvalRoutes.post("/approvals/:id/approve", async (c) => {
 				goalId: state.request.goalId,
 				correlationId: c.req.header("x-correlation-id") ?? null,
 				requestSource: c.req.header("x-request-source") ?? "http",
-				decisionReason: typeof body.reason === "string" ? body.reason : "",
+				decisionReason: body.reason ?? body.comment ?? "",
 			});
 		}
 		return c.json({ ok: true, data: state });
@@ -124,9 +124,9 @@ approvalRoutes.post("/approvals/:id/reject", async (c) => {
 			tenantId: tenant.tenantId,
 			actorId: tenant.userId,
 			actorRoles: [tenant.userRole],
-			reason: body.comment ?? "",
-			artifactIds: [],
-			metadata: {},
+			reason: body.reason ?? body.comment ?? "",
+			artifactIds: body.artifactIds ?? [],
+			metadata: body.metadata ?? {},
 		});
 		if (tenant.tenantId) {
 			await logTenantActivity(tenant.tenantId, tenant.userId, "approvals:reject", {
@@ -134,7 +134,7 @@ approvalRoutes.post("/approvals/:id/reject", async (c) => {
 				goalId: state.request.goalId,
 				correlationId: c.req.header("x-correlation-id") ?? null,
 				requestSource: c.req.header("x-request-source") ?? "http",
-				decisionReason: typeof body.reason === "string" ? body.reason : "",
+				decisionReason: body.reason ?? body.comment ?? "",
 			});
 		}
 		return c.json({ ok: true, data: state });

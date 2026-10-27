@@ -162,6 +162,74 @@ describe("H2-G route-level API wiring", () => {
 		expect(mockApprovalService.rejectRequest).toHaveBeenCalledTimes(1);
 	});
 
+	// Console ApprovalQueuePage sends { reason, metadata, artifactIds }; ControlPlanePage sends no body.
+	it("approval reject forwards the console payload to the service", async () => {
+		const app = await buildApp();
+		const res = await app.request("/approvals/apr-1/reject", {
+			method: "POST",
+			headers: authHeader("admin"),
+			body: JSON.stringify({ reason: "failed review", metadata: { source: "queue" }, artifactIds: ["art-1"] }),
+		});
+		expect(res.status).toBe(200);
+		expect(mockApprovalService.rejectRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				approvalRequestId: "apr-1",
+				reason: "failed review",
+				metadata: { source: "queue" },
+				artifactIds: ["art-1"],
+			}),
+		);
+	});
+
+	it("approval approve accepts an empty body", async () => {
+		mockApprovalService.approveRequest.mockResolvedValue({ state: "approved", request: { goalId: "goal-1" } });
+		const app = await buildApp();
+		const res = await app.request("/approvals/apr-1/approve", { method: "POST", headers: authHeader("admin") });
+		expect(res.status).toBe(200);
+		expect(mockApprovalService.approveRequest).toHaveBeenCalledWith(
+			expect.objectContaining({ approvalRequestId: "apr-1", reason: "", metadata: {}, artifactIds: [] }),
+		);
+	});
+
+	it("approval decision falls back to comment when reason is absent", async () => {
+		const app = await buildApp();
+		const res = await app.request("/approvals/apr-1/reject", {
+			method: "POST",
+			headers: authHeader("admin"),
+			body: JSON.stringify({ comment: "needs rework" }),
+		});
+		expect(res.status).toBe(200);
+		expect(mockApprovalService.rejectRequest).toHaveBeenCalledWith(expect.objectContaining({ reason: "needs rework" }));
+	});
+
+	it("approval decision enforces metadata and artifactIds limits", async () => {
+		const app = await buildApp();
+		const oversized = await app.request("/approvals/apr-1/reject", {
+			method: "POST",
+			headers: authHeader("admin"),
+			body: JSON.stringify({ reason: "x", metadata: { blob: "a".repeat(10_001) } }),
+		});
+		expect(oversized.status).toBe(422);
+		const tooMany = await app.request("/approvals/apr-1/reject", {
+			method: "POST",
+			headers: authHeader("admin"),
+			body: JSON.stringify({ reason: "x", artifactIds: Array.from({ length: 101 }, (_, i) => `a-${i}`) }),
+		});
+		expect(tooMany.status).toBe(422);
+		expect(mockApprovalService.rejectRequest).not.toHaveBeenCalled();
+	});
+
+	it("approval decision rejects unknown fields", async () => {
+		const app = await buildApp();
+		const res = await app.request("/approvals/apr-1/approve", {
+			method: "POST",
+			headers: authHeader("admin"),
+			body: JSON.stringify({ reason: "ok", isAdmin: true }),
+		});
+		expect(res.status).toBe(422);
+		expect(mockApprovalService.approveRequest).not.toHaveBeenCalled();
+	});
+
 	it("manual override hard-fail denied", async () => {
 		const app = await buildApp();
 		const res = await app.request("/release/goal-1/override", {

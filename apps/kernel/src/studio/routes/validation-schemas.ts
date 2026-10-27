@@ -62,11 +62,16 @@ export const CreateWebhookSchema = z
 // ---------------------------------------------------------------------------
 
 // Approval schemas
+// The decision is implied by the route (/approve or /reject); clients send no `decision` field.
 export const ApprovalDecisionSchema = z
 	.object({
-		decision: z.enum(["approved", "rejected"]),
 		comment: z.string().max(2000).optional(),
 		reason: z.string().max(2000).optional(),
+		metadata: z
+			.record(z.string(), z.unknown())
+			.refine((m) => JSON.stringify(m).length <= 10_000, "metadata must be at most 10KB")
+			.optional(),
+		artifactIds: z.array(z.string().min(1).max(200)).max(100).optional(),
 	})
 	.strict();
 

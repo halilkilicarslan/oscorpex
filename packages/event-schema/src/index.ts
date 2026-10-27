@@ -22,6 +22,9 @@ export type {
 	TaskRejectedPayload,
 	TaskAddedPayload,
 	TaskReviewRejectedPayload,
+	ReviewApprovedPayload,
+	ReviewRejectedPayload,
+	TaskEscalatedPayload,
 	TaskProposalCreatedPayload,
 	TaskProposalApprovedPayload,
 	TaskTransientFailurePayload,
@@ -149,6 +152,9 @@ import type {
 	TaskRejectedPayload,
 	TaskAddedPayload,
 	TaskReviewRejectedPayload,
+	ReviewApprovedPayload,
+	ReviewRejectedPayload,
+	TaskEscalatedPayload,
 	TaskProposalCreatedPayload,
 	TaskProposalApprovedPayload,
 	TaskTransientFailurePayload,
@@ -259,6 +265,9 @@ export interface EventPayloadMap {
 	"task:rejected": TaskRejectedPayload;
 	"task:added": TaskAddedPayload;
 	"task:review_rejected": TaskReviewRejectedPayload;
+	"review:approved": ReviewApprovedPayload;
+	"review:rejected": ReviewRejectedPayload;
+	"task:escalated": TaskEscalatedPayload;
 	"task:proposal_created": TaskProposalCreatedPayload;
 	"task:proposal_approved": TaskProposalApprovedPayload;
 	"task:transient_failure": TaskTransientFailurePayload;

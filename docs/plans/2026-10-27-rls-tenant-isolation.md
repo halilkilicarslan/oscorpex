@@ -48,9 +48,13 @@ F0 güvenlik incelemesi: "platform admin" kavramı yok; `/auth/register` ile kay
 ## Süreç (her faz)
 
 test → kod → security-review → code-review (ayrı agent'lar; reviewer'a diff verilir) · gate: `pnpm typecheck && pnpm lint && pnpm test` + `pnpm --filter console test:run` · faz raporu (senaryo bazında sonuçlar) → onay → faz başına tek commit.
-**Bilinen başlangıç durumu (F0'da tam paketle ölçüldü):** yerelde 101 kernel testi / 25 dosya kırmızı (CI superuser olduğu için RLS kaynaklılar orada yeşil): ~92'si RLS (`projects`/`project_plans` yazmaları reddediliyor) → F2 sonunda 0; 11'i birbiriyle tutarsız eski testler (7 auth/access-guard → F2'de yeniden yazılır; 4 diğer → F1 öncesi temizlik). Ayrıca `packages/event-schema` 2 typecheck hatası (F1 öncesi temizlik) ve kernel'de 509 biome hatası (ayrı iş). Gate = "yeni başarısızlık yok".
+**Bilinen başlangıç durumu (F0'da tam paketle ölçüldü):** yerelde 101 kernel testi / 25 dosya kırmızı (CI superuser olduğu için RLS kaynaklılar orada yeşil): ~92'si RLS (`projects`/`project_plans` yazmaları reddediliyor) → F2 sonunda 0; 11'i birbiriyle tutarsız eski testler (8 auth/access-guard/p0-hardening → F2'de yeniden yazılır; 3 diğer → F1 öncesi temizlikte düzeltildi). Ayrıca `packages/event-schema` 2 typecheck hatası (temizlikte düzeltildi) ve kernel'de 509 biome hatası (ayrı iş). Gate = "yeni başarısızlık yok".
 
-**F1 öncesi temizlik (hızlı yol, onaylandı):** auth dışı 4 tutarsız test + `event-schema` 2 tip hatası.
+**F1 öncesi temizlik (hızlı yol, tamamlandı):** 3 tutarsız test + `event-schema` tipleri. Testlerden biri gerçek bir production hatasını ortaya çıkardı: console'un onay/ret istekleri kernel şemasınca reddediliyordu (şema ve rota düzeltildi).
+
+**Temizlik review'ından devredilenler**
+- F2: `/approvals/:id/approve|reject` ve `GET /approvals/:id` iki sistem tarafından tanımlı; önce bağlanan control-plane rotaları quality-gate rotalarını yutuyor (`routes/index.ts:200` vs `:210`). Karar: control-plane onayları `/control-plane/approvals/...` yoluna taşınır (`control-plane/approvals/approval-routes.ts`, console `lib/studio-api/control-plane.ts`, rota izinleri). Control-plane approve/reject/escalate `actor`'ü istek gövdesinden alıyor (OWASP A01) → tenant bağlamından alınır. Gerçek `studio` router'ını bağlayan bir rota çakışma testi eklenir.
+- F5-2: onay kararındaki `artifactIds`'in aynı tenant'a ait olduğu doğrulanır.
 
 ---
 
@@ -115,7 +119,8 @@ test → kod → security-review → code-review (ayrı agent'lar; reviewer'a di
 7. Admin olmayan global skill düzenleyemez; A, B'nin kalıbını promote edemez.
 8. control-plane sorguları tenant taşır (A, B'nin onaylarını görmez).
 9. Performans: benchmark'ta sorgu gecikmesi önce/sonra p50/p95 kaydedilir; eşik aşılırsa raporlanır.
-10. Yerel ~92 RLS kaynaklı test başarısızlığı → 0; 7 auth/access-guard testi yeni davranışa göre yeniden yazılmış ve yeşil.
+10. Yerel ~92 RLS kaynaklı test başarısızlığı → 0; 8 auth/access-guard/p0-hardening testi yeni davranışa göre yeniden yazılmış ve yeşil.
+11. Gerçek `studio` router'ı üzerinden: `/approvals/:id/approve` quality-gate onayına, `/control-plane/approvals/:id/approve` control-plane onayına gider; `GET /approvals/pending` quality-gate'e ulaşır; control-plane `actor` gövdeden alınamaz.
 
 ---
 

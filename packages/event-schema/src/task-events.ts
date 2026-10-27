@@ -64,6 +64,24 @@ export interface TaskReviewRejectedPayload {
 	reason?: string;
 }
 
+export interface ReviewApprovedPayload {
+	title?: string;
+	reviewerAgentId?: string;
+	comment?: string;
+}
+
+export interface ReviewRejectedPayload {
+	title?: string;
+	reviewerAgentId?: string;
+	reason?: string;
+}
+
+export interface TaskEscalatedPayload {
+	title?: string;
+	reason?: string;
+	escalatedTo?: string;
+}
+
 export interface TaskProposalCreatedPayload {
 	title?: string;
 	proposalType?: string;

@@ -78,6 +78,14 @@ vi.mock("../event-bus.js", () => ({
 	},
 }));
 
+// Approving a mutation restarts project execution; the engine is a collaborator here.
+const { mockStartProjectExecution } = vi.hoisted(() => ({
+	mockStartProjectExecution: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../execution-engine.js", () => ({
+	executionEngine: () => ({ startProjectExecution: mockStartProjectExecution }),
+}));
+
 import { getTask } from "../db.js";
 // ---------------------------------------------------------------------------
 // Graph Coordinator
@@ -194,6 +202,7 @@ describe("Graph Coordinator", () => {
 		const result = await approveGraphMutationRequest("mutation-1", "human");
 		expect(result.success).toBe(true);
 		expect(result.mutationType).toBe("insert_node");
+		expect(mockStartProjectExecution).toHaveBeenCalledWith("proj-1");
 	});
 });
 

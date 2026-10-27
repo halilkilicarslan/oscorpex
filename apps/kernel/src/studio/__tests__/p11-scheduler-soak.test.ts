@@ -137,14 +137,17 @@ describe("P11-K: Hermes Design", () => {
 });
 
 describe("P11-M: Coverage Thresholds", () => {
-	it("vitest.config.ts has 70% thresholds", async () => {
+	// Floor set in P11; later phases may only ratchet thresholds up.
+	it("vitest.config.ts keeps coverage thresholds at or above the P11 floor", async () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
 		const src = readFileSync(join(process.cwd(), "vitest.config.ts"), "utf8");
-		expect(src).toContain("lines: 70");
-		expect(src).toContain("functions: 70");
-		expect(src).toContain("statements: 70");
-		expect(src).toContain("branches: 65");
+		const block = src.match(/thresholds:\s*\{([^}]*)\}/)?.[1] ?? "";
+		const threshold = (key: string) => Number(block.match(new RegExp(`\\b${key}:\\s*(\\d+)`))?.[1] ?? Number.NaN);
+		expect(threshold("lines")).toBeGreaterThanOrEqual(70);
+		expect(threshold("functions")).toBeGreaterThanOrEqual(70);
+		expect(threshold("statements")).toBeGreaterThanOrEqual(70);
+		expect(threshold("branches")).toBeGreaterThanOrEqual(65);
 	});
 
 	it("vitest.p11.config.ts exists with P11 thresholds", async () => {
