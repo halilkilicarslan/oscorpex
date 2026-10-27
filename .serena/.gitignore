@@ -1,3 +1,5 @@
 /cache
 /logs
 /project.local.yml
+# Session notes are personal (emails, accounts, business details); repo is public
+/memories/sessions/
