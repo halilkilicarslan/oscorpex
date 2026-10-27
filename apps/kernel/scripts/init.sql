@@ -724,7 +724,6 @@ CREATE INDEX IF NOT EXISTS idx_events_project_type      ON events(project_id, ty
 CREATE INDEX IF NOT EXISTS idx_events_timestamp         ON events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_token_usage_agent        ON token_usage(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agent_runs_status        ON agent_runs(status);
-CREATE INDEX IF NOT EXISTS idx_ctx_events_project_task  ON context_events(project_id, task_id);
 
 -- v3.2: Work items indexes
 CREATE INDEX IF NOT EXISTS idx_work_items_project       ON work_items(project_id);
@@ -886,6 +885,7 @@ CREATE TABLE IF NOT EXISTS context_events (
 
 CREATE INDEX IF NOT EXISTS idx_ctx_events_session ON context_events(session_key, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ctx_events_dedup ON context_events(session_key, type, data_hash);
+CREATE INDEX IF NOT EXISTS idx_ctx_events_project_task ON context_events(project_id, task_id);
 
 -- v4.0: Context search tracking
 CREATE TABLE IF NOT EXISTS context_search_stats (

@@ -47,6 +47,9 @@ RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile --production; \
 # Monorepo build outputs kernel artifact under apps/kernel/dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/kernel/dist ./apps/kernel/dist
 COPY --from=builder --chown=nodejs:nodejs /app/packages ./packages
+# db-bootstrap applies <cwd>/scripts/init.sql idempotently at boot, so existing
+# volumes also receive schema changes (the postgres entrypoint only runs on first init)
+COPY --from=builder --chown=nodejs:nodejs /app/apps/kernel/scripts/init.sql ./scripts/init.sql
 
 # NOTE: Do not bake .env into the image. Pass environment variables at
 # runtime via `docker run --env-file .env` or your orchestrator's secrets.
