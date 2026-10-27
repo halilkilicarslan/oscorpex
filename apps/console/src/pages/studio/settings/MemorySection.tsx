@@ -81,7 +81,7 @@ function FactRow({
 						value={draft.value}
 						onChange={(e) => setDraft({ ...draft, value: e.target.value })}
 						placeholder="Yeni deger"
-						className="flex-1 px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] focus:outline-none focus:border-[#22c55e]"
+						className="flex-1 px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]"
 					/>
 					<input
 						type="number"
@@ -90,7 +90,7 @@ function FactRow({
 						step="0.1"
 						value={draft.confidence}
 						onChange={(e) => setDraft({ ...draft, confidence: parseFloat(e.target.value) || 0 })}
-						className="w-14 px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] focus:outline-none focus:border-[#22c55e]"
+						className="w-14 px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]"
 						title="Confidence (0-1)"
 					/>
 					<button
@@ -301,7 +301,7 @@ export function MemorySection({ projectId }: { projectId: string }) {
 						value={draft.scope}
 						onChange={(e) => setDraft({ ...draft, scope: e.target.value })}
 						placeholder="scope (e.g. testing)"
-						className="w-28 px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] placeholder-[#404040] focus:outline-none focus:border-[#22c55e] font-mono"
+						className="w-28 px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] placeholder-[#404040] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e] font-mono"
 					/>
 					<span className="text-[10px] text-[#525252]">.</span>
 					<input
@@ -309,7 +309,7 @@ export function MemorySection({ projectId }: { projectId: string }) {
 						value={draft.key}
 						onChange={(e) => setDraft({ ...draft, key: e.target.value })}
 						placeholder="key (e.g. framework)"
-						className="w-32 px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] placeholder-[#404040] focus:outline-none focus:border-[#22c55e] font-mono"
+						className="w-32 px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] placeholder-[#404040] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e] font-mono"
 					/>
 					<span className="text-[10px] text-[#525252]">=</span>
 					<input
@@ -317,7 +317,7 @@ export function MemorySection({ projectId }: { projectId: string }) {
 						value={draft.value}
 						onChange={(e) => setDraft({ ...draft, value: e.target.value })}
 						placeholder="value"
-						className="flex-1 px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] placeholder-[#404040] focus:outline-none focus:border-[#22c55e]"
+						className="flex-1 px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded text-[#fafafa] placeholder-[#404040] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]"
 					/>
 					<button
 						type="button"

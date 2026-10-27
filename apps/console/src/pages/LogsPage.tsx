@@ -484,7 +484,7 @@ export default function LogsPage() {
               <select
                 value={severity}
                 onChange={(e) => setSeverity(e.target.value as Severity)}
-                className="appearance-none bg-[#111111] border border-[#262626] text-[#a3a3a3] text-[12px] rounded px-2 py-1 pr-6 cursor-pointer hover:border-[#404040] focus:outline-none focus:border-[#22c55e]"
+                className="appearance-none bg-[#111111] border border-[#262626] text-[#a3a3a3] text-[12px] rounded px-2 py-1 pr-6 cursor-pointer hover:border-[#404040] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]"
               >
                 <option value="ALL">All Levels</option>
                 <option value="DEBUG">DEBUG</option>
@@ -501,7 +501,7 @@ export default function LogsPage() {
               placeholder="Search log body..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-[#111111] border border-[#262626] text-[#a3a3a3] placeholder-[#404040] text-[12px] rounded px-2 py-1 w-52 focus:outline-none focus:border-[#22c55e] hover:border-[#404040]"
+              className="bg-[#111111] border border-[#262626] text-[#a3a3a3] placeholder-[#404040] text-[12px] rounded px-2 py-1 w-52 focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e] hover:border-[#404040]"
             />
 
             {/* Trace ID */}
@@ -510,7 +510,7 @@ export default function LogsPage() {
               placeholder="Trace ID..."
               value={traceIdFilter}
               onChange={(e) => setTraceIdFilter(e.target.value)}
-              className="bg-[#111111] border border-[#262626] text-[#a3a3a3] placeholder-[#404040] text-[12px] rounded px-2 py-1 w-36 font-mono focus:outline-none focus:border-[#22c55e] hover:border-[#404040]"
+              className="bg-[#111111] border border-[#262626] text-[#a3a3a3] placeholder-[#404040] text-[12px] rounded px-2 py-1 w-36 font-mono focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e] hover:border-[#404040]"
             />
 
             {/* From */}
@@ -519,7 +519,7 @@ export default function LogsPage() {
               placeholder="From (ISO)..."
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="bg-[#111111] border border-[#262626] text-[#a3a3a3] placeholder-[#404040] text-[12px] rounded px-2 py-1 w-36 font-mono focus:outline-none focus:border-[#22c55e] hover:border-[#404040]"
+              className="bg-[#111111] border border-[#262626] text-[#a3a3a3] placeholder-[#404040] text-[12px] rounded px-2 py-1 w-36 font-mono focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e] hover:border-[#404040]"
             />
 
             {/* To */}
@@ -528,7 +528,7 @@ export default function LogsPage() {
               placeholder="To (ISO)..."
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="bg-[#111111] border border-[#262626] text-[#a3a3a3] placeholder-[#404040] text-[12px] rounded px-2 py-1 w-36 font-mono focus:outline-none focus:border-[#22c55e] hover:border-[#404040]"
+              className="bg-[#111111] border border-[#262626] text-[#a3a3a3] placeholder-[#404040] text-[12px] rounded px-2 py-1 w-36 font-mono focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e] hover:border-[#404040]"
             />
           </>
         )}
@@ -539,7 +539,7 @@ export default function LogsPage() {
             placeholder="Event type (e.g. task:completed)..."
             value={eventTypeFilter}
             onChange={(e) => setEventTypeFilter(e.target.value)}
-            className="bg-[#111111] border border-[#262626] text-[#a3a3a3] placeholder-[#404040] text-[12px] rounded px-2 py-1 w-60 font-mono focus:outline-none focus:border-[#22c55e] hover:border-[#404040]"
+            className="bg-[#111111] border border-[#262626] text-[#a3a3a3] placeholder-[#404040] text-[12px] rounded px-2 py-1 w-60 font-mono focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e] hover:border-[#404040]"
           />
         )}
 

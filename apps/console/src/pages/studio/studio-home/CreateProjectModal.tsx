@@ -1,31 +1,28 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
-import { X } from 'lucide-react';
+import { X } from "lucide-react";
+import { Suspense, useEffect, useState } from "react";
+import AgentAvatarImg from "../../../components/AgentAvatar";
 import {
+	type AgentConfig,
+	type ArchitectMessage,
+	type CustomTeamTemplate,
+	type IntakeQuestion,
+	type Project,
+	type TeamTemplate,
+	answerIntakeQuestion,
 	applyProjectTeam,
 	approveProjectScope,
-	createProject,
 	createCustomTeam,
-	fetchTeamTemplates,
+	createProject,
 	fetchCustomTeams,
+	fetchIntakeQuestions,
 	fetchPresetAgents,
+	fetchTeamTemplates,
 	recommendProjectTeam,
 	roleLabel,
 	saveProjectScopeDraft,
-	streamTeamArchitectChat,
-	type AgentConfig,
-	type ArchitectMessage,
-	type Project,
-	type TeamTemplate,
-	type CustomTeamTemplate,
-	type TeamArchitectIntake,
-	fetchIntakeQuestions,
-	answerIntakeQuestion,
-	skipIntakeQuestion,
-	type IntakeQuestion,
-} from '../../../lib/studio-api';
-import { streamPMChat } from '../../../lib/studio-api/chat';
-import { API, json } from '../../../lib/studio-api/base';
-import AgentAvatarImg from '../../../components/AgentAvatar';
+} from "../../../lib/studio-api";
+import { API, json } from "../../../lib/studio-api/base";
+import { streamPMChat } from "../../../lib/studio-api/chat";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,7 +33,7 @@ export type TeamCandidate = {
 	name: string;
 	description: string;
 	roles: string[];
-	source: 'preset' | 'custom';
+	source: "preset" | "custom";
 };
 
 export type TeamRecommendation = {
@@ -45,7 +42,7 @@ export type TeamRecommendation = {
 };
 
 export type TeamArchitectRecommendation = {
-	decision: 'recommend-existing' | 'recommend-custom' | 'need-more-info' | 'scope-ready';
+	decision: "recommend-existing" | "recommend-custom" | "need-more-info" | "scope-ready";
 	teamTemplateId?: string;
 	reasoning?: string[];
 	followUpQuestions?: string[];
@@ -61,13 +58,13 @@ export type TeamArchitectRecommendation = {
 // ---------------------------------------------------------------------------
 
 export const PROJECT_TYPE_OPTIONS = [
-	{ value: 'web-app', label: 'Web app', hint: 'User-facing product or SaaS app' },
-	{ value: 'dashboard', label: 'Dashboard', hint: 'Admin panel or internal analytics UI' },
-	{ value: 'landing-page', label: 'Landing page', hint: 'Marketing site or presentation page' },
-	{ value: 'api-service', label: 'API / backend', hint: 'Service, backend or integration layer' },
-	{ value: 'internal-tool', label: 'Internal tool', hint: 'Ops, CRM or business workflow app' },
-	{ value: 'automation', label: 'Automation', hint: 'Agents, workflows or scheduled jobs' },
-	{ value: 'unknown', label: 'Not sure yet', hint: 'Planner should infer the direction' },
+	{ value: "web-app", label: "Web app", hint: "User-facing product or SaaS app" },
+	{ value: "dashboard", label: "Dashboard", hint: "Admin panel or internal analytics UI" },
+	{ value: "landing-page", label: "Landing page", hint: "Marketing site or presentation page" },
+	{ value: "api-service", label: "API / backend", hint: "Service, backend or integration layer" },
+	{ value: "internal-tool", label: "Internal tool", hint: "Ops, CRM or business workflow app" },
+	{ value: "automation", label: "Automation", hint: "Agents, workflows or scheduled jobs" },
+	{ value: "unknown", label: "Not sure yet", hint: "Planner should infer the direction" },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -95,14 +92,14 @@ export function buildTeamCandidates(templates: TeamTemplate[], customTeams: Cust
 			name: team.name,
 			description: team.description,
 			roles: team.roles,
-			source: 'custom' as const,
+			source: "custom" as const,
 		})),
 		...templates.map((team) => ({
 			id: team.id,
 			name: team.name,
 			description: team.description,
 			roles: team.roles,
-			source: 'preset' as const,
+			source: "preset" as const,
 		})),
 	];
 }
@@ -116,44 +113,44 @@ export function recommendTeamCandidate(
 	},
 ): TeamRecommendation {
 	if (candidates.length === 0) {
-		return { candidate: null, reason: 'No team templates available.' };
+		return { candidate: null, reason: "No team templates available." };
 	}
 
 	const scored = candidates.map((candidate) => {
 		let score = 0;
 		const { roles } = candidate;
-		const hasFrontend = hasAnyRole(roles, ['frontend-dev', 'frontend', 'design-lead', 'designer']);
-		const hasBackend = hasAnyRole(roles, ['backend-dev', 'backend', 'architect', 'tech-lead']);
-		const hasDevops = hasAnyRole(roles, ['devops']);
-		const hasQA = hasAnyRole(roles, ['frontend-qa', 'backend-qa', 'qa']);
-		const hasReviewer = hasAnyRole(roles, ['frontend-reviewer', 'backend-reviewer', 'reviewer']);
+		const hasFrontend = hasAnyRole(roles, ["frontend-dev", "frontend", "design-lead", "designer"]);
+		const hasBackend = hasAnyRole(roles, ["backend-dev", "backend", "architect", "tech-lead"]);
+		const hasDevops = hasAnyRole(roles, ["devops"]);
+		const hasQA = hasAnyRole(roles, ["frontend-qa", "backend-qa", "qa"]);
+		const hasReviewer = hasAnyRole(roles, ["frontend-reviewer", "backend-reviewer", "reviewer"]);
 		const lowerName = `${candidate.name} ${candidate.description}`.toLowerCase();
-		const prefs = context.techPreference.join(' ').toLowerCase();
+		const prefs = context.techPreference.join(" ").toLowerCase();
 
-		score += hasAnyRole(roles, ['product-owner', 'pm']) ? 3 : 0;
+		score += hasAnyRole(roles, ["product-owner", "pm"]) ? 3 : 0;
 		score += hasReviewer ? 2 : 0;
 		score += hasQA ? 1 : 0;
 
 		switch (context.projectType) {
-			case 'landing-page':
+			case "landing-page":
 				score += hasFrontend ? 5 : -3;
-				score += hasAnyRole(roles, ['design-lead', 'designer']) ? 4 : 0;
+				score += hasAnyRole(roles, ["design-lead", "designer"]) ? 4 : 0;
 				score += hasBackend ? -2 : 0;
 				score += hasDevops ? -1 : 0;
 				break;
-			case 'api-service':
+			case "api-service":
 				score += hasBackend ? 5 : -3;
 				score += hasFrontend ? -2 : 0;
 				score += hasDevops ? 2 : 0;
 				break;
-			case 'dashboard':
-			case 'internal-tool':
-			case 'web-app':
+			case "dashboard":
+			case "internal-tool":
+			case "web-app":
 				score += hasFrontend ? 4 : -2;
 				score += hasBackend ? 4 : -2;
 				score += hasDevops ? 1 : 0;
 				break;
-			case 'automation':
+			case "automation":
 				score += hasBackend ? 5 : -2;
 				score += hasDevops ? 3 : 0;
 				score += hasFrontend ? -1 : 0;
@@ -164,53 +161,46 @@ export function recommendTeamCandidate(
 
 		if (
 			context.previewEnabled &&
-			(context.projectType === 'landing-page' || context.projectType === 'web-app' || context.projectType === 'dashboard')
+			(context.projectType === "landing-page" ||
+				context.projectType === "web-app" ||
+				context.projectType === "dashboard")
 		) {
 			score += hasFrontend ? 2 : -2;
 		}
 
 		if (/\breact|next|vite|tailwind|frontend\b/.test(prefs)) score += hasFrontend ? 2 : -1;
-		if (/\bnode|express|hono|fastify|nestjs|prisma|drizzle|postgres|backend\b/.test(prefs)) score += hasBackend ? 2 : -1;
+		if (/\bnode|express|hono|fastify|nestjs|prisma|drizzle|postgres|backend\b/.test(prefs))
+			score += hasBackend ? 2 : -1;
 		if (/\bdeploy|infra|docker|kubernetes|aws\b/.test(prefs)) score += hasDevops ? 2 : 0;
 
-		if (lowerName.includes('full stack')) score += 1;
-		if (candidate.source === 'preset') score += 0.25;
+		if (lowerName.includes("full stack")) score += 1;
+		if (candidate.source === "preset") score += 0.25;
 
 		return { candidate, score, hasFrontend, hasBackend, hasDevops };
 	});
 
 	scored.sort((a, b) => b.score - a.score);
 	const best = scored[0];
-	if (!best) return { candidate: null, reason: 'No suitable team recommendation found.' };
+	if (!best) return { candidate: null, reason: "No suitable team recommendation found." };
 
-	let reason = 'Balanced choice based on the current project intake.';
-	if (context.projectType === 'landing-page' && best.hasFrontend) {
-		reason = 'Frontend-heavy team recommended for landing page projects.';
-	} else if (context.projectType === 'api-service' && best.hasBackend) {
-		reason = 'Backend-focused team recommended for API service projects.';
+	let reason = "Balanced choice based on the current project intake.";
+	if (context.projectType === "landing-page" && best.hasFrontend) {
+		reason = "Frontend-heavy team recommended for landing page projects.";
+	} else if (context.projectType === "api-service" && best.hasBackend) {
+		reason = "Backend-focused team recommended for API service projects.";
 	} else if (
-		(context.projectType === 'dashboard' || context.projectType === 'web-app') &&
+		(context.projectType === "dashboard" || context.projectType === "web-app") &&
 		best.hasFrontend &&
 		best.hasBackend
 	) {
-		reason = 'Balanced product team recommended for both UI and application logic.';
-	} else if (context.projectType === 'automation' && (best.hasBackend || best.hasDevops)) {
-		reason = 'Backend/ops team selected for automation and workflow tasks.';
+		reason = "Balanced product team recommended for both UI and application logic.";
+	} else if (context.projectType === "automation" && (best.hasBackend || best.hasDevops)) {
+		reason = "Backend/ops team selected for automation and workflow tasks.";
 	} else if (context.previewEnabled && best.hasFrontend) {
-		reason = 'Frontend-focused team preferred for preview-enabled projects.';
+		reason = "Frontend-focused team preferred for preview-enabled projects.";
 	}
 
 	return { candidate: best.candidate, reason };
-}
-
-export function parseTeamArchitectRecommendation(text: string): TeamArchitectRecommendation | null {
-	const match = text.match(/```team-json\s*\n([\s\S]*?)\n```/);
-	if (!match) return null;
-	try {
-		return JSON.parse(match[1]) as TeamArchitectRecommendation;
-	} catch {
-		return null;
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -221,17 +211,17 @@ export function TeamRosterPreview({
 	roles,
 	presetAgents,
 	limit = 4,
-	columns = 'wide',
+	columns = "wide",
 }: {
 	roles: string[];
 	presetAgents: AgentConfig[];
 	limit?: number;
-	columns?: 'compact' | 'wide';
+	columns?: "compact" | "wide";
 }) {
 	const members = roles.map((role) => resolveTeamMember(role, presetAgents));
 	const visibleMembers = members.slice(0, limit);
 	const remaining = members.length - visibleMembers.length;
-	const gridClass = columns === 'compact' ? 'grid-cols-2' : 'grid-cols-2 2xl:grid-cols-3';
+	const gridClass = columns === "compact" ? "grid-cols-2" : "grid-cols-2 2xl:grid-cols-3";
 
 	return (
 		<div className="mt-3">
@@ -251,7 +241,7 @@ export function TeamRosterPreview({
 			</div>
 			{remaining > 0 && (
 				<div className="text-[10px] text-[#6b7280] px-1">
-					+{remaining} more team member{remaining > 1 ? 's' : ''}
+					+{remaining} more team member{remaining > 1 ? "s" : ""}
 				</div>
 			)}
 		</div>
@@ -266,13 +256,16 @@ function PlanPreviewEmbed({ projectId, onApproved }: { projectId: string; onAppr
 	const [plan, setPlan] = useState<any>(null);
 	const [loading, setLoading] = useState(true);
 	const [generating, setGenerating] = useState(false);
-	const [genText, setGenText] = useState('');
-	const triggered = useState(false)[0]; // prevent double trigger
+	const [genText, setGenText] = useState("");
+	const [planError, setPlanError] = useState<string | null>(null);
 	const triggeredRef = useState({ current: false })[0];
 
 	const fetchPlan = () => {
 		json(`${API}/projects/${projectId}/plan`)
-			.then((data: any) => { setPlan(data); setLoading(false); })
+			.then((data: any) => {
+				setPlan(data);
+				setLoading(false);
+			})
 			.catch(() => setLoading(false));
 	};
 
@@ -280,24 +273,34 @@ function PlanPreviewEmbed({ projectId, onApproved }: { projectId: string; onAppr
 		if (triggeredRef.current) return;
 		triggeredRef.current = true;
 		setGenerating(true);
-		setGenText('');
-		let accumulated = '';
+		setGenText("");
+		let accumulated = "";
 		streamPMChat(
 			projectId,
-			'Create a project plan based on the approved scope. Use the createProjectPlan tool.',
-			'claude-code',
-			'',
+			"Create a project plan based on the approved scope. Use the createProjectPlan tool.",
+			"claude-code",
+			"",
 			null,
-			(chunk) => { accumulated += chunk; setGenText(accumulated); },
-			() => { setGenerating(false); setGenText(''); fetchPlan(); },
-			(err) => { setGenerating(false); setGenText(`Hata: ${err.message}`); },
+			(chunk) => {
+				accumulated += chunk;
+				setGenText(accumulated);
+			},
+			() => {
+				setGenerating(false);
+				setGenText("");
+				fetchPlan();
+			},
+			(err) => {
+				setGenerating(false);
+				setGenText(`Hata: ${err.message}`);
+			},
 		);
 	};
 
 	useEffect(() => {
 		json(`${API}/projects/${projectId}/plan`)
 			.then((data: any) => {
-				if (data && data.phases && data.phases.length > 0) {
+				if (data?.phases && data.phases.length > 0) {
 					setPlan(data);
 					setLoading(false);
 				} else {
@@ -305,42 +308,68 @@ function PlanPreviewEmbed({ projectId, onApproved }: { projectId: string; onAppr
 					triggerPlanGeneration();
 				}
 			})
-			.catch(() => { setLoading(false); triggerPlanGeneration(); });
+			.catch(() => {
+				setLoading(false);
+				triggerPlanGeneration();
+			});
 	}, [projectId]);
 
 	if (loading) return <div className="text-center py-8 text-[#525252]">Plan kontrol ediliyor...</div>;
-	if (generating) return (
-		<div className="space-y-3 py-4">
-			<div className="flex items-center gap-2 text-[#737373]">
-				<span className="flex gap-1">
-					<span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '0ms'}} />
-					<span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '150ms'}} />
-					<span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '300ms'}} />
-				</span>
-				<span className="text-[12px]">PM plan oluşturuyor...</span>
+	if (generating)
+		return (
+			<div className="space-y-3 py-4">
+				<div className="flex items-center gap-2 text-[#737373]">
+					<span className="flex gap-1">
+						<span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{ animationDelay: "0ms" }} />
+						<span
+							className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce"
+							style={{ animationDelay: "150ms" }}
+						/>
+						<span
+							className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce"
+							style={{ animationDelay: "300ms" }}
+						/>
+					</span>
+					<span className="text-[12px]">PM plan oluşturuyor...</span>
+				</div>
+				{genText && (
+					<pre className="max-h-40 overflow-auto rounded-xl bg-[#090909] border border-[#262626] p-3 text-[11px] text-[#737373] whitespace-pre-wrap">
+						{genText
+							.replace(/```[\s\S]*?```/g, "")
+							.trim()
+							.slice(-500)}
+					</pre>
+				)}
 			</div>
-			{genText && (
-				<pre className="max-h-40 overflow-auto rounded-xl bg-[#090909] border border-[#262626] p-3 text-[11px] text-[#737373] whitespace-pre-wrap">
-					{genText.replace(/```[\s\S]*?```/g, '').trim().slice(-500)}
-				</pre>
-			)}
-		</div>
-	);
-	if (!plan) return (
-		<div className="text-center py-8 space-y-3">
-			<p className="text-[#737373] text-[13px]">Plan oluşturulamadı</p>
-			<button type="button" onClick={() => { triggeredRef.current = false; triggerPlanGeneration(); }} className="text-[12px] text-[#22c55e] hover:underline">Tekrar dene</button>
-		</div>
-	);
+		);
+	if (!plan)
+		return (
+			<div className="text-center py-8 space-y-3">
+				<p className="text-[#737373] text-[13px]">Plan oluşturulamadı</p>
+				<button
+					type="button"
+					onClick={() => {
+						triggeredRef.current = false;
+						triggerPlanGeneration();
+					}}
+					className="text-[12px] text-[#22c55e] hover:underline"
+				>
+					Tekrar dene
+				</button>
+			</div>
+		);
 
 	return (
 		<div className="space-y-4">
 			<div className="text-[12px] text-[#a3a3a3]">
-				{plan.phases?.length ?? 0} faz, {plan.phases?.reduce((sum: number, p: any) => sum + (p.tasks?.length ?? 0), 0) ?? 0} görev
+				{plan.phases?.length ?? 0} faz,{" "}
+				{plan.phases?.reduce((sum: number, p: any) => sum + (p.tasks?.length ?? 0), 0) ?? 0} görev
 			</div>
 			{plan.phases?.map((phase: any, i: number) => (
 				<div key={phase.id} className="rounded-xl border border-[#262626] bg-[#090909] px-4 py-3">
-					<div className="text-[13px] font-medium text-[#fafafa]">{i + 1}. {phase.name}</div>
+					<div className="text-[13px] font-medium text-[#fafafa]">
+						{i + 1}. {phase.name}
+					</div>
 					<div className="mt-2 space-y-1">
 						{phase.tasks?.map((task: any) => (
 							<div key={task.id} className="flex items-center justify-between text-[11px]">
@@ -351,21 +380,38 @@ function PlanPreviewEmbed({ projectId, onApproved }: { projectId: string; onAppr
 					</div>
 				</div>
 			))}
-			<div className="flex gap-2 pt-3">
-				<button
-					type="button"
-					onClick={async () => {
-						try {
-							await json(`${API}/projects/${projectId}/plan/approve`, { method: 'POST' });
-							onApproved();
-						} catch (err) {
-							alert(err instanceof Error ? err.message : 'Plan onayı başarısız');
-						}
-					}}
-					className="px-4 py-2 rounded-xl text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] transition-colors"
-				>
-					Planı Onayla ve Başlat
-				</button>
+			<div className="space-y-2 pt-3">
+				{planError && (
+					<div
+						role="alert"
+						className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2"
+					>
+						<span>{planError}</span>
+						<button
+							onClick={() => setPlanError(null)}
+							className="ml-auto text-red-400/60 hover:text-red-400"
+							aria-label="Dismiss error"
+						>
+							×
+						</button>
+					</div>
+				)}
+				<div className="flex gap-2">
+					<button
+						type="button"
+						onClick={async () => {
+							try {
+								await json(`${API}/projects/${projectId}/plan/approve`, { method: "POST" });
+								onApproved();
+							} catch (err) {
+								setPlanError(err instanceof Error ? err.message : "Plan onayı başarısız");
+							}
+						}}
+						className="px-4 py-2 rounded-xl text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] transition-colors"
+					>
+						Planı Onayla ve Başlat
+					</button>
+				</div>
 			</div>
 		</div>
 	);
@@ -382,46 +428,50 @@ export function CreateProjectModal({
 	onClose: () => void;
 	onCreate: (project: Project) => void;
 }) {
-	const [name, setName] = useState('');
-	const [description, setDescription] = useState('');
-	const [projectType, setProjectType] = useState('web-app');
-	const [techPreferenceInput, setTechPreferenceInput] = useState('');
+	const [name, setName] = useState("");
+	const [description, setDescription] = useState("");
+	const [projectType] = useState("web-app");
+	const [techPreferenceInput] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [templates, setTemplates] = useState<TeamTemplate[]>([]);
 	const [customTeams, setCustomTeams] = useState<CustomTeamTemplate[]>([]);
 	const [presetAgents, setPresetAgents] = useState<AgentConfig[]>([]);
-	const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+	const [selectedTemplate, setSelectedTemplate] = useState<string>("");
 	const [plannerAgents, setPlannerAgents] = useState<AgentConfig[]>([]);
-	const [selectedPlanner, setSelectedPlanner] = useState<string>('');
-	const [previewEnabled, setPreviewEnabled] = useState(true);
+	const [selectedPlanner, setSelectedPlanner] = useState<string>("");
+	const [previewEnabled] = useState(true);
 	const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-	const [teamMode, setTeamMode] = useState<'auto' | 'manual'>('auto');
+	const [teamMode, setTeamMode] = useState<"auto" | "manual">("auto");
 	const [architectMessages, setArchitectMessages] = useState<ArchitectMessage[]>([]);
-	const [architectInput, setArchitectInput] = useState('');
+	const [architectInput, setArchitectInput] = useState("");
 	const [architectStreaming, setArchitectStreaming] = useState(false);
-	const [architectStreamText, setArchitectStreamText] = useState('');
+	const [architectStreamText, setArchitectStreamText] = useState("");
 	const [architectRecommendation, setArchitectRecommendation] = useState<TeamArchitectRecommendation | null>(null);
 	const [architectError, setArchitectError] = useState<string | null>(null);
 	const [pendingQuestions, setPendingQuestions] = useState<IntakeQuestion[]>([]);
 	const [questionAnswers, setQuestionAnswers] = useState<Record<string, string[]>>({});
 	const [createdProject, setCreatedProject] = useState<Project | null>(null);
-	const [scopeApproved, setScopeApproved] = useState(false);
-	const [backendRecommendation, setBackendRecommendation] = useState<{
-		decision: 'recommend-existing' | 'recommend-custom' | 'need-more-info';
+	const [, setScopeApproved] = useState(false);
+	const [, setBackendRecommendation] = useState<{
+		decision: "recommend-existing" | "recommend-custom" | "need-more-info";
 		teamTemplateId?: string;
 		reasoning?: string;
 		templateName?: string;
 	} | null>(null);
-	const [teamApplied, setTeamApplied] = useState(false);
-	const [teamConfirmed, setTeamConfirmed] = useState(false);
+	const [, setTeamApplied] = useState(false);
+	const [, setTeamConfirmed] = useState(false);
 
 	useEffect(() => {
-		fetchTeamTemplates().then(setTemplates).catch(() => {});
-		fetchCustomTeams().then(setCustomTeams).catch(() => {});
+		fetchTeamTemplates()
+			.then(setTemplates)
+			.catch(() => {});
+		fetchCustomTeams()
+			.then(setCustomTeams)
+			.catch(() => {});
 		fetchPresetAgents()
 			.then((agents) => {
 				setPresetAgents(agents);
-				const planners = agents.filter((agent) => agent.role === 'product-owner' || agent.role === 'pm');
+				const planners = agents.filter((agent) => agent.role === "product-owner" || agent.role === "pm");
 				setPlannerAgents(planners);
 				if (planners.length > 0) setSelectedPlanner(planners[0].id);
 			})
@@ -429,7 +479,7 @@ export function CreateProjectModal({
 	}, []);
 
 	const techPreference = techPreferenceInput
-		.split(',')
+		.split(",")
 		.map((item) => item.trim())
 		.filter(Boolean);
 	const teamCandidates = buildTeamCandidates(templates, customTeams);
@@ -438,10 +488,10 @@ export function CreateProjectModal({
 		previewEnabled,
 		techPreference,
 	});
-	const recommendationId = recommendation.candidate?.id ?? '';
+	const recommendationId = recommendation.candidate?.id ?? "";
 
 	useEffect(() => {
-		if (teamMode !== 'auto') return;
+		if (teamMode !== "auto") return;
 		if (recommendationId && recommendationId !== selectedTemplate) {
 			setSelectedTemplate(recommendationId);
 			setTeamConfirmed(false);
@@ -449,9 +499,9 @@ export function CreateProjectModal({
 	}, [teamMode, recommendationId, selectedTemplate]);
 
 	const architectCustomTeam =
-		architectRecommendation?.decision === 'recommend-custom' ? architectRecommendation.customTeam : null;
+		architectRecommendation?.decision === "recommend-custom" ? architectRecommendation.customTeam : null;
 	const architectRecommendedTeam =
-		architectRecommendation?.decision === 'recommend-existing'
+		architectRecommendation?.decision === "recommend-existing"
 			? (teamCandidates.find((team) => team.id === architectRecommendation.teamTemplateId) ?? null)
 			: null;
 	const selectedTeam =
@@ -459,46 +509,38 @@ export function CreateProjectModal({
 		architectRecommendedTeam ??
 		(architectCustomTeam
 			? {
-					id: 'architect-custom',
+					id: "architect-custom",
 					name: architectCustomTeam.name,
 					description: architectCustomTeam.description,
 					roles: architectCustomTeam.roles,
-					source: 'custom' as const,
+					source: "custom" as const,
 				}
 			: (recommendation.candidate ?? null));
-	const selectedTeamName = selectedTeam?.name ?? 'Planner will choose a default team';
+	const selectedTeamName = selectedTeam?.name ?? "Planner will choose a default team";
 	const selectedPlannerAgent = plannerAgents.find((agent) => agent.id === selectedPlanner) ?? plannerAgents[0] ?? null;
 	const effectiveTeamTemplateId =
-		teamMode === 'auto'
-			? (architectRecommendedTeam?.id || recommendation.candidate?.id || selectedTemplate || undefined)
-			: (selectedTemplate || undefined);
+		teamMode === "auto"
+			? architectRecommendedTeam?.id || recommendation.candidate?.id || selectedTemplate || undefined
+			: selectedTemplate || undefined;
 	const canCreateShell = name.trim().length > 0 && description.trim().length >= 10;
-	const architectIntake: TeamArchitectIntake = {
-		name: name.trim(),
-		description: description.trim(),
-		projectType,
-		previewEnabled,
-		techPreference,
-	};
-
 	const sendPMMessage = (content: string, opts?: { hidden?: boolean }) => {
 		const text = content.trim();
 		if (!text || architectStreaming || !createdProject) return;
 
 		if (!opts?.hidden) {
-			setArchitectMessages((prev) => [...prev, { role: 'user', content: text }]);
+			setArchitectMessages((prev) => [...prev, { role: "user", content: text }]);
 		}
 		setArchitectStreaming(true);
-		setArchitectStreamText('');
+		setArchitectStreamText("");
 		setArchitectError(null);
-		setArchitectInput('');
+		setArchitectInput("");
 
-		let accumulated = '';
+		let accumulated = "";
 		streamPMChat(
 			createdProject.id,
 			text,
-			'claude-code',
-			'',
+			"claude-code",
+			"",
 			null,
 			(chunk) => {
 				accumulated += chunk;
@@ -506,17 +548,17 @@ export function CreateProjectModal({
 			},
 			() => {
 				const fullText = accumulated;
-				const assistantMessage: ArchitectMessage = { role: 'assistant', content: fullText };
+				const assistantMessage: ArchitectMessage = { role: "assistant", content: fullText };
 				setArchitectMessages((prev) => [...prev, assistantMessage]);
 				setArchitectStreaming(false);
-				setArchitectStreamText('');
+				setArchitectStreamText("");
 
 				// Parse scope-json if present
 				const scopeMatch = fullText.match(/```scope-json\s*\n([\s\S]*?)\n```/);
 				if (scopeMatch) {
 					try {
 						const scopeData = JSON.parse(scopeMatch[1]);
-						setArchitectRecommendation({ decision: 'scope-ready', ...scopeData });
+						setArchitectRecommendation({ decision: "scope-ready", ...scopeData });
 					} catch {}
 				}
 
@@ -526,7 +568,7 @@ export function CreateProjectModal({
 					try {
 						const teamData = JSON.parse(teamMatch[1]) as TeamArchitectRecommendation;
 						setArchitectRecommendation(teamData);
-						if (teamData.decision === 'recommend-existing' && teamData.teamTemplateId) {
+						if (teamData.decision === "recommend-existing" && teamData.teamTemplateId) {
 							setSelectedTemplate(teamData.teamTemplateId);
 							setTeamConfirmed(false);
 						}
@@ -535,60 +577,17 @@ export function CreateProjectModal({
 
 				// Fetch intake questions (backend parses askuser-json and persists them)
 				if (createdProject) {
-					fetchIntakeQuestions(createdProject.id, 'pending')
+					fetchIntakeQuestions(createdProject.id, "pending")
 						.then(setPendingQuestions)
 						.catch(() => {});
 				}
 			},
 			(err) => {
 				setArchitectStreaming(false);
-				setArchitectStreamText('');
+				setArchitectStreamText("");
 				setArchitectError(err.message);
 			},
-			{ mode: 'intake' },
-		);
-	};
-
-	const sendArchitectMessage = (message: string, historyOverride?: ArchitectMessage[]) => {
-		const text = message.trim();
-		if (!text || architectStreaming) return;
-
-		const nextMessages = historyOverride ?? [...architectMessages, { role: 'user', content: text }];
-		setArchitectMessages(nextMessages);
-		setArchitectStreaming(true);
-		setArchitectStreamText('');
-		setArchitectError(null);
-
-		let accumulated = '';
-		streamTeamArchitectChat(
-			architectIntake,
-			nextMessages,
-			(chunk) => {
-				accumulated += chunk;
-				setArchitectStreamText(accumulated);
-			},
-			(fullText) => {
-				const finalText = fullText || accumulated;
-				const assistantMessage: ArchitectMessage = { role: 'assistant', content: finalText };
-				setArchitectMessages((prev) => [...prev, assistantMessage]);
-				setArchitectStreaming(false);
-				setArchitectStreamText('');
-				setArchitectInput('');
-
-				const parsed = parseTeamArchitectRecommendation(finalText);
-				if (parsed) {
-					setArchitectRecommendation(parsed);
-					if (parsed.decision === 'recommend-existing' && parsed.teamTemplateId) {
-						setSelectedTemplate(parsed.teamTemplateId);
-						setTeamConfirmed(false);
-					}
-				}
-			},
-			(err) => {
-				setArchitectStreaming(false);
-				setArchitectStreamText('');
-				setArchitectError(err.message);
-			},
+			{ mode: "intake" },
 		);
 	};
 
@@ -596,7 +595,7 @@ export function CreateProjectModal({
 		if (step !== 2 || architectMessages.length > 0 || architectStreaming || !createdProject) return;
 		const desc = description.trim();
 		const hasTech = techPreference.length > 0;
-		const techInfo = hasTech ? `\nTech preference: ${techPreference.join(', ')}` : '';
+		const techInfo = hasTech ? `\nTech preference: ${techPreference.join(", ")}` : "";
 		const prompt = `New project intake:\nProject name: ${name}\nDescription: ${desc}${techInfo}\n\nAsk the user questions to understand the project. Do NOT recommend a team yet — first understand the scope. Always respond in Turkish.`;
 		sendPMMessage(prompt, { hidden: true });
 	}, [step, createdProject]);
@@ -616,7 +615,7 @@ export function CreateProjectModal({
 			setCreatedProject(project);
 			setStep(2 as 1 | 2 | 3 | 4);
 		} catch (err) {
-			console.error('Failed to create project shell:', err);
+			console.error("Failed to create project shell:", err);
 		} finally {
 			setLoading(false);
 		}
@@ -636,11 +635,11 @@ export function CreateProjectModal({
 				validationPlan: [],
 				requiredCapabilities: techPreference,
 				recommendedTeamRoles: selectedTeam?.roles ?? [],
-				status: 'ready_for_review',
+				status: "ready_for_review",
 			});
 			setStep(3 as 1 | 2 | 3 | 4);
 		} catch (err) {
-			console.error('Failed to save scope draft:', err);
+			console.error("Failed to save scope draft:", err);
 		} finally {
 			setLoading(false);
 		}
@@ -651,7 +650,7 @@ export function CreateProjectModal({
 		setLoading(true);
 		try {
 			// Save scope draft first (use PM scope data if available, otherwise description)
-			const scopeData = architectRecommendation?.decision === 'scope-ready' ? architectRecommendation : null;
+			const scopeData = architectRecommendation?.decision === "scope-ready" ? architectRecommendation : null;
 			await saveProjectScopeDraft(createdProject.id, {
 				problemStatement: (scopeData as any)?.problemStatement || description.trim(),
 				goals: (scopeData as any)?.goals ?? [],
@@ -662,13 +661,13 @@ export function CreateProjectModal({
 				validationPlan: [],
 				requiredCapabilities: (scopeData as any)?.techPreferences ?? techPreference,
 				recommendedTeamRoles: selectedTeam?.roles ?? [],
-				status: 'ready_for_review',
+				status: "ready_for_review",
 			});
 			await approveProjectScope(createdProject.id);
 			setScopeApproved(true);
 			const recommendationResult = await recommendProjectTeam(createdProject.id);
 			setBackendRecommendation(recommendationResult);
-			if (recommendationResult.decision === 'recommend-existing' && recommendationResult.teamTemplateId) {
+			if (recommendationResult.decision === "recommend-existing" && recommendationResult.teamTemplateId) {
 				setSelectedTemplate(recommendationResult.teamTemplateId);
 				setTeamConfirmed(false);
 			}
@@ -693,35 +692,7 @@ export function CreateProjectModal({
 
 			setStep(4 as 1 | 2 | 3 | 4);
 		} catch (err) {
-			console.error('Failed to approve scope or apply team:', err);
-		} finally {
-			setLoading(false);
-		}
-	};
-
-	const handleApplyTeam = async () => {
-		if (!createdProject) return;
-		setLoading(true);
-		try {
-			let teamTemplateId = effectiveTeamTemplateId || backendRecommendation?.teamTemplateId;
-			if (!teamTemplateId && architectCustomTeam) {
-				const customTeam = await createCustomTeam({
-					name: architectCustomTeam.name,
-					description: architectCustomTeam.description,
-					roles: architectCustomTeam.roles,
-					dependencies: [],
-				});
-				teamTemplateId = customTeam.id;
-			}
-			await applyProjectTeam(createdProject.id, {
-				teamTemplateId,
-				customTeam: !teamTemplateId && architectCustomTeam ? architectCustomTeam : undefined,
-				plannerAgentId: selectedPlanner || undefined,
-			});
-			setTeamApplied(true);
-			onCreate(createdProject);
-		} catch (err) {
-			console.error('Failed to apply team:', err);
+			console.error("Failed to approve scope or apply team:", err);
 		} finally {
 			setLoading(false);
 		}
@@ -733,7 +704,9 @@ export function CreateProjectModal({
 				<div className="flex items-center justify-between px-6 pt-6 pb-5 border-b border-[#1f1f1f] shrink-0">
 					<div>
 						<h2 className="text-[18px] font-semibold text-[#fafafa]">New Project</h2>
-						<p className="text-[12px] text-[#6b7280] mt-1">Project shell, PM intake, scope & team onayı ve plan adımları.</p>
+						<p className="text-[12px] text-[#6b7280] mt-1">
+							Project shell, PM intake, scope & team onayı ve plan adımları.
+						</p>
 					</div>
 					<button onClick={onClose} className="p-1 rounded hover:bg-[#1f1f1f] text-[#525252] hover:text-[#a3a3a3]">
 						<X size={18} />
@@ -743,10 +716,10 @@ export function CreateProjectModal({
 				<div className="overflow-y-auto flex-1 px-6 py-6">
 					<div className="mb-6 flex items-center gap-3">
 						{[
-							{ id: 1, title: 'Proje', caption: 'Create base project' },
-							{ id: 2, title: 'PM Intake', caption: 'Clarify scope with PM' },
-							{ id: 3, title: 'Scope & Takım', caption: 'Confirm scope and team' },
-							{ id: 4, title: 'Plan Onayı', caption: 'Review and approve plan' },
+							{ id: 1, title: "Proje", caption: "Create base project" },
+							{ id: 2, title: "PM Intake", caption: "Clarify scope with PM" },
+							{ id: 3, title: "Scope & Takım", caption: "Confirm scope and team" },
+							{ id: 4, title: "Plan Onayı", caption: "Review and approve plan" },
 						].map((item) => {
 							const active = step === item.id;
 							const complete = step > item.id;
@@ -755,16 +728,16 @@ export function CreateProjectModal({
 									<div
 										className={`flex h-9 w-9 items-center justify-center rounded-full border text-[12px] font-semibold ${
 											active
-												? 'border-[#22c55e] bg-[#22c55e]/10 text-[#22c55e]'
+												? "border-[#22c55e] bg-[#22c55e]/10 text-[#22c55e]"
 												: complete
-													? 'border-[#3b82f6] bg-[#3b82f6]/10 text-[#93c5fd]'
-													: 'border-[#2a2a2a] bg-[#111111] text-[#6b7280]'
+													? "border-[#3b82f6] bg-[#3b82f6]/10 text-[#93c5fd]"
+													: "border-[#2a2a2a] bg-[#111111] text-[#6b7280]"
 										}`}
 									>
 										{item.id}
 									</div>
 									<div className="min-w-[120px]">
-										<div className={`text-[12px] font-medium ${active ? 'text-[#fafafa]' : 'text-[#a3a3a3]'}`}>
+										<div className={`text-[12px] font-medium ${active ? "text-[#fafafa]" : "text-[#a3a3a3]"}`}>
 											{item.title}
 										</div>
 										<div className="text-[10px] text-[#525252]">{item.caption}</div>
@@ -777,59 +750,67 @@ export function CreateProjectModal({
 					<div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_360px]">
 						<div className="space-y-6">
 							{step === 1 && (
-								<>
-									<div className="rounded-2xl border border-[#1f1f1f] bg-[linear-gradient(180deg,#121212_0%,#0a0a0a_100%)] px-6 py-6">
-										<div className="flex items-center gap-3 mb-4">
-											<div className="w-10 h-10 rounded-xl bg-[#22c55e]/10 flex items-center justify-center">
-												<span className="text-[#22c55e] text-lg">+</span>
-											</div>
-											<div>
-												<h3 className="text-[16px] font-semibold text-[#fafafa]">Yeni Proje</h3>
-												<p className="text-[12px] text-[#737373]">Fikrini anlat, gerisini biz halledelim</p>
-											</div>
+								<div className="rounded-2xl border border-[#1f1f1f] bg-[linear-gradient(180deg,#121212_0%,#0a0a0a_100%)] px-6 py-6">
+									<div className="flex items-center gap-3 mb-4">
+										<div className="w-10 h-10 rounded-xl bg-[#22c55e]/10 flex items-center justify-center">
+											<span className="text-[#22c55e] text-lg">+</span>
 										</div>
-
-										<div className="space-y-5">
-											<div>
-												<label className="text-[12px] text-[#a3a3a3] font-medium block mb-2">Proje Adı</label>
-												<input
-													type="text"
-													value={name}
-													onChange={(e) => setName(e.target.value)}
-													placeholder="Örn: Todo App, E-Ticaret Sitesi, Blog Platformu..."
-													className="w-full px-4 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[14px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none transition-colors"
-													autoFocus
-												/>
-											</div>
-
-											<div>
-												<label className="text-[12px] text-[#a3a3a3] font-medium block mb-2">Ne yapmak istiyorsunuz?</label>
-												<textarea
-													value={description}
-													onChange={(e) => setDescription(e.target.value)}
-													placeholder={"Projenizi kendi cümlelerinizle anlatın. Teknik detay gerekmez.\n\nÖrnek: Kullanıcıların yapılacak işlerini ekleyip takip edebileceği basit bir uygulama. Filtreleme ve tamamlananları silme özelliği olsun."}
-													rows={5}
-													className="w-full px-4 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[14px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none resize-none leading-7 transition-colors"
-												/>
-												{description.trim().length > 0 && description.trim().length < 10 && (
-													<p className="text-[11px] text-[#f59e0b] mt-1.5">En az 10 karakter gerekli ({description.trim().length}/10)</p>
-												)}
-												{description.trim().length >= 10 && (
-													<p className="text-[11px] text-[#525252] mt-1.5">Sonraki adımda PM asistanı sizinle detayları konuşacak</p>
-												)}
-											</div>
+										<div>
+											<h3 className="text-[16px] font-semibold text-[#fafafa]">Yeni Proje</h3>
+											<p className="text-[12px] text-[#737373]">Fikrini anlat, gerisini biz halledelim</p>
 										</div>
 									</div>
-								</>
+
+									<div className="space-y-5">
+										<div>
+											<label className="text-[12px] text-[#a3a3a3] font-medium block mb-2">Proje Adı</label>
+											<input
+												type="text"
+												value={name}
+												onChange={(e) => setName(e.target.value)}
+												placeholder="Örn: Todo App, E-Ticaret Sitesi, Blog Platformu..."
+												className="w-full px-4 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[14px] text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e] transition-colors"
+											/>
+										</div>
+
+										<div>
+											<label className="text-[12px] text-[#a3a3a3] font-medium block mb-2">
+												Ne yapmak istiyorsunuz?
+											</label>
+											<textarea
+												value={description}
+												onChange={(e) => setDescription(e.target.value)}
+												placeholder={
+													"Projenizi kendi cümlelerinizle anlatın. Teknik detay gerekmez.\n\nÖrnek: Kullanıcıların yapılacak işlerini ekleyip takip edebileceği basit bir uygulama. Filtreleme ve tamamlananları silme özelliği olsun."
+												}
+												rows={5}
+												className="w-full px-4 py-3 bg-[#080808] border border-[#262626] rounded-xl text-[14px] text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e] resize-none leading-7 transition-colors"
+											/>
+											{description.trim().length > 0 && description.trim().length < 10 && (
+												<p className="text-[11px] text-[#f59e0b] mt-1.5">
+													En az 10 karakter gerekli ({description.trim().length}/10)
+												</p>
+											)}
+											{description.trim().length >= 10 && (
+												<p className="text-[11px] text-[#525252] mt-1.5">
+													Sonraki adımda PM asistanı sizinle detayları konuşacak
+												</p>
+											)}
+										</div>
+									</div>
+								</div>
 							)}
 
 							{step === 2 && (
 								<div className="rounded-2xl border border-[#1f1f1f] bg-[#0d0d0d] px-5 py-5 space-y-5">
 									<div>
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 2 — PM Intake</p>
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">
+											Step 2 — PM Intake
+										</p>
 										<h3 className="text-[15px] font-semibold text-[#fafafa]">Projenizi birlikte tanımlayalım</h3>
 										<p className="text-[12px] leading-6 text-[#737373] mt-2 max-w-2xl">
-											PM asistanı projenizi anlamak için birkaç soru soracak. Teknik bilgi gerekmez — sadece ne istediğinizi anlatın.
+											PM asistanı projenizi anlamak için birkaç soru soracak. Teknik bilgi gerekmez — sadece ne
+											istediğinizi anlatın.
 										</p>
 									</div>
 									<div className="rounded-2xl border border-[#1f1f1f] bg-[#0c0c0c] p-4">
@@ -837,17 +818,22 @@ export function CreateProjectModal({
 										<div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
 											{architectMessages.map((message, index) => {
 												const displayContent =
-													message.role === 'assistant'
-														? message.content.replace(/```(?:team-json|scope-json|askuser-json|plan-json)[\s\S]*?```/g, '').trim()
+													message.role === "assistant"
+														? message.content
+																.replace(/```(?:team-json|scope-json|askuser-json|plan-json)[\s\S]*?```/g, "")
+																.trim()
 														: message.content;
 												if (!displayContent) return null;
 												return (
-													<div key={`${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+													<div
+														key={`${message.role}-${index}`}
+														className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+													>
 														<div
 															className={`max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-6 whitespace-pre-wrap ${
-																message.role === 'user'
-																	? 'bg-[#1f3d2a] text-[#e5e7eb]'
-																	: 'bg-[#151515] border border-[#262626] text-[#d4d4d8]'
+																message.role === "user"
+																	? "bg-[#1f3d2a] text-[#e5e7eb]"
+																	: "bg-[#151515] border border-[#262626] text-[#d4d4d8]"
 															}`}
 														>
 															{displayContent}
@@ -858,7 +844,27 @@ export function CreateProjectModal({
 											{architectStreaming && (
 												<div className="flex justify-start">
 													<div className="max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-6 bg-[#151515] border border-[#262626] text-[#d4d4d8] whitespace-pre-wrap">
-														{architectStreamText.replace(/```(?:team-json|scope-json|askuser-json|plan-json)[\s\S]*?```/g, '').trim() || (<span className="inline-flex items-center gap-1.5 text-[#737373]"><span className="flex gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '0ms'}} /><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '150ms'}} /><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce" style={{animationDelay: '300ms'}} /></span>PM düşünüyor</span>)}
+														{architectStreamText
+															.replace(/```(?:team-json|scope-json|askuser-json|plan-json)[\s\S]*?```/g, "")
+															.trim() || (
+															<span className="inline-flex items-center gap-1.5 text-[#737373]">
+																<span className="flex gap-1">
+																	<span
+																		className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce"
+																		style={{ animationDelay: "0ms" }}
+																	/>
+																	<span
+																		className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce"
+																		style={{ animationDelay: "150ms" }}
+																	/>
+																	<span
+																		className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-bounce"
+																		style={{ animationDelay: "300ms" }}
+																	/>
+																</span>
+																PM düşünüyor
+															</span>
+														)}
 													</div>
 												</div>
 											)}
@@ -891,14 +897,24 @@ export function CreateProjectModal({
 																				}}
 																				className={`w-full text-left px-3 py-2 rounded-lg text-[12px] border transition-colors flex items-center justify-between gap-2 ${
 																					isSelected
-																						? 'border-[#22c55e] text-[#22c55e] bg-[#22c55e]/5'
-																						: 'text-[#a3a3a3] border-[#262626] hover:border-[#22c55e] hover:text-[#22c55e]'
+																						? "border-[#22c55e] text-[#22c55e] bg-[#22c55e]/5"
+																						: "text-[#a3a3a3] border-[#262626] hover:border-[#22c55e] hover:text-[#22c55e]"
 																				}`}
 																			>
 																				<span>{opt}</span>
 																				{isSelected && (
-																					<svg className="shrink-0 w-3.5 h-3.5 text-[#22c55e]" viewBox="0 0 14 14" fill="none">
-																						<path d="M2 7l4 4 6-6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+																					<svg
+																						className="shrink-0 w-3.5 h-3.5 text-[#22c55e]"
+																						viewBox="0 0 14 14"
+																						fill="none"
+																					>
+																						<path
+																							d="M2 7l4 4 6-6"
+																							stroke="currentColor"
+																							strokeWidth="1.75"
+																							strokeLinecap="round"
+																							strokeLinejoin="round"
+																						/>
 																					</svg>
 																				)}
 																			</button>
@@ -909,8 +925,8 @@ export function CreateProjectModal({
 																<input
 																	type="text"
 																	placeholder="Cevabınızı yazın..."
-																	className="w-full px-3 py-2 bg-[#080808] border border-[#262626] rounded-lg text-[12px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
-																	value={selectedOpts[0] ?? ''}
+																	className="w-full px-3 py-2 bg-[#080808] border border-[#262626] rounded-lg text-[12px] text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
+																	value={selectedOpts[0] ?? ""}
 																	onChange={(e) => {
 																		const val = e.target.value;
 																		setQuestionAnswers((prev) => ({
@@ -934,18 +950,19 @@ export function CreateProjectModal({
 															type="button"
 															disabled={answeredCount === 0}
 															onClick={async () => {
+																if (!createdProject) return;
 																const lines: string[] = [];
 																for (const q of pendingQuestions) {
 																	const answers = questionAnswers[q.id] ?? [];
 																	if (answers.length > 0) {
-																		await answerIntakeQuestion(createdProject!.id, q.id, answers.join(', '));
-																		lines.push(`${q.question}: ${answers.join(', ')}`);
+																		await answerIntakeQuestion(createdProject.id, q.id, answers.join(", "));
+																		lines.push(`${q.question}: ${answers.join(", ")}`);
 																	}
 																}
 																setPendingQuestions([]);
 																setQuestionAnswers({});
 																if (lines.length > 0) {
-																	sendPMMessage(lines.join('\n'));
+																	sendPMMessage(lines.join("\n"));
 																}
 															}}
 															className="w-full mt-1 px-4 py-2.5 rounded-xl text-[12px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -966,13 +983,13 @@ export function CreateProjectModal({
 												value={architectInput}
 												onChange={(e) => setArchitectInput(e.target.value)}
 												onKeyDown={(e) => {
-													if (e.key === 'Enter') {
+													if (e.key === "Enter") {
 														e.preventDefault();
 														sendPMMessage(architectInput);
 													}
 												}}
 												placeholder="Soruları yanıtlayın veya projeniz hakkında detay ekleyin..."
-												className="flex-1 px-3 py-2 bg-[#080808] border border-[#262626] rounded-xl text-[12px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
+												className="flex-1 px-3 py-2 bg-[#080808] border border-[#262626] rounded-xl text-[12px] text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
 											/>
 											<button
 												type="button"
@@ -990,29 +1007,35 @@ export function CreateProjectModal({
 							{step === 3 && (
 								<div className="rounded-2xl border border-[#1f1f1f] bg-[#0d0d0d] px-5 py-5 space-y-4">
 									<div>
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 3 — Scope & Takım</p>
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">
+											Step 3 — Scope & Takım
+										</p>
 										<h3 className="text-[15px] font-semibold text-[#fafafa]">Scope ve takımı onayla.</h3>
 									</div>
 
 									{/* Scope Summary */}
 									<div className="rounded-xl border border-[#262626] bg-[#090909] px-4 py-4 space-y-2 text-[12px]">
 										<div className="text-[#525252]">Problem Statement</div>
-										<div className="text-[#fafafa]">{description.trim() || 'No description provided.'}</div>
+										<div className="text-[#fafafa]">{description.trim() || "No description provided."}</div>
 										<div className="pt-2 text-[#525252]">Required capabilities</div>
-										<div className="text-[#fafafa]">{techPreference.join(', ') || 'Not specified'}</div>
+										<div className="text-[#fafafa]">{techPreference.join(", ") || "Not specified"}</div>
 										<div className="pt-2 text-[#525252]">Candidate roles</div>
-										<div className="text-[#fafafa]">{selectedTeam?.roles.join(', ') || 'No inferred roles yet'}</div>
+										<div className="text-[#fafafa]">{selectedTeam?.roles.join(", ") || "No inferred roles yet"}</div>
 									</div>
 
 									{/* Team recommendation */}
 									<div>
-										<div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-3">Takım Önerisi</div>
+										<div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-3">
+											Takım Önerisi
+										</div>
 										{recommendation.candidate && (
 											<div className="rounded-2xl border border-[#22c55e]/30 bg-[#22c55e]/5 px-5 py-4 space-y-3">
 												<div className="flex items-start justify-between gap-4">
 													<div>
 														<div className="text-[14px] font-semibold text-[#fafafa]">
-															{architectRecommendedTeam?.name ?? architectCustomTeam?.name ?? recommendation.candidate.name}
+															{architectRecommendedTeam?.name ??
+																architectCustomTeam?.name ??
+																recommendation.candidate.name}
 														</div>
 														<p className="text-[12px] leading-6 text-[#a7f3d0] mt-1">
 															{architectRecommendation?.reasoning?.[0] ?? recommendation.reason}
@@ -1020,11 +1043,11 @@ export function CreateProjectModal({
 													</div>
 													<div className="rounded-full border border-[#22c55e]/30 px-2.5 py-1 text-[10px] font-medium text-[#86efac] shrink-0">
 														{architectCustomTeam
-															? 'Custom'
-															: architectRecommendedTeam?.source === 'custom' ||
-																  recommendation.candidate.source === 'custom'
-																? 'Custom'
-																: 'Preset'}
+															? "Custom"
+															: architectRecommendedTeam?.source === "custom" ||
+																	recommendation.candidate.source === "custom"
+																? "Custom"
+																: "Preset"}
 													</div>
 												</div>
 												<TeamRosterPreview
@@ -1040,7 +1063,9 @@ export function CreateProjectModal({
 											</div>
 										)}
 										{!recommendation.candidate && (
-											<div className="text-[12px] text-[#737373]">Takım önerisi bulunamadı. Scope onaylandıktan sonra otomatik atanacak.</div>
+											<div className="text-[12px] text-[#737373]">
+												Takım önerisi bulunamadı. Scope onaylandıktan sonra otomatik atanacak.
+											</div>
 										)}
 									</div>
 
@@ -1049,18 +1074,18 @@ export function CreateProjectModal({
 										<div className="inline-flex rounded-xl border border-[#262626] bg-[#0a0a0a] p-1">
 											<button
 												type="button"
-												onClick={() => setTeamMode('auto')}
+												onClick={() => setTeamMode("auto")}
 												className={`px-3 py-2 rounded-lg text-[12px] font-medium transition-colors ${
-													teamMode === 'auto' ? 'bg-[#22c55e] text-[#0a0a0a]' : 'text-[#a3a3a3] hover:text-[#fafafa]'
+													teamMode === "auto" ? "bg-[#22c55e] text-[#0a0a0a]" : "text-[#a3a3a3] hover:text-[#fafafa]"
 												}`}
 											>
 												Otomatik
 											</button>
 											<button
 												type="button"
-												onClick={() => setTeamMode('manual')}
+												onClick={() => setTeamMode("manual")}
 												className={`px-3 py-2 rounded-lg text-[12px] font-medium transition-colors ${
-													teamMode === 'manual' ? 'bg-[#3b82f6] text-white' : 'text-[#a3a3a3] hover:text-[#fafafa]'
+													teamMode === "manual" ? "bg-[#3b82f6] text-white" : "text-[#a3a3a3] hover:text-[#fafafa]"
 												}`}
 											>
 												Ben seçeceğim
@@ -1068,29 +1093,32 @@ export function CreateProjectModal({
 										</div>
 									</div>
 
-									{teamMode === 'manual' && (
+									{teamMode === "manual" && (
 										<div className="grid gap-3 xl:grid-cols-2">
 											{teamCandidates.map((team) => (
 												<button
 													key={team.id}
 													type="button"
-													onClick={() => { setSelectedTemplate(team.id); setTeamConfirmed(false); }}
+													onClick={() => {
+														setSelectedTemplate(team.id);
+														setTeamConfirmed(false);
+													}}
 													className={`text-left p-4 rounded-2xl border transition-colors ${
 														selectedTemplate === team.id
-															? 'border-[#3b82f6] bg-[#3b82f6]/6'
-															: 'border-[#262626] bg-[#0a0a0a] hover:border-[#333]'
+															? "border-[#3b82f6] bg-[#3b82f6]/6"
+															: "border-[#262626] bg-[#0a0a0a] hover:border-[#333]"
 													}`}
 												>
 													<div className="flex items-center justify-between gap-3">
 														<span className="text-[13px] font-medium text-[#fafafa]">{team.name}</span>
 														<span
 															className={`text-[10px] px-2 py-0.5 rounded-full border ${
-																team.source === 'custom'
-																	? 'border-[#3b82f6]/30 text-[#93c5fd]'
-																	: 'border-[#262626] text-[#6b7280]'
+																team.source === "custom"
+																	? "border-[#3b82f6]/30 text-[#93c5fd]"
+																	: "border-[#262626] text-[#6b7280]"
 															}`}
 														>
-															{team.source === 'custom' ? 'Custom' : 'Preset'}
+															{team.source === "custom" ? "Custom" : "Preset"}
 														</span>
 													</div>
 													<p className="text-[11px] text-[#737373] mt-1.5 leading-5">{team.description}</p>
@@ -1106,7 +1134,7 @@ export function CreateProjectModal({
 											<select
 												value={selectedPlanner}
 												onChange={(e) => setSelectedPlanner(e.target.value)}
-												className="w-full px-3 py-2.5 bg-[#080808] border border-[#262626] rounded-xl text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none"
+												className="w-full px-3 py-2.5 bg-[#080808] border border-[#262626] rounded-xl text-[13px] text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
 											>
 												{plannerAgents.map((agent) => (
 													<option key={agent.id} value={agent.id}>
@@ -1129,7 +1157,9 @@ export function CreateProjectModal({
 							{step === 4 && (
 								<div className="rounded-2xl border border-[#1f1f1f] bg-[#0d0d0d] px-5 py-5 space-y-4">
 									<div>
-										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">Step 4 — Plan Onayı</p>
+										<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2">
+											Step 4 — Plan Onayı
+										</p>
 										<h3 className="text-[15px] font-semibold text-[#fafafa]">Planı inceleyin ve onaylayın</h3>
 										<p className="text-[12px] leading-6 text-[#737373] mt-2">
 											PM Agent projeniz için bir plan oluşturdu. Fazları ve görevleri inceleyin, uygunsa onaylayın.
@@ -1137,7 +1167,12 @@ export function CreateProjectModal({
 									</div>
 									{createdProject && (
 										<Suspense fallback={<div className="text-center py-8 text-[#525252]">Plan yükleniyor...</div>}>
-											<PlanPreviewEmbed projectId={createdProject.id} onApproved={() => { onCreate(createdProject); }} />
+											<PlanPreviewEmbed
+												projectId={createdProject.id}
+												onApproved={() => {
+													onCreate(createdProject);
+												}}
+											/>
 										</Suspense>
 									)}
 								</div>
@@ -1150,11 +1185,11 @@ export function CreateProjectModal({
 								<div className="space-y-3 text-[12px]">
 									<div className="flex items-center justify-between gap-4">
 										<span className="text-[#525252]">Project</span>
-										<span className="text-[#fafafa] text-right">{name.trim() || 'Untitled project'}</span>
+										<span className="text-[#fafafa] text-right">{name.trim() || "Untitled project"}</span>
 									</div>
 									<div className="flex items-center justify-between gap-4">
 										<span className="text-[#525252]">Type</span>
-										<span className="text-[#fafafa] text-right capitalize">{projectType.replace(/-/g, ' ')}</span>
+										<span className="text-[#fafafa] text-right capitalize">{projectType.replace(/-/g, " ")}</span>
 									</div>
 									<div className="flex items-center justify-between gap-4">
 										<span className="text-[#525252]">Team</span>
@@ -1162,17 +1197,17 @@ export function CreateProjectModal({
 									</div>
 									<div className="flex items-center justify-between gap-4">
 										<span className="text-[#525252]">Planner</span>
-										<span className="text-[#fafafa] text-right">{selectedPlannerAgent?.name ?? 'Not selected'}</span>
+										<span className="text-[#fafafa] text-right">{selectedPlannerAgent?.name ?? "Not selected"}</span>
 									</div>
 									<div className="flex items-center justify-between gap-4">
 										<span className="text-[#525252]">Preview</span>
-										<span className={previewEnabled ? 'text-[#22c55e]' : 'text-[#a3a3a3]'}>
-											{previewEnabled ? 'Enabled' : 'Disabled'}
+										<span className={previewEnabled ? "text-[#22c55e]" : "text-[#a3a3a3]"}>
+											{previewEnabled ? "Enabled" : "Disabled"}
 										</span>
 									</div>
 									<div className="flex items-start justify-between gap-4">
 										<span className="text-[#525252]">Tech pref</span>
-										<span className="text-[#fafafa] text-right">{techPreference.join(', ') || 'Planner decides'}</span>
+										<span className="text-[#fafafa] text-right">{techPreference.join(", ") || "Planner decides"}</span>
 									</div>
 								</div>
 								{selectedTeam && (
@@ -1191,8 +1226,10 @@ export function CreateProjectModal({
 					</div>
 				</div>
 
-				{architectRecommendation?.decision === 'need-more-info' && step === 2 && (
-					<p className="text-[11px] text-[#f59e0b] px-6 pb-2">PM Agent daha fazla bilgi istiyor. Lütfen soruları yanıtlayın.</p>
+				{architectRecommendation?.decision === "need-more-info" && step === 2 && (
+					<p className="text-[11px] text-[#f59e0b] px-6 pb-2">
+						PM Agent daha fazla bilgi istiyor. Lütfen soruları yanıtlayın.
+					</p>
 				)}
 
 				{/* Actions */}
@@ -1217,7 +1254,7 @@ export function CreateProjectModal({
 							disabled={!canCreateShell || loading}
 							className="px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 						>
-							{loading ? 'Creating shell...' : 'Create Shell'}
+							{loading ? "Creating shell..." : "Create Shell"}
 						</button>
 					) : step === 2 ? (
 						<button
@@ -1225,7 +1262,7 @@ export function CreateProjectModal({
 							disabled={!createdProject || loading || architectMessages.length < 2}
 							className="px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 						>
-							{loading ? 'Saving scope...' : 'Continue to Scope Review'}
+							{loading ? "Saving scope..." : "Continue to Scope Review"}
 						</button>
 					) : step === 3 ? (
 						<button
@@ -1233,7 +1270,7 @@ export function CreateProjectModal({
 							disabled={!createdProject || loading}
 							className="px-4 py-2 rounded-lg text-[13px] font-medium bg-[#22c55e] text-[#0a0a0a] hover:bg-[#16a34a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 						>
-							{loading ? 'Onaylanıyor...' : 'Scope & Takımı Onayla'}
+							{loading ? "Onaylanıyor..." : "Scope & Takımı Onayla"}
 						</button>
 					) : null}
 				</div>

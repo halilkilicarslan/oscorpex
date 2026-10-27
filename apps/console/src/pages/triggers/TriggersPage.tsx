@@ -282,7 +282,7 @@ export default function TriggersPage() {
 									value={search}
 									onChange={(e) => setSearch(e.target.value)}
 									placeholder="Search triggers..."
-									className="w-full pl-7 pr-3 py-1.5 text-xs bg-[#111111] border border-[#262626] rounded-md text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#3f3f46]"
+									className="w-full pl-7 pr-3 py-1.5 text-xs bg-[#111111] border border-[#262626] rounded-md text-[#fafafa] placeholder-[#525252] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#3f3f46]"
 								/>
 							</div>
 
@@ -292,7 +292,7 @@ export default function TriggersPage() {
 								<select
 									value={typeFilter}
 									onChange={(e) => setTypeFilter(e.target.value as TriggerType | 'ALL')}
-									className="px-2.5 py-1.5 text-xs bg-[#111111] border border-[#262626] rounded-md text-[#a3a3a3] focus:outline-none focus:border-[#3f3f46]"
+									className="px-2.5 py-1.5 text-xs bg-[#111111] border border-[#262626] rounded-md text-[#a3a3a3] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#3f3f46]"
 								>
 									<option value="ALL">All Types</option>
 									<option value="webhook">Webhook</option>
@@ -306,7 +306,7 @@ export default function TriggersPage() {
 							<select
 								value={statusFilter}
 								onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'active' | 'disabled')}
-								className="px-2.5 py-1.5 text-xs bg-[#111111] border border-[#262626] rounded-md text-[#a3a3a3] focus:outline-none focus:border-[#3f3f46]"
+								className="px-2.5 py-1.5 text-xs bg-[#111111] border border-[#262626] rounded-md text-[#a3a3a3] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#3f3f46]"
 							>
 								<option value="ALL">All Status</option>
 								<option value="active">Active</option>
@@ -465,7 +465,7 @@ export default function TriggersPage() {
 							<select
 								value={logsTriggerFilter}
 								onChange={(e) => { setLogsPage(0); setLogsTriggerFilter(e.target.value); }}
-								className="px-2.5 py-1.5 text-xs bg-[#111111] border border-[#262626] rounded-md text-[#a3a3a3] focus:outline-none focus:border-[#3f3f46]"
+								className="px-2.5 py-1.5 text-xs bg-[#111111] border border-[#262626] rounded-md text-[#a3a3a3] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#3f3f46]"
 							>
 								<option value="ALL">All Triggers</option>
 								{triggers.map((t) => (
@@ -476,7 +476,7 @@ export default function TriggersPage() {
 							<select
 								value={logsStatusFilter}
 								onChange={(e) => { setLogsPage(0); setLogsStatusFilter(e.target.value as LogStatus | 'ALL'); }}
-								className="px-2.5 py-1.5 text-xs bg-[#111111] border border-[#262626] rounded-md text-[#a3a3a3] focus:outline-none focus:border-[#3f3f46]"
+								className="px-2.5 py-1.5 text-xs bg-[#111111] border border-[#262626] rounded-md text-[#a3a3a3] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#3f3f46]"
 							>
 								<option value="ALL">All Status</option>
 								<option value="success">Success</option>

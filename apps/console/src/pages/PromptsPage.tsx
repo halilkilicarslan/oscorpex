@@ -294,7 +294,7 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[
 				onKeyDown={handleKeyDown}
 				onBlur={addTag}
 				placeholder={tags.length === 0 ? 'Add tags...' : ''}
-				className="flex-1 min-w-[80px] bg-transparent text-[12px] text-[#a3a3a3] placeholder-[#3a3a3a] focus:outline-none"
+				className="flex-1 min-w-[80px] bg-transparent text-[12px] text-[#a3a3a3] placeholder-[#3a3a3a] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40"
 			/>
 		</div>
 	);
@@ -385,7 +385,7 @@ function TemplateEditor({ initial, onClose, onSave }: TemplateEditorProps) {
 							value={form.name}
 							onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
 							placeholder="e.g. System Prompt - Helpful Assistant"
-							className="w-full bg-[#0d0d0d] border border-[#262626] rounded-lg px-3 py-2 text-[13px] text-[#fafafa] placeholder-[#3a3a3a] focus:outline-none focus:border-[#333]"
+							className="w-full bg-[#0d0d0d] border border-[#262626] rounded-lg px-3 py-2 text-[13px] text-[#fafafa] placeholder-[#3a3a3a] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#333]"
 						/>
 					</div>
 
@@ -396,7 +396,7 @@ function TemplateEditor({ initial, onClose, onSave }: TemplateEditorProps) {
 							<select
 								value={form.category}
 								onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as Category }))}
-								className="w-full appearance-none bg-[#0d0d0d] border border-[#262626] rounded-lg px-3 py-2 text-[13px] text-[#a3a3a3] focus:outline-none focus:border-[#333] pr-8"
+								className="w-full appearance-none bg-[#0d0d0d] border border-[#262626] rounded-lg px-3 py-2 text-[13px] text-[#a3a3a3] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#333] pr-8"
 							>
 								{CATEGORIES.filter((c) => c.value !== 'all').map((c) => (
 									<option key={c.value} value={c.value}>{c.label}</option>
@@ -414,7 +414,7 @@ function TemplateEditor({ initial, onClose, onSave }: TemplateEditorProps) {
 							onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
 							placeholder="Brief description of what this prompt does..."
 							rows={2}
-							className="w-full bg-[#0d0d0d] border border-[#262626] rounded-lg px-3 py-2 text-[13px] text-[#a3a3a3] placeholder-[#3a3a3a] focus:outline-none focus:border-[#333] resize-none leading-relaxed"
+							className="w-full bg-[#0d0d0d] border border-[#262626] rounded-lg px-3 py-2 text-[13px] text-[#a3a3a3] placeholder-[#3a3a3a] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#333] resize-none leading-relaxed"
 						/>
 					</div>
 
@@ -435,7 +435,7 @@ function TemplateEditor({ initial, onClose, onSave }: TemplateEditorProps) {
 							onChange={(e) => handleContentChange(e.target.value)}
 							placeholder={"You are a helpful assistant.\n\nUser context: {{context}}\nTask: {{task}}"}
 							rows={10}
-							className="w-full bg-[#0d0d0d] border border-[#262626] rounded-lg px-3 py-2.5 text-[12px] text-[#d4d4d4] placeholder-[#3a3a3a] focus:outline-none focus:border-[#333] resize-none font-mono leading-relaxed"
+							className="w-full bg-[#0d0d0d] border border-[#262626] rounded-lg px-3 py-2.5 text-[12px] text-[#d4d4d4] placeholder-[#3a3a3a] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#333] resize-none font-mono leading-relaxed"
 						/>
 						{detectedVars.length > 0 && (
 							<div className="mt-2 flex flex-wrap gap-1.5">
@@ -875,7 +875,7 @@ export default function PromptsPage() {
 						placeholder="Search templates..."
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
-						className="bg-[#111111] border border-[#262626] rounded-lg pl-8 pr-3 py-1.5 text-[12px] text-[#a3a3a3] placeholder-[#3a3a3a] focus:outline-none focus:border-[#333] w-52"
+						className="bg-[#111111] border border-[#262626] rounded-lg pl-8 pr-3 py-1.5 text-[12px] text-[#a3a3a3] placeholder-[#3a3a3a] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#333] w-52"
 					/>
 				</div>
 
@@ -930,7 +930,7 @@ export default function PromptsPage() {
 					<select
 						value={sort}
 						onChange={(e) => setSort(e.target.value as SortOrder)}
-						className="appearance-none bg-[#111111] border border-[#262626] rounded-lg pl-3 pr-7 py-1.5 text-[12px] text-[#a3a3a3] focus:outline-none focus:border-[#333]"
+						className="appearance-none bg-[#111111] border border-[#262626] rounded-lg pl-3 pr-7 py-1.5 text-[12px] text-[#a3a3a3] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#333]"
 					>
 						<option value="recent">Recent</option>
 						<option value="most_used">Most Used</option>

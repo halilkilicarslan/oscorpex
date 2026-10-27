@@ -59,6 +59,7 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
 	const [teamVelocity, setTeamVelocity] = useState<number | null>(null);
 	const [allItems, setAllItems] = useState<SprintWorkItem[]>([]);
 	const [showCreate, setShowCreate] = useState(false);
+	const [sprintError, setSprintError] = useState<string | null>(null);
 
 	const loadSprints = useCallback(async () => {
 		try {
@@ -117,7 +118,7 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
 			await loadSprints();
 			await loadTeamVelocity();
 		} catch (e: any) {
-			alert(e?.message ?? `Sprint ${action} failed`);
+			setSprintError(e?.message ?? `Sprint ${action} failed`);
 		}
 	};
 
@@ -127,7 +128,7 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
 			await loadSprints();
 			await loadAllItems();
 		} catch (e: any) {
-			alert(e?.message ?? 'Assign failed');
+			setSprintError(e?.message ?? 'Assign failed');
 		}
 	};
 
@@ -148,6 +149,12 @@ export default function SprintBoard({ projectId }: { projectId: string }) {
 
 	return (
 		<div className="flex flex-col h-full p-5 gap-4">
+			{sprintError && (
+				<div className="flex items-center justify-between px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+					<span>{sprintError}</span>
+					<button type="button" onClick={() => setSprintError(null)} className="ml-2 hover:text-red-300">✕</button>
+				</div>
+			)}
 			<div className="flex items-center justify-between">
 				<div>
 					<h2 className="text-[15px] font-semibold text-[#fafafa]">Sprint Board</h2>

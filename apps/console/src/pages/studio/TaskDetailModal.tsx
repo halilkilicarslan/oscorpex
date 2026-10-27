@@ -44,6 +44,7 @@ export default function TaskDetailModal({
 	onRefresh,
 }: TaskDetailModalProps) {
 	const [actionLoading, setActionLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
 	const handleApprove = async () => {
 		setActionLoading(true);
@@ -52,7 +53,7 @@ export default function TaskDetailModal({
 			onRefresh?.();
 			onClose();
 		} catch (err) {
-			alert(err instanceof Error ? err.message : 'Onay islemi basarisiz oldu');
+			setError(err instanceof Error ? err.message : 'Onay islemi basarisiz oldu');
 		} finally {
 			setActionLoading(false);
 		}
@@ -65,7 +66,7 @@ export default function TaskDetailModal({
 			onRefresh?.();
 			onClose();
 		} catch (err) {
-			alert(err instanceof Error ? err.message : 'Reddetme islemi basarisiz oldu');
+			setError(err instanceof Error ? err.message : 'Reddetme islemi basarisiz oldu');
 		} finally {
 			setActionLoading(false);
 		}
@@ -78,7 +79,7 @@ export default function TaskDetailModal({
 			onRefresh?.();
 			onClose();
 		} catch (err) {
-			alert(err instanceof Error ? err.message : 'Yeniden deneme islemi basarisiz oldu');
+			setError(err instanceof Error ? err.message : 'Yeniden deneme islemi basarisiz oldu');
 		} finally {
 			setActionLoading(false);
 		}
@@ -140,6 +141,12 @@ export default function TaskDetailModal({
 
 				{/* Body */}
 				<div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+					{error && (
+						<div role="alert" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+							<span>{error}</span>
+							<button onClick={() => setError(null)} className="ml-auto text-red-400/60 hover:text-red-400" aria-label="Dismiss error">×</button>
+						</div>
+					)}
 					{task.description && (
 						<Section title="Aciklama">
 							<p className="text-[12px] text-[#a3a3a3] leading-relaxed whitespace-pre-wrap">{task.description}</p>

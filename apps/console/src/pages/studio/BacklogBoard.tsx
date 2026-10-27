@@ -30,6 +30,7 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
 	const [total, setTotal] = useState(0);
 	const [wiOffset, setWiOffset] = useState(0);
 	const [loadingMore, setLoadingMore] = useState(false);
+	const [inlineError, setInlineError] = useState<string | null>(null);
 
 	const load = useCallback(() => {
 		Promise.all([
@@ -80,7 +81,7 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
 			await httpPost(`${BASE}/api/studio/projects/${projectId}/work-items/${itemId}/plan`);
 			load();
 		} catch (e: any) {
-			alert(e?.message ?? 'Convert failed');
+			setInlineError(e?.message ?? 'Convert failed');
 		}
 	};
 
@@ -132,6 +133,12 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
 			{showModal && <NewItemModal onClose={() => setShowModal(false)} onSubmit={handleCreate} />}
 
 			<div className="flex flex-col h-full p-5 gap-4">
+				{inlineError && (
+					<div className="flex items-center justify-between px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+						<span>{inlineError}</span>
+						<button type="button" onClick={() => setInlineError(null)} className="ml-2 hover:text-red-300">✕</button>
+					</div>
+				)}
 				<div className="flex items-center justify-between">
 					<div>
 						<h2 className="text-[15px] font-semibold text-[#fafafa]">Backlog</h2>

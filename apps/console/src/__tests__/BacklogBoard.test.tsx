@@ -390,9 +390,7 @@ describe('BacklogBoard — "open" statüsündeki item\'larda Convert butonu', ()
 		});
 	});
 
-	it('convert API başarısız olunca alert göstermeli', async () => {
-		const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
+	it('convert API başarısız olunca inline hata mesajı göstermeli', async () => {
 		const fetchMock = vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
 			if (url.includes('/plan') && opts?.method === 'POST') {
 				return Promise.resolve({
@@ -413,11 +411,7 @@ describe('BacklogBoard — "open" statüsündeki item\'larda Convert butonu', ()
 		await waitFor(() => screen.getByText('Convert'));
 		await user.click(screen.getByText('Convert'));
 
-		await waitFor(() => {
-			expect(alertMock).toHaveBeenCalledWith('Plan oluşturulamadı');
-		});
-
-		alertMock.mockRestore();
+		expect(await screen.findByText('Plan oluşturulamadı')).toBeInTheDocument();
 	});
 });
 

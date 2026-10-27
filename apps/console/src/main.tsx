@@ -34,6 +34,12 @@ const ApprovalQueuePage = lazy(() => import("./pages/studio/ApprovalQueuePage"))
 const ReleaseDecisionPanelPage = lazy(() => import("./pages/studio/ReleaseDecisionPanelPage"));
 const TaskSessionInspectorPage = lazy(() => import("./pages/studio/TaskSessionInspectorPage"));
 const SkillsPage = lazy(() => import("./pages/studio/SkillsPage"));
+const MemoryPruningPage = lazy(() => import("./pages/studio/MemoryPruningPage"));
+const ApprovalsPage = lazy(() => import("./pages/studio/ApprovalsPage"));
+const McpAuditPage = lazy(() => import("./pages/studio/McpAuditPage"));
+const McpMetricsPage = lazy(() => import("./pages/studio/McpMetricsPage"));
+const HermesDashboardPage = lazy(() => import("./pages/studio/HermesDashboardPage"));
+const HermesKeysPage = lazy(() => import("./pages/studio/HermesKeysPage"));
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/auth/RegisterPage"));
 
@@ -92,8 +98,14 @@ createRoot(document.getElementById("root")!).render(
 									<Route path="/studio/providers/compare" element={<ProviderComparisonPage />} />
 									<Route path="/studio/admin" element={<AdminSettingsPage />} />
 									<Route path="/studio/skills" element={<SkillsPage />} />
+									<Route path="/studio/memory-pruning" element={<MemoryPruningPage />} />
 									<Route path="/studio/control-plane" element={<ControlPlanePage />} />
 									<Route path="/studio/approvals" element={<ApprovalQueuePage />} />
+									<Route path="/studio/mcp/approvals" element={<ApprovalsPage />} />
+									<Route path="/studio/mcp/audit" element={<McpAuditPage />} />
+									<Route path="/studio/mcp/metrics" element={<McpMetricsPage />} />
+									<Route path="/studio/hermes" element={<HermesDashboardPage />} />
+									<Route path="/studio/hermes/keys" element={<HermesKeysPage />} />
 									<Route path="/studio/releases/:goalId" element={<ReleaseDecisionPanelPage />} />
 									<Route path="/studio/quality-gates/:goalId" element={<QualityGatesDashboardPage />} />
 									<Route path="/studio/:projectId/tasks/:taskId/inspector" element={<TaskSessionInspectorPage />} />

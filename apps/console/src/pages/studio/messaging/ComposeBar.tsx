@@ -129,7 +129,7 @@ export default function ComposeBar({
             <select
               value={form.fromAgentId}
               onChange={(e) => setForm((prev) => ({ ...prev, fromAgentId: e.target.value }))}
-              className="flex-1 min-w-[120px] px-2 py-1.5 rounded-lg bg-[#111111] border border-[#262626] text-[11px] text-[#a3a3a3] focus:outline-none focus:border-[#22c55e]/50"
+              className="flex-1 min-w-[120px] px-2 py-1.5 rounded-lg bg-[#111111] border border-[#262626] text-[11px] text-[#a3a3a3] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]/50"
             >
               <option value="">Kimden...</option>
               {agents.map((a) => (
@@ -142,7 +142,7 @@ export default function ComposeBar({
             <select
               value={form.toAgentId}
               onChange={(e) => setForm((prev) => ({ ...prev, toAgentId: e.target.value }))}
-              className="flex-1 min-w-[120px] px-2 py-1.5 rounded-lg bg-[#111111] border border-[#262626] text-[11px] text-[#a3a3a3] focus:outline-none focus:border-[#22c55e]/50"
+              className="flex-1 min-w-[120px] px-2 py-1.5 rounded-lg bg-[#111111] border border-[#262626] text-[11px] text-[#a3a3a3] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]/50"
             >
               <option value="">Kime...</option>
               {agents.map((a) => (
@@ -157,7 +157,7 @@ export default function ComposeBar({
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, type: e.target.value as AgentMessageType }))
               }
-              className="flex-1 min-w-[120px] px-2 py-1.5 rounded-lg bg-[#111111] border border-[#262626] text-[11px] text-[#a3a3a3] focus:outline-none focus:border-[#22c55e]/50"
+              className="flex-1 min-w-[120px] px-2 py-1.5 rounded-lg bg-[#111111] border border-[#262626] text-[11px] text-[#a3a3a3] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]/50"
             >
               {MESSAGE_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -172,7 +172,7 @@ export default function ComposeBar({
             value={form.subject}
             onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
             placeholder="Konu..."
-            className="w-full px-3 py-1.5 rounded-lg bg-[#111111] border border-[#262626] text-[12px] text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50"
+            className="w-full px-3 py-1.5 rounded-lg bg-[#111111] border border-[#262626] text-[12px] text-[#fafafa] placeholder-[#525252] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]/50"
           />
 
           <textarea
@@ -180,7 +180,7 @@ export default function ComposeBar({
             onChange={(e) => setForm((prev) => ({ ...prev, content: e.target.value }))}
             placeholder="Message content..."
             rows={3}
-            className="w-full px-3 py-2 rounded-lg bg-[#111111] border border-[#262626] text-[12px] text-[#a3a3a3] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50 resize-none"
+            className="w-full px-3 py-2 rounded-lg bg-[#111111] border border-[#262626] text-[12px] text-[#a3a3a3] placeholder-[#525252] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]/50 resize-none"
           />
 
           <div className="flex items-center gap-2 justify-end">

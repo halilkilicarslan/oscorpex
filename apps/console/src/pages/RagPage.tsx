@@ -196,7 +196,7 @@ function KBFormModal({
               value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               placeholder="My Knowledge Base"
-              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50"
+              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50"
             />
           </div>
 
@@ -207,7 +207,7 @@ function KBFormModal({
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               placeholder="Describe this knowledge base..."
               rows={2}
-              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50 resize-none"
+              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50 resize-none"
             />
           </div>
 
@@ -243,7 +243,7 @@ function KBFormModal({
               <select
                 value={form.embedding_model}
                 onChange={e => setForm(f => ({ ...f, embedding_model: e.target.value }))}
-                className="w-full appearance-none bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 pr-8 text-sm text-[#fafafa] focus:outline-none focus:border-[#22c55e]/50"
+                className="w-full appearance-none bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 pr-8 text-sm text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50"
               >
                 {EMBEDDING_MODELS.map(m => (
                   <option key={m} value={m}>{m}</option>
@@ -375,7 +375,7 @@ function AddDocumentModal({
               <select
                 value={kbId}
                 onChange={e => setKbId(e.target.value)}
-                className="w-full appearance-none bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 pr-8 text-sm text-[#fafafa] focus:outline-none focus:border-[#22c55e]/50"
+                className="w-full appearance-none bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 pr-8 text-sm text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50"
               >
                 {knowledgeBases.map(kb => (
                   <option key={kb.id} value={kb.id}>{kb.name}</option>
@@ -392,7 +392,7 @@ function AddDocumentModal({
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. company-policy.pdf"
-              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50"
+              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50"
             />
           </div>
 
@@ -403,7 +403,7 @@ function AddDocumentModal({
               value={source}
               onChange={e => setSource(e.target.value)}
               placeholder="https://example.com/doc or /path/to/file"
-              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50"
+              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50"
             />
           </div>
 
@@ -414,7 +414,7 @@ function AddDocumentModal({
               onChange={e => setContent(e.target.value)}
               placeholder="Paste document content here..."
               rows={5}
-              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] font-mono placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50 resize-none"
+              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] font-mono placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50 resize-none"
             />
           </div>
 
@@ -425,7 +425,7 @@ function AddDocumentModal({
               min={0}
               value={chunkCount}
               onChange={e => setChunkCount(parseInt(e.target.value) || 0)}
-              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] focus:outline-none focus:border-[#22c55e]/50"
+              className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50"
             />
           </div>
 
@@ -739,7 +739,7 @@ function DocumentsTab({ knowledgeBases, onRefresh }: { knowledgeBases: Knowledge
           <select
             value={selectedKbId}
             onChange={e => setSelectedKbId(e.target.value)}
-            className="appearance-none bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 pr-8 text-sm text-[#fafafa] focus:outline-none focus:border-[#22c55e]/50"
+            className="appearance-none bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 pr-8 text-sm text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50"
           >
             <option value="all">All Knowledge Bases</option>
             {knowledgeBases.map(kb => (
@@ -896,7 +896,7 @@ function QueryLogTab({ knowledgeBases }: { knowledgeBases: KnowledgeBase[] }) {
           <select
             value={filterKb}
             onChange={e => { setFilterKb(e.target.value); setPage(0); }}
-            className="appearance-none bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 pr-8 text-sm text-[#fafafa] focus:outline-none focus:border-[#22c55e]/50"
+            className="appearance-none bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 pr-8 text-sm text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50"
           >
             <option value="">All KBs</option>
             {knowledgeBases.map(kb => (

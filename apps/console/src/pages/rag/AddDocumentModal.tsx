@@ -58,7 +58,7 @@ export function AddDocumentModal({ knowledgeBases, defaultKbId, onClose, onSave 
 							<select
 								value={kbId}
 								onChange={e => setKbId(e.target.value)}
-								className="w-full appearance-none bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 pr-8 text-sm text-[#fafafa] focus:outline-none focus:border-[#22c55e]/50"
+								className="w-full appearance-none bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 pr-8 text-sm text-[#fafafa] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]/50"
 							>
 								{knowledgeBases.map(kb => (
 									<option key={kb.id} value={kb.id}>{kb.name}</option>
@@ -75,7 +75,7 @@ export function AddDocumentModal({ knowledgeBases, defaultKbId, onClose, onSave 
 							value={name}
 							onChange={e => setName(e.target.value)}
 							placeholder="e.g. company-policy.pdf"
-							className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50"
+							className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]/50"
 						/>
 					</div>
 
@@ -86,7 +86,7 @@ export function AddDocumentModal({ knowledgeBases, defaultKbId, onClose, onSave 
 							value={source}
 							onChange={e => setSource(e.target.value)}
 							placeholder="https://example.com/doc or /path/to/file"
-							className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50"
+							className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]/50"
 						/>
 					</div>
 
@@ -97,7 +97,7 @@ export function AddDocumentModal({ knowledgeBases, defaultKbId, onClose, onSave 
 							onChange={e => setContent(e.target.value)}
 							placeholder="Paste document content here..."
 							rows={5}
-							className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] font-mono placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50 resize-none"
+							className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] font-mono placeholder-[#525252] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]/50 resize-none"
 						/>
 					</div>
 
@@ -108,7 +108,7 @@ export function AddDocumentModal({ knowledgeBases, defaultKbId, onClose, onSave 
 							min={0}
 							value={chunkCount}
 							onChange={e => setChunkCount(parseInt(e.target.value) || 0)}
-							className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] focus:outline-none focus:border-[#22c55e]/50"
+							className="w-full bg-[#1a1a1a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#fafafa] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 focus:border-[#22c55e]/50"
 						/>
 					</div>
 

@@ -135,7 +135,7 @@ export default function ProviderModal({ provider, onClose, onSaved }: ProviderMo
 							onChange={(e) => set('name', e.target.value)}
 							placeholder="My OpenAI Provider"
 							autoFocus
-							className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
+							className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40"
 						/>
 					</div>
 
@@ -144,7 +144,7 @@ export default function ProviderModal({ provider, onClose, onSaved }: ProviderMo
 						<select
 							value={form.type}
 							onChange={(e) => handleTypeChange(e.target.value as AIProviderType)}
-							className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none appearance-none"
+							className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 appearance-none"
 						>
 							<option value="openai">OpenAI</option>
 							<option value="anthropic">Anthropic</option>
@@ -163,7 +163,7 @@ export default function ProviderModal({ provider, onClose, onSaved }: ProviderMo
 							<select
 								value={form.cliTool}
 								onChange={(e) => set('cliTool', e.target.value as ProviderCliTool)}
-								className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none appearance-none"
+								className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 appearance-none"
 							>
 								<option value="claude">Claude (claude CLI)</option>
 								<option value="codex">Codex (codex CLI)</option>
@@ -187,7 +187,7 @@ export default function ProviderModal({ provider, onClose, onSaved }: ProviderMo
 									value={form.apiKey}
 									onChange={(e) => set('apiKey', e.target.value)}
 									placeholder={isEdit ? 'Leave blank to keep existing key' : 'sk-...'}
-									className="w-full px-3 py-2 pr-10 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none font-mono"
+									className="w-full px-3 py-2 pr-10 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 font-mono"
 								/>
 								<button
 									type="button"
@@ -214,7 +214,7 @@ export default function ProviderModal({ provider, onClose, onSaved }: ProviderMo
 								placeholder={
 									form.type === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com/v1'
 								}
-								className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
+								className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40"
 							/>
 						</div>
 					)}
@@ -225,7 +225,7 @@ export default function ProviderModal({ provider, onClose, onSaved }: ProviderMo
 							<select
 								value={form.model}
 								onChange={(e) => set('model', e.target.value)}
-								className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none appearance-none"
+								className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] focus:border-[#22c55e] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40 appearance-none"
 							>
 								{PROVIDER_META[form.type].models.map((m) => (
 									<option key={m} value={m}>{m}</option>
@@ -237,7 +237,7 @@ export default function ProviderModal({ provider, onClose, onSaved }: ProviderMo
 								value={form.model}
 								onChange={(e) => set('model', e.target.value)}
 								placeholder="model-name"
-								className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none"
+								className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#262626] rounded-lg text-[13px] text-[#fafafa] placeholder-[#525252] focus:border-[#22c55e] focus:outline-none focus:ring-1 focus:ring-[#22c55e]/40"
 							/>
 						)}
 					</div>

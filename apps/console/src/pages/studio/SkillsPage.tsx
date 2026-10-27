@@ -109,9 +109,13 @@ function SkillCard({ skill, selected, onClick }: SkillCardProps) {
 				<span className="text-[13px] font-medium text-[#fafafa] leading-snug line-clamp-1">{skill.name}</span>
 				<div className="flex items-center gap-1.5 shrink-0">
 					{skill.isGlobal ? (
-						<Globe size={12} className="text-[#22c55e]" title="Global skill" />
+						<span title="Global skill" className="inline-flex">
+							<Globe size={12} className="text-[#22c55e]" />
+						</span>
 					) : (
-						<Lock size={12} className="text-[#525252]" title="Project-scoped" />
+						<span title="Project-scoped" className="inline-flex">
+							<Lock size={12} className="text-[#525252]" />
+						</span>
 					)}
 				</div>
 			</div>
@@ -580,7 +584,7 @@ export default function SkillsPage() {
 				setSkills((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
 			}
 		} catch (err) {
-			alert(err instanceof Error ? err.message : "Save failed");
+			setError(err instanceof Error ? err.message : "Save failed");
 		} finally {
 			setSaving(false);
 		}
@@ -594,7 +598,7 @@ export default function SkillsPage() {
 			setSkills((prev) => prev.filter((s) => s.id !== selectedId));
 			closeEditor();
 		} catch (err) {
-			alert(err instanceof Error ? err.message : "Delete failed");
+			setError(err instanceof Error ? err.message : "Delete failed");
 		} finally {
 			setDeleting(false);
 		}

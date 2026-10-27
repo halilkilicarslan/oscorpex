@@ -86,6 +86,18 @@ const sections: NavSection[] = [
 			{ to: "/studio/admin", label: "Admin", icon: <Shield size={18} />, badge: "New" },
 		],
 	},
+	{
+		title: "MCP & INTEGRATIONS",
+		collapsible: true,
+		items: [
+			{ to: "/studio/hermes", label: "Hermes", icon: <Radio size={18} />, badge: "New" },
+			{ to: "/studio/hermes/keys", label: "API Keys", icon: <Shield size={18} /> },
+			{ to: "/studio/mcp/approvals", label: "Approvals", icon: <Shield size={18} />, badge: "New" },
+			{ to: "/studio/mcp/audit", label: "Audit Log", icon: <ScrollText size={18} /> },
+			{ to: "/studio/mcp/metrics", label: "Metrics", icon: <BarChart3 size={18} /> },
+			{ to: "/studio/memory-pruning", label: "Memory Pruning", icon: <Brain size={18} /> },
+		],
+	},
 ];
 
 const SIDEBAR_STORAGE_KEY = "oscorpex-sidebar-collapsed";
@@ -104,6 +116,7 @@ export default function Sidebar() {
 		OBSERVABILITY: true,
 		AUTOMATION: true,
 		OSCORPEX: true,
+		"MCP & INTEGRATIONS": true,
 	});
 
 	const toggleSection = (title: string) => {

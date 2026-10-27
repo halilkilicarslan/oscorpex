@@ -496,7 +496,7 @@ export default function AlertsPage() {
                       value={form.name}
                       onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                       placeholder="e.g. High Error Rate"
-                      className="w-full px-2.5 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]"
+                      className="w-full px-2.5 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
                     />
                   </div>
                   <div>
@@ -504,7 +504,7 @@ export default function AlertsPage() {
                     <select
                       value={form.type}
                       onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as AlertType }))}
-                      className="w-full px-2.5 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus:outline-none focus:border-[#22c55e]"
+                      className="w-full px-2.5 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
                     >
                       {Object.entries(TYPE_STYLES).map(([k, v]) => (
                         <option key={k} value={k}>{v.label}</option>
@@ -521,7 +521,7 @@ export default function AlertsPage() {
                     value={form.description}
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                     placeholder="Optional description..."
-                    className="w-full px-2.5 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]"
+                    className="w-full px-2.5 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
                   />
                 </div>
 
@@ -532,7 +532,7 @@ export default function AlertsPage() {
                     <select
                       value={form.metric}
                       onChange={(e) => setForm((f) => ({ ...f, metric: e.target.value }))}
-                      className="w-full px-2 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus:outline-none focus:border-[#22c55e]"
+                      className="w-full px-2 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
                     >
                       {METRIC_OPTIONS.map((m) => (
                         <option key={m.value} value={m.value}>{m.label}</option>
@@ -544,7 +544,7 @@ export default function AlertsPage() {
                     <select
                       value={form.operator}
                       onChange={(e) => setForm((f) => ({ ...f, operator: e.target.value as ConditionOperator }))}
-                      className="w-full px-2 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus:outline-none focus:border-[#22c55e]"
+                      className="w-full px-2 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
                     >
                       {Object.entries(OPERATOR_LABELS).map(([k, v]) => (
                         <option key={k} value={k}>{v}</option>
@@ -557,7 +557,7 @@ export default function AlertsPage() {
                       type="number"
                       value={form.threshold}
                       onChange={(e) => setForm((f) => ({ ...f, threshold: e.target.value }))}
-                      className="w-full px-2 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus:outline-none focus:border-[#22c55e]"
+                      className="w-full px-2 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
                     />
                   </div>
                   <div>
@@ -566,7 +566,7 @@ export default function AlertsPage() {
                       type="number"
                       value={form.window_minutes}
                       onChange={(e) => setForm((f) => ({ ...f, window_minutes: e.target.value }))}
-                      className="w-full px-2 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus:outline-none focus:border-[#22c55e]"
+                      className="w-full px-2 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
                     />
                   </div>
                 </div>
@@ -579,7 +579,7 @@ export default function AlertsPage() {
                       type="number"
                       value={form.cooldown_minutes}
                       onChange={(e) => setForm((f) => ({ ...f, cooldown_minutes: e.target.value }))}
-                      className="w-full px-2.5 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus:outline-none focus:border-[#22c55e]"
+                      className="w-full px-2.5 py-1.5 text-xs bg-[#0a0a0a] border border-[#262626] rounded-md text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]"
                     />
                   </div>
                   <div className="flex items-center gap-2 pb-0.5">
@@ -748,7 +748,7 @@ export default function AlertsPage() {
                   setHistoryPage(0);
                   setHistoryStatusFilter(e.target.value as AlertStatus | 'ALL');
                 }}
-                className="px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded-md text-[#a3a3a3] focus:outline-none focus:border-[#3f3f46]"
+                className="px-2 py-1 text-[11px] bg-[#0a0a0a] border border-[#262626] rounded-md text-[#a3a3a3] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#3f3f46]"
               >
                 <option value="ALL">All</option>
                 <option value="triggered">Triggered</option>

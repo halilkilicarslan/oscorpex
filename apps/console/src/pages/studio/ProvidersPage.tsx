@@ -25,6 +25,7 @@ export default function ProvidersPage() {
 	const [editingProvider, setEditingProvider] = useState<AIProvider | undefined>();
 	const [testStates, setTestStates] = useState<Record<string, TestState>>({});
 	const [testMessages, setTestMessages] = useState<Record<string, string>>({});
+	const [error, setError] = useState<string | null>(null);
 
 	const [fallbackChain, setFallbackChain] = useState<AIProvider[]>([]);
 	const [fallbackSaving, setFallbackSaving] = useState(false);
@@ -65,7 +66,7 @@ export default function ProvidersPage() {
 			await deleteProvider(id);
 			setProviders((prev) => prev.filter((p) => p.id !== id));
 		} catch (err) {
-			alert(err instanceof Error ? err.message : 'Failed to delete provider');
+			setError(err instanceof Error ? err.message : 'Failed to delete provider');
 		}
 	};
 
@@ -74,7 +75,7 @@ export default function ProvidersPage() {
 			await setDefaultProvider(id);
 			load();
 		} catch (err) {
-			alert(err instanceof Error ? err.message : 'Failed to set default provider');
+			setError(err instanceof Error ? err.message : 'Failed to set default provider');
 		}
 	};
 
@@ -83,7 +84,7 @@ export default function ProvidersPage() {
 			const updated = await updateProvider(provider.id, { isActive: !provider.isActive });
 			setProviders((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
 		} catch (err) {
-			alert(err instanceof Error ? err.message : 'Failed to update provider');
+			setError(err instanceof Error ? err.message : 'Failed to update provider');
 		}
 	};
 
@@ -110,7 +111,7 @@ export default function ProvidersPage() {
 			const updated = await updateFallbackOrder(newChain.map((p) => p.id));
 			setFallbackChain(updated);
 		} catch (err) {
-			alert(err instanceof Error ? err.message : 'Sirama guncellenemedi');
+			setError(err instanceof Error ? err.message : 'Sirama guncellenemedi');
 			load();
 		} finally {
 			setFallbackSaving(false);
@@ -127,7 +128,7 @@ export default function ProvidersPage() {
 			const updated = await updateFallbackOrder(newChain.map((p) => p.id));
 			setFallbackChain(updated);
 		} catch (err) {
-			alert(err instanceof Error ? err.message : 'Sirama guncellenemedi');
+			setError(err instanceof Error ? err.message : 'Sirama guncellenemedi');
 			load();
 		} finally {
 			setFallbackSaving(false);
@@ -146,6 +147,12 @@ export default function ProvidersPage() {
 
 	return (
 		<div className="p-6 max-w-5xl">
+			{error && (
+				<div role="alert" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+					<span>{error}</span>
+					<button onClick={() => setError(null)} className="ml-auto text-red-400/60 hover:text-red-400" aria-label="Dismiss error">×</button>
+				</div>
+			)}
 			<div className="flex items-center justify-between mb-6">
 				<div>
 					<h1 className="text-xl font-semibold text-[#fafafa]">AI Providers</h1>

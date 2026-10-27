@@ -242,7 +242,7 @@ function AddFeedbackForm({ agents, onSubmit, onCancel }: AddFeedbackFormProps) {
             <select
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-2 text-sm text-[#fafafa] focus:outline-none focus:border-[#22c55e]/50"
+              className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-2 text-sm text-[#fafafa] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50"
             >
               <option value="">All / Unknown</option>
               {agents.map((a) => (
@@ -338,7 +338,7 @@ function AddFeedbackForm({ agents, onSubmit, onCancel }: AddFeedbackFormProps) {
             onChange={(e) => setComment(e.target.value)}
             rows={3}
             placeholder="Optional feedback comment..."
-            className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50 resize-none"
+            className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50 resize-none"
           />
         </div>
 
@@ -371,7 +371,7 @@ function AddFeedbackForm({ agents, onSubmit, onCancel }: AddFeedbackFormProps) {
               value={traceId}
               onChange={(e) => setTraceId(e.target.value)}
               placeholder="trace-id..."
-              className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50 font-mono"
+              className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50 font-mono"
             />
           </div>
           <div>
@@ -380,7 +380,7 @@ function AddFeedbackForm({ agents, onSubmit, onCancel }: AddFeedbackFormProps) {
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               placeholder="anonymous"
-              className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50"
+              className="w-full bg-[#0a0a0a] border border-[#262626] rounded px-3 py-2 text-sm text-[#fafafa] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50"
             />
           </div>
         </div>
@@ -761,7 +761,7 @@ export default function FeedbacksPage() {
                 <select
                   value={filterAgent}
                   onChange={(e) => setFilterAgent(e.target.value)}
-                  className="appearance-none bg-[#111111] border border-[#262626] rounded px-3 py-2 text-sm text-[#a3a3a3] pr-8 focus:outline-none focus:border-[#22c55e]/50 cursor-pointer"
+                  className="appearance-none bg-[#111111] border border-[#262626] rounded px-3 py-2 text-sm text-[#a3a3a3] pr-8 focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50 cursor-pointer"
                 >
                   <option value="">All Agents</option>
                   {agents.map((a) => (
@@ -781,7 +781,7 @@ export default function FeedbacksPage() {
                 <select
                   value={filterRatingType}
                   onChange={(e) => setFilterRatingType(e.target.value)}
-                  className="appearance-none bg-[#111111] border border-[#262626] rounded px-3 py-2 text-sm text-[#a3a3a3] pr-8 focus:outline-none focus:border-[#22c55e]/50 cursor-pointer"
+                  className="appearance-none bg-[#111111] border border-[#262626] rounded px-3 py-2 text-sm text-[#a3a3a3] pr-8 focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50 cursor-pointer"
                 >
                   <option value="">All Types</option>
                   <option value="stars">Stars</option>
@@ -798,7 +798,7 @@ export default function FeedbacksPage() {
                 <select
                   value={filterMinRating}
                   onChange={(e) => setFilterMinRating(e.target.value)}
-                  className="appearance-none bg-[#111111] border border-[#262626] rounded px-3 py-2 text-sm text-[#a3a3a3] pr-8 focus:outline-none focus:border-[#22c55e]/50 cursor-pointer"
+                  className="appearance-none bg-[#111111] border border-[#262626] rounded px-3 py-2 text-sm text-[#a3a3a3] pr-8 focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50 cursor-pointer"
                 >
                   <option value="">Min Rating</option>
                   {[1, 2, 3, 4, 5].map((n) => (
@@ -818,7 +818,7 @@ export default function FeedbacksPage() {
                 <select
                   value={filterTag}
                   onChange={(e) => setFilterTag(e.target.value)}
-                  className="appearance-none bg-[#111111] border border-[#262626] rounded px-3 py-2 text-sm text-[#a3a3a3] pr-8 focus:outline-none focus:border-[#22c55e]/50 cursor-pointer"
+                  className="appearance-none bg-[#111111] border border-[#262626] rounded px-3 py-2 text-sm text-[#a3a3a3] pr-8 focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50 cursor-pointer"
                 >
                   <option value="">All Tags</option>
                   {AVAILABLE_TAGS.map((t) => (
@@ -838,7 +838,7 @@ export default function FeedbacksPage() {
                 value={filterSearch}
                 onChange={(e) => setFilterSearch(e.target.value)}
                 placeholder="Search comments..."
-                className="bg-[#111111] border border-[#262626] rounded px-3 py-2 text-sm text-[#a3a3a3] placeholder-[#525252] focus:outline-none focus:border-[#22c55e]/50 min-w-[180px]"
+                className="bg-[#111111] border border-[#262626] rounded px-3 py-2 text-sm text-[#a3a3a3] placeholder-[#525252] focus-visible:ring-2 focus-visible:ring-[#22c55e]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0a0a] focus:border-[#22c55e]/50 min-w-[180px]"
               />
 
               {(filterAgent || filterRatingType || filterMinRating || filterTag || filterSearch) && (
