@@ -17,7 +17,7 @@ jobs:
     # P2-5: PostgreSQL service for DB-backed tests
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: oscorpex
           POSTGRES_PASSWORD: oscorpex_dev
@@ -58,7 +58,7 @@ jobs:
         run: pnpm typecheck
 
       - name: Initialize test database
-        run: psql "$DATABASE_URL" -f apps/kernel/scripts/init.sql
+        run: psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f apps/kernel/scripts/init.sql
         env:
           PGPASSWORD: oscorpex_dev
 
