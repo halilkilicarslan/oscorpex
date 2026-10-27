@@ -12,8 +12,9 @@ fi
 # Only format JS/TS/JSON files that Biome handles
 case "$FILE_PATH" in
   *.ts|*.tsx|*.js|*.jsx|*.json|*.jsonc)
-    # Run biome format silently, don't fail the hook if biome errors
-    npx @biomejs/biome check --write --unsafe "$FILE_PATH" 2>/dev/null || true
+    # Run biome format silently, don't fail the hook if biome errors.
+    # No --unsafe: unsafe fixes change semantics (e.g. `x!.id` -> `x?.id`).
+    npx @biomejs/biome check --write "$FILE_PATH" 2>/dev/null || true
     ;;
 esac
 
