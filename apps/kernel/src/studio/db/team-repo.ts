@@ -21,6 +21,17 @@ export interface CustomTeamTemplate {
 	roles: string[];
 	dependencies: { from: string; to: string; type: string }[];
 	createdAt: string;
+	/** Owner tenant; undefined for legacy rows (visible to platform admins only). */
+	tenantId?: string;
+}
+
+/** Visibility of a custom team: platform admins see everything; others only their own tenant's teams. */
+export function isCustomTeamVisible(
+	team: Pick<CustomTeamTemplate, "tenantId">,
+	viewer: { tenantId?: string; isPlatformAdmin?: boolean },
+): boolean {
+	if (viewer.isPlatformAdmin === true) return true;
+	return team.tenantId !== undefined && viewer.tenantId !== undefined && team.tenantId === viewer.tenantId;
 }
 
 function rowToCustomTeamTemplate(row: any): CustomTeamTemplate {
@@ -31,6 +42,7 @@ function rowToCustomTeamTemplate(row: any): CustomTeamTemplate {
 		roles: JSON.parse(row.roles),
 		dependencies: JSON.parse(row.dependencies),
 		createdAt: row.created_at,
+		tenantId: row.tenant_id ?? undefined,
 	};
 }
 
@@ -58,8 +70,16 @@ export async function getTeamTemplate(id: string): Promise<TeamTemplate | undefi
 // Custom Team Templates
 // ---------------------------------------------------------------------------
 
-export async function listCustomTeamTemplates(): Promise<CustomTeamTemplate[]> {
-	const rows = await query<any>("SELECT * FROM custom_team_templates ORDER BY created_at DESC");
+/** Without `tenantId` every row is returned (platform admin / internal use); with it, only that tenant's teams. */
+export async function listCustomTeamTemplates(filter: { tenantId?: string } = {}): Promise<CustomTeamTemplate[]> {
+	const rows = filter.tenantId
+		? await query<Parameters<typeof rowToCustomTeamTemplate>[0]>(
+				"SELECT * FROM custom_team_templates WHERE tenant_id = $1 ORDER BY created_at DESC",
+				[filter.tenantId],
+			)
+		: await query<Parameters<typeof rowToCustomTeamTemplate>[0]>(
+				"SELECT * FROM custom_team_templates ORDER BY created_at DESC",
+			);
 	return rows.map(rowToCustomTeamTemplate);
 }
 

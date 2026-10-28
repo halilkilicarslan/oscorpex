@@ -15,26 +15,30 @@ const log = createLogger("agent-repo");
 // Agent Configs CRUD
 // ---------------------------------------------------------------------------
 
-export async function createAgentConfig(data: Omit<AgentConfig, "id">): Promise<AgentConfig> {
+export async function createAgentConfig(
+	data: Omit<AgentConfig, "id">,
+	createdBy?: string | null,
+): Promise<AgentConfig> {
 	const id = randomUUID();
 	const role = canonicalizeAgentRole(data.role);
 	await execute(
 		`
-    INSERT INTO agent_configs (id, name, role, avatar, gender, personality, model, cli_tool, skills, system_prompt, is_preset)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    INSERT INTO agent_configs (id, name, role, avatar, gender, personality, model, cli_tool, skills, system_prompt, is_preset, created_by)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
   `,
 		[
 			id,
 			data.name,
 			role,
-			data.avatar,
+			data.avatar ?? "",
 			data.gender ?? "male",
-			data.personality,
-			data.model,
-			data.cliTool,
-			JSON.stringify(data.skills),
-			data.systemPrompt,
+			data.personality ?? "",
+			data.model ?? "claude-sonnet-4-6",
+			data.cliTool ?? "claude-code",
+			JSON.stringify(data.skills ?? []),
+			data.systemPrompt ?? "",
 			data.isPreset ? 1 : 0,
+			createdBy ?? null,
 		],
 	);
 	return { id, ...data, role: role as AgentRole };
@@ -45,9 +49,65 @@ export async function getAgentConfig(id: string): Promise<AgentConfig | undefine
 	return row ? rowToAgentConfig(row) : undefined;
 }
 
+/** Creator of a config: undefined = no such config, null = preset/legacy row without a creator. */
+export async function getAgentConfigCreator(id: string): Promise<string | null | undefined> {
+	const row = await queryOne<{ created_by: string | null }>("SELECT created_by FROM agent_configs WHERE id = $1", [id]);
+	return row ? row.created_by : undefined;
+}
+
 export async function listAgentConfigs(): Promise<AgentConfig[]> {
 	const rows = await query<any>("SELECT * FROM agent_configs ORDER BY name");
 	return rows.map(rowToAgentConfig);
+}
+
+type AgentConfigRow = Parameters<typeof rowToAgentConfig>[0];
+
+/** Who is asking for agent configs (see {@link listVisibleAgentConfigs}). */
+export interface AgentConfigViewer {
+	tenantId?: string;
+	userId?: string;
+	isPlatformAdmin?: boolean;
+}
+
+/**
+ * Configs the viewer may see: presets, plus configs they own (tenant_id AND created_by). Platform admins see all.
+ * Legacy rows without a tenant are therefore admin-only.
+ */
+export async function listVisibleAgentConfigs(viewer: AgentConfigViewer): Promise<AgentConfig[]> {
+	if (viewer.isPlatformAdmin) return listAgentConfigs();
+	const rows = await query<AgentConfigRow>(
+		"SELECT * FROM agent_configs WHERE is_preset = 1 OR (tenant_id = $1 AND created_by = $2) ORDER BY name",
+		[viewer.tenantId ?? null, viewer.userId ?? null],
+	);
+	return rows.map(rowToAgentConfig);
+}
+
+/** Single-config variant of {@link listVisibleAgentConfigs}; undefined when missing OR not visible. */
+export async function getVisibleAgentConfig(id: string, viewer: AgentConfigViewer): Promise<AgentConfig | undefined> {
+	const row = viewer.isPlatformAdmin
+		? await queryOne<AgentConfigRow>("SELECT * FROM agent_configs WHERE id = $1", [id])
+		: await queryOne<AgentConfigRow>(
+				"SELECT * FROM agent_configs WHERE id = $1 AND (is_preset = 1 OR (tenant_id = $2 AND created_by = $3))",
+				[id, viewer.tenantId ?? null, viewer.userId ?? null],
+			);
+	return row ? rowToAgentConfig(row) : undefined;
+}
+
+/** Configs usable on behalf of a tenant (review fallback): presets and the tenant's own configs. */
+export async function listAgentConfigsForTenant(tenantId: string): Promise<AgentConfig[]> {
+	const rows = await query<AgentConfigRow>(
+		"SELECT * FROM agent_configs WHERE is_preset = 1 OR tenant_id = $1 ORDER BY name",
+		[tenantId],
+	);
+	return rows.map(rowToAgentConfig);
+}
+
+export async function getAgentConfigForTenant(id: string, tenantId: string): Promise<AgentConfig | undefined> {
+	const row = await queryOne<AgentConfigRow>(
+		"SELECT * FROM agent_configs WHERE id = $1 AND (is_preset = 1 OR tenant_id = $2)",
+		[id, tenantId],
+	);
+	return row ? rowToAgentConfig(row) : undefined;
 }
 
 export async function listPresetAgents(): Promise<AgentConfig[]> {

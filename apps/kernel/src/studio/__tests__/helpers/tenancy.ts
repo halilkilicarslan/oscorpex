@@ -3,7 +3,25 @@
 // ---------------------------------------------------------------------------
 
 import pg, { type PoolClient } from "pg";
-import { getPool } from "../../pg.js";
+
+let _testPool: pg.Pool | null = null;
+
+/** Test-only pool (the kernel no longer exports its pool). Closed by closeTestPool() in setup.ts. */
+export function getPool(): pg.Pool {
+	if (!_testPool) {
+		if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set");
+		_testPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
+	}
+	return _testPool;
+}
+
+export async function closeTestPool(): Promise<void> {
+	if (_testPool) {
+		const p = _testPool;
+		_testPool = null;
+		await p.end();
+	}
+}
 
 export const TENANT_LOCAL = "00000000-0000-0000-0000-000000000001";
 export const TENANT_A = "00000000-0000-0000-0000-00000000000a";

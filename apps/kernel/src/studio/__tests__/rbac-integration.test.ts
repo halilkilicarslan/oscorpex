@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { accessGuard } from "../auth/access-guard.js";
 import { signJwt } from "../auth/jwt.js";
 import { query } from "../pg.js";
@@ -9,6 +9,8 @@ import { approvalRoutes } from "../routes/approvals.js";
 import { artifactRoutes } from "../routes/artifacts.js";
 import { qualityGateRoutes } from "../routes/quality-gates.js";
 import { releaseRoutes } from "../routes/releases.js";
+import { seedUser } from "./helpers/identity.js";
+import { seedTestTenants } from "./helpers/tenancy.js";
 
 let dbReady = false;
 try {
@@ -43,6 +45,14 @@ function authHeaders(role: string, tenantId: string) {
 }
 
 describe.skipIf(!dbReady)("H2-I RBAC Integration", () => {
+	// Real users: a viewer (lacks release.override) and an admin, both in tenant-rbac.
+	beforeAll(async () => {
+		await seedTestTenants();
+		for (const role of ["viewer", "admin"]) {
+			await seedUser({ tenantId: "tenant-rbac", role, id: `user-${role}-tenant-rbac` });
+		}
+	});
+
 	beforeEach(() => {
 		process.env.OSCORPEX_AUTH_ENABLED = "true";
 	});

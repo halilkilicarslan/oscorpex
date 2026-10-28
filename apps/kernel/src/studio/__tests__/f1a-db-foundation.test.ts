@@ -9,10 +9,10 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import pg from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getPool, withTransaction } from "../pg.js";
+import { withTransaction } from "../pg.js";
 import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { runApplySchema } from "./helpers/apply-schema.js";
-import { roleExists, withAppRole, withMigrator } from "./helpers/tenancy.js";
+import { getPool, roleExists, withAppRole, withMigrator } from "./helpers/tenancy.js";
 
 const KERNEL_ROOT = process.cwd();
 const REPO_ROOT = resolve(KERNEL_ROOT, "..", "..");
@@ -43,18 +43,17 @@ describe("no hardcoded database credentials", () => {
 		vi.resetModules();
 	});
 
-	it("kernel pg.ts getPool() throws mentioning DATABASE_URL when it is unset", async () => {
+	it("kernel pg.ts query() rejects mentioning DATABASE_URL when it is unset", async () => {
 		Reflect.deleteProperty(process.env, "DATABASE_URL");
 		vi.resetModules();
 		const mod = await import("../pg.js");
-		expect(() => mod.getPool()).toThrow(/DATABASE_URL/);
+		await expect(mod.query("SELECT 1")).rejects.toThrow(/DATABASE_URL/);
 	});
 
-	it("control-plane pg.ts getPool() throws mentioning DATABASE_URL when it is unset", async () => {
-		Reflect.deleteProperty(process.env, "DATABASE_URL");
+	it("control-plane pg.ts query() rejects asking for initDb() when not initialised (no own pool)", async () => {
 		vi.resetModules();
 		const mod = await import("../../../../../packages/control-plane/src/pg.js");
-		expect(() => mod.getPool()).toThrow(/DATABASE_URL/);
+		await expect(mod.query("SELECT 1")).rejects.toThrow(/initDb/);
 	});
 
 	it("pg-listener start() rejects mentioning DATABASE_URL when it is unset", async () => {
@@ -389,7 +388,7 @@ describe("pg.withTransaction", () => {
 			}),
 			release,
 		};
-		const spy = vi.spyOn(getPool(), "connect").mockResolvedValue(fake as never);
+		const spy = vi.spyOn(pg.Pool.prototype, "connect").mockResolvedValue(fake as never);
 		try {
 			await expect(
 				withTransaction(async () => {

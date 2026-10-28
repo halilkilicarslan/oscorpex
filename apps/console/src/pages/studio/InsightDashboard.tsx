@@ -289,8 +289,6 @@ export default function InsightDashboard() {
 	const insights = generateInsights(data);
 	const topAgent = data.agentUsage[0];
 	const peakHour = data.hourlyPattern.reduce((max, h) => h.count > (max?.count || 0) ? h : max, data.hourlyPattern[0]);
-	const topProject = data.projectActivity[0];
-	const topFile = data.fileActivity[0];
 	const totalAgentTasks = data.agentUsage.reduce((a, b) => a + b.count, 0);
 
 	return (
@@ -468,66 +466,28 @@ export default function InsightDashboard() {
 				</div>
 			</div>
 
-			{/* Project Focus + Hot Files */}
+			{/* Platform volume (aggregate counts only — no per-project / per-file rows) */}
 			<div className="grid gap-3 lg:grid-cols-2">
-				{/* Project Focus */}
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
 					<div className="flex items-center gap-2 mb-3">
 						<FolderOpen size={14} className="text-[#22c55e]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Project Focus</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Projects &amp; Tasks</h3>
 					</div>
-					<div className="grid grid-cols-3 gap-4 mb-4">
+					<div className="grid grid-cols-3 gap-4">
 						<Mini label="Projects" value={t.totalProjects} />
-						<Mini label="Most Active" value={topProject?.projectName || "-"} color="text-[#22c55e]" />
-						<Mini label="Events" value={topProject?.events || 0} />
-					</div>
-					<div className="space-y-2.5 pt-2 border-t border-[#1a1a1a]">
-						{data.projectActivity.slice(0, 6).map((p, i) => {
-							const maxEv = data.projectActivity[0]?.events || 1;
-							const pct = Math.round((p.events / maxEv) * 100);
-							return (
-								<div key={i}>
-									<div className="flex justify-between text-[10px] mb-1">
-										<span className="font-medium text-[#e4e4e7] truncate max-w-[160px]">{p.projectName}</span>
-										<span className="text-[#737373] tabular-nums">{p.activeDays}g · {p.events}e</span>
-									</div>
-									<div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
-										<div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: COLORS[i % COLORS.length] }} />
-									</div>
-								</div>
-							);
-						})}
+						<Mini label="Tasks" value={t.totalTasks} />
+						<Mini label="Active Days" value={t.activeDays} />
 					</div>
 				</div>
-
-				{/* Hot Files */}
 				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
 					<div className="flex items-center gap-2 mb-3">
 						<FileCode size={14} className="text-[#f59e0b]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Hot Files</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Events &amp; Errors</h3>
 					</div>
-					<div className="grid grid-cols-3 gap-4 mb-4">
-						<Mini label="Files" value={data.fileActivity.length} />
-						<Mini label="Top File" value={topFile?.file?.split("/").pop() || "-"} color="text-[#f59e0b]" />
-						<Mini label="Hits" value={topFile?.count || 0} />
-					</div>
-					<div className="space-y-1 pt-2 border-t border-[#1a1a1a]">
-						{data.fileActivity.slice(0, 10).map((f, i) => {
-							const parts = f.file?.split("/") || [];
-							const name = parts.pop() || f.file;
-							const dir = parts.slice(-2).join("/");
-							return (
-								<div key={i} className="flex items-center gap-2 py-0.5">
-									<span className="text-[9px] px-1.5 py-0.5 rounded border border-[#262626] bg-[#0a0a0a] text-[#a3a3a3] tabular-nums min-w-[24px] text-center">{f.count}</span>
-									<span className="text-[10px] font-mono text-[#e4e4e7] truncate">
-										{dir && <span className="text-[#525252]">{dir}/</span>}{name}
-									</span>
-								</div>
-							);
-						})}
-						{data.fileActivity.length === 0 && (
-							<p className="text-[10px] text-[#525252] text-center py-6">No file data yet</p>
-						)}
+					<div className="grid grid-cols-3 gap-4">
+						<Mini label="Events" value={t.totalEvents} />
+						<Mini label="Errors" value={t.totalErrors} color="text-[#f59e0b]" />
+						<Mini label="Error Rate" value={`${t.errorRate}%`} />
 					</div>
 				</div>
 			</div>

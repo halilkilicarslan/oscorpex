@@ -24,11 +24,28 @@ export const PUBLIC_ROUTES: Array<string | RegExp> = [
  *  If it does NOT match any pattern (public or protected), it defaults to DENY.
  */
 export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
+	// Platform-admin writes (global/system tables). Must stay first: first match wins.
+	{ pattern: /^\/providers(\/.*)?$/, permission: "platform:admin", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: /^\/plugins(\/.*)?$/, permission: "platform:admin", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: /^\/actions(\/.*)?$/, permission: "platform:admin", methods: ["POST"] },
+	{ pattern: /^\/registry(\/.*)?$/, permission: "platform:admin", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: /^\/provider-ops(\/.*)?$/, permission: "platform:admin", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{
+		pattern: /^\/cli-usage\/providers\/[^/]+\/settings$/,
+		permission: "platform:admin",
+		methods: ["POST", "PUT", "PATCH", "DELETE"],
+	},
+	{ pattern: /^\/team-templates(\/.*)?$/, permission: "platform:admin", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: /^\/agent-strategies(\/.*)?$/, permission: "platform:admin", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/platform/stats", permission: "platform:admin", methods: ["GET"] },
+	{ pattern: "/platform/analytics", permission: "platform:admin", methods: ["GET"] },
+
 	// Auth & User management
 	{ pattern: "/auth/me", permission: null },
 	{ pattern: "/auth/users", permission: "users:read" },
 	{ pattern: "/auth/users/", permission: "users:write" },
-	{ pattern: "/auth/api-keys", permission: "settings:read", methods: ["GET", "POST"] },
+	{ pattern: "/auth/api-keys", permission: "settings:read", methods: ["GET"] },
+	{ pattern: "/auth/api-keys", permission: "settings:write", methods: ["POST"] },
 	{ pattern: "/auth/api-keys/", permission: "settings:write", methods: ["DELETE"] },
 
 	// Projects
@@ -359,8 +376,6 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: "/scheduler/soak", permission: "projects:update", methods: ["POST"] },
 
 	// Platform-wide endpoints
-	{ pattern: "/platform/stats", permission: "projects:read", methods: ["GET"] },
-	{ pattern: "/platform/analytics", permission: "projects:read", methods: ["GET"] },
 	{ pattern: "/avatars", permission: "projects:read", methods: ["GET"] },
 
 	// Quality Gates Center — H2-G
@@ -411,10 +426,18 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: "/presence/", permission: "control-plane:read", methods: ["GET"] },
 	{ pattern: "/presence", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/presence/", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
-	{ pattern: "/approvals", permission: "control-plane:read", methods: ["GET"] },
-	{ pattern: "/approvals/", permission: "control-plane:read", methods: ["GET"] },
-	{ pattern: "/approvals", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
-	{ pattern: "/approvals/", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },
+	{ pattern: "/control-plane/approvals", permission: "control-plane:read", methods: ["GET"] },
+	{ pattern: "/control-plane/approvals/", permission: "control-plane:read", methods: ["GET"] },
+	{
+		pattern: "/control-plane/approvals",
+		permission: "control-plane:operate",
+		methods: ["POST", "PUT", "PATCH", "DELETE"],
+	},
+	{
+		pattern: "/control-plane/approvals/",
+		permission: "control-plane:operate",
+		methods: ["POST", "PUT", "PATCH", "DELETE"],
+	},
 	{ pattern: "/audit", permission: "audit:read", methods: ["GET"] },
 	{ pattern: "/audit/", permission: "audit:read", methods: ["GET"] },
 	{ pattern: "/audit", permission: "control-plane:operate", methods: ["POST", "PUT", "PATCH", "DELETE"] },

@@ -5,6 +5,17 @@
 import { execute, query, queryOne } from "../pg.js";
 import { randomUUID } from "node:crypto";
 
+/** Visibility scope: tenant's project-bound approvals; project-less ones (project_id NULL) only when includeProjectless. */
+export interface ApprovalScope {
+	tenantId: string;
+	includeProjectless?: boolean;
+}
+
+function scopeClause(scope: ApprovalScope, param: string): string {
+	const bound = `project_id IN (SELECT id FROM projects WHERE tenant_id = ${param})`;
+	return scope.includeProjectless ? `(${bound} OR project_id IS NULL)` : bound;
+}
+
 export interface ApprovalRow {
 	id: string;
 	project_id: string | null;
@@ -52,19 +63,34 @@ export async function createApproval(data: {
 	return row;
 }
 
-export async function getApproval(id: string): Promise<ApprovalRow | undefined> {
-	return queryOne<ApprovalRow>("SELECT * FROM approvals WHERE id = $1", [id]) ?? undefined;
+/** Optional tenantId restricts the lookup to approvals of that tenant's projects (approvals without a project are not visible). */
+export async function getApproval(id: string, scope?: ApprovalScope): Promise<ApprovalRow | undefined> {
+	if (scope) {
+		return queryOne<ApprovalRow>(`SELECT * FROM approvals WHERE id = $1 AND ${scopeClause(scope, "$2")}`, [
+			id,
+			scope.tenantId,
+		]);
+	}
+	return queryOne<ApprovalRow>("SELECT * FROM approvals WHERE id = $1", [id]);
 }
 
 export async function listPendingApprovals(): Promise<ApprovalRow[]> {
 	return query<ApprovalRow>("SELECT * FROM approvals WHERE status = 'pending' ORDER BY created_at DESC");
 }
 
-export async function listApprovals(status?: string): Promise<ApprovalRow[]> {
+export async function listApprovals(status?: string, scope?: ApprovalScope): Promise<ApprovalRow[]> {
+	const where: string[] = [];
+	const params: unknown[] = [];
 	if (status) {
-		return query<ApprovalRow>("SELECT * FROM approvals WHERE status = $1 ORDER BY created_at DESC", [status]);
+		params.push(status);
+		where.push(`status = $${params.length}`);
 	}
-	return query<ApprovalRow>("SELECT * FROM approvals ORDER BY created_at DESC");
+	if (scope) {
+		params.push(scope.tenantId);
+		where.push(scopeClause(scope, `$${params.length}`));
+	}
+	const clause = where.length ? ` WHERE ${where.join(" AND ")}` : "";
+	return query<ApprovalRow>(`SELECT * FROM approvals${clause} ORDER BY created_at DESC`, params);
 }
 
 export async function approveApproval(id: string, actor: string): Promise<ApprovalRow | undefined> {
@@ -111,6 +137,12 @@ export async function listApprovalEvents(approvalId: string): Promise<ApprovalEv
 	]);
 }
 
-export async function listExpiredApprovals(): Promise<ApprovalRow[]> {
+export async function listExpiredApprovals(scope?: ApprovalScope): Promise<ApprovalRow[]> {
+	if (scope) {
+		return query<ApprovalRow>(
+			`SELECT * FROM approvals WHERE status = 'pending' AND expires_at <= now() AND ${scopeClause(scope, "$1")}`,
+			[scope.tenantId],
+		);
+	}
 	return query<ApprovalRow>("SELECT * FROM approvals WHERE status = 'pending' AND expires_at <= now()");
 }

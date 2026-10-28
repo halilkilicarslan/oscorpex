@@ -12,8 +12,13 @@ describe("P1-6: Zod validation schemas", () => {
 		expect(result.success).toBe(true);
 	});
 
-	it("rejects isPreset in agent creation", () => {
+	it("accepts isPreset in agent creation (authorization is enforced by the route: platform admin only)", () => {
 		const result = parseBody(CreateAgentSchema, { name: "test", role: "dev", isPreset: true });
+		expect(result.success).toBe(true);
+	});
+
+	it("still rejects other unknown fields in agent creation (strict mode)", () => {
+		const result = parseBody(CreateAgentSchema, { name: "test", role: "dev", tenant_id: "evil" });
 		expect(result.success).toBe(false);
 	});
 

@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "admin:grant": "tsx scripts/admin-grant.ts grant",
+    "admin:revoke": "tsx scripts/admin-grant.ts revoke"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.67",

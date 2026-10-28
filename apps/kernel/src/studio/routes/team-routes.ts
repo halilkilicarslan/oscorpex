@@ -2,8 +2,10 @@
 // Team Routes — Team Templates, Custom Teams, Project Team (project_agents)
 // ---------------------------------------------------------------------------
 
-import { resolve } from "node:path";
-import { Hono } from "hono";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import {
 	createAgentFiles,
@@ -14,17 +16,19 @@ import {
 	writeAgentFile,
 } from "../agent-files.js";
 import { hasPermission } from "../auth/rbac.js";
+import { callerTenantId, callerUserId, isPlatformAdminRequest } from "../auth/request-identity.js";
 import {
 	copyAgentsToProject,
 	createCustomTeamTemplate,
 	createProjectAgent,
 	deleteCustomTeamTemplate,
 	deleteProjectAgent,
-	getAgentConfig,
 	getCustomTeamTemplate,
 	getProject,
 	getProjectAgent,
 	getTeamTemplate,
+	getVisibleAgentConfig,
+	isCustomTeamVisible,
 	listCustomTeamTemplates,
 	listPresetAgents,
 	listProjectAgents,
@@ -53,13 +57,22 @@ teamRoutes.get("/team-templates", async (c) => {
 
 // ---- Custom Team Templates (user-created) ---------------------------------
 
+/** Custom teams are tenant-owned: the caller's own tenant's teams, or everything for platform admins. */
+const customTeamViewer = (c: Context) => ({
+	tenantId: callerTenantId(c),
+	isPlatformAdmin: isPlatformAdminRequest(c),
+});
+
 teamRoutes.get("/custom-teams", async (c) => {
-	return c.json(await listCustomTeamTemplates());
+	const viewer = customTeamViewer(c);
+	if (viewer.isPlatformAdmin) return c.json(await listCustomTeamTemplates());
+	if (!viewer.tenantId) return c.json([]);
+	return c.json(await listCustomTeamTemplates({ tenantId: viewer.tenantId }));
 });
 
 teamRoutes.get("/custom-teams/:id", async (c) => {
 	const template = await getCustomTeamTemplate(c.req.param("id"));
-	if (!template) return c.json({ error: "Not found" }, 404);
+	if (!template || !isCustomTeamVisible(template, customTeamViewer(c))) return c.json({ error: "Not found" }, 404);
 	return c.json(template);
 });
 
@@ -71,12 +84,16 @@ teamRoutes.post("/custom-teams", async (c) => {
 
 teamRoutes.put("/custom-teams/:id", async (c) => {
 	const body = await c.req.json();
+	const current = await getCustomTeamTemplate(c.req.param("id"));
+	if (!current || !isCustomTeamVisible(current, customTeamViewer(c))) return c.json({ error: "Not found" }, 404);
 	const template = await updateCustomTeamTemplate(c.req.param("id"), body);
 	if (!template) return c.json({ error: "Not found" }, 404);
 	return c.json(template);
 });
 
 teamRoutes.delete("/custom-teams/:id", async (c) => {
+	const current = await getCustomTeamTemplate(c.req.param("id"));
+	if (!current || !isCustomTeamVisible(current, customTeamViewer(c))) return c.json({ error: "Not found" }, 404);
 	const ok = await deleteCustomTeamTemplate(c.req.param("id"));
 	if (!ok) return c.json({ error: "Not found" }, 404);
 	return c.json({ success: true });
@@ -84,12 +101,11 @@ teamRoutes.delete("/custom-teams/:id", async (c) => {
 
 teamRoutes.post("/team-architect/chat", async (c) => {
 	const plannerProviders = await listPlannerCLIProviders();
-	const availableProviders = plannerProviders.filter((provider) => provider.available);
+	// Fail-closed: the architect prompt carries tenant data, so only a provider that can run with every tool
+	// disabled (Claude CLI) is eligible. Codex/Gemini can still read files and are never spawned here.
+	const availableProviders = plannerProviders.filter((provider) => provider.available && provider.id === "claude-code");
 	if (availableProviders.length === 0) {
-		return c.json(
-			{ error: "No supported planner CLI is available. Install Claude CLI, Codex CLI, or Gemini CLI." },
-			503,
-		);
+		return c.json({ error: "Claude CLI is required for the team architect but is not available." }, 503);
 	}
 
 	const body = (await c.req.json()) as {
@@ -119,7 +135,9 @@ teamRoutes.post("/team-architect/chat", async (c) => {
 
 	const intake = body.intake ?? {};
 	const teamTemplates = await listTeamTemplates();
-	const customTeams = await listCustomTeamTemplates();
+	// Only the caller's tenant's custom teams may enter the prompt (platform admins: their own tenant's too).
+	const callerTenant = callerTenantId(c);
+	const customTeams = callerTenant ? await listCustomTeamTemplates({ tenantId: callerTenant }) : [];
 	const presetAgents = await listPresetAgents();
 	const allowedRoles = Array.from(
 		new Set([
@@ -170,18 +188,22 @@ ${teamCatalog}
 [Allowed Roles]
 ${allowedRoles.join(", ")}`;
 
+	// The planner CLI gets a fresh, empty directory outside the repo — never the kernel's working tree.
+	// Created before the stream starts so the CLI is spawned synchronously inside streamSSE.
+	const sandboxDir = await mkdtemp(join(tmpdir(), "oscorpex-team-architect-"));
 	return streamSSE(c, async (stream) => {
 		try {
 			await new Promise<void>((resolveStream, rejectStream) => {
 				const cancel = streamPlannerWithCLI(
 					{
-						repoPath: resolve("."),
+						repoPath: sandboxDir,
 						prompt,
 						systemPrompt: TEAM_ARCHITECT_SYSTEM_PROMPT,
 						provider: selectedProvider,
 						model: selectedModel,
 						effort: selectedEffort,
 						timeoutMs: 120_000,
+						textOnly: true,
 					},
 					{
 						onTextDelta: (text) => {
@@ -210,6 +232,10 @@ ${allowedRoles.join(", ")}`;
 				event: "error",
 				data: JSON.stringify({ error: errorMsg }),
 			});
+		} finally {
+			await rm(sandboxDir, { recursive: true, force: true }).catch((err) =>
+				log.warn({ err }, "failed to remove team-architect sandbox dir"),
+			);
 		}
 	});
 });
@@ -243,7 +269,11 @@ teamRoutes.post("/projects/:id/team", async (c) => {
 	};
 
 	if (body.sourceAgentId) {
-		const preset = await getAgentConfig(body.sourceAgentId);
+		const preset = await getVisibleAgentConfig(body.sourceAgentId, {
+			tenantId: callerTenantId(c),
+			userId: callerUserId(c),
+			isPlatformAdmin: isPlatformAdminRequest(c),
+		});
 		if (!preset) return c.json({ error: "Source agent not found" }, 404);
 		const agent = await createProjectAgent({
 			projectId,
@@ -328,6 +358,9 @@ teamRoutes.post("/projects/:id/team/apply", async (c) => {
 		const templateId = body.teamTemplateId?.trim() ?? "";
 		const presetTemplate = await getTeamTemplate(templateId);
 		const customTemplate = !presetTemplate ? await getCustomTeamTemplate(templateId) : null;
+		if (customTemplate && !isCustomTeamVisible(customTemplate, customTeamViewer(c))) {
+			return c.json({ error: "Template not found" }, 404);
+		}
 		const selected = presetTemplate ?? customTemplate;
 		if (!selected) return c.json({ error: "Template not found" }, 404);
 		roles = selected.roles;

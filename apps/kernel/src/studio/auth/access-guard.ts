@@ -6,11 +6,18 @@
 
 import type { Context, Next } from "hono";
 import { createLogger } from "../logger.js";
-import { authMiddleware } from "./auth-middleware.js";
+import { enterRequestTenant, runAsSystemAtBoundary, runWithoutScopeAtBoundary } from "../tenancy/tenant-scope.js";
+import { LOCAL_TENANT_ID, authMiddleware } from "./auth-middleware.js";
 import { getRoutePermission, isKnownRoute, isPublicRoute } from "./route-permissions.js";
 import { requireTenantContext } from "./tenant-context.js";
 
 const log = createLogger("access-guard");
+
+/** Tenant of the authenticated request; the dev bypass (authType "none") always maps to the local tenant. */
+function resolveRequestTenant(c: Context): string | null | undefined {
+	if (c.get("authType") === "none") return LOCAL_TENANT_ID;
+	return c.get("tenantId") as string | null | undefined;
+}
 
 /**
  * Unified access guard middleware.
@@ -34,7 +41,8 @@ export async function accessGuard(c: Context, next: Next): Promise<void | Respon
 
 	// 1. Public routes — no auth required
 	if (isPublicRoute(path)) {
-		return next();
+		// Public routes never touch tenant data: run outside any scope (also drops an inherited implicit test scope).
+		return runWithoutScopeAtBoundary(async () => next());
 	}
 
 	// 2. Default deny — unknown routes are rejected
@@ -75,7 +83,41 @@ export async function accessGuard(c: Context, next: Next): Promise<void | Respon
 		);
 	}
 
-	return next();
+	// 7. Run the downstream handler inside the request's tenant scope (RLS: app.current_tenant_id)
+	const tenantId = resolveRequestTenant(c);
+	if (!tenantId) {
+		log.warn(`[access-guard] No tenant after authentication: ${method} ${originalPath}`);
+		return c.json({ error: "Forbidden — tenant context required" }, 403);
+	}
+	// Platform-wide aggregate endpoints read cross-tenant data through sys_* functions: system scope.
+	// Only for /platform/* — other platform:admin routes (providers, plugins, …) keep the caller's tenant scope.
+	if (routePermission === "platform:admin" && path.startsWith("/platform/")) {
+		return runAsSystemAtBoundary("platform-admin", next);
+	}
+	return enterRequestTenant(tenantId, next);
+}
+
+/**
+ * Guard for the observability router (mounted outside the studio router).
+ * Until observability tables are tenant-scoped (F5-6) the whole router is platform-admin only.
+ * Authenticates, requires users.is_platform_admin and runs the handler in the caller's tenant scope.
+ * CORS preflight is answered by the cors middleware registered before this guard.
+ */
+// biome-ignore lint/suspicious/noConfusingVoidType: Hono middleware contract (Next resolves to void)
+export async function observabilityGuard(c: Context, next: Next): Promise<void | Response> {
+	const authResult = await authMiddleware(c, async () => {});
+	if (authResult) return authResult;
+
+	const tenantError = requireTenantContext(c);
+	if (tenantError) return tenantError;
+
+	const { requirePermission: rbacRequire } = await import("./rbac.js");
+	const rbacResult = await rbacRequire("platform:admin")(c, async () => {});
+	if (rbacResult) return rbacResult;
+
+	const tenantId = resolveRequestTenant(c);
+	if (!tenantId) return c.json({ error: "Forbidden — tenant context required" }, 403);
+	return enterRequestTenant(tenantId, next);
 }
 
 /** Factory: create a guard scoped to a specific permission */

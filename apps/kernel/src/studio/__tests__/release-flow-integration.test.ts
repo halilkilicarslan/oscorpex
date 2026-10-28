@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { ApprovalService } from "../approval-service.js";
 import { artifactReferenceService } from "../artifact-reference-service.js";
 import { execute, query, queryOne } from "../pg.js";
 import { QualityGateService } from "../quality-gate-service.js";
 import { NonOverridableGateError, ReleaseDecisionService } from "../release-decision-service.js";
+import { TENANT_LOCAL } from "./helpers/tenancy.js";
 
 let dbReady = false;
 try {
@@ -24,15 +25,10 @@ const releaseService = new ReleaseDecisionService();
 async function createGoal() {
 	counter += 1;
 	const suffix = `${prefix}-${counter}`;
-	const tenantId = `tenant-${suffix}`;
+	const tenantId = TENANT_LOCAL;
 	const projectId = `project-${suffix}`;
 	const goalId = `goal-${suffix}`;
 
-	await execute("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)", [
-		tenantId,
-		`Tenant ${suffix}`,
-		`tenant-${suffix}`,
-	]);
 	await execute(
 		"INSERT INTO projects (id, name, description, status, tech_stack, repo_path, tenant_id, created_at, updated_at) VALUES ($1, $2, '', 'planning', '[]', '', $3, now(), now())",
 		[projectId, `Project ${suffix}`, tenantId],
@@ -86,6 +82,13 @@ async function baselineReady(goalId: string, tenantId: string) {
 }
 
 describe.skipIf(!dbReady)("H2-I Release Flow Integration", () => {
+	afterAll(async () => {
+		// Tenant is shared across runs: remove rows created by this run so data does not accumulate.
+		await execute("DELETE FROM artifact_references WHERE goal_id LIKE $1", [`goal-${prefix}%`]);
+		await execute("DELETE FROM events WHERE project_id LIKE $1", [`project-${prefix}%`]);
+		await execute("DELETE FROM projects WHERE id LIKE $1", [`project-${prefix}%`]);
+	});
+
 	beforeEach(async () => {
 		process.env.OSCORPEX_AUTH_ENABLED = "true";
 	});
@@ -196,6 +199,9 @@ describe.skipIf(!dbReady)("H2-I Release Flow Integration", () => {
 			title: "security scan output",
 			environment: "production",
 			createdBy: "release-flow-int",
+			// unique digest: the tenant is shared across runs, so fixed content would collide
+			uri: `artifact://rel-flow-int/${randomUUID()}`,
+			checksum: randomUUID(),
 		});
 		await artifactReferenceService.rejectArtifact({
 			artifactId: reg.id,

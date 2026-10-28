@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { createLogger } from "./logger.js";
-import { getPool } from "./pg.js";
+import { getPoolStats } from "./pg.js";
 const log = createLogger("db-pool-metrics");
 
 // ---------------------------------------------------------------------------
@@ -38,19 +38,20 @@ export interface DbPoolSnapshot {
  */
 export function getDbPoolSnapshot(): DbPoolSnapshot {
 	try {
-		const pool = getPool();
-		const total = pool.totalCount ?? 0;
-		const idle = pool.idleCount ?? 0;
-		const waiting = pool.waitingCount ?? 0;
+		const pool = getPoolStats();
+		if (!pool) throw new Error("Pool not initialized");
+		const total = pool.totalCount;
+		const idle = pool.idleCount;
+		const waiting = pool.waitingCount;
 
 		return {
 			total,
 			idle,
 			waiting,
 			active: total - idle,
-			max: pool.options.max ?? 20,
-			connectionTimeoutMs: pool.options.connectionTimeoutMillis ?? 5_000,
-			idleTimeoutMs: pool.options.idleTimeoutMillis ?? 30_000,
+			max: pool.max,
+			connectionTimeoutMs: pool.connectionTimeoutMillis,
+			idleTimeoutMs: pool.idleTimeoutMillis,
 		};
 	} catch {
 		// Pool not initialized yet

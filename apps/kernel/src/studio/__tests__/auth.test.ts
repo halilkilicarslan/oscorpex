@@ -19,7 +19,6 @@ vi.mock("../pg.js", () => ({
 		};
 		return cb(fakeClient);
 	}),
-	setTenantContext: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { execute, queryOne } from "../pg.js";
@@ -151,11 +150,16 @@ describe("authMiddleware", () => {
 		await authMiddleware(c as never, next);
 		expect(next).toHaveBeenCalled();
 		expect(c._store.authType).toBe("api-key");
+		// F2b: legacy env key maps to the local tenant
+		expect(c._store.tenantId).toBe("00000000-0000-0000-0000-000000000001");
 	});
 
 	it("valid JWT — sets userId/tenantId/role and calls next()", async () => {
 		process.env.OSCORPEX_API_KEY = undefined as unknown as string;
 		const token = signJwt({ sub: "u-1", email: "a@b.com", tenantId: "t-1", role: "admin" });
+		// Identity is verified against the DB (sys_identity_lookup): the user exists and holds the admin role.
+		mockQueryOne.mockImplementation((async (sql: string) =>
+			/sys_identity_lookup/i.test(sql) ? { role: "admin", is_platform_admin: false } : undefined) as never);
 		const c = makeMockContext({ authHeader: `Bearer ${token}` });
 		const next = vi.fn().mockResolvedValue(undefined);
 		await authMiddleware(c as never, next);
@@ -166,13 +170,29 @@ describe("authMiddleware", () => {
 		expect(c._store.authType).toBe("jwt");
 	});
 
-	it("no API_KEY env + no token — next() (backward compat)", async () => {
-		delete process.env.OSCORPEX_API_KEY;
+	it("no API_KEY env + no token + no DEV_NO_AUTH — returns 401 (no implicit bypass)", async () => {
+		Reflect.deleteProperty(process.env, "OSCORPEX_API_KEY");
+		Reflect.deleteProperty(process.env, "OSCORPEX_DEV_NO_AUTH");
 		const c = makeMockContext({});
 		const next = vi.fn().mockResolvedValue(undefined);
-		await authMiddleware(c as never, next);
-		expect(next).toHaveBeenCalled();
-		expect(c._store.authType).toBe("none");
+		const result = await authMiddleware(c as never, next);
+		expect(next).not.toHaveBeenCalled();
+		expect((result as { status: number })?.status).toBe(401);
+	});
+
+	it("no API_KEY env + no token + OSCORPEX_DEV_NO_AUTH=true — dev tenant, authType none", async () => {
+		Reflect.deleteProperty(process.env, "OSCORPEX_API_KEY");
+		process.env.OSCORPEX_DEV_NO_AUTH = "true";
+		try {
+			const c = makeMockContext({});
+			const next = vi.fn().mockResolvedValue(undefined);
+			await authMiddleware(c as never, next);
+			expect(next).toHaveBeenCalled();
+			expect(c._store.authType).toBe("none");
+			expect(c._store.tenantId).toBe("00000000-0000-0000-0000-000000000001");
+		} finally {
+			Reflect.deleteProperty(process.env, "OSCORPEX_DEV_NO_AUTH");
+		}
 	});
 
 	it("API_KEY set + no token — returns 401", async () => {
@@ -273,13 +293,16 @@ describe("Auth routes", () => {
 		// We need userId in context — use a JWT
 		const token = signJwt({ sub: "u-1", email: "user@example.com", tenantId: "t-1", role: "owner" });
 
-		mockQueryOne.mockResolvedValueOnce({
-			id: "u-1",
-			email: "user@example.com",
-			display_name: "Alice",
-			tenant_id: "t-1",
-		});
-		mockQueryOne.mockResolvedValueOnce({ role: "owner" });
+		// Mock by SQL text (not call order): authMiddleware also looks up users.is_platform_admin.
+		mockQueryOne.mockImplementation((async (sql: string) => {
+			if (/sys_identity_lookup/i.test(sql)) return { role: "owner", is_platform_admin: false };
+			if (/is_platform_admin/i.test(sql)) return { is_platform_admin: false };
+			if (/FROM\s+users/i.test(sql)) {
+				return { id: "u-1", email: "user@example.com", display_name: "Alice", tenant_id: "t-1" };
+			}
+			if (/user_roles/i.test(sql)) return { role: "owner" };
+			return undefined;
+		}) as never);
 
 		// The /me handler reads userId from context (set by authMiddleware).
 		// Since we're calling the route directly without middleware, we need to

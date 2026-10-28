@@ -8,7 +8,8 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { getPool } from "../pg.js";
+import { getPool } from "./helpers/tenancy.js";
+
 import {
 	RLS_ENFORCED_PHASES,
 	TABLE_CLASSIFICATION,

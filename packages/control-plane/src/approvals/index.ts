@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 export type { ApprovalStatus, ApprovalKind } from "./service.js";
+export type { ApprovalScope } from "./repo.js";
 export type { ApprovalRow as ApprovalRequest } from "./repo.js";
 export type { ApprovalEventRow as ApprovalEvent } from "./repo.js";
 export {

@@ -1,44 +1,43 @@
 // ---------------------------------------------------------------------------
-// @oscorpex/control-plane — PostgreSQL helpers
-// Re-exports to keep package self-contained. Pool init via env var.
+// @oscorpex/control-plane — database bridge
+// The kernel injects its tenant-aware helpers at boot via initDb(); the package
+// never owns a pool. Every query therefore runs through the kernel's tenant
+// scope handling (AsyncLocalStorage → app.current_tenant_id).
 // ---------------------------------------------------------------------------
 
-import pg from "pg";
+import type { PoolClient } from "pg";
 
-const { Pool } = pg;
-
-let _pool: pg.Pool | null = null;
-
-/** Inject an external pool to share connections with the kernel — avoids dual pool overhead */
-export function initPool(pool: pg.Pool): void {
-	_pool = pool;
+export interface ControlPlaneDb {
+	query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
+	queryOne<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T | undefined>;
+	execute(sql: string, params?: unknown[]): Promise<{ rowCount: number }>;
+	withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T>;
 }
 
-export function getPool(): pg.Pool {
-	if (!_pool) {
-		const connectionString = process.env.DATABASE_URL;
-		if (!connectionString) throw new Error("DATABASE_URL is not set");
-		_pool = new Pool({
-			connectionString,
-			max: 20,
-			idleTimeoutMillis: 30_000,
-			connectionTimeoutMillis: 5_000,
-		});
-	}
-	return _pool;
+let _db: ControlPlaneDb | null = null;
+
+/** Inject the kernel's DB helpers. Must be called once at boot before any control-plane query. */
+export function initDb(db: ControlPlaneDb): void {
+	_db = db;
+}
+
+function db(): ControlPlaneDb {
+	if (!_db) throw new Error("@oscorpex/control-plane: initDb() must be called before using the database");
+	return _db;
 }
 
 export async function query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]> {
-	const result = await getPool().query(sql, params);
-	return result.rows as T[];
+	return db().query<T>(sql, params);
 }
 
 export async function queryOne<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T | undefined> {
-	const result = await getPool().query(sql, params);
-	return result.rows[0] as T | undefined;
+	return db().queryOne<T>(sql, params);
 }
 
 export async function execute(sql: string, params?: unknown[]): Promise<{ rowCount: number }> {
-	const result = await getPool().query(sql, params);
-	return { rowCount: result.rowCount ?? 0 };
+	return db().execute(sql, params);
+}
+
+export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+	return db().withTransaction(fn);
 }

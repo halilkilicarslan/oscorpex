@@ -16,6 +16,9 @@ export interface SkillSuggestion {
 	reason: string;
 }
 
+/** Required on purpose: callers must say which skills the requester may see (no unfiltered listing). */
+export type SkillVisibilityFilter = (skill: Skill) => boolean;
+
 /**
  * Analyzes a project and its agents, returns skill suggestions.
  * Matches skills based on:
@@ -23,9 +26,13 @@ export interface SkillSuggestion {
  * 2. Project description keywords → skill triggers
  * 3. Agent role → skill applicableRoles
  */
-export async function detectSkillsForProject(project: Project, agents: ProjectAgent[]): Promise<SkillSuggestion[]> {
+export async function detectSkillsForProject(
+	project: Project,
+	agents: ProjectAgent[],
+	isVisible: SkillVisibilityFilter,
+): Promise<SkillSuggestion[]> {
 	const { listSkills } = await import("./db.js");
-	const allSkills = await listSkills({});
+	const allSkills = (await listSkills({})).filter(isVisible);
 
 	if (allSkills.length === 0 || agents.length === 0) return [];
 
@@ -93,11 +100,12 @@ export async function detectSkillsForProject(project: Project, agents: ProjectAg
 export async function autoAssignDetectedSkills(
 	project: Project,
 	agents: ProjectAgent[],
-	minConfidence = 0.5,
+	minConfidence: number,
+	isVisible: SkillVisibilityFilter,
 ): Promise<{ assigned: number; suggestions: SkillSuggestion[] }> {
 	const { assignSkillToAgent, getAgentSkills } = await import("./db.js");
 
-	const suggestions = await detectSkillsForProject(project, agents);
+	const suggestions = await detectSkillsForProject(project, agents, isVisible);
 	const qualified = suggestions.filter((s) => s.confidence >= minConfidence);
 
 	let assigned = 0;

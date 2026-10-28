@@ -24,7 +24,7 @@ export async function createProject(
 	await execute(
 		`
     INSERT INTO projects (id, name, description, status, tech_stack, repo_path, tenant_id, owner_id, created_at, updated_at)
-    VALUES ($1, $2, $3, 'planning', $4, $5, $6, $7, $8, $9)
+    VALUES ($1, $2, $3, 'planning', $4, $5, COALESCE($6, app_tenant()), (SELECT id FROM users WHERE id = $7), $8, $9)
   `,
 		[
 			id,
@@ -43,6 +43,12 @@ export async function createProject(
 
 export async function getProject(id: string): Promise<Project | undefined> {
 	const row = await queryOne<any>("SELECT * FROM projects WHERE id = $1", [id]);
+	return row ? rowToProject(row) : undefined;
+}
+
+/** Project only if it belongs to `tenantId` (explicit check: holds in superuser mode where RLS is bypassed). */
+export async function getProjectForTenant(id: string, tenantId: string): Promise<Project | undefined> {
+	const row = await queryOne<any>("SELECT * FROM projects WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
 	return row ? rowToProject(row) : undefined;
 }
 

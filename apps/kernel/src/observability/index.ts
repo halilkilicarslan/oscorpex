@@ -6,6 +6,7 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { observabilityGuard } from "../studio/auth/access-guard.js";
 import { alertsRoutes } from "./alerts.js";
 import { feedbacksRoutes } from "./feedbacks.js";
 import { logsRoutes } from "./logs.js";
@@ -32,6 +33,8 @@ observabilityRoutes.use(
 		maxAge: 86400,
 	}),
 );
+
+observabilityRoutes.use("*", observabilityGuard);
 
 observabilityRoutes.route("/", memoryRoutes);
 observabilityRoutes.route("/", logsRoutes);

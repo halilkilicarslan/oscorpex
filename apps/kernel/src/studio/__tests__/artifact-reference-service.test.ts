@@ -1,7 +1,28 @@
 import { randomUUID } from "node:crypto";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { artifactReferenceService } from "../artifact-reference-service.js";
+import { getGoalScope } from "../db.js";
 import { execute, query, queryOne } from "../pg.js";
+import { TENANT_LOCAL } from "./helpers/tenancy.js";
+
+// F2d: projects can no longer have a NULL tenant. The "production tenant missing" fail-closed paths are
+// exercised by making the goal-scope lookup report a missing tenant for the given goal.
+vi.mock("../db.js", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../db.js")>();
+	return { ...actual, getGoalScope: vi.fn(actual.getGoalScope) };
+});
+
+afterEach(() => {
+	vi.mocked(getGoalScope).mockReset();
+});
+
+async function reportTenantMissing(goalId: string) {
+	const actual = await vi.importActual<typeof import("../db.js")>("../db.js");
+	vi.mocked(getGoalScope).mockImplementation(async (id: string) => {
+		const scope = await actual.getGoalScope(id);
+		return scope && id === goalId ? { ...scope, tenantId: null } : scope;
+	});
+}
 
 let dbReady = false;
 try {
@@ -17,21 +38,14 @@ let counter = 0;
 async function createGoal(options: { tenant?: boolean } = {}) {
 	counter += 1;
 	const suffix = `${prefix}-${counter}`;
-	const tenantId = options.tenant === false ? null : `tenant-${suffix}`;
-	if (tenantId) {
-		await execute("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)", [
-			tenantId,
-			`Tenant ${suffix}`,
-			`tenant-${suffix}`,
-		]);
-	}
+	const tenantId = options.tenant === false ? null : TENANT_LOCAL;
 	const projectId = `project-${suffix}`;
 	await execute(
 		`
 		INSERT INTO projects (id, name, description, status, tech_stack, repo_path, tenant_id, created_at, updated_at)
 		VALUES ($1, $2, '', 'planning', '[]', '', $3, now(), now())
 		`,
-		[projectId, `Project ${suffix}`, tenantId],
+		[projectId, `Project ${suffix}`, tenantId ?? TENANT_LOCAL],
 	);
 	const goalId = `goal-${suffix}`;
 	await execute("INSERT INTO execution_goals (id, project_id, definition, status) VALUES ($1, $2, $3, 'running')", [
@@ -197,6 +211,7 @@ describe.skipIf(!dbReady)("ArtifactReferenceService", () => {
 
 	it("production tenant missing -> deny", async () => {
 		const goal = await createGoal({ tenant: false });
+		await reportTenantMissing(goal.goalId);
 		await expect(
 			artifactReferenceService.registerArtifact({
 				goalId: goal.goalId,

@@ -8,10 +8,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import pg from "pg";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { getPool } from "../pg.js";
 import { TABLE_CLASSIFICATION } from "../tenancy/table-classification.js";
 import { type RuntimeIsolationInfo, loadBootstrap, runApplySchema } from "./helpers/apply-schema.js";
-import { TENANT_A, expectPgError, seedTestTenants, withAppRole, withMigrator } from "./helpers/tenancy.js";
+import { TENANT_A, expectPgError, getPool, seedTestTenants, withAppRole, withMigrator } from "./helpers/tenancy.js";
 
 const F1_TABLES = Object.entries(TABLE_CLASSIFICATION)
 	.filter(([, e]) => e.rlsPhase === "F1")

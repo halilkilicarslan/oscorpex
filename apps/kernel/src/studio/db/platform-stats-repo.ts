@@ -1,8 +1,12 @@
 // ---------------------------------------------------------------------------
 // Oscorpex — Platform Stats Repository: Dashboard + Analytics Aggregates
+// Cross-tenant, aggregate-only: reads sys_platform_stats() (SECURITY DEFINER) in system scope.
+// Per-project / per-task / per-file details are NOT exposed (they would leak across tenants).
 // ---------------------------------------------------------------------------
 
-import { query, queryOne } from "../pg.js";
+import { queryOne } from "../pg.js";
+import { canonicalizeAgentRole } from "../roles.js";
+import { runAsSystem } from "../tenancy/tenant-scope.js";
 
 // ---------------------------------------------------------------------------
 // Platform Stats (Dashboard Overview)
@@ -49,134 +53,92 @@ export interface PlatformStats {
 	}>;
 }
 
-interface ProjectStatsRow {
-	total: string;
-	active: string;
-	completed: string;
-	failed: string;
+/** Raw shape of sys_platform_stats() (aggregates across all tenants, no identifying values). */
+interface SysPlatformStats {
+	total_projects?: number;
+	projects_active?: number;
+	projects_completed?: number;
+	projects_failed?: number;
+	total_tasks?: number;
+	tasks_done?: number;
+	tasks_failed?: number;
+	tasks_running?: number;
+	tasks_queued?: number;
+	unique_agents?: number;
+	avg_task_min?: number;
+	total_cost_usd?: number;
+	total_tokens?: number;
+	cache_read_tokens?: number;
+	cache_creation_tokens?: number;
+	active_agents?: number;
+	total_events?: number;
+	total_errors?: number;
+	active_days?: number;
+	agent_usage?: Array<{ role: string; count: number }>;
+	daily_activity?: Array<{ date: string; events: number; errors: number; completions: number }>;
+	hourly_pattern?: Array<{ hour: number; count: number }>;
+	event_types?: Array<{ type: string; count: number }>;
+	complexity_distribution?: Array<{ complexity: string; count: number }>;
+	cost_by_model?: Array<{ model: string; calls: number; cost: number; tokens: number }>;
 }
 
-interface TaskStatsRow {
-	total: string;
-	done: string;
-	running: string;
-	failed: string;
-	queued: string;
+async function readSysStats(withSeries: boolean): Promise<SysPlatformStats> {
+	// Scalars (sys_platform_stats) and series (sys_platform_series) are separate SECURITY DEFINER functions;
+	// the series are the expensive part and only the analytics endpoint needs them.
+	const row = await runAsSystem("platform-stats", () =>
+		queryOne<{ s: SysPlatformStats; series?: SysPlatformStats }>(
+			withSeries
+				? "SELECT sys_platform_stats() AS s, sys_platform_series() AS series"
+				: "SELECT sys_platform_stats() AS s",
+		),
+	);
+	return { ...(row?.s ?? {}), ...(row?.series ?? {}) };
 }
 
-interface CostStatsRow {
-	total_cost: string;
-	total_tokens: string;
-	cache_read: string;
-	cache_creation: string;
-	active_agents: string;
+/** Merge role aliases (backend_dev, backend-developer, …) under their canonical name, top 12 by count. */
+function mergeAgentUsage(rows: Array<{ role: string; count: number }>): Array<{ role: string; count: number }> {
+	const merged = new Map<string, number>();
+	for (const r of rows) {
+		const role = canonicalizeAgentRole(r.role);
+		merged.set(role, (merged.get(role) ?? 0) + Number(r.count ?? 0));
+	}
+	return [...merged.entries()]
+		.map(([role, count]) => ({ role, count }))
+		.sort((a, b) => b.count - a.count)
+		.slice(0, 12);
 }
 
-interface RecentProjectRow {
-	id: string;
-	name: string;
-	status: string;
-	description: string | null;
-	created_at: string;
-	updated_at: string;
-}
-
-interface RecentTaskRow {
-	id: string;
-	title: string;
-	status: string;
-	assigned_agent: string | null;
-	complexity: string | null;
-	completed_at: string | null;
-	project_name: string;
-}
+const n = (v: unknown): number => Number(v ?? 0);
 
 export async function getPlatformStats(): Promise<PlatformStats> {
-	const [projectStats, taskStats, costStats, recentProjects, recentTasks] = await Promise.all([
-		queryOne<ProjectStatsRow>(`
-			SELECT
-				COUNT(*) AS total,
-				COUNT(*) FILTER (WHERE status = 'active' OR status = 'planning' OR status = 'executing') AS active,
-				COUNT(*) FILTER (WHERE status = 'completed') AS completed,
-				COUNT(*) FILTER (WHERE status = 'failed') AS failed
-			FROM projects
-		`),
-		queryOne<TaskStatsRow>(`
-			SELECT
-				COUNT(*) AS total,
-				COUNT(*) FILTER (WHERE status = 'done') AS done,
-				COUNT(*) FILTER (WHERE status = 'running') AS running,
-				COUNT(*) FILTER (WHERE status = 'failed') AS failed,
-				COUNT(*) FILTER (WHERE status = 'queued' OR status = 'assigned') AS queued
-			FROM tasks
-		`),
-		queryOne<CostStatsRow>(`
-			SELECT
-				COALESCE(SUM(cost_usd), 0) AS total_cost,
-				COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens), 0) AS total_tokens,
-				COALESCE(SUM(cache_read_tokens), 0) AS cache_read,
-				COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation,
-				COUNT(DISTINCT agent_id) AS active_agents
-			FROM token_usage
-		`),
-		query<RecentProjectRow>(`
-			SELECT id, name, status, description, created_at, updated_at
-			FROM projects ORDER BY updated_at DESC LIMIT 5
-		`),
-		query<RecentTaskRow>(`
-			SELECT t.id, t.title, t.status, t.assigned_agent, t.complexity, t.completed_at, p.name AS project_name
-			FROM tasks t
-			JOIN phases ph ON ph.id = t.phase_id
-			JOIN project_plans pp ON pp.id = ph.plan_id
-			JOIN projects p ON p.id = pp.project_id
-			WHERE t.status = 'done'
-			ORDER BY t.completed_at DESC NULLS LAST LIMIT 8
-		`),
-	]);
-
-	const totalTokens = Number(costStats?.total_tokens ?? 0);
-	const cacheRead = Number(costStats?.cache_read ?? 0);
-	const cacheRate = totalTokens > 0 ? cacheRead / totalTokens : 0;
-
+	const s = await readSysStats(false);
+	const totalTokens = n(s.total_tokens);
+	const cacheRead = n(s.cache_read_tokens);
 	return {
 		projects: {
-			total: Number(projectStats?.total ?? 0),
-			active: Number(projectStats?.active ?? 0),
-			completed: Number(projectStats?.completed ?? 0),
-			failed: Number(projectStats?.failed ?? 0),
+			total: n(s.total_projects),
+			active: n(s.projects_active),
+			completed: n(s.projects_completed),
+			failed: n(s.projects_failed),
 		},
 		tasks: {
-			total: Number(taskStats?.total ?? 0),
-			done: Number(taskStats?.done ?? 0),
-			running: Number(taskStats?.running ?? 0),
-			failed: Number(taskStats?.failed ?? 0),
-			queued: Number(taskStats?.queued ?? 0),
+			total: n(s.total_tasks),
+			done: n(s.tasks_done),
+			running: n(s.tasks_running),
+			failed: n(s.tasks_failed),
+			queued: n(s.tasks_queued),
 		},
 		cost: {
-			totalUsd: Math.round(Number(costStats?.total_cost ?? 0) * 100) / 100,
+			totalUsd: Math.round(n(s.total_cost_usd) * 100) / 100,
 			totalTokens,
 			cacheReadTokens: cacheRead,
-			cacheCreationTokens: Number(costStats?.cache_creation ?? 0),
-			cacheRate: Math.round(cacheRate * 1000) / 10,
-			activeAgents: Number(costStats?.active_agents ?? 0),
+			cacheCreationTokens: n(s.cache_creation_tokens),
+			cacheRate: totalTokens > 0 ? Math.round((cacheRead / totalTokens) * 1000) / 10 : 0,
+			activeAgents: n(s.active_agents),
 		},
-		recentProjects: recentProjects.map((r) => ({
-			id: r.id,
-			name: r.name,
-			status: r.status,
-			description: r.description,
-			createdAt: r.created_at,
-			updatedAt: r.updated_at,
-		})),
-		recentTasks: recentTasks.map((r) => ({
-			id: r.id,
-			title: r.title,
-			status: r.status,
-			assignedAgent: r.assigned_agent,
-			complexity: r.complexity,
-			completedAt: r.completed_at,
-			projectName: r.project_name,
-		})),
+		// Identifying lists are intentionally not exposed (cross-tenant data)
+		recentProjects: [],
+		recentTasks: [],
 	};
 }
 
@@ -224,257 +186,57 @@ export interface PlatformAnalytics {
 	costByModel: Array<{ model: string; calls: number; cost: number; tokens: number }>;
 }
 
-interface AnalyticsTotalsRow {
-	total_projects: string;
-	total_tasks: string;
-	tasks_done: string;
-	tasks_failed: string;
-	unique_agents: string;
-	avg_task_min: string;
-	total_cost: string;
-	cache_read: string;
-	total_tokens: string;
-	total_events: string;
-	total_errors: string;
-	active_days: string;
-}
-
-interface AgentUsageRow {
-	agent_name: string;
-	role: string;
-	task_count: string;
-}
-
-interface DailyActivityRow {
-	date: unknown;
-	events: string;
-	errors: string;
-	completions: string;
-}
-
-interface HourlyPatternRow {
-	hour: string;
-	count: string;
-}
-
-interface ProjectActivityRow {
-	project_name: string;
-	project_id: string;
-	status: string;
-	events: string;
-	active_days: string;
-}
-
-interface FileActivityRow {
-	file: string;
-	count: string;
-}
-
-interface ComplexityDistRow {
-	complexity: string;
-	count: string;
-}
-
-interface EventTypeRow {
-	type: string;
-	count: string;
-}
-
-interface ErrorRateRow {
-	project_name: string;
-	project_id: string;
-	errors: string;
-	total: string;
-	error_rate: string;
-}
-
-interface CostByModelRow {
-	model: string;
-	calls: string;
-	cost: string;
-	tokens: string;
-}
-
 export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
-	const [
-		totalsRow,
-		agentUsage,
-		dailyActivity,
-		hourlyPattern,
-		projectActivity,
-		fileActivity,
-		complexityDist,
-		eventTypes,
-		errorRates,
-		costByModel,
-	] = await Promise.all([
-		// Totals
-		queryOne<AnalyticsTotalsRow>(`
-			SELECT
-				(SELECT COUNT(*) FROM projects) AS total_projects,
-				(SELECT COUNT(*) FROM tasks) AS total_tasks,
-				(SELECT COUNT(*) FILTER (WHERE status = 'done') FROM tasks) AS tasks_done,
-				(SELECT COUNT(*) FILTER (WHERE status = 'failed') FROM tasks) AS tasks_failed,
-				(SELECT COUNT(DISTINCT assigned_agent) FROM tasks WHERE assigned_agent IS NOT NULL) AS unique_agents,
-				(SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (completed_at::timestamp - started_at::timestamp)) / 60), 0)
-				 FROM tasks WHERE status = 'done' AND started_at IS NOT NULL AND completed_at IS NOT NULL) AS avg_task_min,
-				(SELECT COALESCE(SUM(cost_usd), 0) FROM token_usage) AS total_cost,
-				(SELECT COALESCE(SUM(cache_read_tokens), 0) FROM token_usage) AS cache_read,
-				(SELECT COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens), 0) FROM token_usage) AS total_tokens,
-				(SELECT COUNT(*) FROM events) AS total_events,
-				(SELECT COUNT(*) FILTER (WHERE type LIKE '%failed%' OR type LIKE '%error%') FROM events) AS total_errors,
-				(SELECT COUNT(DISTINCT DATE(timestamp::timestamptz)) FROM events) AS active_days
-		`),
-		// Agent usage (like tool usage)
-		query<AgentUsageRow>(`
-			SELECT COALESCE(pa.name, t.assigned_agent) AS agent_name,
-				COALESCE(pa.role, 'unknown') AS role,
-				COUNT(t.id) AS task_count
-			FROM tasks t
-			LEFT JOIN project_agents pa ON pa.name = t.assigned_agent OR pa.id::text = t.assigned_agent
-			WHERE t.assigned_agent IS NOT NULL
-			GROUP BY COALESCE(pa.name, t.assigned_agent), COALESCE(pa.role, 'unknown')
-			ORDER BY task_count DESC LIMIT 12
-		`),
-		// Daily activity (like sessionsByDate)
-		query<DailyActivityRow>(`
-			SELECT DATE(timestamp::timestamptz) AS date, COUNT(*) AS events,
-				COUNT(*) FILTER (WHERE type LIKE '%failed%') AS errors,
-				COUNT(*) FILTER (WHERE type = 'task:completed') AS completions
-			FROM events
-			GROUP BY DATE(timestamp::timestamptz)
-			ORDER BY date DESC LIMIT 30
-		`),
-		// Hourly pattern (like hourlyPattern)
-		query<HourlyPatternRow>(`
-			SELECT EXTRACT(HOUR FROM timestamp::timestamptz) AS hour, COUNT(*) AS count
-			FROM events GROUP BY hour ORDER BY hour
-		`),
-		// Project activity (like projectActivity)
-		query<ProjectActivityRow>(`
-			SELECT p.name AS project_name, p.id AS project_id, p.status,
-				COUNT(e.id) AS events,
-				COUNT(DISTINCT DATE(e.timestamp::timestamptz)) AS active_days
-			FROM projects p
-			LEFT JOIN events e ON e.project_id = p.id
-			GROUP BY p.id, p.name, p.status
-			ORDER BY events DESC LIMIT 10
-		`),
-		// Hot files (like fileActivity) — from task_diffs
-		query<FileActivityRow>(`
-			SELECT file_path AS file, COUNT(*) AS count
-			FROM task_diffs
-			GROUP BY file_path ORDER BY count DESC LIMIT 15
-		`),
-		// Complexity distribution (like explore vs execute)
-		query<ComplexityDistRow>(`
-			SELECT complexity, COUNT(*) AS count FROM tasks
-			WHERE complexity IS NOT NULL
-			GROUP BY complexity ORDER BY count DESC
-		`),
-		// Event types (like eventTypes)
-		query<EventTypeRow>(`
-			SELECT type, COUNT(*) AS count FROM events
-			GROUP BY type ORDER BY count DESC LIMIT 15
-		`),
-		// Error rates by project (like errorRates)
-		query<ErrorRateRow>(`
-			SELECT p.name AS project_name, p.id AS project_id,
-				COUNT(*) FILTER (WHERE e.type LIKE '%failed%') AS errors,
-				COUNT(*) AS total,
-				CASE WHEN COUNT(*) > 0
-					THEN ROUND(100.0 * COUNT(*) FILTER (WHERE e.type LIKE '%failed%') / COUNT(*), 1)
-					ELSE 0 END AS error_rate
-			FROM projects p
-			LEFT JOIN events e ON e.project_id = p.id
-			GROUP BY p.id, p.name
-			HAVING COUNT(*) > 0
-			ORDER BY error_rate DESC
-		`),
-		// Cost by model (like MCP tools breakdown)
-		query<CostByModelRow>(`
-			SELECT model, COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost,
-				COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens
-			FROM token_usage
-			WHERE model IS NOT NULL
-			GROUP BY model ORDER BY cost DESC
-		`),
-	]);
-
-	const t = totalsRow ?? ({} as Partial<AnalyticsTotalsRow>);
-	const totalTasks = Number(t.total_tasks ?? 0);
-	const tasksDone = Number(t.tasks_done ?? 0);
-	const tasksFailed = Number(t.tasks_failed ?? 0);
-	const totalEvents = Number(t.total_events ?? 0);
-	const totalErrors = Number(t.total_errors ?? 0);
-	const totalTokens = Number(t.total_tokens ?? 0);
-	const cacheRead = Number(t.cache_read ?? 0);
-
+	const s = await readSysStats(true);
+	const totalTasks = n(s.total_tasks);
+	const tasksDone = n(s.tasks_done);
+	const tasksFailed = n(s.tasks_failed);
+	const totalEvents = n(s.total_events);
+	const totalErrors = n(s.total_errors);
+	const totalTokens = n(s.total_tokens);
+	const hourly = s.hourly_pattern ?? [];
 	return {
 		totals: {
-			totalProjects: Number(t.total_projects ?? 0),
+			totalProjects: n(s.total_projects),
 			totalTasks,
 			tasksDone,
 			tasksFailed,
 			taskDoneRate: totalTasks > 0 ? Math.round((tasksDone / totalTasks) * 100) : 0,
 			failureRate: totalTasks > 0 ? Math.round((tasksFailed / totalTasks) * 1000) / 10 : 0,
-			uniqueAgents: Number(t.unique_agents ?? 0),
-			avgTaskMin: Math.round(Number(t.avg_task_min ?? 0) * 10) / 10,
-			totalCostUsd: Math.round(Number(t.total_cost ?? 0) * 100) / 100,
-			cacheRate: totalTokens > 0 ? Math.round((cacheRead / totalTokens) * 1000) / 10 : 0,
+			uniqueAgents: n(s.unique_agents),
+			avgTaskMin: Math.round(n(s.avg_task_min) * 10) / 10,
+			totalCostUsd: Math.round(n(s.total_cost_usd) * 100) / 100,
+			cacheRate: totalTokens > 0 ? Math.round((n(s.cache_read_tokens) / totalTokens) * 1000) / 10 : 0,
 			totalEvents,
 			totalErrors,
 			errorRate: totalEvents > 0 ? Math.round((totalErrors / totalEvents) * 1000) / 10 : 0,
-			activeDays: Number(t.active_days ?? 0),
+			activeDays: n(s.active_days),
 		},
-		agentUsage: agentUsage.map((r) => ({
-			agent: r.agent_name,
-			role: r.role,
-			count: Number(r.task_count),
+		// Per-role breakdown (agent names are not exposed)
+		agentUsage: mergeAgentUsage(s.agent_usage ?? []).map((r) => ({ agent: r.role, role: r.role, count: n(r.count) })),
+		dailyActivity: (s.daily_activity ?? []).map((r) => ({
+			date: r.date,
+			events: n(r.events),
+			errors: n(r.errors),
+			completions: n(r.completions),
 		})),
-		dailyActivity: dailyActivity
-			.map((r) => ({
-				date: r.date,
-				events: Number(r.events),
-				errors: Number(r.errors),
-				completions: Number(r.completions),
-			}))
-			.reverse(),
-		hourlyPattern: Array.from({ length: 24 }, (_, i) => {
-			const found = hourlyPattern.find((r) => Number(r.hour) === i);
-			return { hour: i, count: found ? Number(found.count) : 0 };
-		}),
-		projectActivity: projectActivity.map((r) => ({
-			projectName: r.project_name,
-			projectId: r.project_id,
-			status: r.status,
-			events: Number(r.events),
-			activeDays: Number(r.active_days),
+		hourlyPattern: Array.from({ length: 24 }, (_, i) => ({
+			hour: i,
+			count: n(hourly.find((r) => n(r.hour) === i)?.count),
 		})),
-		fileActivity: fileActivity.map((r) => ({
-			file: r.file,
-			count: Number(r.count),
-		})),
-		complexityDistribution: complexityDist.map((r) => ({
+		projectActivity: [],
+		fileActivity: [],
+		complexityDistribution: (s.complexity_distribution ?? []).map((r) => ({
 			complexity: r.complexity,
-			count: Number(r.count),
+			count: n(r.count),
 		})),
-		eventTypes: eventTypes.map((r) => ({
-			type: r.type,
-			count: Number(r.count),
-		})),
-		errorRates: errorRates.map((r) => ({
-			projectName: r.project_name,
-			projectId: r.project_id,
-			errors: Number(r.errors),
-			total: Number(r.total),
-			errorRate: Number(r.error_rate),
-		})),
-		costByModel: costByModel.map((r) => ({
+		eventTypes: (s.event_types ?? []).map((r) => ({ type: r.type, count: n(r.count) })),
+		errorRates: [],
+		costByModel: (s.cost_by_model ?? []).map((r) => ({
 			model: r.model,
-			calls: Number(r.calls),
-			cost: Math.round(Number(r.cost) * 1000) / 1000,
-			tokens: Number(r.tokens),
+			calls: n(r.calls),
+			cost: Math.round(n(r.cost) * 1000) / 1000,
+			tokens: n(r.tokens),
 		})),
 	};
 }

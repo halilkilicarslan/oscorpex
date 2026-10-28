@@ -134,6 +134,12 @@ CREATE TABLE IF NOT EXISTS agent_configs (
   gender        TEXT NOT NULL DEFAULT 'male'
 );
 
+-- Creator of a user-defined agent config (NULL for presets and legacy rows); edits are creator-only.
+ALTER TABLE agent_configs ADD COLUMN IF NOT EXISTS created_by TEXT;
+-- Owner tenant (F2 round 3). NULL = preset or legacy row (legacy rows are visible to platform admins only).
+-- Ownership = tenant_id AND created_by. RLS for this table is introduced in F5-6.
+ALTER TABLE agent_configs ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+
 CREATE TABLE IF NOT EXISTS events (
   id          TEXT PRIMARY KEY,
   project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -191,6 +197,9 @@ CREATE TABLE IF NOT EXISTS custom_team_templates (
   dependencies  TEXT NOT NULL DEFAULT '[]',
   created_at    TEXT NOT NULL
 );
+
+-- Owner tenant (F2 round 3); NULL = legacy row, visible to platform admins only. RLS comes in F5-6.
+ALTER TABLE custom_team_templates ADD COLUMN IF NOT EXISTS tenant_id TEXT;
 
 CREATE TABLE IF NOT EXISTS project_agents (
   id              TEXT PRIMARY KEY,
@@ -2427,6 +2436,9 @@ CREATE TABLE IF NOT EXISTS skills (
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Owner tenant (F2 round 3); NULL = global/legacy row (legacy non-global rows are admin-only). RLS comes in F5-6.
+ALTER TABLE skills ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_skills_category ON skills(category);
 CREATE INDEX IF NOT EXISTS idx_skills_global   ON skills(is_global) WHERE is_global = TRUE;
 
@@ -2639,6 +2651,11 @@ CREATE OR REPLACE FUNCTION app_tenant() RETURNS text
 REVOKE ALL ON FUNCTION app_tenant() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_tenant() TO oscorpex_app, oscorpex_sysread, oscorpex_owner;
 
+-- F2 round 3: creator's tenant is recorded on new rows (SET DEFAULT never rewrites/backfills legacy rows).
+ALTER TABLE skills ALTER COLUMN tenant_id SET DEFAULT app_tenant();
+ALTER TABLE agent_configs ALTER COLUMN tenant_id SET DEFAULT app_tenant();
+ALTER TABLE custom_team_templates ALTER COLUMN tenant_id SET DEFAULT app_tenant();
+
 -- ---------------------------------------------------------------------------
 -- F1c: SECURITY DEFINER sys_* functions — the only sanctioned cross-tenant
 -- read path. Owned by oscorpex_sysread (SELECT only), pinned search_path,
@@ -2687,15 +2704,71 @@ CREATE OR REPLACE FUNCTION sys_api_key_lookup(p_key_hash text)
 		WHERE k.key_hash = p_key_hash AND (k.expires_at IS NULL OR k.expires_at > pg_catalog.now())
 	$fn$;
 
+-- One round trip per JWT / API-key request: does the user still exist, what is their role in the given tenant, are they a platform admin.
+-- (API keys: SELECT ... FROM sys_api_key_lookup(hash) k JOIN LATERAL sys_identity_lookup(k.user_id, k.tenant_id) i ON true.)
+CREATE OR REPLACE FUNCTION sys_identity_lookup(p_user_id text, p_tenant_id text)
+	RETURNS TABLE (role text, is_platform_admin boolean)
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+	AS $fn$
+		SELECT r.role, u.is_platform_admin
+		FROM public.users u
+		LEFT JOIN public.user_roles r ON r.user_id = u.id AND r.tenant_id = p_tenant_id
+		WHERE u.id = p_user_id
+	$fn$;
+
 CREATE OR REPLACE FUNCTION sys_platform_stats() RETURNS jsonb
 	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
 	AS $fn$
 		SELECT pg_catalog.jsonb_build_object(
 			'total_projects', (SELECT count(*) FROM public.projects),
+			'projects_active', (SELECT count(*) FROM public.projects WHERE status IN ('active', 'planning', 'executing')),
+			'projects_completed', (SELECT count(*) FROM public.projects WHERE status = 'completed'),
+			'projects_failed', (SELECT count(*) FROM public.projects WHERE status = 'failed'),
 			'total_tasks', (SELECT count(*) FROM public.tasks),
 			'tasks_done', (SELECT count(*) FROM public.tasks WHERE status = 'done'),
 			'tasks_failed', (SELECT count(*) FROM public.tasks WHERE status = 'failed'),
-			'total_cost_usd', (SELECT coalesce(sum(cost_usd), 0)::float8 FROM public.token_usage)
+			'tasks_running', (SELECT count(*) FROM public.tasks WHERE status = 'running'),
+			'tasks_queued', (SELECT count(*) FROM public.tasks WHERE status IN ('queued', 'assigned')),
+			'unique_agents', (SELECT count(DISTINCT assigned_agent) FROM public.tasks WHERE assigned_agent IS NOT NULL),
+			'avg_task_min', (SELECT coalesce(avg(extract(epoch FROM (completed_at::timestamp - started_at::timestamp)) / 60), 0)::float8
+			                 FROM public.tasks WHERE status = 'done' AND started_at IS NOT NULL AND completed_at IS NOT NULL),
+			'total_cost_usd', (SELECT coalesce(sum(cost_usd), 0)::float8 FROM public.token_usage),
+			'total_tokens', (SELECT coalesce(sum(total_tokens), 0)::float8 FROM public.token_usage),
+			'cache_read_tokens', (SELECT coalesce(sum(cache_read_tokens), 0)::float8 FROM public.token_usage),
+			'cache_creation_tokens', (SELECT coalesce(sum(cache_creation_tokens), 0)::float8 FROM public.token_usage),
+			'active_agents', (SELECT count(DISTINCT agent_id) FROM public.token_usage),
+			'total_events', (SELECT count(*) FROM public.events),
+			'total_errors', (SELECT count(*) FROM public.events WHERE type LIKE '%failed%' OR type LIKE '%error%'),
+			'active_days', (SELECT count(DISTINCT (timestamp::timestamptz)::date) FROM public.events)
+		)
+	$fn$;
+
+CREATE OR REPLACE FUNCTION sys_platform_series() RETURNS jsonb
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+	AS $fn$
+		SELECT pg_catalog.jsonb_build_object(
+			'agent_usage', (SELECT coalesce(jsonb_agg(jsonb_build_object('role', role, 'count', n) ORDER BY n DESC), '[]'::jsonb)
+			                FROM (SELECT assigned_agent AS role, count(*) AS n
+			                      FROM public.tasks
+			                      WHERE assigned_agent <> ''
+			                      GROUP BY assigned_agent ORDER BY n DESC LIMIT 200) x),
+			'daily_activity', (SELECT coalesce(jsonb_agg(jsonb_build_object('date', d::text, 'events', ev, 'errors', er, 'completions', co) ORDER BY d), '[]'::jsonb)
+			                   FROM (SELECT (timestamp::timestamptz)::date AS d, count(*) AS ev,
+			                                count(*) FILTER (WHERE type LIKE '%failed%') AS er,
+			                                count(*) FILTER (WHERE type = 'task:completed') AS co
+			                         FROM public.events GROUP BY 1 ORDER BY 1 DESC LIMIT 30) x),
+			'hourly_pattern', (SELECT coalesce(jsonb_agg(jsonb_build_object('hour', h, 'count', n) ORDER BY h), '[]'::jsonb)
+			                   FROM (SELECT extract(hour FROM timestamp::timestamptz)::int AS h, count(*) AS n
+			                         FROM public.events GROUP BY 1) x),
+			'event_types', (SELECT coalesce(jsonb_agg(jsonb_build_object('type', type, 'count', n) ORDER BY n DESC), '[]'::jsonb)
+			                FROM (SELECT type, count(*) AS n FROM public.events GROUP BY type ORDER BY n DESC LIMIT 500) x),
+			'complexity_distribution', (SELECT coalesce(jsonb_agg(jsonb_build_object('complexity', complexity, 'count', n) ORDER BY n DESC), '[]'::jsonb)
+			                            FROM (SELECT complexity, count(*) AS n FROM public.tasks WHERE complexity IS NOT NULL
+			                                  GROUP BY complexity) x),
+			'cost_by_model', (SELECT coalesce(jsonb_agg(jsonb_build_object('model', model, 'calls', n, 'cost', c, 'tokens', tk) ORDER BY c DESC), '[]'::jsonb)
+			                  FROM (SELECT model, count(*) AS n, coalesce(sum(cost_usd), 0)::float8 AS c,
+			                               coalesce(sum(input_tokens + output_tokens), 0)::float8 AS tk
+			                        FROM public.token_usage WHERE model IS NOT NULL GROUP BY model) x)
 		)
 	$fn$;
 
@@ -2706,7 +2779,8 @@ BEGIN
 	-- ALTER OWNER needs CREATE on the schema for the new owner; grant it only for the duration.
 	GRANT CREATE ON SCHEMA public TO oscorpex_sysread;
 	FOREACH fn IN ARRAY ARRAY['sys_project_tenant(text)', 'sys_event_tenant(text)', 'sys_running_project_phases()',
-	                          'sys_running_projects()', 'sys_api_key_lookup(text)', 'sys_platform_stats()']
+	                          'sys_running_projects()', 'sys_api_key_lookup(text)', 'sys_platform_stats()',
+	                          'sys_platform_series()', 'sys_identity_lookup(text, text)']
 	LOOP
 		EXECUTE format('ALTER FUNCTION public.%s OWNER TO oscorpex_sysread', fn);
 		EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);
@@ -2973,7 +3047,7 @@ DECLARE
 	t TEXT;
 BEGIN
 	FOREACH t IN ARRAY ARRAY['projects','pipeline_runs','project_plans','phases','tasks','events','token_usage',
-	                         'api_keys','user_roles']
+	                         'api_keys','user_roles','users']
 	LOOP
 		EXECUTE format('GRANT SELECT ON public.%I TO oscorpex_sysread', t);
 	END LOOP;
@@ -3061,3 +3135,63 @@ END $$;
 
 -- schema_meta is bookkeeping for the migrator only; revoked after the blanket DML grant above.
 REVOKE ALL ON public.schema_meta FROM oscorpex_app;
+
+-- F2d: tenant_id is mandatory on the direct tables; projects → tenants is RESTRICT (a tenant with data cannot
+-- be deleted). Constraint first as NOT VALID (rejects new NULLs immediately), then VALIDATE, then SET NOT NULL.
+-- Legacy NULL rows never fail the apply: the NOT VALID check stays and a WARNING lists per-table counts;
+-- validation is retried on every later apply.
+DO $$
+DECLARE
+	r RECORD;
+	t TEXT;
+	cname TEXT;
+	nulls BIGINT;
+	dropped BOOLEAN := false;
+BEGIN
+	FOR r IN
+		SELECT conname FROM pg_constraint
+		WHERE conrelid = 'public.projects'::regclass AND contype = 'f'
+		  AND confrelid = 'public.tenants'::regclass AND confdeltype <> 'r'
+	LOOP
+		EXECUTE format('ALTER TABLE public.projects DROP CONSTRAINT %I', r.conname);
+		dropped := true;
+	END LOOP;
+	IF dropped THEN
+		ALTER TABLE public.projects
+			ADD CONSTRAINT projects_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE RESTRICT NOT VALID;
+	END IF;
+	-- Guarded VALIDATE (also retried on later applies): orphans never abort the apply, they only warn.
+	FOR r IN
+		SELECT conname FROM pg_constraint
+		WHERE conrelid = 'public.projects'::regclass AND contype = 'f'
+		  AND confrelid = 'public.tenants'::regclass AND NOT convalidated
+	LOOP
+		BEGIN
+			EXECUTE format('ALTER TABLE public.projects VALIDATE CONSTRAINT %I', r.conname);
+		EXCEPTION WHEN OTHERS THEN
+			RAISE WARNING 'F2 round 3: projects FK % left NOT VALID (existing rows violate it): %', r.conname, SQLERRM;
+		END;
+	END LOOP;
+
+	FOREACH t IN ARRAY ARRAY['projects','tasks','phases','project_plans','notifications','checkpoints',
+	                         'rollback_requests','git_checkpoints','commit_proposals','hermes_api_keys','hermes_sessions']
+	LOOP
+		CONTINUE WHEN EXISTS (
+			SELECT 1 FROM pg_attribute
+			WHERE attrelid = format('public.%I', t)::regclass AND attname = 'tenant_id' AND attnotnull
+		);
+		cname := t || '_tenant_id_nn';
+		IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = format('public.%I', t)::regclass AND conname = cname) THEN
+			EXECUTE format('ALTER TABLE public.%I ADD CONSTRAINT %I CHECK (tenant_id IS NOT NULL) NOT VALID', t, cname);
+		END IF;
+		BEGIN
+			EXECUTE format('ALTER TABLE public.%I VALIDATE CONSTRAINT %I', t, cname);
+			EXECUTE format('ALTER TABLE public.%I ALTER COLUMN tenant_id SET NOT NULL', t);
+			EXECUTE format('ALTER TABLE public.%I DROP CONSTRAINT %I', t, cname);
+		EXCEPTION WHEN check_violation OR not_null_violation THEN
+			EXECUTE format('SELECT count(*) FROM public.%I WHERE tenant_id IS NULL', t) INTO nulls;
+			RAISE WARNING 'F2d: % has legacy rows with NULL tenant_id (count seen by this role: %); NOT NULL deferred, NOT VALID check % kept',
+				t, nulls, cname;
+		END;
+	END LOOP;
+END $$;

@@ -66,30 +66,6 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
 }
 
 // ---------------------------------------------------------------------------
-// Status Badge
-// ---------------------------------------------------------------------------
-
-const STATUS_COLORS: Record<string, string> = {
-	active: "text-[#3b82f6] bg-[#3b82f6]/10 border-[#3b82f6]/20",
-	planning: "text-[#a78bfa] bg-[#a78bfa]/10 border-[#a78bfa]/20",
-	executing: "text-[#f59e0b] bg-[#f59e0b]/10 border-[#f59e0b]/20",
-	completed: "text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/20",
-	failed: "text-[#ef4444] bg-[#ef4444]/10 border-[#ef4444]/20",
-	done: "text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/20",
-	running: "text-[#f59e0b] bg-[#f59e0b]/10 border-[#f59e0b]/20",
-};
-
-function StatusBadge({ status }: { status: string }) {
-	return (
-		<span
-			className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-medium border ${STATUS_COLORS[status] ?? "text-[#737373] bg-[#1a1a1a] border-[#262626]"}`}
-		>
-			{status}
-		</span>
-	);
-}
-
-// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
@@ -135,23 +111,13 @@ export default function PlatformDashboard() {
 		);
 	}
 
-	const { projects, tasks, cost, recentProjects, recentTasks } = stats;
+	const { projects, tasks, cost } = stats;
 	const taskDoneRate = tasks.total > 0 ? Math.round((tasks.done / tasks.total) * 100) : 0;
 
 	const formatTokens = (n: number) => {
 		if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
 		if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
 		return String(n);
-	};
-
-	const timeAgo = (iso: string) => {
-		if (!iso) return "-";
-		const diff = Date.now() - new Date(iso).getTime();
-		const mins = Math.floor(diff / 60000);
-		if (mins < 60) return `${mins}m ago`;
-		const hrs = Math.floor(mins / 60);
-		if (hrs < 24) return `${hrs}h ago`;
-		return `${Math.floor(hrs / 24)}d ago`;
 	};
 
 	return (
@@ -271,74 +237,46 @@ export default function PlatformDashboard() {
 				</div>
 			</div>
 
-			{/* Recent Projects + Tasks */}
+			{/* Projects + Tasks by status (aggregate counts across the platform) */}
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-				{/* Recent Projects */}
-				<div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
-					<div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
+				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
+					<div className="flex items-center gap-2 mb-3">
 						<FolderKanban size={14} className="text-[#3b82f6]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Recent Projects</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Projects by Status</h3>
 					</div>
-					{recentProjects.length === 0 ? (
-						<p className="text-[11px] text-[#525252] text-center py-6">No projects yet</p>
-					) : (
-						<div className="divide-y divide-[#1a1a1a]">
-							{recentProjects.map((p) => (
-								<button
-									type="button"
-									key={p.id}
-									onClick={() => navigate(`/studio/${p.id}`)}
-									className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#0a0a0a] transition-colors text-left"
-								>
-									<div className="flex-1 min-w-0">
-										<p className="text-[11px] text-[#e4e4e7] truncate">{p.name}</p>
-										<p className="text-[9px] text-[#525252] truncate">{p.description || "-"}</p>
-									</div>
-									<StatusBadge status={p.status} />
-									<span className="text-[9px] text-[#525252] shrink-0">{timeAgo(p.updatedAt)}</span>
-									<ChevronRight size={12} className="text-[#525252]" />
-								</button>
-							))}
-						</div>
-					)}
+					<div className="grid grid-cols-4 gap-3 text-center">
+						{[
+							{ label: "Total", val: projects.total },
+							{ label: "Active", val: projects.active },
+							{ label: "Completed", val: projects.completed },
+							{ label: "Failed", val: projects.failed },
+						].map((x) => (
+							<div key={x.label}>
+								<p className="text-[16px] font-semibold text-[#fafafa] tabular-nums">{x.val}</p>
+								<p className="text-[9px] text-[#525252]">{x.label}</p>
+							</div>
+						))}
+					</div>
 				</div>
-
-				{/* Recent Tasks */}
-				<div className="bg-[#111111] border border-[#262626] rounded-xl overflow-hidden">
-					<div className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a]">
+				<div className="bg-[#111111] border border-[#262626] rounded-xl p-4">
+					<div className="flex items-center gap-2 mb-3">
 						<Activity size={14} className="text-[#22c55e]" />
-						<h3 className="text-[12px] font-semibold text-[#fafafa]">Recently Completed Tasks</h3>
+						<h3 className="text-[12px] font-semibold text-[#fafafa]">Tasks by Status</h3>
 					</div>
-					{recentTasks.length === 0 ? (
-						<p className="text-[11px] text-[#525252] text-center py-6">No completed tasks yet</p>
-					) : (
-						<div className="divide-y divide-[#1a1a1a]">
-							{recentTasks.map((t) => (
-								<div key={t.id} className="flex items-center gap-3 px-4 py-2.5">
-									<div className="flex-1 min-w-0">
-										<p className="text-[11px] text-[#e4e4e7] truncate">{t.title}</p>
-										<p className="text-[9px] text-[#525252]">
-											{t.projectName} · {t.assignedAgent}
-										</p>
-									</div>
-									<span
-										className={`text-[9px] px-1.5 py-0.5 rounded border ${
-											t.complexity === "XL"
-												? "text-[#ef4444] border-[#ef4444]/20 bg-[#ef4444]/10"
-												: t.complexity === "L"
-													? "text-[#f59e0b] border-[#f59e0b]/20 bg-[#f59e0b]/10"
-													: "text-[#525252] border-[#262626] bg-[#1a1a1a]"
-										}`}
-									>
-										{t.complexity}
-									</span>
-									<span className="text-[9px] text-[#525252] shrink-0">
-										{timeAgo(t.completedAt)}
-									</span>
-								</div>
-							))}
-						</div>
-					)}
+					<div className="grid grid-cols-5 gap-3 text-center">
+						{[
+							{ label: "Total", val: tasks.total },
+							{ label: "Done", val: tasks.done },
+							{ label: "Running", val: tasks.running },
+							{ label: "Queued", val: tasks.queued },
+							{ label: "Failed", val: tasks.failed },
+						].map((x) => (
+							<div key={x.label}>
+								<p className="text-[16px] font-semibold text-[#fafafa] tabular-nums">{x.val}</p>
+								<p className="text-[9px] text-[#525252]">{x.label}</p>
+							</div>
+						))}
+					</div>
 				</div>
 			</div>
 		</div>

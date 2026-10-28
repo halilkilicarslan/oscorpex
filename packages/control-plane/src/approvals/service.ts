@@ -14,7 +14,8 @@ import {
 	appendApprovalEvent,
 	listApprovalEvents,
 	listExpiredApprovals,
-	 type ApprovalRow,
+	type ApprovalRow,
+	type ApprovalScope,
 } from "./repo.js";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "escalated";
@@ -36,7 +37,8 @@ export async function requestApproval(data: {
 	return approval;
 }
 
-export async function approve(id: string, actor: string): Promise<ApprovalRow | undefined> {
+export async function approve(id: string, actor: string, scope?: ApprovalScope): Promise<ApprovalRow | undefined> {
+	if (scope && !(await getApproval(id, scope))) return undefined;
 	const approval = await approveApproval(id, actor);
 	if (approval) {
 		await appendApprovalEvent({ approvalId: id, eventType: "approved", actor });
@@ -44,7 +46,8 @@ export async function approve(id: string, actor: string): Promise<ApprovalRow | 
 	return approval;
 }
 
-export async function reject(id: string, actor: string): Promise<ApprovalRow | undefined> {
+export async function reject(id: string, actor: string, scope?: ApprovalScope): Promise<ApprovalRow | undefined> {
+	if (scope && !(await getApproval(id, scope))) return undefined;
 	const approval = await rejectApproval(id, actor);
 	if (approval) {
 		await appendApprovalEvent({ approvalId: id, eventType: "rejected", actor });
@@ -52,8 +55,8 @@ export async function reject(id: string, actor: string): Promise<ApprovalRow | u
 	return approval;
 }
 
-export async function expireStaleApprovals(): Promise<number> {
-	const stale = await listExpiredApprovals();
+export async function expireStaleApprovals(scope?: ApprovalScope): Promise<number> {
+	const stale = await listExpiredApprovals(scope);
 	for (const a of stale) {
 		await expireApproval(a.id);
 		await appendApprovalEvent({ approvalId: a.id, eventType: "expired", actor: "system" });
@@ -61,8 +64,11 @@ export async function expireStaleApprovals(): Promise<number> {
 	return stale.length;
 }
 
-export async function getApprovalWithEvents(id: string): Promise<{ approval: ApprovalRow; events: unknown[] } | undefined> {
-	const approval = await getApproval(id);
+export async function getApprovalWithEvents(
+	id: string,
+	scope?: ApprovalScope,
+): Promise<{ approval: ApprovalRow; events: unknown[] } | undefined> {
+	const approval = await getApproval(id, scope);
 	if (!approval) return undefined;
 	const events = await listApprovalEvents(id);
 	return { approval, events };
@@ -87,12 +93,18 @@ export interface ApprovalWithSla extends ApprovalRow {
 	sla: ApprovalSla;
 }
 
-export async function listApprovalsWithSla(status?: string): Promise<ApprovalWithSla[]> {
-	const approvals = await listApprovals(status);
+export async function listApprovalsWithSla(status?: string, scope?: ApprovalScope): Promise<ApprovalWithSla[]> {
+	const approvals = await listApprovals(status, scope);
 	return approvals.map(computeSla);
 }
 
-export async function escalateApproval(id: string, target: string, actor: string): Promise<ApprovalRow | undefined> {
+export async function escalateApproval(
+	id: string,
+	target: string,
+	actor: string,
+	scope?: ApprovalScope,
+): Promise<ApprovalRow | undefined> {
+	if (scope && !(await getApproval(id, scope))) return undefined;
 	await execute(
 		"UPDATE approvals SET escalated = true, escalation_target = $1, status = 'escalated' WHERE id = $2",
 		[target, id],

@@ -101,6 +101,12 @@ export async function getUserByEmail(email: string): Promise<User | undefined> {
 
 export type UserRole = "owner" | "admin" | "developer" | "viewer" | "billing";
 
+/** users.is_platform_admin — informational for the console (authorization re-reads it per request). */
+export async function isUserPlatformAdmin(userId: string): Promise<boolean> {
+	const row = await queryOne<{ is_platform_admin: boolean }>("SELECT is_platform_admin FROM users WHERE id = $1", [userId]);
+	return row?.is_platform_admin === true;
+}
+
 export async function getUserRole(userId: string, tenantId: string): Promise<UserRole | undefined> {
 	const row = await queryOne<{ role: string }>("SELECT role FROM user_roles WHERE user_id = $1 AND tenant_id = $2", [
 		userId,
@@ -177,8 +183,10 @@ export async function listApiKeys(tenantId: string): Promise<ApiKeyRecord[]> {
 	}));
 }
 
-export async function revokeApiKey(id: string): Promise<void> {
-	await execute("DELETE FROM api_keys WHERE id = $1", [id]);
+/** Delete an API key that belongs to the given tenant. Returns false when no such key exists in that tenant. */
+export async function revokeApiKey(id: string, tenantId: string): Promise<boolean> {
+	const { rowCount } = await execute("DELETE FROM api_keys WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
+	return rowCount > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,13 +209,10 @@ export async function createTenantWithOwner(params: {
 			params.tenantName,
 			params.tenantSlug,
 		]);
-		await client.query("INSERT INTO users (id, email, password_hash, display_name, tenant_id) VALUES ($1, $2, $3, $4, $5)", [
-			params.userId,
-			params.email,
-			params.passwordHash,
-			params.displayName,
-			params.tenantId,
-		]);
+		await client.query(
+			"INSERT INTO users (id, email, password_hash, display_name, tenant_id) VALUES ($1, $2, $3, $4, $5)",
+			[params.userId, params.email, params.passwordHash, params.displayName, params.tenantId],
+		);
 		await client.query("INSERT INTO user_roles (user_id, tenant_id, role) VALUES ($1, $2, $3)", [
 			params.userId,
 			params.tenantId,

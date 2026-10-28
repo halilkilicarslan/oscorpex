@@ -2,11 +2,12 @@
 // Project CRUD Routes — List, Create, Import, Get, Update, Delete + Templates + Platform Stats
 // ---------------------------------------------------------------------------
 
-import { access, mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Hono } from "hono";
 import { createAgentFiles } from "../agent-files.js";
 import { requirePermission } from "../auth/rbac.js";
+import { isPlatformAdminRequest } from "../auth/request-identity.js";
 import { getTenantContext, verifyProjectAccess } from "../auth/tenant-context.js";
 import {
 	copyAgentsToProject,
@@ -25,6 +26,7 @@ import { initLintConfig } from "../lint-runner.js";
 import { createLogger } from "../logger.js";
 import { getProjectTemplate, listProjectTemplates, scaffoldFromTemplate } from "../project-templates.js";
 import { initSonarConfig, isSonarEnabled } from "../sonar-runner.js";
+import { resolveTenantImportPath, validateRepoPath } from "../security/workspace-resolver.js";
 import { UpdateProjectSchema, parseBody } from "./validation-schemas.js";
 
 const log = createLogger("project-crud-routes");
@@ -167,10 +169,29 @@ projectCrudRoutes.post("/projects/import", async (c) => {
 
 	if (!body.repoPath) return c.json({ error: "repoPath is required" }, 400);
 
-	try {
-		await access(body.repoPath);
-	} catch {
-		return c.json({ error: `Path does not exist: ${body.repoPath}` }, 400);
+	const { tenantId, userId } = getTenantContext(c);
+	// One uniform message for every rejection: the response must not reveal whether a path exists.
+	const INVALID_PATH = "Invalid repository path: it must be an existing directory inside your workspace";
+	if (isPlatformAdminRequest(c)) {
+		// Platform admins may import from anywhere except system paths / $HOME; the path is canonicalised
+		// (symlinks followed) BEFORE validation, and every such import is logged.
+		try {
+			if (typeof body.repoPath !== "string" || body.repoPath.includes("\0")) throw new Error("bad path");
+			validateRepoPath(resolve(body.repoPath)); // raw path first, then the canonical one
+			const real = await realpath(resolve(body.repoPath));
+			if (!(await stat(real)).isDirectory()) throw new Error("not a directory");
+			validateRepoPath(real);
+			const home = process.env.HOME;
+			if (home && real === (await realpath(home).catch(() => home))) throw new Error("home directory");
+			body.repoPath = real;
+		} catch {
+			return c.json({ error: INVALID_PATH }, 400);
+		}
+		log.info({ userId, tenantId, repoPath: body.repoPath }, "platform admin project import outside workspace root");
+	} else {
+		const confined = resolveTenantImportPath(tenantId ?? "", body.repoPath);
+		if (!confined) return c.json({ error: INVALID_PATH }, 400);
+		body.repoPath = confined;
 	}
 
 	let description = body.description ?? "";
@@ -206,6 +227,8 @@ projectCrudRoutes.post("/projects/import", async (c) => {
 		description,
 		techStack,
 		repoPath: body.repoPath,
+		tenantId,
+		ownerId: userId,
 	});
 	await saveProjectIntake(project.id, {
 		previewEnabled: body.previewEnabled,
@@ -277,6 +300,7 @@ projectCrudRoutes.post("/projects/from-template", async (c) => {
 		previewEnabled?: boolean;
 	};
 
+	const callerTenant = getTenantContext(c);
 	const template = getProjectTemplate(body.templateId);
 	if (!template) return c.json({ error: "Template not found" }, 400);
 
@@ -285,6 +309,8 @@ projectCrudRoutes.post("/projects/from-template", async (c) => {
 		description: body.description ?? template.description,
 		techStack: template.techStack,
 		repoPath: "",
+		tenantId: callerTenant.tenantId,
+		ownerId: callerTenant.userId,
 	});
 	await saveProjectIntake(project.id, {
 		previewEnabled: body.previewEnabled,

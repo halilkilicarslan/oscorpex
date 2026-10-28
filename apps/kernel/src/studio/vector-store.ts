@@ -7,8 +7,8 @@
 import { randomUUID } from "node:crypto";
 import { openai } from "@ai-sdk/openai";
 import { embed, embedMany } from "ai";
+import { execute, query, queryOne, withTransaction } from "./db.js";
 import { createLogger } from "./logger.js";
-import { execute, getPool, query, queryOne } from "./db.js";
 const log = createLogger("vector-store");
 
 // ---------------------------------------------------------------------------
@@ -286,10 +286,7 @@ export async function indexDocument(
 	}
 
 	// 3. Transaction içinde: önce mevcut embedding'leri sil, sonra yenilerini ekle
-	const client = await getPool().connect();
-	try {
-		await client.query("BEGIN");
-
+	await withTransaction(async (client) => {
 		// Mevcut embedding'leri temizle (yeniden indeksleme)
 		await client.query("DELETE FROM rag_embeddings WHERE doc_id = $1", [docId]);
 
@@ -302,14 +299,7 @@ export async function indexDocument(
 				[id, kbId, docId, i, chunks[i], null, vectorToString(embeddings[i]), new Date().toISOString()],
 			);
 		}
-
-		await client.query("COMMIT");
-	} catch (err) {
-		await client.query("ROLLBACK");
-		throw err;
-	} finally {
-		client.release();
-	}
+	});
 
 	log.info(`[VectorStore] Indexed ${chunks.length} chunks for docId=${docId}`);
 

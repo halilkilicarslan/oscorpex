@@ -25,15 +25,15 @@ export async function fetchControlPlaneSummary(): Promise<{
 
 export async function fetchApprovals(status?: string): Promise<{ approvals: ApprovalWithSla[] }> {
   const qs = status ? `?status=${status}` : '';
-  return json(`${API}/api/studio/approvals${qs}`);
+  return json(`${API}/api/studio/control-plane/approvals${qs}`);
 }
 
 export async function approveRequest(id: string): Promise<{ approval: ApprovalWithSla }> {
-  return json(`${API}/api/studio/approvals/${id}/approve`, { method: 'POST' });
+  return json(`${API}/api/studio/control-plane/approvals/${id}/approve`, { method: 'POST' });
 }
 
 export async function rejectRequest(id: string): Promise<{ approval: ApprovalWithSla }> {
-  return json(`${API}/api/studio/approvals/${id}/reject`, { method: 'POST' });
+  return json(`${API}/api/studio/control-plane/approvals/${id}/reject`, { method: 'POST' });
 }
 
 export async function fetchAuditEvents(filters?: { category?: string; severity?: string }): Promise<{ events: AuditEvent[] }> {
@@ -94,7 +94,7 @@ export async function resetProviderCooldown(providerId: string, actor: string, r
 }
 
 export async function escalateApproval(id: string, target: string, actor: string) {
-  return json(`${API}/api/studio/approvals/${id}/escalate`, { method: 'POST', body: JSON.stringify({ target, actor }) });
+  return json(`${API}/api/studio/control-plane/approvals/${id}/escalate`, { method: 'POST', body: JSON.stringify({ target, actor }) });
 }
 
 export async function reopenIncident(id: string, actor: string, reason?: string) {

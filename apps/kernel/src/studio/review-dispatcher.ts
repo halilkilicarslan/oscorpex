@@ -9,9 +9,16 @@ import { persistAgentLog } from "./agent-log-store.js";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { resolveAllowedTools } from "./capability-resolver.js";
 import { getAdapter } from "./cli-adapter.js";
-import { getAgentConfig, getTask, listAgentConfigs, listProjectAgents, recordTokenUsage } from "./db.js";
+import {
+	getAgentConfigForTenant,
+	getTask,
+	listAgentConfigsForTenant,
+	listProjectAgents,
+	recordTokenUsage,
+} from "./db.js";
 import { type ExecutionWorkspace, resolveWorkspace } from "./execution-workspace.js";
 import { createLogger } from "./logger.js";
+import { queryOne } from "./pg.js";
 import { defaultSystemPrompt } from "./prompt-builder.js";
 import { canonicalizeAgentRole, roleMatches } from "./roles.js";
 import { taskEngine } from "./task-engine.js";
@@ -56,11 +63,19 @@ export async function resolveAgent(projectId: string, assignment: string): Promi
 	);
 	if (pByPartialRole) return pByPartialRole as unknown as AgentConfig;
 
-	const byId = await getAgentConfig(assignment);
+	// Fallback to the global config table: presets plus configs owned by the project's tenant only.
+	const projectTenant = (
+		await queryOne<{ tenant_id: string | null }>("SELECT tenant_id FROM projects WHERE id = $1", [projectId])
+	)?.tenant_id;
+	if (!projectTenant) return undefined;
+
+	const byId = await getAgentConfigForTenant(assignment, projectTenant);
 	if (byId) return byId;
 
-	const all = await listAgentConfigs();
-	const byRole = all.find((a) => roleMatches(a.role, normalizedAssignment));
+	const all = await listAgentConfigsForTenant(projectTenant);
+	// Exact canonical role only: the fuzzy behaviour-key match ("…-reviewer" ≈ any reviewer) would let an
+	// unrelated preset win over the project's own config.
+	const byRole = all.find((a) => canonicalizeAgentRole(a.role) === normalizedAssignment);
 	if (byRole) return byRole;
 
 	const byName = all.find((a) => a.name.toLowerCase() === assignment.toLowerCase());
@@ -251,7 +266,11 @@ export async function executeReviewTask(
 		}
 		await taskEngine().failTask(reviewTask.id, msg);
 		try {
-			await taskEngine().submitReview(originalTaskId!, false, `Review başarısız: ${msg.slice(0, 200)} — insan incelemesi gerekli`);
+			await taskEngine().submitReview(
+				originalTaskId!,
+				false,
+				`Review başarısız: ${msg.slice(0, 200)} — insan incelemesi gerekli`,
+			);
 		} catch {
 			/* failsafe */
 		}

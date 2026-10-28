@@ -41,8 +41,8 @@ const owned = (tenantKey: TenantKey, rlsPhase: RlsPhase, note?: string): TableCl
 	writer: "tenant",
 	...(note ? { note } : {}),
 });
-const shared = (note?: string): TableClassification => ({
-	...owned("none", "F5-6", note),
+const shared = (note?: string, tenantKey: TenantKey = "none"): TableClassification => ({
+	...owned(tenantKey, "F5-6", note),
 	sharedRows: true,
 });
 const preTenant = (tenantKey: TenantKey, rlsPhase: RlsPhase, note?: string): TableClassification => ({
@@ -155,7 +155,10 @@ export const TABLE_CLASSIFICATION: Record<string, TableClassification> = {
 
 	// --- F5-6: tenant data in tables with no tenant column today ---------------
 	agent_presence: owned("none", "F5-6", "presence/repo.ts; keyed by agent_id of a project agent"),
-	agent_configs: shared("agent-repo.ts; preset agents (is_preset=1) readable by all, writes admin-only"),
+	agent_configs: shared(
+		"agent-repo.ts; preset agents (is_preset=1) readable by all, writes admin-only; user rows owned by (tenant_id, created_by)",
+		"tenant_id",
+	),
 	project_templates: shared("template-repo.ts; public templates readable by all, writes admin-only"),
 	agent_skills: owned("none", "F5-6", "skill-repo.ts; agent_id + skill_id; follows agent/skill ownership (see skills)"),
 	alert_history: owned("none", "F5-6", "observability/alerts.ts; child of alert_rules via rule_id"),
@@ -163,7 +166,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableClassification> = {
 	approval_events: owned("none", "F5-6", "approvals/repo.ts; child of approvals via approval_id"),
 	context_chunks: owned("none", "F5-6", "context-repo.ts; child of context_sources via source_id"),
 	custom_team_templates: owned(
-		"none",
+		"tenant_id",
 		"F5-6",
 		"team-repo.ts; user-created templates (preset team_templates are global)",
 	),
@@ -178,7 +181,10 @@ export const TABLE_CLASSIFICATION: Record<string, TableClassification> = {
 	rag_knowledge_bases: owned("none", "F5-6", "document-indexer.ts, context-builder.ts; user knowledge bases"),
 	rag_queries: owned("none", "F5-6", "observability/rag.ts; query log per knowledge base"),
 	replay_snapshots: owned("none", "F5-6", "replay-store.ts; run_id-keyed execution snapshots"),
-	skills: shared("skill-repo.ts; is_global rows readable by all, writes admin-only; user rows tenant-owned"),
+	skills: shared(
+		"skill-repo.ts; is_global rows readable by all, writes admin-only; user rows owned by (tenant_id, created_by)",
+		"tenant_id",
+	),
 	trigger_logs: owned("none", "F5-6", "observability/triggers.ts; child of triggers via trigger_id"),
 	triggers: owned("none", "F5-6", "observability/triggers.ts; user-defined automation"),
 	webhook_deliveries: owned("none", "F5-6", "webhook-repo.ts; child of webhooks via webhook_id"),

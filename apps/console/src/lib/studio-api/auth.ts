@@ -12,6 +12,8 @@ export interface AuthUser {
 	displayName: string;
 	tenantId: string;
 	role: string;
+	/** users.is_platform_admin as reported by GET /auth/me (absent = not a platform admin) */
+	isPlatformAdmin?: boolean;
 	/** Backend may return this when auth is globally disabled */
 	authDisabled?: boolean;
 }

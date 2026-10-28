@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import { requirePermission } from "../auth/rbac.js";
+import { callerTenantId } from "../auth/request-identity.js";
 import {
 	answerIntakeQuestion,
 	getIntakeQuestion,
@@ -218,7 +219,8 @@ projectPlanRoutes.post("/projects/:id/scope/approve", requirePermission("project
 	const updated = readScopeContract(await getProjectSettingsMap(projectId));
 	const warnings: string[] = [];
 	if (!scope.goals || scope.goals.length === 0) warnings.push("Hedefler (goals) tanımlanmamış");
-	if (!scope.requiredCapabilities || scope.requiredCapabilities.length === 0) warnings.push("Gerekli yetenekler tanımlanmamış");
+	if (!scope.requiredCapabilities || scope.requiredCapabilities.length === 0)
+		warnings.push("Gerekli yetenekler tanımlanmamış");
 	return c.json({ ok: true, data: updated, warnings });
 });
 
@@ -236,7 +238,9 @@ projectPlanRoutes.post("/projects/:id/team/recommend", requirePermission("projec
 	}
 
 	const templates = await listTeamTemplates();
-	const customTemplates = await listCustomTeamTemplates();
+	// Only the caller's (= project's) tenant's custom teams are candidates; no tenant → presets only.
+	const callerTenant = callerTenantId(c);
+	const customTemplates = callerTenant ? await listCustomTeamTemplates({ tenantId: callerTenant }) : [];
 	const allTemplates = [
 		...templates.map((t) => ({
 			id: t.id,

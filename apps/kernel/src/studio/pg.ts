@@ -6,20 +6,19 @@
 // Parameter style: $1, $2, $3, … (PostgreSQL positional placeholders)
 // ---------------------------------------------------------------------------
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import pg from "pg";
 import { createLogger } from "./logger.js";
 import { getDbPoolConfig } from "./performance-config.js";
+import { UnscopedQueryError, currentScope, isImplicitScope, tenantScopeMode } from "./tenancy/tenant-scope.js";
 const log = createLogger("pg");
 
 const { Pool } = pg;
 
 let _pool: pg.Pool | null = null;
 
-/**
- * Returns the singleton connection pool.
- * Lazily created on first call; reused on subsequent calls.
- */
-export function getPool(): pg.Pool {
+/** Internal pool accessor — the pool never leaves this module. */
+function pool(): pg.Pool {
 	if (!_pool) {
 		const connectionString = process.env.DATABASE_URL;
 		if (!connectionString) throw new Error("DATABASE_URL is not set");
@@ -33,10 +32,161 @@ export function getPool(): pg.Pool {
 		});
 
 		_pool.on("error", (err) => {
-			log.error("[pg] Unexpected error on idle client:" + " " + String(err));
+			log.error({ err }, "Unexpected error on idle pooled client");
 		});
 	}
 	return _pool;
+}
+
+export interface PoolStats {
+	totalCount: number;
+	idleCount: number;
+	waitingCount: number;
+	max: number;
+	connectionTimeoutMillis: number;
+	idleTimeoutMillis: number;
+}
+
+/** Pool statistics for db-pool-metrics. Returns undefined when the pool is not created yet. */
+export function getPoolStats(): PoolStats | undefined {
+	if (!_pool) return undefined;
+	return {
+		totalCount: _pool.totalCount ?? 0,
+		idleCount: _pool.idleCount ?? 0,
+		waitingCount: _pool.waitingCount ?? 0,
+		max: _pool.options.max ?? 20,
+		connectionTimeoutMillis: _pool.options.connectionTimeoutMillis ?? 5_000,
+		idleTimeoutMillis: _pool.options.idleTimeoutMillis ?? 30_000,
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Tenant scope enforcement
+// ---------------------------------------------------------------------------
+
+let _unscopedCount = 0;
+let _implicitCount = 0;
+const _warnedSites = new Set<string>();
+const MAX_WARNED_SITES = 500;
+
+/** Number of unscoped queries observed in warn mode since process start (for metrics). */
+export function getUnscopedQueryCount(): number {
+	return _unscopedCount;
+}
+
+/** Number of queries that ran under the implicit default test scope (must stay 0 on request paths). */
+export function getImplicitScopeQueryCount(): number {
+	return _implicitCount;
+}
+
+/** Test helper: reset the unscoped-query counters and the per-call-site warning dedupe. */
+export function resetUnscopedQueryStats(): void {
+	_unscopedCount = 0;
+	_implicitCount = 0;
+	_warnedSites.clear();
+}
+
+/** pg module frames: src `pg.ts`, built `pg.js` and hashed chunks such as `dist/pg-DZ4nHWIx.js`. */
+const PG_FRAME = /[\\/]pg(?:-[\w-]+)?\.(?:ts|js|mjs|cjs)(?=[:)\s]|$)/;
+
+/**
+ * Up to 3 caller frames outside the pg module (src and built layouts). `stack` is injectable for tests; by default
+ * the current call stack is used (captureStackTrace omits this function's own frame).
+ */
+export function callerHint(stack?: string): string {
+	let raw = stack;
+	if (raw === undefined) {
+		const holder: { stack?: string } = {};
+		Error.captureStackTrace(holder, callerHint);
+		raw = holder.stack ?? "";
+	}
+	const frames = raw
+		.split("\n")
+		.slice(1)
+		.filter((l) => l.trim().startsWith("at ") && !PG_FRAME.test(l) && !l.includes("node:internal"));
+	return frames
+		.slice(0, 3)
+		.map((l) => l.trim())
+		.join(" <- ");
+}
+
+/** Resolve the tenant GUC value for the current scope; undefined = unscoped (warn mode only). */
+function resolveTenantGuc(): string | undefined {
+	const scope = currentScope();
+	if (scope?.kind === "tenant") {
+		if (isImplicitScope()) _implicitCount++;
+		return scope.tenantId;
+	}
+	if (scope?.kind === "system") return "";
+	if (tenantScopeMode() === "strict") {
+		throw new UnscopedQueryError("Database access outside a tenant/system scope is not allowed (strict mode)");
+	}
+	_unscopedCount++;
+	const caller = callerHint();
+	if (!_warnedSites.has(caller) && _warnedSites.size < MAX_WARNED_SITES) {
+		_warnedSites.add(caller);
+		log.warn({ unscopedCount: _unscopedCount, caller }, "Unscoped database query (no tenant scope)");
+	}
+	return undefined;
+}
+
+/**
+ * BEGIN + transaction-local tenant GUC as one simple-protocol round trip. The tenant id has been validated by
+ * tenant-scope.ts (non-empty, <=128 chars, no control characters) and is hex-encoded here, so no tenant-controlled
+ * text ever reaches the SQL string.
+ */
+function beginScopedSql(guc: string): string {
+	const hex = Buffer.from(guc, "utf8").toString("hex");
+	return `BEGIN; SELECT set_config('app.current_tenant_id', convert_from(decode('${hex}', 'hex'), 'UTF8'), true)`;
+}
+
+function toError(e: unknown): Error {
+	return e instanceof Error ? e : new Error(String(e));
+}
+
+/**
+ * While a client is checked out, node-postgres emits 'error' on it if the backend connection dies. Without a
+ * listener that is an uncaught exception. The guard logs it, remembers it so the client is destroyed on release
+ * (`release(err)`), and is removed on release so listeners never pile up on reused clients.
+ */
+function guardClient(client: pg.PoolClient): { release: (err?: Error) => void } {
+	let brokenErr: Error | undefined;
+	const onError = (err: Error) => {
+		brokenErr = err;
+		log.warn({ err }, "Checked-out pooled client errored; it will be destroyed on release");
+	};
+	client.on?.("error", onError);
+	return {
+		release: (err?: Error) => {
+			client.removeListener?.("error", onError);
+			client.release(err ?? brokenErr);
+		},
+	};
+}
+
+async function runQuery(sql: string, params?: unknown[]): Promise<pg.QueryResult> {
+	const guc = resolveTenantGuc();
+	// System scope (guc "") and unscoped queries need no transaction: the GUC is simply unset/empty.
+	if (guc === undefined || guc === "") return pool().query(sql, params);
+
+	const client = await pool().connect();
+	const guard = guardClient(client);
+	let releaseErr: Error | undefined;
+	try {
+		await client.query(beginScopedSql(guc));
+		const result = await client.query(sql, params);
+		await client.query("COMMIT");
+		return result;
+	} catch (err) {
+		try {
+			await client.query("ROLLBACK");
+		} catch (rollbackErr) {
+			releaseErr = toError(rollbackErr);
+		}
+		throw err;
+	} finally {
+		guard.release(releaseErr);
+	}
 }
 
 /**
@@ -46,7 +196,7 @@ export function getPool(): pg.Pool {
  *   const projects = await query<Project>('SELECT * FROM projects WHERE id = $1', [id]);
  */
 export async function query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]> {
-	const result = await getPool().query(sql, params);
+	const result = await runQuery(sql, params);
 	return result.rows as T[];
 }
 
@@ -57,7 +207,7 @@ export async function query<T = Record<string, unknown>>(sql: string, params?: u
  *   const project = await queryOne<Project>('SELECT * FROM projects WHERE id = $1', [id]);
  */
 export async function queryOne<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T | undefined> {
-	const result = await getPool().query(sql, params);
+	const result = await runQuery(sql, params);
 	return result.rows[0] as T | undefined;
 }
 
@@ -69,13 +219,14 @@ export async function queryOne<T = Record<string, unknown>>(sql: string, params?
  *   const { rowCount } = await execute('DELETE FROM projects WHERE id = $1', [id]);
  */
 export async function execute(sql: string, params?: unknown[]): Promise<{ rowCount: number }> {
-	const result = await getPool().query(sql, params);
+	const result = await runQuery(sql, params);
 	return { rowCount: result.rowCount ?? 0 };
 }
 
 /**
  * Run multiple statements inside a single transaction.
  * If `fn` throws the transaction is rolled back automatically.
+ * The tenant/system scope is applied once (transaction-local) right after BEGIN.
  *
  * @example
  *   await withTransaction(async (client) => {
@@ -83,59 +234,35 @@ export async function execute(sql: string, params?: unknown[]): Promise<{ rowCou
  *     await client.query('INSERT INTO project_plans ...', [...]);
  *   });
  */
+const txStorage = new AsyncLocalStorage<true>();
+
 export async function withTransaction<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
-	const client = await getPool().connect();
+	const guc = resolveTenantGuc();
+	if (txStorage.getStore()) {
+		log.warn(
+			{ caller: callerHint() },
+			"Nested withTransaction: the inner call opens a separate connection and transaction",
+		);
+	}
+	const client = await pool().connect();
+	const guard = guardClient(client);
 	let releaseErr: Error | undefined;
 	try {
-		await client.query("BEGIN");
-		const result = await fn(client);
+		if (guc !== undefined && guc !== "") await client.query(beginScopedSql(guc));
+		else await client.query("BEGIN");
+		const result = await txStorage.run(true, () => fn(client));
 		await client.query("COMMIT");
 		return result;
 	} catch (err) {
 		try {
 			await client.query("ROLLBACK");
 		} catch (rollbackErr) {
-			releaseErr = rollbackErr instanceof Error ? rollbackErr : new Error(String(rollbackErr));
+			releaseErr = toError(rollbackErr);
 		}
 		throw err;
 	} finally {
-		client.release(releaseErr);
+		guard.release(releaseErr);
 	}
-}
-
-/**
- * Set the current tenant context for the PostgreSQL session.
- * This is used by RLS policies when Row Level Security is enabled.
- * The setting is transaction-scoped (true = reset after transaction end).
- *
- * @example
- *   await setTenantContext("tenant-uuid");
- */
-export async function setTenantContext(tenantId: string): Promise<void> {
-	await execute("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
-}
-
-/**
- * v8.0: Run a callback inside a transaction with tenant context enforced.
- * When OSCORPEX_AUTH_ENABLED=true, this ensures every query in the transaction
- * has the correct tenant_id set, closing the RLS backward-compat hole.
- *
- * When auth is disabled, tenant context is skipped (backward compat).
- */
-export async function withTenantTransaction<T>(
-	tenantId: string | undefined,
-	fn: (client: pg.PoolClient) => Promise<T>,
-): Promise<T> {
-	const authEnabled = process.env.OSCORPEX_AUTH_ENABLED === "true";
-	return withTransaction(async (client) => {
-		if (authEnabled && tenantId) {
-			await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
-		} else if (authEnabled && !tenantId) {
-			// Strict mode: auth enabled but no tenant → set empty to prevent NULL-tenant row access
-			await client.query("SELECT set_config('app.current_tenant_id', '', true)");
-		}
-		return fn(client);
-	});
 }
 
 /**

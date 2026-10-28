@@ -7,7 +7,6 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { beforeAll, describe, expect, it } from "vitest";
-import { getPool } from "../pg.js";
 import { TABLE_CLASSIFICATION } from "../tenancy/table-classification.js";
 import { runApplySchema } from "./helpers/apply-schema.js";
 import { POLICY_SQL, type PolicyRow, policyProblems } from "./helpers/rls-catalog.js";
@@ -16,6 +15,7 @@ import {
 	TENANT_B,
 	TENANT_LOCAL,
 	expectPgError,
+	getPool,
 	seedTestTenants,
 	withAppRole,
 	withMigrator,
@@ -105,7 +105,7 @@ describe("fail-closed reads", () => {
 
 // 3. direct tables
 describe("direct tables tenant_id", () => {
-	it.todo("F2: tenant_id NOT NULL on direct tables");
+	// NOT NULL on direct tables is asserted in f2d-not-null-and-scope.test.ts
 
 	it("tenant_id is TEXT on every direct table", async () => {
 		const { rows } = await getPool().query<{ table_name: string; data_type: string }>(
@@ -119,26 +119,37 @@ describe("direct tables tenant_id", () => {
 		expect(bad, `wrong tenant_id type: ${bad.join(", ")}`).toEqual([]);
 	});
 
-	it("a NULL-tenant project created later stays NULL after a forced applySchema and is invisible to the app role", async () => {
+	it("a NULL-tenant project can no longer be created (NOT NULL), also not after a forced applySchema", async () => {
 		const id = `f1b-null-${randomUUID().slice(0, 8)}`;
-		await withMigrator(async (c) => {
-			await c.query(
-				"INSERT INTO projects (id, name, tenant_id, created_at, updated_at) VALUES ($1, 'f1b', NULL, now(), now())",
-				[id],
-			);
-		});
-		try {
-			await applySchema(true);
-			await withMigrator(async (c) => {
-				const { rows } = await c.query("SELECT tenant_id FROM projects WHERE id = $1", [id]);
-				expect(rows).toHaveLength(1);
-				expect(rows[0].tenant_id).toBeNull();
+		const insertNull = () =>
+			withMigrator(async (c) => {
+				await c.query(
+					"INSERT INTO projects (id, name, tenant_id, created_at, updated_at) VALUES ($1, 'f1b', NULL, now(), now())",
+					[id],
+				);
 			});
-			for (const tenant of [TENANT_A, TENANT_B, TENANT_LOCAL, null, ""]) {
-				await withAppRole(tenant, async (c) => {
-					expect((await c.query("SELECT 1 FROM projects WHERE id = $1", [id])).rowCount, String(tenant)).toBe(0);
-				});
-			}
+		try {
+			await expect(insertNull()).rejects.toMatchObject({ code: "23502" });
+			await applySchema(true);
+			await expect(insertNull()).rejects.toMatchObject({ code: "23502" });
+			await withMigrator(async (c) => {
+				expect((await c.query("SELECT 1 FROM projects WHERE id = $1", [id])).rowCount).toBe(0);
+			});
+			// the app role cannot create one either (RLS or NOT NULL)
+			await withAppRole(null, async (c) => {
+				await c.query("SAVEPOINT f1b_null");
+				let code: string | undefined;
+				try {
+					await c.query(
+						"INSERT INTO projects (id, name, tenant_id, created_at, updated_at) VALUES ($1, 'f1b', NULL, now(), now())",
+						[id],
+					);
+				} catch (e) {
+					code = (e as { code?: string }).code;
+				}
+				await c.query("ROLLBACK TO SAVEPOINT f1b_null");
+				expect(["23502", "42501", "23514"]).toContain(code);
+			});
 		} finally {
 			await withMigrator(async (c) => {
 				await c.query("DELETE FROM projects WHERE id = $1", [id]);

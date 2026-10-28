@@ -35,28 +35,19 @@ export function resolveWorkspacePath(scope: WorkspaceScope, relativePath?: strin
 	// Reject obvious traversal attempts
 	const normalizedRel = normalize(relativePath);
 	if (normalizedRel.startsWith("..") || normalizedRel.includes(`..${sep}`)) {
-		throw new WorkspaceViolationError(
-			`Path traversal attempt: ${relativePath}`,
-			scope,
-		);
+		throw new WorkspaceViolationError(`Path traversal attempt: ${relativePath}`, scope);
 	}
 
 	// Reject absolute paths in relativePath
 	if (relativePath.startsWith("/") || relativePath.startsWith("\\")) {
-		throw new WorkspaceViolationError(
-			`Absolute path in relative parameter: ${relativePath}`,
-			scope,
-		);
+		throw new WorkspaceViolationError(`Absolute path in relative parameter: ${relativePath}`, scope);
 	}
 
 	const fullPath = resolve(basePath, normalizedRel);
 
 	// Final check: resolved path must be inside base
 	if (!fullPath.startsWith(basePath + sep) && fullPath !== basePath) {
-		throw new WorkspaceViolationError(
-			`Resolved path escapes workspace: ${fullPath}`,
-			scope,
-		);
+		throw new WorkspaceViolationError(`Resolved path escapes workspace: ${fullPath}`, scope);
 	}
 
 	return fullPath;
@@ -87,10 +78,7 @@ export function assertInsideWorkspace(scope: WorkspaceScope, absolutePath: strin
 	}
 
 	if (canonical !== canonicalBase && !canonical.startsWith(canonicalBase + sep)) {
-		throw new WorkspaceViolationError(
-			`Path ${canonical} is outside workspace ${canonicalBase}`,
-			scope,
-		);
+		throw new WorkspaceViolationError(`Path ${canonical} is outside workspace ${canonicalBase}`, scope);
 	}
 }
 
@@ -98,16 +86,52 @@ export function assertInsideWorkspace(scope: WorkspaceScope, absolutePath: strin
  * Validate that repoPath is safe — not system paths, not other project paths.
  */
 export function validateRepoPath(repoPath: string): void {
-	const dangerous = ["/", "/etc", "/usr", "/var", "/tmp", "/bin", "/sbin", "/root"];
+	// macOS aliases /etc, /var, /tmp to /private/*; the config trees are blocked recursively
+	// (temp dirs such as /private/var/folders/... stay usable).
+	const dangerous = [
+		"/",
+		"/etc",
+		"/usr",
+		"/var",
+		"/tmp",
+		"/bin",
+		"/sbin",
+		"/root",
+		"/private",
+		"/private/etc",
+		"/private/var",
+		"/private/tmp",
+	];
+	const dangerousTrees = ["/etc", "/private/etc"];
 	const resolved = normalize(resolve(repoPath));
 
-	if (dangerous.includes(resolved)) {
+	if (dangerous.includes(resolved) || dangerousTrees.some((t) => resolved.startsWith(t + sep))) {
 		throw new WorkspaceViolationError(`Dangerous repoPath: ${repoPath}`, {} as WorkspaceScope);
 	}
 
 	const home = process.env.HOME || "/root";
 	if (resolved === home) {
 		throw new WorkspaceViolationError(`repoPath is HOME directory: ${repoPath}`, {} as WorkspaceScope);
+	}
+}
+
+/**
+ * Resolve a user-supplied import path to its canonical form, requiring it to live under
+ * `<WORKSPACE_ROOT>/<tenantId>/`. Symlinks are followed (realpath) and the containment check uses
+ * resolve + normalize + sep. Returns null for ANY failure (missing path, outside the tenant root, bad tenant id),
+ * so callers can return one uniform error that does not reveal whether a path exists.
+ */
+export function resolveTenantImportPath(tenantId: string, userPath: unknown): string | null {
+	if (typeof userPath !== "string" || userPath.length === 0 || userPath.length > 4096 || userPath.includes("\0")) {
+		return null;
+	}
+	if (!UUID_OR_SLUG.test(tenantId)) return null;
+	try {
+		const root = realpathSync(resolve(WORKSPACE_ROOT, tenantId));
+		const canonical = realpathSync(normalize(resolve(userPath)));
+		return canonical.startsWith(root + sep) ? canonical : null;
+	} catch {
+		return null;
 	}
 }
 

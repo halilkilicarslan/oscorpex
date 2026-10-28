@@ -14,7 +14,6 @@ vi.mock("../pg.js", () => ({
 	queryOne: vi.fn(),
 	execute: vi.fn(),
 	withTransaction: vi.fn(),
-	setTenantContext: vi.fn(),
 }));
 
 vi.mock("../db.js", () => ({
@@ -23,10 +22,9 @@ vi.mock("../db.js", () => ({
 }));
 
 import { queryOne as dbQueryOne, insertEvent } from "../db.js";
-import { execute, setTenantContext } from "../pg.js";
+import { execute } from "../pg.js";
 
 const mockExecute = vi.mocked(execute);
-const mockSetTenantContext = vi.mocked(setTenantContext);
 const mockInsertEvent = vi.mocked(insertEvent);
 const mockDbQueryOne = vi.mocked(dbQueryOne);
 
@@ -66,30 +64,8 @@ function makeMockContext(
 	return ctx;
 }
 
-// ---------------------------------------------------------------------------
-// 1. setTenantContext — execute çağrısını doğrula
-// ---------------------------------------------------------------------------
-
-describe("setTenantContext", () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-	});
-
-	it("execute ile set_config çağrısı yapar", async () => {
-		mockExecute.mockResolvedValue({ rowCount: 1 });
-
-		// setTenantContext pg.ts'den import edildi — mock üzerinden test
-		await setTenantContext("tenant-uuid-123");
-
-		// setTenantContext mocked — sadece çağrıldığını doğrula
-		expect(mockSetTenantContext).toHaveBeenCalledWith("tenant-uuid-123");
-	});
-
-	it("farklı tenantId ile çağrıldığında doğru argümanı iletir", async () => {
-		await setTenantContext("another-tenant");
-		expect(mockSetTenantContext).toHaveBeenCalledWith("another-tenant");
-	});
-});
+// (F2b) setTenantContext removed — tenant scope is established by accessGuard via runInTenant;
+// see f2b-auth-scope.test.ts.
 
 // ---------------------------------------------------------------------------
 // 2–5. API Key Scope enforcement — requirePermission middleware
@@ -134,7 +110,7 @@ describe("requirePermission — API key scope enforcement", () => {
 		expect(resultAny?.body?.scopes).toEqual(["projects:read"]);
 	});
 
-	it("wildcard scope '*' → her permission için next() çağrılır", async () => {
+	it("wildcard scope '*' never widens access → role lacks permission → 403 (no role-check bypass)", async () => {
 		const c = makeMockContext({
 			authType: "api-key-db",
 			userRole: "developer",
@@ -143,9 +119,37 @@ describe("requirePermission — API key scope enforcement", () => {
 		const next = vi.fn().mockResolvedValue(undefined);
 
 		const handler = requirePermission("settings:write");
-		await handler(c as never, next);
+		const result = await handler(c as never, next);
+
+		expect(next).not.toHaveBeenCalled();
+		expect((result as unknown as { status: number })?.status).toBe(403);
+	});
+
+	it("wildcard scope '*' with a role that has the permission → next() called (role AND scope both allow)", async () => {
+		const c = makeMockContext({
+			authType: "api-key-db",
+			userRole: "developer",
+			apiKeyScopes: ["*"],
+		});
+		const next = vi.fn().mockResolvedValue(undefined);
+
+		await requirePermission("projects:read")(c as never, next);
 
 		expect(next).toHaveBeenCalled();
+	});
+
+	it("scope narrows: owner role has settings:write but a key scoped to projects:read is denied", async () => {
+		const c = makeMockContext({
+			authType: "api-key-db",
+			userRole: "owner",
+			apiKeyScopes: ["projects:read"],
+		});
+		const next = vi.fn().mockResolvedValue(undefined);
+
+		const result = await requirePermission("settings:write")(c as never, next);
+
+		expect(next).not.toHaveBeenCalled();
+		expect((result as unknown as { status: number })?.status).toBe(403);
 	});
 
 	it("resource wildcard 'projects:*' → 'projects:read' permission için next() çağrılır", async () => {

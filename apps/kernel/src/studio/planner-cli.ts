@@ -341,9 +341,18 @@ export function streamPlannerWithCLI(
 		model?: string;
 		effort?: PlannerReasoningEffort;
 		timeoutMs?: number;
+		/**
+		 * Fail-closed text-only mode: only providers that can run with ALL tools disabled are allowed (Claude CLI).
+		 * Codex (read-only sandbox still reads files) and Gemini (plan mode still has read tools) are refused.
+		 */
+		textOnly?: boolean;
 	},
 	callbacks: PlannerStreamCallbacks,
 ): () => void {
+	if (opts.textOnly && opts.provider !== "claude-code") {
+		callbacks.onError(new Error(`Provider "${opts.provider}" cannot run without file access; text-only mode refused`));
+		return () => undefined;
+	}
 	switch (opts.provider) {
 		case "codex":
 			return streamWithCodex(opts, callbacks);
@@ -357,6 +366,7 @@ export function streamPlannerWithCLI(
 					systemPrompt: opts.systemPrompt,
 					model: opts.model ?? "sonnet",
 					timeoutMs: opts.timeoutMs,
+					lockdown: opts.textOnly === true,
 				},
 				callbacks,
 			);

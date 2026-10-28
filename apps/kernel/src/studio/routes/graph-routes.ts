@@ -11,6 +11,7 @@ import {
 	listReplanEvents,
 	rejectReplanEvent,
 } from "../adaptive-replanner.js";
+import { callerTenantId } from "../auth/request-identity.js";
 import {
 	type LearningType,
 	extractPatternsFromEpisodes,
@@ -310,7 +311,9 @@ graphRoutes.get("/learning/patterns", async (c) => {
 	try {
 		const taskType = c.req.query("taskType") ?? "ai";
 		const agentRole = canonicalizeAgentRole(c.req.query("agentRole") ?? "backend-dev");
-		const tenantId = c.req.query("tenantId");
+		// Always the caller's own tenant — a client-supplied tenant id is never honoured
+		const tenantId = callerTenantId(c);
+		if (!tenantId) return c.json({ error: "Forbidden — tenant context required" }, 403);
 		const patterns = await getLearningPatterns(taskType, getBehaviorRoleKey(agentRole), tenantId);
 		return c.json(patterns);
 	} catch (err) {
@@ -331,7 +334,10 @@ graphRoutes.get("/learning/global", async (c) => {
 
 graphRoutes.post("/learning/extract/:tenantId", async (c) => {
 	try {
-		const count = await extractPatternsFromEpisodes(c.req.param("tenantId"));
+		// The :tenantId path segment is kept for URL compatibility but ignored: extraction runs for the caller's tenant only
+		const tenantId = callerTenantId(c);
+		if (!tenantId) return c.json({ error: "Forbidden — tenant context required" }, 403);
+		const count = await extractPatternsFromEpisodes(tenantId);
 		return c.json({ patternsCreated: count });
 	} catch (err) {
 		return c.json({ error: String(err) }, 500);
@@ -340,7 +346,9 @@ graphRoutes.post("/learning/extract/:tenantId", async (c) => {
 
 graphRoutes.post("/learning/promote/:patternId", async (c) => {
 	try {
-		const result = await promoteToGlobal(c.req.param("patternId"));
+		const result = await promoteToGlobal(c.req.param("patternId"), {
+			callerTenantId: callerTenantId(c) ?? "",
+		});
 		if (!result) return c.json({ error: "Pattern not found" }, 404);
 		return c.json(result);
 	} catch (err) {

@@ -12,7 +12,8 @@ export interface PlatformStats {
     cacheRate: number;
     activeAgents: number;
   };
-  recentProjects: {
+  /** Deprecated: the server no longer sends identifying lists (aggregates only). */
+  recentProjects?: {
     id: string;
     name: string;
     status: string;
@@ -20,7 +21,7 @@ export interface PlatformStats {
     createdAt: string;
     updatedAt: string;
   }[];
-  recentTasks: {
+  recentTasks?: {
     id: string;
     title: string;
     status: string;
@@ -45,11 +46,11 @@ export interface PlatformAnalytics {
   agentUsage: { agent: string; role: string; count: number }[];
   dailyActivity: { date: string; events: number; errors: number; completions: number }[];
   hourlyPattern: { hour: number; count: number }[];
-  projectActivity: { projectName: string; projectId: string; status: string; events: number; activeDays: number }[];
-  fileActivity: { file: string; count: number }[];
+  projectActivity?: { projectName: string; projectId: string; status: string; events: number; activeDays: number }[];
+  fileActivity?: { file: string; count: number }[];
   complexityDistribution: { complexity: string; count: number }[];
   eventTypes: { type: string; count: number }[];
-  errorRates: { projectName: string; projectId: string; errors: number; total: number; errorRate: number }[];
+  errorRates?: { projectName: string; projectId: string; errors: number; total: number; errorRate: number }[];
   costByModel: { model: string; calls: number; cost: number; tokens: number }[];
 }
 

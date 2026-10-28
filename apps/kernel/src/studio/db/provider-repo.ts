@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createLogger } from "../logger.js";
-import { execute, getPool, query, queryOne } from "../pg.js";
+import { execute, query, queryOne, withTransaction } from "../pg.js";
 import { decrypt, encrypt, isEncrypted } from "../secret-vault.js";
 import type { AIProvider } from "../types.js";
 import { now, rowToProvider } from "./helpers.js";
@@ -128,18 +128,10 @@ export async function setDefaultProvider(id: string): Promise<AIProvider | undef
 	if (!row) return undefined;
 
 	// Use a transaction to swap default atomically
-	const client = await getPool().connect();
-	try {
-		await client.query("BEGIN");
+	await withTransaction(async (client) => {
 		await client.query("UPDATE ai_providers SET is_default = 0, updated_at = $1", [now()]);
 		await client.query("UPDATE ai_providers SET is_default = 1, updated_at = $1 WHERE id = $2", [now(), id]);
-		await client.query("COMMIT");
-	} catch (err) {
-		await client.query("ROLLBACK");
-		throw err;
-	} finally {
-		client.release();
-	}
+	});
 
 	return getProvider(id);
 }
@@ -179,9 +171,7 @@ export async function getFallbackChain(): Promise<AIProvider[]> {
  * Fallback sıralamasını toplu olarak günceller.
  */
 export async function updateFallbackOrder(orderedIds: string[]): Promise<void> {
-	const client = await getPool().connect();
-	try {
-		await client.query("BEGIN");
+	await withTransaction(async (client) => {
 		for (let index = 0; index < orderedIds.length; index++) {
 			const id = orderedIds[index];
 			await client.query("UPDATE ai_providers SET fallback_order = $1, updated_at = $2 WHERE id = $3", [
@@ -190,11 +180,5 @@ export async function updateFallbackOrder(orderedIds: string[]): Promise<void> {
 				id,
 			]);
 		}
-		await client.query("COMMIT");
-	} catch (err) {
-		await client.query("ROLLBACK");
-		throw err;
-	} finally {
-		client.release();
-	}
+	});
 }

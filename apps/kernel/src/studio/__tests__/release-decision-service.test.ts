@@ -8,6 +8,7 @@ import {
 	ReleaseDecisionService,
 	TenantRequiredForProductionReleaseError,
 } from "../release-decision-service.js";
+import { TENANT_LOCAL } from "./helpers/tenancy.js";
 
 let dbReady = false;
 try {
@@ -27,21 +28,14 @@ let counter = 0;
 async function createGoal(options: { tenant?: boolean } = {}) {
 	counter += 1;
 	const suffix = `${prefix}-${counter}`;
-	const tenantId = options.tenant === false ? null : `tenant-${suffix}`;
-	if (tenantId) {
-		await execute("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)", [
-			tenantId,
-			`Tenant ${suffix}`,
-			`tenant-${suffix}`,
-		]);
-	}
+	const tenantId = options.tenant === false ? null : TENANT_LOCAL;
 	const projectId = `project-${suffix}`;
 	await execute(
 		`
 		INSERT INTO projects (id, name, description, status, tech_stack, repo_path, tenant_id, created_at, updated_at)
 		VALUES ($1, $2, '', 'planning', '[]', '', $3, now(), now())
 		`,
-		[projectId, `Project ${suffix}`, tenantId],
+		[projectId, `Project ${suffix}`, tenantId ?? TENANT_LOCAL],
 	);
 	const goalId = `goal-${suffix}`;
 	await execute("INSERT INTO execution_goals (id, project_id, definition, status) VALUES ($1, $2, $3, 'running')", [

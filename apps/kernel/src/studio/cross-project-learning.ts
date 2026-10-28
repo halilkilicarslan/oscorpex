@@ -275,9 +275,14 @@ export async function autoPromotePatterns(tenantId: string): Promise<number> {
 	return promoted;
 }
 
-export async function promoteToGlobal(patternId: string): Promise<LearningPattern | null> {
+export async function promoteToGlobal(
+	patternId: string,
+	opts: { callerTenantId?: string } = {},
+): Promise<LearningPattern | null> {
 	const pattern = await queryOne("SELECT * FROM learning_patterns WHERE id = $1", [patternId]);
 	if (!pattern) return null;
+	// A tenant may only promote its own patterns (null result → caller answers 404)
+	if (opts.callerTenantId !== undefined && pattern.tenant_id !== opts.callerTenantId) return null;
 
 	// Governance gate: validate content before allowing manual promotion
 	const patternData = (pattern.pattern as Record<string, unknown>) ?? {};

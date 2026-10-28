@@ -3,13 +3,14 @@
 // ---------------------------------------------------------------------------
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { getPool } from "../pg.js";
+
 import {
 	TENANT_A,
 	TENANT_B,
 	TENANT_LOCAL,
 	assertRlsSubjectRole,
 	expectPgError,
+	getPool,
 	roleExists,
 	seedTestTenants,
 	withAppRole,

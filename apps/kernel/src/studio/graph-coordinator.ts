@@ -19,6 +19,8 @@ import {
 } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
+import { queryOne } from "./pg.js";
+import { currentScope, runAsSystem } from "./tenancy/tenant-scope.js";
 import type { Task } from "./types.js";
 import { createCheckpoint } from "./checkpoint/index.js";
 
@@ -292,6 +294,19 @@ async function validateAddEdge(fromTaskId: string, toTaskId: string, projectId: 
 // Insert Node — add a new task into an existing phase
 // ---------------------------------------------------------------------------
 
+/**
+ * Tenant for graph checkpoints: the active tenant scope, otherwise the project's real tenant
+ * (sys_project_tenant, SECURITY DEFINER) when running in system / unscoped context.
+ */
+async function resolveCheckpointTenant(projectId: string): Promise<string> {
+	const scope = currentScope();
+	if (scope?.kind === "tenant") return scope.tenantId;
+	const lookup = () => queryOne<{ t: string | null }>("SELECT sys_project_tenant($1) AS t", [projectId]);
+	const row = scope?.kind === "system" ? await lookup() : await runAsSystem("graph-coordinator:project-tenant", lookup);
+	if (!row?.t) throw new Error(`Cannot resolve tenant for project ${projectId}`);
+	return row.t;
+}
+
 export async function insertNode(
 	ctx: MutationContext,
 	params: {
@@ -306,7 +321,7 @@ export async function insertNode(
 	// P5-C: Checkpoint before graph mutation
 	try {
 		await createCheckpoint({
-			tenantId: "system",
+			tenantId: await resolveCheckpointTenant(ctx.projectId),
 			projectId: ctx.projectId,
 			type: "task-state",
 			reason: "graph_mutation_pre_insert_node",
@@ -359,7 +374,7 @@ export async function splitTask(
 	// P5-C: Checkpoint before graph mutation
 	try {
 		await createCheckpoint({
-			tenantId: "system",
+			tenantId: await resolveCheckpointTenant(ctx.projectId),
 			projectId: ctx.projectId,
 			type: "task-state",
 			reason: "graph_mutation_pre_split_task",
@@ -404,7 +419,7 @@ export async function addEdge(
 	// P5-C: Checkpoint before graph mutation
 	try {
 		await createCheckpoint({
-			tenantId: "system",
+			tenantId: await resolveCheckpointTenant(ctx.projectId),
 			projectId: ctx.projectId,
 			type: "task-state",
 			reason: "graph_mutation_pre_add_edge",

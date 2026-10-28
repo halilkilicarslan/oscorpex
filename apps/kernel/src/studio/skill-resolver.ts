@@ -16,6 +16,7 @@
 
 import type { Skill } from "./db/skill-repo.js";
 import { createLogger } from "./logger.js";
+import { queryOne } from "./pg.js";
 import type { Task } from "./types.js";
 
 const log = createLogger("skill-resolver");
@@ -71,10 +72,18 @@ export async function resolveSkillsForTask(
 	const matched: ResolvedSkill[] = [];
 	const seenIds = new Set<string>();
 
+	// An assignment row alone never grants a skill: a non-global skill must belong to the project's own tenant
+	// (defence against cross-tenant assignment rows). Unknown project tenant → only global skills apply.
+	const projectTenant = (
+		await queryOne<{ tenant_id: string | null }>("SELECT tenant_id FROM projects WHERE id = $1", [projectId])
+	)?.tenant_id;
+	const applicable = (skill: Skill): boolean =>
+		skill.isGlobal || (projectTenant !== null && projectTenant !== undefined && skill.tenantId === projectTenant);
+
 	// --- Tier 1: skills explicitly assigned to this agent ---
 	const agentSkills = await getAgentSkills(agentId);
 	for (const skill of agentSkills) {
-		if (!seenIds.has(skill.id)) {
+		if (!seenIds.has(skill.id) && applicable(skill)) {
 			matched.push({ skill, matchReason: "agent_assigned", level: 2 });
 			seenIds.add(skill.id);
 		}
@@ -83,7 +92,7 @@ export async function resolveSkillsForTask(
 	// --- Tier 2: skills assigned to the project ---
 	const projectSkills = await getProjectSkills(projectId);
 	for (const skill of projectSkills) {
-		if (!seenIds.has(skill.id)) {
+		if (!seenIds.has(skill.id) && applicable(skill)) {
 			matched.push({ skill, matchReason: "project_assigned", level: 2 });
 			seenIds.add(skill.id);
 		}
@@ -102,7 +111,8 @@ export async function resolveSkillsForTask(
 
 	// --- Tier 4: trigger-based matching (task title + description keyword scan) ---
 	// Fetch all non-already-matched skills and scan their trigger keywords.
-	const allSkills = await listSkills({});
+	// Personal skills never auto-match: they apply only through explicit assignment (tiers 1-2).
+	const allSkills = await listSkills({ isGlobal: true });
 	const taskText = `${task.title} ${task.description ?? ""}`.toLowerCase();
 
 	for (const skill of allSkills) {

@@ -173,6 +173,10 @@ packages/*/src/**/*.d.ts.map
 # web/: local tool state (Serena memories may hold credentials) and Firebase deploy cache
 web/**/.serena/
 web/**/.firebase/
+# Nested Serena dirs and per-session notes written by the Serena hooks (repo is public)
+apps/**/.serena/
+packages/**/.serena/
+**/.serena/memories/last_session.md
 
 # cursor
 .cursor

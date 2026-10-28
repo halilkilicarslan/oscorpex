@@ -10,7 +10,8 @@ import { join } from "node:path";
 import dotenv from "dotenv";
 import { afterAll, beforeAll } from "vitest";
 import { applySchema } from "../db-bootstrap.js";
-import { closePool } from "../pg.js";
+import { enterTenantScopeForTests } from "../tenancy/tenant-scope.js";
+import { closeTestPool } from "./helpers/tenancy.js";
 
 const envFile = join(process.cwd(), ".env.test.local");
 if (existsSync(envFile)) dotenv.config({ path: envFile });
@@ -20,17 +21,45 @@ if (existsSync(envFile)) dotenv.config({ path: envFile });
 process.env.DATABASE_URL =
 	process.env.DATABASE_URL || "postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex_test";
 
+// Every kernel test runs inside the local tenant scope by default (tests that need no scope / other tenants
+// use runOutsideScope or helpers/outside-scope.ts `it`). enterWith at module top level propagates to the
+// runner's async context for hooks and test bodies of this file.
+enterTenantScopeForTests("00000000-0000-0000-0000-000000000001");
+
 beforeAll(async () => {
 	// SKIP_DB_SETUP=1 allows pure unit-test files (e.g. schema validation) to run without a DB.
 	if (process.env.SKIP_DB_SETUP === "1") return;
 	try {
 		await applySchema();
+		await initControlPlaneDb();
 	} catch (err) {
 		console.error("[test setup] Failed to apply scripts/init.sql:", err);
 		throw err;
 	}
 });
 
+/**
+ * Mirrors boot-phases/db-phase.ts: the control-plane package delegates to the kernel's tenant-scoped helpers.
+ * The helpers are resolved lazily so that pg.ts is not loaded before a test file had the chance to vi.mock its logger.
+ */
+async function initControlPlaneDb(): Promise<void> {
+	const { initDb } = await import("@oscorpex/control-plane");
+	const kernelPg = () => import("../pg.js");
+	initDb({
+		query: async (sql, params) => (await kernelPg()).query(sql, params),
+		queryOne: async (sql, params) => (await kernelPg()).queryOne(sql, params),
+		execute: async (sql, params) => (await kernelPg()).execute(sql, params),
+		withTransaction: async (fn) => (await kernelPg()).withTransaction(fn),
+	});
+}
+
 afterAll(async () => {
-	await closePool();
+	// Lazy import: a static import here would load pg.ts (and its logger) before test files can vi.mock the logger.
+	try {
+		const { closePool } = await import("../pg.js");
+		await closePool();
+	} catch {
+		// Test files that vi.mock("../pg.js") without closePool have no real pool to close.
+	}
+	await closeTestPool();
 });

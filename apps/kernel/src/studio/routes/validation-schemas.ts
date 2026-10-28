@@ -35,8 +35,13 @@ export const CreateAgentSchema = z
 		personality: z.string().max(200).optional(),
 		cliTool: z.string().max(80).optional(),
 		skills: z.array(z.string().max(200)).max(50).optional(),
+		// Reaches the route's permission check (platform:admin only) instead of failing with 400
+		isPreset: z.boolean().optional(),
 	})
 	.strict();
+
+/** PUT /agents/:id — same fields and size limits as creation, all optional, unknown keys rejected. */
+export const UpdateAgentConfigSchema = CreateAgentSchema.partial().strict();
 
 export const UpdateAgentSchema = z
 	.object({
@@ -157,8 +162,47 @@ export const CreateTemplateSchema = z
 		description: z.string().max(5000).optional(),
 		category: z.string().max(80).optional(),
 		config: z.record(z.string(), z.unknown()).optional(),
+		techStack: z.array(z.string().max(80)).max(50).optional(),
+		agentConfig: z.record(z.string(), z.unknown()).optional(),
+		phases: z.array(z.unknown()).max(100).optional(),
+		// isPublic is platform-admin only (checked in the route); authorId is accepted but ignored (caller is the author)
+		isPublic: z.boolean().optional(),
+		authorId: z.string().max(200).nullable().optional(),
 	})
 	.strict();
+
+const TEMPLATE_JSON_MAX_BYTES = 256 * 1024;
+const TEMPLATE_JSON_MAX_DEPTH = 12;
+const TEMPLATE_PHASES_MAX = 100;
+
+function jsonDepthExceeds(value: unknown, maxDepth: number): boolean {
+	const stack: Array<[unknown, number]> = [[value, 1]];
+	while (stack.length > 0) {
+		const [v, depth] = stack.pop() as [unknown, number];
+		if (typeof v !== "object" || v === null) continue;
+		if (depth > maxDepth) return true;
+		for (const child of Array.isArray(v) ? v : Object.values(v)) stack.push([child, depth + 1]);
+	}
+	return false;
+}
+
+/** Size / depth / count limits for the free-form template fields (agentConfig, phases). Returns an error message or null. */
+export function validateTemplateJsonFields(body: { agentConfig?: unknown; phases?: unknown }): string | null {
+	if (body.phases !== undefined) {
+		if (!Array.isArray(body.phases)) return "phases must be an array";
+		if (body.phases.length > TEMPLATE_PHASES_MAX) return `phases: at most ${TEMPLATE_PHASES_MAX} entries`;
+	}
+	for (const key of ["agentConfig", "phases"] as const) {
+		const value = body[key];
+		if (value === undefined) continue;
+		if (key === "agentConfig" && (typeof value !== "object" || value === null || Array.isArray(value))) {
+			return "agentConfig must be an object";
+		}
+		if (jsonDepthExceeds(value, TEMPLATE_JSON_MAX_DEPTH)) return `${key}: nesting too deep`;
+		if (JSON.stringify(value).length > TEMPLATE_JSON_MAX_BYTES) return `${key}: payload too large`;
+	}
+	return null;
+}
 
 // Plugin schema
 export const UpdatePluginSchema = z

@@ -552,10 +552,15 @@ export function streamWithCLI(
 		systemPrompt: string;
 		model?: string;
 		timeoutMs?: number;
+		/**
+		 * Pure-text mode: plan permission mode and every tool disabled (`--tools ""`), so the model cannot read or
+		 * write files or run commands. Use for prompts that embed tenant data and need no repo access.
+		 */
+		lockdown?: boolean;
 	},
 	callbacks: StreamCLICallbacks,
 ): () => void {
-	const { repoPath, prompt, systemPrompt, model = "sonnet", timeoutMs = 120_000 } = opts;
+	const { repoPath, prompt, systemPrompt, model = "sonnet", timeoutMs = 120_000, lockdown = false } = opts;
 
 	const args = [
 		"-p",
@@ -563,7 +568,21 @@ export function streamWithCLI(
 		"stream-json",
 		"--verbose",
 		"--permission-mode",
-		"bypassPermissions",
+		lockdown ? "plan" : "bypassPermissions",
+		...(lockdown
+			? [
+					"--tools",
+					"",
+					// No MCP servers (even from user/project config) and no settings sources at all.
+					"--strict-mcp-config",
+					"--mcp-config",
+					'{"mcpServers":{}}',
+					"--setting-sources",
+					"",
+					"--disallowed-tools",
+					"mcp__*",
+				]
+			: []),
 		"--model",
 		model,
 		"--system-prompt",

@@ -6,12 +6,13 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
-import { Hono } from "hono";
+import { Hono, type Next } from "hono";
+import type { Context } from "hono";
 import type { AuthVariables } from "../auth/auth-middleware.js";
 import { authMiddleware } from "../auth/auth-middleware.js";
 import { signJwt } from "../auth/jwt.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
-import { requirePermission } from "../auth/rbac.js";
+import { canGrantApiKeyScope, requirePermission } from "../auth/rbac.js";
 import { logTenantActivity } from "../auth/tenant-context.js";
 import {
 	createApiKey,
@@ -19,22 +20,38 @@ import {
 	getUser,
 	getUserByEmail,
 	getUserRole,
+	isUserPlatformAdmin,
 	listApiKeys,
 	listTenantUsers,
 	revokeApiKey,
 	upsertUserRole,
 } from "../db.js";
 import { createLogger } from "../logger.js";
+import { enterRequestTenant, runAsSystemAtBoundary } from "../tenancy/tenant-scope.js";
 const log = createLogger("auth-routes");
 
 const router = new Hono<{ Variables: AuthVariables }>();
 
-// Protected auth endpoints require resolved auth context (JWT/API key).
-router.use("/me", authMiddleware);
-router.use("/users", authMiddleware);
-router.use("/users/*", authMiddleware);
-router.use("/api-keys", authMiddleware);
-router.use("/api-keys/*", authMiddleware);
+/** Authenticate, then run the rest of the request in the caller's tenant scope. */
+// biome-ignore lint/suspicious/noConfusingVoidType: Hono middleware contract (Next resolves to void)
+async function authenticatedScope(c: Context, next: Next): Promise<void | Response> {
+	const denied = await authMiddleware(c, async () => {});
+	if (denied) return denied;
+	const tenantId = c.get("tenantId") as string | null | undefined;
+	if (!tenantId) return c.json({ error: "Forbidden — tenant context required" }, 403);
+	return enterRequestTenant(tenantId, next);
+}
+
+// Protected auth endpoints require resolved auth context (JWT/API key) and run in the caller's tenant scope.
+router.use("/me", authenticatedScope);
+router.use("/users", authenticatedScope);
+router.use("/users/*", authenticatedScope);
+router.use("/api-keys", authenticatedScope);
+router.use("/api-keys/*", authenticatedScope);
+
+// register/login run before any tenant is known → explicit system scope.
+router.use("/register", (_c, next) => runAsSystemAtBoundary("auth:register", next));
+router.use("/login", (_c, next) => runAsSystemAtBoundary("auth:login", next));
 
 // ---------------------------------------------------------------------------
 // POST /auth/register
@@ -128,6 +145,7 @@ router.post("/login", async (c) => {
 				displayName: user.displayName,
 				tenantId: user.tenantId,
 				role,
+				isPlatformAdmin: await isUserPlatformAdmin(user.id),
 			},
 		});
 	} catch (err) {
@@ -167,6 +185,7 @@ router.get("/me", async (c) => {
 			displayName: user.displayName,
 			tenantId: user.tenantId,
 			role,
+			isPlatformAdmin: c.get("isPlatformAdmin") === true,
 		});
 	} catch (err) {
 		log.error(`[auth] me error: ${String(err)}`);
@@ -228,23 +247,46 @@ router.patch("/users/:id/role", async (c) => {
 // ---------------------------------------------------------------------------
 // POST /auth/api-keys — create a new API key
 // ---------------------------------------------------------------------------
-router.post("/api-keys", async (c) => {
+router.post("/api-keys", requirePermission("settings:write"), async (c) => {
 	try {
 		const tid = c.get("tenantId");
 		const uid = c.get("userId");
 
 		if (!tid || !uid) return c.json({ error: "Auth required" }, 401);
 
-		const body = await c.req.json<{ name?: string; scopes?: string[] }>();
+		const body = await c.req.json<{ name?: string; scopes?: unknown }>();
+		const scopes = body.scopes ?? [];
+		// Scopes can never exceed what the creator's own role grants ("*" and unknown scopes included).
+		const role = c.get("userRole") as string | undefined;
+		const isPlatformAdmin = c.get("isPlatformAdmin") === true;
+		if (!Array.isArray(scopes) || !scopes.every((s) => canGrantApiKeyScope(role, s, isPlatformAdmin))) {
+			return c.json({ error: "Invalid or ungranted scopes" }, 403);
+		}
+		// An API-key caller may only mint a non-empty subset of its own key's scopes; a key without platform:admin
+		// (or "*") can never mint an unscoped or platform:admin key, even for a platform-admin user.
+		if (c.get("authType") === "api-key-db") {
+			const own = (c.get("apiKeyScopes") as string[] | undefined) ?? [];
+			const requested = scopes as string[];
+			const covers = (s: string) =>
+				own.includes(s) || (s !== "platform:admin" && (own.includes("*") || own.includes(`${s.split(":")[0]}:*`)));
+			const holdsAdmin = own.includes("platform:admin");
+			const ok =
+				own.length > 0
+					? requested.length > 0 && requested.every(covers)
+					: !isPlatformAdmin || (requested.length > 0 && !requested.includes("platform:admin"));
+			if (!ok || (own.length > 0 && !holdsAdmin && requested.includes("platform:admin"))) {
+				return c.json({ error: "Requested scopes exceed the calling API key's scopes" }, 403);
+			}
+		}
 		const result = await createApiKey({
 			tenantId: tid,
 			userId: uid,
 			name: body.name ?? "Default",
-			scopes: body.scopes ?? [],
+			scopes: scopes as string[],
 		});
 
 		// M6.4: Audit log — non-blocking
-		logTenantActivity(tid, uid, "api_key_create", { keyName: body.name ?? "Default", scopes: body.scopes ?? [] });
+		logTenantActivity(tid, uid, "api_key_create", { keyName: body.name ?? "Default", scopes });
 
 		return c.json(result, 201);
 	} catch (err) {
@@ -278,17 +320,14 @@ router.delete("/api-keys/:id", async (c) => {
 		const tid = c.get("tenantId");
 		const uid = c.get("userId");
 
-		if (tid) {
-			const tenantKeys = await listApiKeys(tid);
-			if (!tenantKeys.some((k) => k.id === keyId)) {
-				return c.json({ error: "API key not found" }, 404);
-			}
-		}
+		if (!tid) return c.json({ error: "Auth required" }, 401);
 
-		await revokeApiKey(keyId);
+		// Tenant-scoped delete: a key of another tenant is indistinguishable from a missing one
+		const revoked = await revokeApiKey(keyId, tid);
+		if (!revoked) return c.json({ error: "API key not found" }, 404);
 
 		// M6.4: Audit log — non-blocking
-		if (tid && uid) {
+		if (uid) {
 			logTenantActivity(tid, uid, "api_key_delete", { keyId });
 		}
 

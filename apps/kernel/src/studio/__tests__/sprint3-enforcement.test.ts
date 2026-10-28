@@ -9,8 +9,6 @@ vi.mock("../pg.js", () => ({
 	execute: vi.fn().mockResolvedValue({ rowCount: 0 }),
 	getPool: vi.fn().mockReturnValue({ query: vi.fn() }),
 	withTransaction: vi.fn().mockImplementation(async (fn: any) => fn({ query: vi.fn() })),
-	setTenantContext: vi.fn().mockResolvedValue(undefined),
-	withTenantTransaction: vi.fn().mockImplementation(async (_tid: any, fn: any) => fn({ query: vi.fn() })),
 	closePool: vi.fn(),
 }));
 
@@ -84,30 +82,7 @@ describe("Model Context Limits", () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
-// 3. withTenantTransaction — unit test against the real function logic
-// Since pg.ts is fully mocked, we test the withTenantTransaction contract
-// by verifying the exported function exists and accepts correct params.
-// Integration behavior (SET LOCAL calls) is validated via tenant-rls.test.ts.
-// ---------------------------------------------------------------------------
-describe("withTenantTransaction — contract", () => {
-	it("withTenantTransaction is exported and callable", async () => {
-		const pg = await import("../pg.js");
-		expect(typeof pg.withTenantTransaction).toBe("function");
-	});
-
-	it("withTenantTransaction completes without error when mocked", async () => {
-		const pg = await import("../pg.js");
-		const result = await pg.withTenantTransaction("tenant-123", async () => "ok");
-		expect(result).toBe("ok");
-	});
-
-	it("setTenantContext is exported and callable", async () => {
-		const pg = await import("../pg.js");
-		expect(typeof pg.setTenantContext).toBe("function");
-		await expect(pg.setTenantContext("tenant-123")).resolves.toBeUndefined();
-	});
-});
+// (F2b) withTenantTransaction / setTenantContext removed in favour of runInTenant (tenancy/tenant-scope.ts).
 
 // ---------------------------------------------------------------------------
 // 4. Risk classification on task start

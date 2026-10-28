@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Oscorpex — Tenant Context tests (M6.2: Row-Level Security / Tenant Scoping)
-// Tests: getTenantContext, withTenantFilter, verifyProjectAccess
+// Tests: getTenantContext, requireTenantContext, verifyProjectAccess
 // ---------------------------------------------------------------------------
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,13 +25,7 @@ const mockQueryOne = vi.mocked(queryOne);
 // ---------------------------------------------------------------------------
 
 import type { Context } from "hono";
-import {
-	getTenantContext,
-	isTenantIsolationEnabled,
-	requireTenantContext,
-	verifyProjectAccess,
-	withTenantFilter,
-} from "../auth/tenant-context.js";
+import { getTenantContext, requireTenantContext, verifyProjectAccess } from "../auth/tenant-context.js";
 
 // ---------------------------------------------------------------------------
 // Helper: minimal Hono Context mock
@@ -88,47 +82,7 @@ describe("getTenantContext", () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
-// 3–5. withTenantFilter
-// ---------------------------------------------------------------------------
-
-describe("withTenantFilter", () => {
-	it("appends WHERE clause when base query has no WHERE", () => {
-		const result = withTenantFilter("SELECT * FROM projects ORDER BY created_at DESC", "tenant-xyz", 1);
-
-		expect(result.query).toContain("WHERE tenant_id = $1");
-		expect(result.params).toEqual(["tenant-xyz"]);
-	});
-
-	it("appends AND clause when base query already has a WHERE", () => {
-		const result = withTenantFilter("SELECT * FROM projects WHERE status = 'active'", "tenant-xyz", 2);
-
-		expect(result.query).toContain("AND tenant_id = $2");
-		expect(result.params).toEqual(["tenant-xyz"]);
-		// Original WHERE must still be present
-		expect(result.query).toContain("WHERE status = 'active'");
-	});
-
-	it("returns unchanged query and empty params when tenantId is null", () => {
-		const base = "SELECT * FROM projects ORDER BY created_at DESC";
-		const result = withTenantFilter(base, null, 1);
-
-		expect(result.query).toBe(base);
-		expect(result.params).toEqual([]);
-	});
-
-	it("throws when tenantId is null and tenant isolation is enabled", () => {
-		const original = process.env.OSCORPEX_AUTH_ENABLED;
-		try {
-			process.env.OSCORPEX_AUTH_ENABLED = "true";
-			expect(() => withTenantFilter("SELECT * FROM projects", null, 1)).toThrow(
-				"Tenant isolation enabled but tenantId is null",
-			);
-		} finally {
-			process.env.OSCORPEX_AUTH_ENABLED = original;
-		}
-	});
-});
+// (F2b) withTenantFilter / isTenantIsolationEnabled removed — RLS + runInTenant replace manual tenant filters.
 
 // ---------------------------------------------------------------------------
 // 6–10. verifyProjectAccess
@@ -200,7 +154,7 @@ describe("requireTenantContext", () => {
 	it("returns null when tenant isolation is disabled", () => {
 		const original = process.env.OSCORPEX_AUTH_ENABLED;
 		try {
-			delete process.env.OSCORPEX_AUTH_ENABLED;
+			Reflect.deleteProperty(process.env, "OSCORPEX_AUTH_ENABLED");
 			const c = makeMockContext();
 			const result = requireTenantContext(c);
 			expect(result).toBeNull();
@@ -253,7 +207,7 @@ describe("Auth middleware opt-in (OSCORPEX_AUTH_ENABLED)", () => {
 	it("studioRoutes skips authMiddleware when OSCORPEX_AUTH_ENABLED is not set", () => {
 		const original = process.env.OSCORPEX_AUTH_ENABLED;
 		try {
-			delete process.env.OSCORPEX_AUTH_ENABLED;
+			Reflect.deleteProperty(process.env, "OSCORPEX_AUTH_ENABLED");
 			expect(process.env.OSCORPEX_AUTH_ENABLED === "true").toBe(false);
 		} finally {
 			process.env.OSCORPEX_AUTH_ENABLED = original;

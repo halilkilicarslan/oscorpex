@@ -19,8 +19,35 @@ export interface Skill {
 	isGlobal: boolean;
 	maxTokenBudget: number;
 	createdBy?: string;
+	/** Owner tenant; undefined for global/legacy rows (legacy non-global rows are visible to platform admins only). */
+	tenantId?: string;
 	createdAt: string;
 	updatedAt: string;
+}
+
+/** Who is asking: used by {@link isSkillVisible}. */
+export interface SkillViewer {
+	tenantId?: string;
+	userId?: string;
+	isPlatformAdmin?: boolean;
+}
+
+/**
+ * Visibility rule shared by routes and auto-detection: global skills are visible to everyone; platform admins also
+ * see legacy rows without a tenant; everyone else only sees skills they own (tenant_id AND created_by match).
+ */
+export function isSkillVisible(
+	skill: Pick<Skill, "isGlobal" | "tenantId" | "createdBy">,
+	viewer: SkillViewer,
+): boolean {
+	if (skill.isGlobal) return true;
+	if (!skill.tenantId) return viewer.isPlatformAdmin === true;
+	return (
+		viewer.tenantId !== undefined &&
+		viewer.userId !== undefined &&
+		skill.tenantId === viewer.tenantId &&
+		skill.createdBy === viewer.userId
+	);
 }
 
 export interface AgentSkillAssignment {
@@ -31,7 +58,7 @@ export interface AgentSkillAssignment {
 	createdAt: string;
 }
 
-export type CreateSkillData = Omit<Skill, "id" | "createdAt" | "updatedAt">;
+export type CreateSkillData = Omit<Skill, "id" | "createdAt" | "updatedAt" | "tenantId">;
 
 export type UpdateSkillData = Partial<
 	Pick<
@@ -66,6 +93,7 @@ interface SkillRow {
 	is_global: boolean;
 	max_token_budget: number;
 	created_by: string | null;
+	tenant_id?: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -84,6 +112,7 @@ function rowToSkill(row: SkillRow): Skill {
 		isGlobal: row.is_global,
 		maxTokenBudget: row.max_token_budget,
 		createdBy: row.created_by ?? undefined,
+		tenantId: row.tenant_id ?? undefined,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};
@@ -208,6 +237,22 @@ export async function listSkills(filters: ListSkillsFilters = {}): Promise<Skill
 // ---------------------------------------------------------------------------
 // Agent ↔ Skill assignments
 // ---------------------------------------------------------------------------
+
+/** True when the project agent belongs to a project of the given tenant (explicit check, independent of RLS). */
+export async function isAgentInTenant(agentId: string, tenantId: string): Promise<boolean> {
+	const row = await queryOne(
+		`SELECT 1 AS ok FROM project_agents a JOIN projects p ON p.id = a.project_id
+		 WHERE a.id = $1 AND p.tenant_id = $2`,
+		[agentId, tenantId],
+	);
+	return row !== undefined;
+}
+
+/** True when the project belongs to the given tenant (explicit check, independent of RLS). */
+export async function isProjectInTenant(projectId: string, tenantId: string): Promise<boolean> {
+	const row = await queryOne("SELECT 1 AS ok FROM projects WHERE id = $1 AND tenant_id = $2", [projectId, tenantId]);
+	return row !== undefined;
+}
 
 export async function assignSkillToAgent(agentId: string, skillId: string, priority = 0): Promise<void> {
 	await execute(

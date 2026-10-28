@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createLogger } from "../logger.js";
-import { execute, getPool, query, queryOne } from "../pg.js";
+import { execute, query, queryOne } from "../pg.js";
 import type { ConversationCompaction, MemoryFact, ProjectContextSnapshot } from "../types.js";
 import { now, rowToContextSnapshot, rowToConversationCompaction, rowToMemoryFact } from "./helpers.js";
 const log = createLogger("memory-repo");

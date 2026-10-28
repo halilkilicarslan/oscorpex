@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect } from "vitest";
 import { artifactReferenceService } from "../artifact-reference-service.js";
 import { accessGuard } from "../auth/access-guard.js";
 import { signJwt } from "../auth/jwt.js";
@@ -10,6 +10,20 @@ import { approvalRoutes } from "../routes/approvals.js";
 import { artifactRoutes } from "../routes/artifacts.js";
 import { qualityGateRoutes } from "../routes/quality-gates.js";
 import { releaseRoutes } from "../routes/releases.js";
+import { seedUser } from "./helpers/identity.js";
+import { itInTenant } from "./helpers/outside-scope.js";
+import { TENANT_A, seedTestTenants } from "./helpers/tenancy.js";
+
+const it = itInTenant(TENANT_A);
+
+beforeAll(async () => {
+	await seedTestTenants();
+	for (const role of ["admin", "developer", "viewer", "owner", "billing"]) {
+		await seedUser({ tenantId: TENANT_A, role, id: `user-${role}-${TENANT_A}` });
+	}
+	// Real user whose token carries no tenant (token tenant "" → sub `user-admin-none`): must reach 403, not 401.
+	await seedUser({ tenantId: TENANT_A, role: "admin", id: "user-admin-none" });
+});
 
 let dbReady = false;
 try {
@@ -50,18 +64,11 @@ function authHeaders(role: string, tenantId: string) {
 async function createGoal(options: { tenant?: boolean } = {}) {
 	counter += 1;
 	const suffix = `${prefix}-${counter}`;
-	const tenantId = options.tenant === false ? null : `tenant-${suffix}`;
-	if (tenantId) {
-		await execute("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)", [
-			tenantId,
-			`Tenant ${suffix}`,
-			`tenant-${suffix}`,
-		]);
-	}
+	const tenantId = options.tenant === false ? null : TENANT_A;
 	const projectId = `project-${suffix}`;
 	await execute(
 		"INSERT INTO projects (id, name, description, status, tech_stack, repo_path, tenant_id, created_at, updated_at) VALUES ($1, $2, '', 'planning', '[]', '', $3, now(), now())",
-		[projectId, `Project ${suffix}`, tenantId],
+		[projectId, `Project ${suffix}`, tenantId ?? TENANT_A],
 	);
 	const goalId = `goal-${suffix}`;
 	await execute("INSERT INTO execution_goals (id, project_id, definition, status) VALUES ($1, $2, $3, 'running')", [
@@ -262,10 +269,15 @@ describe.skipIf(!dbReady)("H2-I Quality Gates Integration", () => {
 				goalId: goal.goalId,
 				artifactType: "security_scan_result",
 				title: "security report",
+				// unique digest: the tenant is now shared across runs (TENANT_A), so identical content would collide
+				uri: `artifact://qg-int/${randomUUID()}`,
+				checksum: randomUUID(),
 				environment: "production",
 			}),
 		});
-		const regBody = (await regRes.json()) as { data: { id: string } };
+		const regText = await regRes.text();
+		expect(regRes.status, regText).toBeLessThan(300);
+		const regBody = JSON.parse(regText) as { data: { id: string } };
 		const rejectRes = await app.request(`/artifacts/${regBody.data.id}/reject`, {
 			method: "POST",
 			headers: authHeaders("admin", tenantId),

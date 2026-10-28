@@ -2,7 +2,7 @@
 // Agent Routes — Agent Management, Runs, Messaging, Inbox
 // ---------------------------------------------------------------------------
 
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { chatWithAgent } from "../agent-chat.js";
 import { loadAgentLog } from "../agent-log-store.js";
 import {
@@ -19,6 +19,7 @@ import {
 	sendMessage,
 } from "../agent-messaging.js";
 import { agentRuntime } from "../agent-runtime.js";
+import { callerTenantId, callerUserId, isPlatformAdminRequest } from "../auth/request-identity.js";
 import { AVATARS, FEMALE_AVATARS, MALE_AVATARS } from "../avatars.js";
 import { containerManager } from "../container-manager.js";
 import {
@@ -26,17 +27,19 @@ import {
 	deleteAgentConfig,
 	getAgentConfig,
 	getProject,
-	listAgentConfigs,
+	getProjectForTenant,
+	getVisibleAgentConfig,
 	listAgentRuns,
 	listChatMessages,
 	listPresetAgents,
 	listProjectAgents,
 	listProjectTasks,
+	listVisibleAgentConfigs,
 	updateAgentConfig,
 } from "../db.js";
 import { createLogger } from "../logger.js";
 import type { MessageStatus, MessageType } from "../types.js";
-import { CreateAgentSchema, parseBody } from "./validation-schemas.js";
+import { CreateAgentSchema, UpdateAgentConfigSchema, parseBody } from "./validation-schemas.js";
 const log = createLogger("agent-routes");
 
 function matchesTaskFilter(line: string, taskId?: string): boolean {
@@ -50,8 +53,15 @@ export const agentRoutes = new Hono();
 
 // ---- Agent Configs --------------------------------------------------------
 
+/** Presets + the caller's own configs (tenant AND creator); platform admins see everything. */
+const agentViewer = (c: Context) => ({
+	tenantId: callerTenantId(c),
+	userId: callerUserId(c),
+	isPlatformAdmin: isPlatformAdminRequest(c),
+});
+
 agentRoutes.get("/agents", async (c) => {
-	return c.json(await listAgentConfigs());
+	return c.json(await listVisibleAgentConfigs(agentViewer(c)));
 });
 
 agentRoutes.get("/agents/presets", async (c) => {
@@ -66,32 +76,67 @@ agentRoutes.get("/avatars", (c) => {
 	return c.json(AVATARS);
 });
 
+/** A non-admin may not even mention isPreset (any value), so the check runs on the raw body before validation. */
+function mentionsPreset(body: unknown): boolean {
+	return typeof body === "object" && body !== null && Object.hasOwn(body, "isPreset");
+}
+
 agentRoutes.post("/agents", async (c) => {
-	const rawBody = await c.req.json();
+	const rawBody = await c.req.json().catch(() => undefined);
+	if (mentionsPreset(rawBody) && !isPlatformAdminRequest(c)) {
+		return c.json({ error: "Only platform admins can create preset agents" }, 403);
+	}
 	// P1-6: Validate with Zod — rejects unknown fields (strict mode) and enforces size limits
 	const parsed = parseBody(CreateAgentSchema, rawBody);
 	if (!parsed.success) return c.json({ error: parsed.error }, 400);
-	// P1-6: Only pass validated data — prevents mass assignment of isPreset, tenant_id, etc.
+	const wantsPreset = parsed.data.isPreset === true;
+	// P1-6: Only pass validated data — prevents mass assignment of tenant_id, etc.
 	// biome-ignore lint/suspicious/noExplicitAny: createAgentConfig accepts flexible Omit<AgentConfig,"id">
-	const agent = await createAgentConfig({ ...parsed.data, isPreset: false } as any);
+	const agent = await createAgentConfig({ ...parsed.data, isPreset: wantsPreset } as any, callerUserId(c));
 	return c.json(agent, 201);
 });
 
 agentRoutes.get("/agents/:id", async (c) => {
-	const agent = await getAgentConfig(c.req.param("id"));
+	const agent = await getVisibleAgentConfig(c.req.param("id"), agentViewer(c));
 	if (!agent) return c.json({ error: "Agent not found" }, 404);
 	return c.json(agent);
 });
 
+/**
+ * Presets are platform data (admin only). Any other config may be changed only by its creator (or a platform
+ * admin); everybody else gets a 404 so existence is not revealed.
+ */
+async function authorizeConfigWrite(c: Context, id: string): Promise<Response | undefined> {
+	const existing = await getAgentConfig(id);
+	if (!existing) return c.json({ error: "Agent not found" }, 404);
+	if (isPlatformAdminRequest(c)) return undefined;
+	if (existing.isPreset) return c.json({ error: "Only platform admins can modify preset agents" }, 403);
+	// Ownership is (tenant_id, created_by): the same user id in another tenant gets a 404 as well.
+	if (!(await getVisibleAgentConfig(id, agentViewer(c)))) return c.json({ error: "Agent not found" }, 404);
+	return undefined;
+}
+
 agentRoutes.put("/agents/:id", async (c) => {
-	const body = await c.req.json();
-	const agent = await updateAgentConfig(c.req.param("id"), body);
+	const id = c.req.param("id");
+	const body = await c.req.json().catch(() => undefined);
+	if (mentionsPreset(body) && !isPlatformAdminRequest(c)) {
+		return c.json({ error: "Only platform admins can modify preset agents" }, 403);
+	}
+	const denied = await authorizeConfigWrite(c, id);
+	if (denied) return denied;
+	const parsed = parseBody(UpdateAgentConfigSchema, body);
+	if (!parsed.success) return c.json({ error: parsed.error }, 400);
+	// biome-ignore lint/suspicious/noExplicitAny: validated partial of AgentConfig (capabilities is ignored by the repo)
+	const agent = await updateAgentConfig(id, parsed.data as any);
 	if (!agent) return c.json({ error: "Agent not found" }, 404);
 	return c.json(agent);
 });
 
 agentRoutes.delete("/agents/:id", async (c) => {
-	const ok = await deleteAgentConfig(c.req.param("id"));
+	const id = c.req.param("id");
+	const denied = await authorizeConfigWrite(c, id);
+	if (denied) return denied;
+	const ok = await deleteAgentConfig(id);
 	if (!ok) return c.json({ error: "Agent not found or is a preset" }, 404);
 	return c.json({ success: true });
 });
@@ -275,7 +320,9 @@ agentRoutes.post("/projects/:id/agents/:agentId/start", async (c) => {
 	const projectId = c.req.param("id");
 	const agentId = c.req.param("agentId");
 
-	const project = await getProject(projectId);
+	// Explicit tenant check (superuser mode bypasses RLS): another tenant's project is a 404.
+	const callerTenant = callerTenantId(c);
+	const project = callerTenant ? await getProjectForTenant(projectId, callerTenant) : undefined;
 	if (!project) return c.json({ error: "Proje bulunamadı" }, 404);
 
 	const { getProjectAgent } = await import("../db.js");
@@ -313,7 +360,11 @@ agentRoutes.post("/projects/:id/agents/:agentId/start", async (c) => {
 		}
 	}
 
+	// Backing config must be visible to the caller (preset, or own tenant + creator); otherwise 404.
 	const agentConfig = await getAgentConfig(agentId);
+	if (agentConfig && !(await getVisibleAgentConfig(agentId, agentViewer(c)))) {
+		return c.json({ error: "Agent bulunamadı" }, 404);
+	}
 	if (agentConfig) {
 		try {
 			const containerId = await containerManager.createContainer(agentConfig, project);

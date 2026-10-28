@@ -33,5 +33,5 @@ export * from "./policy/index.js";
 // Shared
 export * from "./shared/index.js";
 
-// Pool injection — kernel calls initPool() at boot to share its connection pool
-export { initPool } from "./pg.js";
+// DB injection — kernel calls initDb() at boot with its tenant-aware query helpers
+export { type ControlPlaneDb, initDb } from "./pg.js";

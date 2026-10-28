@@ -33,6 +33,8 @@ interface NavItem {
 	icon: React.ReactNode;
 	badge?: string;
 	external?: boolean;
+	/** Visible to platform admins only (the server enforces the same restriction). */
+	adminOnly?: boolean;
 }
 
 interface NavSection {
@@ -41,6 +43,8 @@ interface NavSection {
 	collapsible?: boolean;
 }
 
+const withAdminOnly = (items: NavItem[]): NavItem[] => items.map((item) => ({ ...item, adminOnly: true }));
+
 const sections: NavSection[] = [
 	{
 		title: "",
@@ -48,13 +52,13 @@ const sections: NavSection[] = [
 	},
 	{
 		title: "OBSERVABILITY",
-		items: [
+		items: withAdminOnly([
 			{ to: "/dashboard", label: "Overview", icon: <BarChart3 size={18} /> },
 			{ to: "/traces", label: "Traces", icon: <Activity size={18} /> },
 			{ to: "/logs", label: "Logs", icon: <FileText size={18} /> },
 			{ to: "/feedbacks", label: "Feedbacks", icon: <MessageSquareMore size={18} /> },
 			{ to: "/alerts", label: "Alerts", icon: <Bell size={18} />, badge: "New" },
-		],
+		]),
 	},
 	{
 		title: "AI FEATURES",
@@ -73,8 +77,8 @@ const sections: NavSection[] = [
 		title: "OSCORPEX",
 		collapsible: true,
 		items: [
-			{ to: "/studio/dashboard", label: "Dashboard", icon: <Gauge size={18} />, badge: "New" },
-			{ to: "/studio/insights", label: "Insights", icon: <Brain size={18} />, badge: "New" },
+			{ to: "/studio/dashboard", label: "Dashboard", icon: <Gauge size={18} />, badge: "New", adminOnly: true },
+			{ to: "/studio/insights", label: "Insights", icon: <Brain size={18} />, badge: "New", adminOnly: true },
 			{ to: "/studio", label: "Projects", icon: <Code2 size={18} /> },
 			{ to: "/studio/teams", label: "Team Builder", icon: <Users size={18} /> },
 			{ to: "/studio/skills", label: "Skills", icon: <Sparkles size={18} />, badge: "New" },
@@ -103,7 +107,7 @@ const sections: NavSection[] = [
 const SIDEBAR_STORAGE_KEY = "oscorpex-sidebar-collapsed";
 
 export default function Sidebar() {
-	const { user, isAuthenticated, logout } = useAuth();
+	const { user, isAuthenticated, isLoading, logout } = useAuth();
 	const [collapsed, setCollapsed] = useState<boolean>(() => {
 		try {
 			return localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
@@ -118,6 +122,13 @@ export default function Sidebar() {
 		OSCORPEX: true,
 		"MCP & INTEGRATIONS": true,
 	});
+
+	// Auth disabled (loading finished, no user) is the dev bypass, which the server treats as platform admin.
+	// While the user is still loading nothing is known yet, so admin-only links stay hidden (no flash).
+	const isPlatformAdmin = isLoading === true ? false : !user || user.isPlatformAdmin === true;
+	const visibleSections = sections
+		.map((section) => ({ ...section, items: section.items.filter((item) => !item.adminOnly || isPlatformAdmin) }))
+		.filter((section) => section.items.length > 0);
 
 	const toggleSection = (title: string) => {
 		setExpandedSections((prev) => ({ ...prev, [title]: !prev[title] }));
@@ -157,7 +168,7 @@ export default function Sidebar() {
 
 			{/* Navigation */}
 			<nav className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-1">
-				{sections.map((section) => (
+				{visibleSections.map((section) => (
 					<div key={section.title || "main"} className="mb-2">
 						{section.title && !collapsed && (
 							<div className="flex items-center justify-between px-2 mb-1">

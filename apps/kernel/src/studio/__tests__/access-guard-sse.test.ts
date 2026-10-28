@@ -2,10 +2,26 @@
 // Access Guard — SSE Auth Enforcement Tests
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, vi } from "vitest";
+import { it } from "./helpers/outside-scope.js";
 import { accessGuard } from "../auth/access-guard.js";
+import { currentScope } from "../tenancy/tenant-scope.js";
+
+const ENV_KEYS = ["OSCORPEX_AUTH_ENABLED", "OSCORPEX_DEV_NO_AUTH", "OSCORPEX_API_KEY"] as const;
 
 describe("accessGuard — SSE requests", () => {
+	let saved: Record<string, string | undefined> = {};
+	beforeEach(() => {
+		saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
+		for (const k of ENV_KEYS) delete process.env[k];
+	});
+	afterEach(() => {
+		for (const k of ENV_KEYS) {
+			if (saved[k] === undefined) delete process.env[k];
+			else process.env[k] = saved[k];
+		}
+	});
+
 	function makeCtx(opts: {
 		path: string;
 		method?: string;
@@ -52,15 +68,27 @@ describe("accessGuard — SSE requests", () => {
 		expect((result as any).body.error).toContain("unknown route");
 	});
 
-	it("allows SSE to known routes when auth is disabled (backward compat)", async () => {
-		delete process.env.OSCORPEX_AUTH_ENABLED;
-		const c = makeCtx({ path: "/projects", accept: "text/event-stream", authType: "none" });
-		const next = vi.fn();
+	it("allows SSE to known routes only with explicit dev bypass (OSCORPEX_DEV_NO_AUTH=true), in local tenant scope", async () => {
+		process.env.OSCORPEX_DEV_NO_AUTH = "true";
+		const c = makeCtx({ path: "/projects", accept: "text/event-stream" });
+		let scope: unknown;
+		const next = vi.fn(async () => {
+			scope = currentScope();
+		});
 		await accessGuard(c, next);
 		expect(next).toHaveBeenCalled();
+		expect(scope).toEqual({ kind: "tenant", tenantId: "00000000-0000-0000-0000-000000000001" });
 	});
 
-	it("requires tenant for SSE to protected routes when auth enabled", async () => {
+	it("denies SSE to known routes when auth is not configured and no dev bypass", async () => {
+		const c = makeCtx({ path: "/projects", accept: "text/event-stream" });
+		const next = vi.fn();
+		const result = await accessGuard(c, next);
+		expect(next).not.toHaveBeenCalled();
+		expect((result as any).status).toBe(401);
+	});
+
+	it("requires authentication for SSE to protected routes when auth enabled", async () => {
 		process.env.OSCORPEX_AUTH_ENABLED = "true";
 		try {
 			const c = makeCtx({
@@ -71,7 +99,7 @@ describe("accessGuard — SSE requests", () => {
 			const result = await accessGuard(c, next);
 			expect(next).not.toHaveBeenCalled();
 			expect(result).toBeDefined();
-			expect((result as any).status).toBe(403); // requireTenantContext blocks
+			expect((result as any).status).toBe(401); // unauthenticated → 401 from authMiddleware
 		} finally {
 			delete process.env.OSCORPEX_AUTH_ENABLED;
 		}

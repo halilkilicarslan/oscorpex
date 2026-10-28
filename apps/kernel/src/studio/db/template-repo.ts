@@ -54,6 +54,8 @@ export interface ListTemplatesOpts {
 	search?: string;
 	authorId?: string;
 	isPublic?: boolean;
+	/** Restrict to templates the caller may see: public ones and their own. Platform admins see everything. */
+	visibleTo?: { userId: string | null; isAdmin: boolean };
 	limit?: number;
 	offset?: number;
 }
@@ -115,7 +117,7 @@ export async function createTemplate(data: CreateTemplateData): Promise<ProjectT
 // ---------------------------------------------------------------------------
 
 export async function listTemplates(opts: ListTemplatesOpts = {}): Promise<ProjectTemplate[]> {
-	const { category, search, authorId, isPublic, limit = 50, offset = 0 } = opts;
+	const { category, search, authorId, isPublic, visibleTo, limit = 50, offset = 0 } = opts;
 	const conditions: string[] = [];
 	const params: unknown[] = [];
 	let idx = 1;
@@ -136,6 +138,10 @@ export async function listTemplates(opts: ListTemplatesOpts = {}): Promise<Proje
 	if (isPublic !== undefined) {
 		conditions.push(`is_public = $${idx++}`);
 		params.push(isPublic);
+	}
+	if (visibleTo && !visibleTo.isAdmin) {
+		conditions.push(`(is_public = true OR author_id = $${idx++})`);
+		params.push(visibleTo.userId);
 	}
 
 	const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -153,7 +159,7 @@ export async function listTemplates(opts: ListTemplatesOpts = {}): Promise<Proje
 // ---------------------------------------------------------------------------
 
 export async function countTemplates(opts: Omit<ListTemplatesOpts, "limit" | "offset"> = {}): Promise<number> {
-	const { category, search, authorId, isPublic } = opts;
+	const { category, search, authorId, isPublic, visibleTo } = opts;
 	const conditions: string[] = [];
 	const params: unknown[] = [];
 	let idx = 1;
@@ -174,6 +180,10 @@ export async function countTemplates(opts: Omit<ListTemplatesOpts, "limit" | "of
 	if (isPublic !== undefined) {
 		conditions.push(`is_public = $${idx++}`);
 		params.push(isPublic);
+	}
+	if (visibleTo && !visibleTo.isAdmin) {
+		conditions.push(`(is_public = true OR author_id = $${idx++})`);
+		params.push(visibleTo.userId);
 	}
 
 	const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";

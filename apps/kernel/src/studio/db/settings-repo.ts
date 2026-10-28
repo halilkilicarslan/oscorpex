@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { createLogger } from "../logger.js";
-import { execute, getPool, query, queryOne } from "../pg.js";
+import { execute, query, queryOne, withTransaction } from "../pg.js";
 import { now } from "./helpers.js";
 const log = createLogger("settings-repo");
 
@@ -91,9 +91,7 @@ export async function setProjectSettings(
 	entries: Record<string, string>,
 ): Promise<void> {
 	const ts = now();
-	const client = await getPool().connect();
-	try {
-		await client.query("BEGIN");
+	await withTransaction(async (client) => {
 		for (const [k, v] of Object.entries(entries)) {
 			const id = `${projectId}:${category}:${k}`;
 			await client.query(
@@ -105,13 +103,7 @@ export async function setProjectSettings(
 				[id, projectId, category, k, v, ts],
 			);
 		}
-		await client.query("COMMIT");
-	} catch (err) {
-		await client.query("ROLLBACK");
-		throw err;
-	} finally {
-		client.release();
-	}
+	});
 }
 
 /** Get all settings as a nested object { category: { key: value } }. */

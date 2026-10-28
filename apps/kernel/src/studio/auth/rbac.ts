@@ -91,11 +91,15 @@ const ROLE_PERMISSIONS: Record<Role, string[]> = {
 	billing: ["billing:read", "projects:read"],
 };
 
+/** Permission satisfied exclusively by the isPlatformAdmin flag. */
+export const PLATFORM_ADMIN_PERMISSION = "platform:admin";
+
 /**
  * Check whether a role holds a given permission.
  * Supports wildcard notation: "projects:*" grants any "projects:<action>".
  */
 export function hasPermission(role: Role | string, permission: string): boolean {
+	if (permission === PLATFORM_ADMIN_PERMISSION) return false;
 	// Owner is the highest-privilege tenant role and can access all scoped actions.
 	if (role === "owner") return true;
 
@@ -118,18 +122,25 @@ export function hasPermission(role: Role | string, permission: string): boolean 
  *   - authType === "api-key"  → legacy env key, treated as system admin
  *   - authType === "api-key-db" → DB-backed key: scope check first, then role check
  *
- * M6.4 Scope enforcement for DB-backed API keys:
+ * M6.4 Scope enforcement for DB-backed API keys (scopes only narrow — role AND scope must both allow):
  *   If the key has declared scopes, the requested permission must be covered by one of them.
  *   Scope matching rules:
  *     - "*"              → grants any permission (superscope)
  *     - "resource:*"     → grants all actions on a resource (e.g. "projects:*")
  *     - "resource:action" → exact permission match (e.g. "projects:read")
- *   If scopes are empty the check falls through to normal role-based enforcement.
+ *   The role-based check always runs afterwards; empty scopes simply mean "no extra narrowing".
  */
 // biome-ignore lint/suspicious/noExplicitAny: middleware must be env-agnostic to work across all routers
 export function requirePermission(permission: string): MiddlewareHandler<any> {
 	return async (c, next) => {
 		const authType = c.get("authType") as string | undefined;
+
+		// platform:admin is granted ONLY by users.is_platform_admin (resolved by authMiddleware, never from
+		// the token, roles or API-key scopes).
+		if (permission === PLATFORM_ADMIN_PERMISSION) {
+			if (c.get("isPlatformAdmin") === true) return next();
+			return c.json({ error: "Forbidden", required: permission }, 403);
+		}
 
 		// No auth configured (dev mode / backward compat) — allow
 		if (!authType || authType === "none") return next();
@@ -138,10 +149,10 @@ export function requirePermission(permission: string): MiddlewareHandler<any> {
 		if (authType === "api-key") return next();
 
 		// M6.4: Scope check for DB-backed API keys
-		// If the key has declared scopes, the scope check is authoritative:
-		//   - Scope granted  → return next() immediately (bypass role check)
-		//   - Scope denied   → return 403 immediately
-		//   - Scopes empty   → fall through to role-based check (backward compat)
+		// If the key has declared scopes they can only narrow what the role allows:
+		//   - Scope denied   → 403 immediately
+		//   - Scope granted  → the role check below must still pass
+		//   - Scopes empty   → role-based check only (backward compat)
 		if (authType === "api-key-db") {
 			const scopes = c.get("apiKeyScopes") as string[] | undefined;
 			if (scopes && scopes.length > 0) {
@@ -162,8 +173,7 @@ export function requirePermission(permission: string): MiddlewareHandler<any> {
 						403,
 					);
 				}
-				// Scope explicitly granted — skip role check (scope is the authority)
-				return next();
+				// Scope granted: scopes only NARROW access, so the role check below must pass as well.
 			}
 		}
 
@@ -174,6 +184,27 @@ export function requirePermission(permission: string): MiddlewareHandler<any> {
 
 		return next();
 	};
+}
+
+const SCOPE_FORMAT = /^[a-z][a-z0-9-]*:([a-z][a-z0-9-]*|\*)$/;
+
+/**
+ * May a key created by a user with `role` carry `scope`? Scopes can never exceed the creator's role:
+ * the scope must be well-formed and held by the role ("*" and "resource:*" only when the role holds them);
+ * "platform:admin" only for platform admins.
+ */
+export function canGrantApiKeyScope(
+	role: Role | string | undefined,
+	scope: unknown,
+	isPlatformAdmin: boolean,
+): boolean {
+	if (typeof scope !== "string") return false;
+	if (scope === PLATFORM_ADMIN_PERMISSION) return isPlatformAdmin;
+	if (!role) return false;
+	if (scope === "*") return role === "owner";
+	if (!SCOPE_FORMAT.test(scope)) return false;
+	if (scope.endsWith(":*")) return role === "owner" || (ROLE_PERMISSIONS[role as Role] ?? []).includes(scope);
+	return hasPermission(role, scope);
 }
 
 /**

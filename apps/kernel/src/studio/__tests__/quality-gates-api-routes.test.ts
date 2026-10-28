@@ -1,7 +1,10 @@
 import { Hono } from "hono";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, vi } from "vitest";
 import { accessGuard } from "../auth/access-guard.js";
 import { signJwt } from "../auth/jwt.js";
+import { seedUser } from "./helpers/identity.js";
+import { itInTenant } from "./helpers/outside-scope.js";
+import { seedTestTenants } from "./helpers/tenancy.js";
 
 const { mockQualityGateService, mockApprovalService, mockReleaseDecisionService, mockArtifactReferenceService } =
 	vi.hoisted(() => ({
@@ -74,15 +77,26 @@ async function buildApp() {
 	return app;
 }
 
-function authHeader(role: string, tenantId = "tenant-1") {
+// Identity is verified against the DB on every JWT request, so the actors are real users in a real tenant.
+const TENANT = "00000000-0000-0000-0000-00000000000a"; // TENANT_A
+const actorId = (role: string) => `qg-routes-${role}`;
+
+beforeAll(async () => {
+	await seedTestTenants();
+	for (const role of ["admin", "viewer"]) await seedUser({ tenantId: TENANT, role, id: actorId(role) });
+});
+
+function authHeader(role: string, tenantId = TENANT) {
 	const token = signJwt({
-		sub: "user-1",
-		email: "user@example.com",
+		sub: actorId(role),
+		email: `${actorId(role)}@f2r.test`,
 		tenantId,
 		role,
 	});
 	return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 }
+
+const it = itInTenant(TENANT);
 
 describe("H2-G route-level API wiring", () => {
 	beforeEach(() => {

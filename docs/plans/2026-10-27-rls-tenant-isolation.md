@@ -62,7 +62,40 @@ test → kod → security-review → code-review (ayrı agent'lar; reviewer'a di
 - Bilgi: F1 ağır DDL bloğu `schema_migrations` tablosu yerine `COMMENT ON FUNCTION app_tenant()` işaretiyle bir kez çalışır; blok içeriği yine de idempotenttir. Kompozit FK'ler `NOT VALID` eklenip veri izin veriyorsa doğrulanır (eski yetim satırlar açılışı engellemez).
 - F1 review düzeltmeleri: şema yalnızca `init.sql` hash'i değiştiğinde veya katalog kayması (drift) olduğunda uygulanır (`schema_meta`); `local`'e backfill yalnızca bir kez; migrator üyelikleri `INHERIT FALSE`; `is_platform_admin` sütun yetkisiyle korunur; `notifications` doğrudan `tenant_id` tablosu; `(phase_id, tenant_id)` kompozit FK; fonksiyonlarda `search_path = pg_catalog, pg_temp`.
 - F2: `sys_project_tenant` / `sys_event_tenant` istekten gelen bir ID ile tenant kapsamı seçmek için kullanılmaz (yalnızca sistem yolları); `sys_api_key_lookup` NULL tenant döndürürse anahtar reddedilir.
-- F2: `OSCORPEX_PLATFORM_ADMIN_EMAILS` ile admin ataması yalnızca önceden var olan ve e-postası doğrulanmış hesaplara yapılır (kayıt açık, e-posta doğrulaması yok; operatörden önce o e-postayla kayıt olan kişi admin olamamalı).
+- F2 (karar güncellendi): platform admin **operatör komutuyla** atanır (`admin:grant <email>`, migration bağlantısıyla çalışır); `OSCORPEX_PLATFORM_ADMIN_EMAILS` kaldırılır (kayıt açık + e-posta doğrulaması yok → e-posta ile atama ele geçirilebilir). Auth kapalıyken yerel kullanıcı admin.
+- F2/F3 aşamalama: kapsamsız sorgu `OSCORPEX_TENANT_SCOPE_MODE` ile yönetilir — F2/F3'te varsayılan `warn` (log + metrik; DB tarafında RLS zaten 0 satır döndürür), testlerde `strict` doğrulanır; F4'te varsayılan `strict`.
+- F2 alt adımları: F2-a tenant kapsamı + `pg.ts` + control-plane `initDb`; F2-b `accessGuard` + auth açıkları + `/api/observability`; F2-c platform admin yetkileri + prompt enjeksiyonu + onay rota çakışması; F2-d `tenant_id NOT NULL` + yazma düzeltmeleri + test taşıma.
+
+**F2 review kararları (onaylandı)**
+- Skill / agent_configs enjeksiyonu: uygulama seviyesinde şimdi (otomatik eşleşme yalnızca global skill'lerle; kişisel skill'ler yalnızca açık atamayla ve kendi tenant'ında; agent_configs `created_by` + sahiplik); DB seviyesi RLS F5-6'da.
+- `POST /projects/import`: tenant başına çalışma alanı kökü — yol `realpath` ile `<OSCORPEX_WORKSPACE_ROOT>/<tenantId>/` altında olmalı (`resolve + normalize + sep`); platform admin muaf (loglanır); hata mesajı yolun varlığını açığa çıkarmaz.
+- `/api/observability`: F5-6'ya kadar yalnızca platform admin.
+- `OSCORPEX_API_KEY`: production + auth açıkken yalnızca `OSCORPEX_ALLOW_LEGACY_API_KEY=true` ile; sabit süreli karşılaştırma; denetimde `legacy-operator`.
+- Ek bulgu: takım mimarı CLI'ı (`team-routes.ts:178`) kernel dizininde çalışıyor → boş, izole bir dizinde çalıştırılır.
+- Projesiz control-plane onayları (`project_id` NULL): yalnızca platform admin oluşturur, görür, sonuçlandırır; tenant kullanıcıları onay oluştururken `projectId` vermek zorundadır.
+
+**F2 üçüncü düzeltme turu (kullanıcı onayıyla kurala istisna; 2. tur review sonrası)**
+1. Skill otomatik tespiti/önerileri yalnızca görünür skill'leri kullanır; çalışma zamanında global olmayan skill yalnızca projenin tenant'ına aitse uygulanır.
+2. Takım mimarı CLI'ı araçsız ve planlama modunda çalışır (`bypassPermissions` yok); dosya erişimini engelleyemeyen sağlayıcı kullanılmaz (fail-closed); prompt'a yalnızca çağıranın tenant'ının özel takımları girer.
+3. Review dağıtıcısının yedek agent seçimi yalnızca preset'ler ve projenin tenant'ına ait config'ler.
+4. `GET /agents` ve `/agents/:id`: preset'ler + çağıranınkiler; `sourceAgentId` kopyalama yalnızca görünür config'lerden.
+5. API anahtarı kapsamları: oluşturanın rol izinlerini aşamaz (`platform:admin` yalnızca platform admin); RBAC'ta kapsam yalnızca daraltır (kapsam ve rol birlikte geçmeli).
+6. Kapsamsız sorgu uyarısı build çıktısında da çağıranı gösterir.
+7. Düşükler: `skills`/`agent_configs` sahipliği (tenant, kullanıcı) — `tenant_id` sütunu şimdi (RLS F5-6'da); projects FK `NOT VALID` + korumalı `VALIDATE`; auth açıkken `local` tenant'lı API anahtarları reddedilir; admin import'u da `realpath` + `validateRepoPath`'ten geçer; menüde kullanıcı yüklenmeden admin bağlantıları gizlenir; yorum/kullanılmayan kod düzeltmeleri; sınır yardımcıları için test kapsamı.
+Ardından yalnızca bu maddelere odaklı tek bir hedefli güvenlik doğrulaması.
+
+**F2 son maddeler A–E (hedefli doğrulamadan; "şimdi düzelt, sonra commit" kararı — yeni review turu yok)**
+- A: Takım mimarı CLI'ı MCP ve ayar kaynağı yüklemez (`--strict-mcp-config`, boş `--mcp-config`, `--setting-sources ""`, `--disallowed-tools mcp__*`); Claude CLI 2.1.308 ile argüman ayrıştırması doğrulandı (`tools:[]`, `mcp_servers:[]`).
+- B: `team/recommend` yalnızca çağıranın tenant'ının özel takımlarını listeler; `team/apply` görünmeyen özel takımda 404.
+- C: `POST /auth/api-keys` `settings:write` ister; API anahtarıyla çağıran yalnızca kendi kapsamlarının boş olmayan alt kümesini üretebilir; `platform:admin` yalnızca onu taşıyan anahtardan.
+- D: agent config PUT/DELETE için `tenant_id` = çağıranın tenant'ı **ve** `created_by` = çağıran; `/projects/:id/agents/:agentId/start` superuser modunda da açık tenant kontrolü yapar. Tenant'sız eski kayıtlar yalnızca admin (eski iki test bu karara göre güncellendi).
+- E: Admin import'u ham ve `realpath` yolunu `validateRepoPath`'ten geçirir; `/private/*` (macOS) engelli.
+
+**Sonraki planlar (backlog)**
+- Kilitli CLI modunda CLAUDE.md (kullanıcı/proje belleği) yükleniyor olabilir; araç olmadığı için sızdırma yolu yok, ama operatörün `~/.claude/CLAUDE.md` içeriği yanıta yansıyabilir. `--bare` yalnızca API anahtarıyla çalıştığı için varsayılan yapılmadı.
+- Admin import'unda ev dizininin alt ağaçları (ör. `~/.ssh`) engellenmiyor (admin güvenilir operatör kararı); istenirse ev dizini alt ağaç olarak engellenir.
+- F4'e kadar superuser modunda `/projects/:id/*` rotaları yalnızca RLS'e dayanır (RLS atlanır); access-guard proje tenant'ını ayrıca kontrol etmez. F4 (app rolü zorunlu) bu açığı kapatır.
+- Kayıtta e-posta doğrulaması; doğrulanmış hesaplara env/e-posta ile platform admin ataması (kullanıcı isteği, F2 kararı sonrası).
 - F4: çalışma zamanı kullanıcısının superuser olması ya da migrator ile aynı olması F1'de yalnızca hata olarak loglanır (Docker F4'e kadar superuser); F4'te açılışı durdurur.
 - F4: superuser olmayan migrator, sahip olunan tablolarda DDL için `SET ROLE oscorpex_owner` kullanmalı; `vector` eklentisi superuser ya da önceden kurulmuş olmalı. Production'da ayrı `OSCORPEX_MIGRATION_DATABASE_URL` zorunludur.
 - Kullanıcı (manuel): `.env.example`'daki eski `oscorpex_dev` şifresi yer tutucuyla değiştirilmeli; `.env`'e `POSTGRES_PASSWORD` ve yerelde `OSCORPEX_MIGRATION_DATABASE_URL` eklenmeli (hook `.env` dosyalarını koruyor).

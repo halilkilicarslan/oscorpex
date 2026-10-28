@@ -26,7 +26,7 @@ export interface TenantContext {
 // Tenant Isolation Switch
 // ---------------------------------------------------------------------------
 
-export function isTenantIsolationEnabled(): boolean {
+function tenantIsolationEnabled(): boolean {
 	return process.env.OSCORPEX_AUTH_ENABLED === "true";
 }
 
@@ -50,36 +50,13 @@ export function getTenantContext(c: Context<any>): TenantContext {
  * This prevents cross-tenant access when running in multi-tenant mode.
  */
 export function requireTenantContext(c: Context<any>): Response | null {
-	if (!isTenantIsolationEnabled()) return null;
+	if (!tenantIsolationEnabled()) return null;
 	const tenantId = c.get("tenantId") ?? null;
 	if (!tenantId) {
 		log.warn("[tenant-context] Tenant isolation enabled but no tenantId in context — rejecting request");
 		return c.json({ error: "Forbidden — tenant context required" }, 403);
 	}
 	return null;
-}
-
-// ---------------------------------------------------------------------------
-// Tenant-scoped Query Helper
-// Appends "WHERE tenant_id = $N" or "AND tenant_id = $N" to base query.
-// Returns empty params when tenantId is null (backward compat — no filter).
-// ---------------------------------------------------------------------------
-
-export function withTenantFilter(
-	baseQuery: string,
-	tenantId: string | null,
-	paramIndex: number,
-): { query: string; params: unknown[] } {
-	// Strict mode: when tenant isolation is enabled, missing tenant is an error
-	if (isTenantIsolationEnabled() && !tenantId) {
-		throw new Error("Tenant isolation enabled but tenantId is null — query aborted");
-	}
-	if (!tenantId) return { query: baseQuery, params: [] };
-
-	const hasWhere = /\bWHERE\b/i.test(baseQuery);
-	const clause = hasWhere ? ` AND tenant_id = $${paramIndex}` : ` WHERE tenant_id = $${paramIndex}`;
-
-	return { query: baseQuery + clause, params: [tenantId] };
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +99,7 @@ export async function logTenantActivity(
 
 export async function verifyProjectAccess(projectId: string, tenantId: string | null): Promise<boolean> {
 	// Strict mode: when tenant isolation is enabled, missing tenant = denied
-	if (isTenantIsolationEnabled() && !tenantId) {
+	if (tenantIsolationEnabled() && !tenantId) {
 		log.warn("[tenant-context] verifyProjectAccess denied: tenant isolation enabled but no tenantId provided");
 		return false;
 	}

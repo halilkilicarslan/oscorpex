@@ -100,9 +100,10 @@ describe("P0-5: Auth bypass explicit", () => {
 		const authSource = readFileSync(join(process.cwd(), "src/studio/auth/auth-middleware.ts"), "utf8");
 		// Must contain the explicit flag check
 		expect(authSource).toContain("OSCORPEX_DEV_NO_AUTH");
-		// Must set dev tenant context when bypass is enabled
-		expect(authSource).toContain("dev_tenant_id");
-		expect(authSource).toContain("dev_actor_id");
+		// Dev bypass maps to the local tenant (no stale dev_tenant_id literal)
+		expect(authSource).toContain("00000000-0000-0000-0000-000000000001");
+		// F2b: no session-level tenant GUC from auth middleware
+		expect(authSource).not.toContain("setTenantContext");
 	});
 });
 

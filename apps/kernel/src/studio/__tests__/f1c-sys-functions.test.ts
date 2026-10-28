@@ -4,8 +4,15 @@
 
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getPool } from "../pg.js";
-import { TENANT_A, TENANT_B, expectPgError, seedTestTenants, withAppRole, withMigrator } from "./helpers/tenancy.js";
+import {
+	TENANT_A,
+	TENANT_B,
+	expectPgError,
+	getPool,
+	seedTestTenants,
+	withAppRole,
+	withMigrator,
+} from "./helpers/tenancy.js";
 
 const SYS_FUNCTIONS = [
 	"sys_project_tenant",

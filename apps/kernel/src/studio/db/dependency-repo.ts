@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createLogger } from "../logger.js";
-import { execute, getPool, query } from "../pg.js";
+import { execute, query, withTransaction } from "../pg.js";
 import type {
 	AgentCapability,
 	AgentDependency,
@@ -63,9 +63,7 @@ export async function bulkCreateDependencies(
 ): Promise<AgentDependency[]> {
 	const createdAt = new Date().toISOString();
 	const results: AgentDependency[] = [];
-	const client = await getPool().connect();
-	try {
-		await client.query("BEGIN");
+	await withTransaction(async (client) => {
 		for (const dep of deps) {
 			const id = randomUUID();
 			await client.query(
@@ -82,13 +80,7 @@ export async function bulkCreateDependencies(
 				createdAt,
 			});
 		}
-		await client.query("COMMIT");
-	} catch (err) {
-		await client.query("ROLLBACK");
-		throw err;
-	} finally {
-		client.release();
-	}
+	});
 	return results;
 }
 
