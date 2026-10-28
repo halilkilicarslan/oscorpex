@@ -134,7 +134,7 @@ React 19 + Vite + Tailwind 4 + React Router. Dark theme: bg `#0a0a0a`, accent `#
 
 ### Database
 
-PostgreSQL (`postgresql://oscorpex:oscorpex_dev@localhost:5432/oscorpex`). 85 tables including `projects`, `tasks`, `phases`, `events`, `agent_sessions`, `agent_episodes`, `task_proposals`, `graph_mutations`, `replan_events`, `learning_patterns`, `provider_state`, `agent_instances`, `runtime_heartbeats`, `approvals`, `audit_events`, `incidents`.
+PostgreSQL — runtime connection from `DATABASE_URL` in `.env` (e.g. `postgresql://oscorpex:<password>@localhost:5432/oscorpex`); schema migrations use `OSCORPEX_MIGRATION_DATABASE_URL`. 85 tables including `projects`, `tasks`, `phases`, `events`, `agent_sessions`, `agent_episodes`, `task_proposals`, `graph_mutations`, `replan_events`, `learning_patterns`, `provider_state`, `agent_instances`, `runtime_heartbeats`, `approvals`, `audit_events`, `incidents`.
 
 All migrations use `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`.
 
