@@ -296,7 +296,7 @@ export async function updatePhaseStatus(id: string, status: PhaseStatus): Promis
  *     appear in the result (with plan = null, phases = []).
  *  3. Group rows back into the nested { project, plan, phases } shape in TS.
  */
-export async function getRunningProjectsWithPlans(): Promise<
+export async function getRunningProjectsWithPlans(projectId?: string): Promise<
 	Array<{
 		project: Project;
 		plan: ProjectPlan | null;
@@ -370,9 +370,10 @@ export async function getRunningProjectsWithPlans(): Promise<
 		LEFT JOIN latest_plans pp ON pp.project_id = proj.id AND pp.rn = 1
 		LEFT JOIN phases ph ON ph.plan_id = pp.id
 		LEFT JOIN tasks t ON t.phase_id = ph.id
-		WHERE proj.status = 'running'
+		WHERE proj.status = 'running' AND ($1::text IS NULL OR proj.id = $1)
 		ORDER BY proj.id, pp.version DESC, ph."order", t.id
 		`,
+		[projectId ?? null],
 	);
 
 	// ---- Group flat rows into nested { project, plan, phases } buckets -----

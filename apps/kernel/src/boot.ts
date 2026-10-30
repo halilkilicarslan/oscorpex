@@ -29,6 +29,7 @@ import {
 	registerWebhookBridge,
 } from "./studio/composition/index.js";
 import { registerGraphSplitBridge } from "./studio/graph-coordinator.js";
+import { TenantScopeError, currentScope, isImplicitScope } from "./studio/tenancy/tenant-scope.js";
 
 const log = createLogger("boot");
 
@@ -46,6 +47,12 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 	port: number;
 }> {
 	const port = options.port ?? (Number(process.env.PORT) || 3141);
+
+	// Boot timers and intervals must start outside any request scope or they would capture it.
+	const scope = currentScope();
+	if (scope !== undefined && !isImplicitScope()) {
+		throw new TenantScopeError("bootKernel called inside a tenant/system scope; background timers would inherit it");
+	}
 
 	log.info(`[boot] Starting Oscorpex kernel on port ${port}...`);
 
@@ -83,7 +90,9 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 	replayPhase();
 
 	// Phase 9.5: Application composition (seeders, event bridges, webhooks, plugins, notifications)
-	registerSeeders();
+	await registerSeeders().catch((err) => {
+		log.error({ err }, "[boot] Seeding failed (non-fatal)");
+	});
 	registerEventBridges();
 	registerWebhookBridge();
 	registerPluginBridge();

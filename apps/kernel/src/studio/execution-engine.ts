@@ -94,13 +94,6 @@ class ExecutionEngine {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Consolidated query: fetch all running projects with their active phase IDs.
-	 */
-	async getRunningProjectPhases(): Promise<Array<{ projectId: string; phaseId: string }>> {
-		return this.dispatcher.getRunningProjectPhases();
-	}
-
-	/**
 	 * Begin execution for a project.
 	 */
 	async startProjectExecution(projectId: string): Promise<void> {

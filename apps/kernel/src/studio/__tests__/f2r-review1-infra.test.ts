@@ -19,8 +19,10 @@ import {
 	enterTenantScopeForTests,
 	runAsSystem,
 	runAsSystemAtBoundary,
+	runAsSystemInBackground,
 	runInTenant,
 	runInTenantAtBoundary,
+	runInTenantInBackground,
 	runOutsideScope,
 } from "../tenancy/tenant-scope.js";
 import { type SeededUser, removeUsers, seedUser } from "./helpers/identity.js";
@@ -107,6 +109,46 @@ describe("*AtBoundary helpers", () => {
 	});
 });
 
+describe("*InBackground helpers", () => {
+	it("throw when an explicit tenant scope is active, even for the same tenant", async () => {
+		await runOutsideScope(() =>
+			runInTenant(TENANT_A, async () => {
+				await expect(runInTenantInBackground(TENANT_A, async () => 1)).rejects.toBeInstanceOf(TenantScopeError);
+				await expect(runInTenantInBackground(TENANT_B, async () => 1)).rejects.toBeInstanceOf(TenantScopeError);
+				await expect(runAsSystemInBackground("x", async () => 1)).rejects.toBeInstanceOf(TenantScopeError);
+				// the explicit scope is untouched
+				expect(currentScope()).toEqual({ kind: "tenant", tenantId: TENANT_A });
+			}),
+		);
+	});
+
+	it("work with no scope", async () => {
+		const t = await runOutsideScope(() => runInTenantInBackground(TENANT_A, async () => currentScope()));
+		expect(t).toEqual({ kind: "tenant", tenantId: TENANT_A });
+		const s = await runOutsideScope(() => runAsSystemInBackground("tick", async () => currentScope()));
+		expect(s).toEqual({ kind: "system", reason: "tick" });
+	});
+
+	it("work from system scope (the watchdog tick discovers in system, then enters each tenant)", async () => {
+		await runOutsideScope(() =>
+			runAsSystem("tick", async () => {
+				const s = await runAsSystemInBackground("discovery", async () => currentScope());
+				expect(s).toEqual({ kind: "system", reason: "discovery" });
+				const t = await runInTenantInBackground(TENANT_B, async () => currentScope());
+				expect(t).toEqual({ kind: "tenant", tenantId: TENANT_B });
+			}),
+		);
+	});
+
+	it("may drop the implicit default test scope (plain test body)", async () => {
+		expect(currentScope()).toEqual({ kind: "tenant", tenantId: TENANT_LOCAL }); // implicit default
+		const t = await runInTenantInBackground(TENANT_A, async () => currentScope());
+		expect(t).toEqual({ kind: "tenant", tenantId: TENANT_A });
+		const s = await runAsSystemInBackground("tick", async () => currentScope());
+		expect(s).toEqual({ kind: "system", reason: "tick" });
+	});
+});
+
 describe("enterTenantScopeForTests", () => {
 	it("throws unless VITEST is set", () => {
 		const prev = process.env.VITEST;
@@ -161,6 +203,32 @@ describe("source guard — scope-escape helpers have a closed importer set", () 
 		// The bus-private dispatch boundary is the single, explicit exemption.
 		expect(importers("runOutsideScope")).toEqual(["apps/kernel/src/studio/event-bus.ts"]);
 		expect(importers("enterTenantScopeForTests")).toEqual([]);
+	});
+
+	it("*InBackground helpers are used only by execution / boot-phases / composition, from a closed importer set", () => {
+		const found = [
+			...new Set([...importers("runInTenantInBackground"), ...importers("runAsSystemInBackground")]),
+		].sort();
+		expect(found).toEqual([
+			"apps/kernel/src/boot-phases/provider-state-phase.ts",
+			"apps/kernel/src/studio/composition/register-seeders.ts",
+			"apps/kernel/src/studio/execution/dispatch-coordinator.ts",
+			"apps/kernel/src/studio/execution/execution-recovery.ts",
+			"apps/kernel/src/studio/execution/execution-watchdog.ts",
+		]);
+		const allowed = /(apps\/kernel\/src\/boot-phases\/|apps\/kernel\/src\/studio\/(execution|composition)\/)/;
+		expect(found.filter((f) => !allowed.test(f))).toEqual([]);
+	});
+
+	it("scope-detached timers (setBackgroundInterval, ExecutionWatchdog) are only wired by the execution engine", () => {
+		// Their callbacks run outside the caller's scope (system → tenant per project), so a request handler must never
+		// be able to start one.
+		expect(importers("setBackgroundInterval")).toEqual(["apps/kernel/src/studio/execution/execution-watchdog.ts"]);
+		expect([...new Set(importers("ExecutionWatchdog"))].sort()).toEqual([
+			"apps/kernel/src/studio/execution-engine.ts",
+			"apps/kernel/src/studio/execution/execution-watchdog.ts", // definition
+			"apps/kernel/src/studio/execution/index.ts",
+		]);
 	});
 
 	it("*AtBoundary helpers are used only at request boundaries (auth / routes / observability / middleware / control-plane)", () => {

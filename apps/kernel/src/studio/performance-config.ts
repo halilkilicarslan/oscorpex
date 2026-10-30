@@ -279,6 +279,16 @@ export interface PerformanceConfigSnapshot {
 	dbPool: DbPoolConfig;
 }
 
+export interface RecoveryConfig {
+	concurrency: number;
+}
+
+export function getRecoveryConfig(): RecoveryConfig {
+	const raw = process.env.OSCORPEX_RECOVERY_CONCURRENCY?.trim();
+	const concurrency = raw ? Math.floor(Number(raw)) : Number.NaN;
+	return { concurrency: Number.isFinite(concurrency) ? Math.min(10, Math.max(1, concurrency)) : 2 };
+}
+
 export function getPerformanceConfigSnapshot(): PerformanceConfigSnapshot {
 	return {
 		features: getFeatureFlags(),

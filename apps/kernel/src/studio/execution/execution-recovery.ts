@@ -5,19 +5,25 @@
 
 import { agentRuntime } from "../agent-runtime.js";
 import { stopApp } from "../app-runner.js";
+import { enforceBudgetGuard } from "../budget-guard.js";
 import {
 	getRunningProjectsWithPlans,
 	getTask,
 	listProjectTasks,
+	listRunningProjectsSys,
 	releaseTaskClaim,
 	updatePhaseStatus,
 	updateTask,
 } from "../db.js";
 import { createLogger } from "../logger.js";
+import { getRecoveryConfig } from "../performance-config.js";
 import { taskEngine } from "../task-engine.js";
+import { runAsSystemInBackground, runInTenantInBackground } from "../tenancy/tenant-scope.js";
 import type { Task } from "../types.js";
 
 const log = createLogger("execution-recovery");
+
+const PROJECT_DEADLOCK_ATTEMPTS = 3;
 
 export class ExecutionRecovery {
 	constructor(
@@ -33,10 +39,45 @@ export class ExecutionRecovery {
 	 * yeniden başlatır. Bu sayede yarıda kalmış görevler yeniden çalıştırılır.
 	 */
 	async recoverStuckTasks(): Promise<void> {
-		// Single query replaces the previous N+1 pattern (getLatestPlan + listPhases
-		// per project).  With 50 running projects that was 100+ round-trips; now it
-		// is exactly one.
-		const runningProjects = await getRunningProjectsWithPlans();
+		const running = await runAsSystemInBackground("startup-recovery", () => listRunningProjectsSys());
+		const queue: Array<{ projectId: string; tenantId: string }> = [];
+		for (const { projectId, tenantId } of running) {
+			if (tenantId) queue.push({ projectId, tenantId });
+			else log.error(`[execution-recovery] Skipping project "${projectId}": running project has a NULL tenant`);
+		}
+
+		const worker = async (): Promise<void> => {
+			for (let next = queue.shift(); next; next = queue.shift()) {
+				const { projectId, tenantId } = next;
+				for (let attempt = 1; ; attempt++) {
+					try {
+						await runInTenantInBackground(tenantId, () => this._recoverProject(projectId));
+						break;
+					} catch (err) {
+						if (isDeadlockError(err) && attempt < PROJECT_DEADLOCK_ATTEMPTS) {
+							log.warn(
+								`[execution-recovery] Deadlock recovering project "${projectId}" (attempt ${attempt}), retrying`,
+							);
+							await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+							continue;
+						}
+						log.error({ err }, `[execution-recovery] Recovery failed for project "${projectId}"`);
+						break;
+					}
+				}
+			}
+		};
+		const { concurrency } = getRecoveryConfig();
+		await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
+	}
+
+	private async _recoverProject(projectId: string): Promise<void> {
+		if (await enforceBudgetGuard(projectId)) {
+			log.warn(`[execution-recovery] Skipping project "${projectId}": budget exceeded`);
+			return;
+		}
+		// One query per project replaces the previous N+1 pattern (getLatestPlan + listPhases).
+		const runningProjects = await getRunningProjectsWithPlans(projectId);
 		for (const { project, plan, phases } of runningProjects) {
 			if (!plan || plan.status !== "approved") continue;
 
@@ -62,8 +103,9 @@ export class ExecutionRecovery {
 
 			if (hasRecovered) {
 				log.info(`[execution-recovery] Recovering project "${project.name}" — restarting execution`);
+				// Execution is long-running: never block recovery (and boot) on it.
 				this._startProjectExecution(project.id).catch((err) => {
-					log.error(`[execution-recovery] Recovery failed for "${project.name}": ${String(err)}`);
+					log.warn({ err }, `[execution-recovery] Restarting execution failed for "${project.name}"`);
 				});
 			}
 
@@ -189,7 +231,7 @@ export class ExecutionRecovery {
 }
 
 // ---------------------------------------------------------------------------
-// isDeadlockError — only used by runStartupRecoveryWithRetry
+// isDeadlockError — per-project retry inside recovery and runStartupRecoveryWithRetry
 // ---------------------------------------------------------------------------
 
 function isDeadlockError(err: unknown): boolean {

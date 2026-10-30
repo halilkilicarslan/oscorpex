@@ -477,6 +477,24 @@ F2 ile istek bazlı tenant kapsamı ve gerçek RLS geldi. Etki analizi ve üç i
 6. Seed edilen presetlerin tenant'ı NULL'dur ve tüm tenant'lar görebilir.
 7. **Regresyon:** `execution-engine` ve `restart-recovery` testleri yeşil.
 
+**F3-d uygulamasında ortaya çıkanlar**
+- **Kurtarma açılışı bloklamaz:**
+  - Keşif, görev sıfırlama ve bütçe kontrolü eşzamanlılık sınırı içinde beklenir.
+  - Proje yürütmesi tenant kapsamında, beklenmeden başlatılır ve hatası loglanır.
+  - Deadlock yeniden denemesi yalnızca ilgili proje için yapılır.
+- **`sys_running_projects()` yeniden tanımlandı:** Onaylı planı olan, `paused` ya da `failed` pipeline run'ı bulunmayan çalışan projeleri kapsar. Böylece pipeline run'ı olmayan çalışan projeler (agent'sız plan onayı, `POST /execute`, `retryTask`) eskisi gibi kurtarılır.
+- **Watchdog:**
+  - Bütçesi aşılmış projeyi atlar; pipeline duraklatma başarısız olsa bile atlamaya devam eder.
+  - Tick'ler üst üste binmez.
+- **Kapsamdan kaçan yardımcılar:**
+  - `runAsSystemInBackground` ve `runInTenantInBackground` açık bir tenant kapsamında çalışmayı reddeder.
+  - `setBackgroundInterval` ve `ExecutionWatchdog` kapalı bir importer listesiyle korunur; bunu `f2r-review1-infra` testi denetler.
+- **Açılış:** Açık bir kapsam içinde çalışırsa hata fırlatır.
+- **Seeder'lar:** Sistem kapsamında çalışır ve hataları loglar. Önceden gerçek RLS altında preset'ler sessizce yazılamıyordu.
+- **provider-state:** Boş `catch` kaldırıldı.
+- **Ayar:** `OSCORPEX_RECOVERY_CONCURRENCY` (varsayılan 2, 1–10 aralığında; boş ya da sayı dışı değer varsayılana döner) CLAUDE.md'ye eklendi.
+- **Sonraki işler:** Bütçesi aşılmış proje için watchdog her 15 saniyede bir uyarı logu basıyor; seyreltilmeli.
+
 ---
 
 ### F3-e — WebSocket ve console

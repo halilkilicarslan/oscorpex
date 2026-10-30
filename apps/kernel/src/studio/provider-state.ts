@@ -98,7 +98,7 @@ class ProviderStateManager {
 		});
 
 		log.info(`[provider-state] ${adapter} cooldown: ${trigger} (${durationMs}ms)`);
-		this.persistToDb().catch((err) => log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err));
+		this.persistToDb().catch((err) => log.warn({ err }, "[provider-state] Non-blocking operation failed"));
 	}
 
 	/** Legacy alias — defaults to rate_limited trigger */
@@ -113,9 +113,7 @@ class ProviderStateManager {
 			state.cooldownUntil = null;
 			state.consecutiveFailures = 0;
 			state.lastSuccess = new Date();
-			this.persistToDb().catch((err) =>
-				log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err),
-			);
+			this.persistToDb().catch((err) => log.warn({ err }, "[provider-state] Non-blocking operation failed"));
 		}
 	}
 
@@ -141,9 +139,7 @@ class ProviderStateManager {
 		if (state.consecutiveFailures >= 3) {
 			this.markCooldown(adapter, "cli_error", 120_000);
 		} else {
-			this.persistToDb().catch((err) =>
-				log.warn("[provider-state] Non-blocking operation failed:", err?.message ?? err),
-			);
+			this.persistToDb().catch((err) => log.warn({ err }, "[provider-state] Non-blocking operation failed"));
 		}
 	}
 
@@ -214,7 +210,7 @@ class ProviderStateManager {
 				);
 			}
 		} catch (err) {
-			log.warn("[provider-state] Failed to persist state:" + " " + String(err));
+			log.warn({ err }, "[provider-state] Failed to persist state");
 		}
 	}
 
@@ -244,8 +240,8 @@ class ProviderStateManager {
 				existing.lastCooldownAt = row.last_cooldown_at ? new Date(row.last_cooldown_at) : undefined;
 			}
 			log.info("[provider-state] Loaded state from DB");
-		} catch {
-			// Table may not exist yet on first run — non-blocking
+		} catch (err) {
+			log.warn({ err }, "[provider-state] Failed to load state from DB");
 		}
 	}
 }

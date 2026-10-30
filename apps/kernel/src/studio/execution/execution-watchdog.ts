@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { createLogger } from "../logger.js";
+import { runAsSystemInBackground, setBackgroundInterval } from "../tenancy/tenant-scope.js";
 
 const log = createLogger("execution-watchdog");
 
@@ -18,9 +19,9 @@ export class ExecutionWatchdog {
 
 	start(): void {
 		if (this.timer) return;
-		this.timer = setInterval(() => {
-			this.runDispatchWatchdog().catch((err) => {
-				log.warn("[execution-watchdog] Dispatch watchdog failed (non-blocking):" + " " + String(err));
+		this.timer = setBackgroundInterval(() => {
+			runAsSystemInBackground("execution-watchdog", () => this.runDispatchWatchdog()).catch((err) => {
+				log.warn({ err }, "[execution-watchdog] Dispatch watchdog failed (non-blocking)");
 			});
 		}, this.intervalMs);
 	}

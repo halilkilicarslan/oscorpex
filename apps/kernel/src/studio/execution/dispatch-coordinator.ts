@@ -6,19 +6,21 @@
 
 import type { AdaptiveSemaphore, ConcurrencyTracker } from "../adaptive-concurrency.js";
 import { evaluateReplan } from "../adaptive-replanner.js";
+import { checkBudget } from "../budget-guard.js";
 import {
-	getRunningProjectPhases as dbGetRunningProjectPhases,
 	getFailedTaskCountInPhase,
 	getLatestPlan,
 	getPipelineRun,
 	getProject,
 	listPhases,
+	listRunningProjectPhasesSys,
 	reclaimStaleQueuedClaimsForProject,
 } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
 import { taskEngine } from "../task-engine.js";
 import { sortTasksByFairness } from "../task-scheduler.js";
+import { runAsSystemInBackground, runInTenantInBackground } from "../tenancy/tenant-scope.js";
 import type { Task } from "../types.js";
 
 const log = createLogger("task-dispatcher");
@@ -34,14 +36,6 @@ export class TaskDispatcher {
 		private readonly _executeTask: (projectId: string, task: Task) => Promise<void>,
 	) {}
 
-	/**
-	 * Consolidated query: fetch all running projects with their active phase IDs in one shot.
-	 * Replaces N+1 pattern of listProjects → getPipelineRun → getLatestPlan → listPhases.
-	 */
-	async getRunningProjectPhases(): Promise<Array<{ projectId: string; phaseId: string }>> {
-		return dbGetRunningProjectPhases();
-	}
-
 	get dispatchingTasks(): Set<string> {
 		return this._dispatchingTasks;
 	}
@@ -53,46 +47,62 @@ export class TaskDispatcher {
 			// If engine is actively working, watchdog should stay passive.
 			if (this._semaphore.activeCount > 0 || this._semaphore.pendingCount > 0) return;
 
-			const projectPhases = await this.getRunningProjectPhases();
+			const projectPhases = await runAsSystemInBackground("dispatch-watchdog", () => listRunningProjectPhasesSys());
 			if (projectPhases.length === 0) return;
 
 			// Group phases by project
-			const byProject = new Map<string, string[]>();
-			for (const { projectId, phaseId } of projectPhases) {
-				const phases = byProject.get(projectId) ?? [];
-				phases.push(phaseId);
-				byProject.set(projectId, phases);
+			const byProject = new Map<string, { tenantId: string | null; phaseIds: string[] }>();
+			for (const { projectId, phaseId, tenantId } of projectPhases) {
+				const entry = byProject.get(projectId) ?? { tenantId, phaseIds: [] };
+				entry.phaseIds.push(phaseId);
+				byProject.set(projectId, entry);
 			}
 
 			const now = Date.now();
-			for (const [projectId, phaseIds] of byProject) {
+			for (const [projectId, { tenantId, phaseIds }] of byProject) {
+				if (!tenantId) {
+					log.error(`[task-dispatcher] Watchdog skipped project "${projectId}": running project has a NULL tenant`);
+					continue;
+				}
 				const lastKick = this._lastWatchdogKickByProject.get(projectId) ?? 0;
 				// Cooldown to avoid dispatch thrash loops when a project keeps flapping.
 				if (now - lastKick < 20_000) continue;
 
-				let hasReadyTask = false;
-				for (const phaseId of phaseIds) {
-					const readyTasks = await taskEngine().getReadyTasks(phaseId);
-					if (readyTasks.length > 0) {
-						hasReadyTask = true;
-						const sorted = sortTasksByFairness(readyTasks);
-						for (const task of sorted) {
-							this._executeTask(projectId, task).catch((err) =>
-								log.warn(`[task-dispatcher] Non-blocking operation failed: ${err?.message ?? err}`),
-							);
-						}
-					}
-				}
-
-				if (hasReadyTask) {
-					this._lastWatchdogKickByProject.set(projectId, now);
-					log.warn(`[task-dispatcher] Watchdog kick: dispatching ready tasks for project "${projectId}"`);
+				try {
+					await runInTenantInBackground(tenantId, () => this._kickProject(projectId, phaseIds, now));
+				} catch (err) {
+					log.error({ err }, `[task-dispatcher] Dispatch watchdog failed for project "${projectId}"`);
 				}
 			}
 		} catch (err) {
-			log.error(`[task-dispatcher] Dispatch watchdog error: ${String(err)}`);
+			log.error({ err }, "[task-dispatcher] Dispatch watchdog error");
 		} finally {
 			this._dispatchWatchdogRunning = false;
+		}
+	}
+
+	private async _kickProject(projectId: string, phaseIds: string[], now: number): Promise<void> {
+		if ((await checkBudget(projectId)).exceeded) {
+			log.warn(`[task-dispatcher] Watchdog skipped project "${projectId}": budget exceeded`);
+			return;
+		}
+		let hasReadyTask = false;
+		for (const phaseId of phaseIds) {
+			const readyTasks = await taskEngine().getReadyTasks(phaseId);
+			if (readyTasks.length > 0) {
+				hasReadyTask = true;
+				const sorted = sortTasksByFairness(readyTasks);
+				for (const task of sorted) {
+					this._executeTask(projectId, task).catch((err) =>
+						log.warn(`[task-dispatcher] Non-blocking operation failed: ${err?.message ?? err}`),
+					);
+				}
+			}
+		}
+
+		if (hasReadyTask) {
+			this._lastWatchdogKickByProject.set(projectId, now);
+			log.warn(`[task-dispatcher] Watchdog kick: dispatching ready tasks for project "${projectId}"`);
 		}
 	}
 

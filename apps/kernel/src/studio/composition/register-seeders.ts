@@ -1,19 +1,23 @@
 // ---------------------------------------------------------------------------
 // Composition — Seeders
 // Initializes preset agents and team templates on startup.
-// Non-blocking: errors are swallowed to avoid crashing the server on stale DB.
+// Runs in system scope: presets are global records with a NULL tenant.
 // ---------------------------------------------------------------------------
 
 import { seedPresetAgents, seedTeamTemplates } from "../db.js";
 import { createLogger } from "../logger.js";
+import { runAsSystemInBackground } from "../tenancy/tenant-scope.js";
 
 const log = createLogger("composition:seeders");
 
-export function registerSeeders(): void {
-	seedPresetAgents().catch((err) => {
-		log.warn({ err }, "seedPresetAgents failed");
-	});
-	seedTeamTemplates().catch((err) => {
-		log.warn({ err }, "seedTeamTemplates failed");
+export async function registerSeeders(): Promise<void> {
+	await runAsSystemInBackground("seeders", async () => {
+		const results = await Promise.allSettled([seedPresetAgents(), seedTeamTemplates()]);
+		const names = ["seedPresetAgents", "seedTeamTemplates"];
+		results.forEach((r, i) => {
+			if (r.status === "rejected") log.error({ err: r.reason }, `${names[i]} failed`);
+		});
+		const failed = results.find((r) => r.status === "rejected");
+		if (failed) throw failed.reason;
 	});
 }

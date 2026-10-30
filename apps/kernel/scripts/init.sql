@@ -2690,7 +2690,10 @@ CREATE OR REPLACE FUNCTION sys_running_projects()
 	AS $fn$
 		SELECT p.id, p.tenant_id FROM public.projects p
 		WHERE p.status = 'running'
-		  AND EXISTS (SELECT 1 FROM public.pipeline_runs pr WHERE pr.project_id = p.id AND pr.status = 'running')
+		  AND EXISTS (SELECT 1 FROM public.project_plans pp WHERE pp.project_id = p.id AND pp.status = 'approved')
+		  AND NOT EXISTS (
+			SELECT 1 FROM public.pipeline_runs pr WHERE pr.project_id = p.id AND pr.status IN ('paused', 'failed')
+		  )
 		ORDER BY p.id
 	$fn$;
 

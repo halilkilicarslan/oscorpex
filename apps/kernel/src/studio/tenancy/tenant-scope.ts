@@ -124,6 +124,32 @@ export function enterTenantScopeForTests(tenantId: string): void {
 	scopeStorage.enterWith({ kind: "tenant", tenantId, implicit: true });
 }
 
+function assertNoExplicitScope(helper: string): void {
+	if (readScope()?.kind === "tenant" && !isImplicitScope()) {
+		throw new TenantScopeError(`${helper} cannot run inside an explicit tenant scope`);
+	}
+}
+
+/**
+ * Background-work variants (timers, watchdog, startup recovery): a tick is a fresh unit of work, so the implicit
+ * default test scope (or no scope) is dropped before the explicit scope is established. An explicit tenant scope
+ * is never dropped: it is rejected, so a request scope cannot leak into background work.
+ */
+export async function runAsSystemInBackground<T>(reason: string, fn: () => Promise<T>): Promise<T> {
+	assertNoExplicitScope("runAsSystemInBackground");
+	return runOutsideScope(() => runAsSystem(reason, fn));
+}
+
+export async function runInTenantInBackground<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+	assertNoExplicitScope("runInTenantInBackground");
+	return runOutsideScope(() => runInTenant(tenantId, fn));
+}
+
+/** setInterval whose callbacks never inherit the scope of the code that created the timer. */
+export function setBackgroundInterval(fn: () => void, ms: number): NodeJS.Timeout {
+	return runOutsideScope(() => setInterval(fn, ms));
+}
+
 /**
  * Request-boundary variants: an HTTP request is a fresh unit of work, so the implicit default test scope (or no
  * scope) is dropped before the request establishes its own. An explicit tenant/system scope is never dropped:

@@ -177,6 +177,7 @@ All performance/scheduling subsystems read from `performance-config.ts`. Key env
 | `OSCORPEX_AVAILABILITY_CACHE_TTL_MS` | 30000 | Health cache TTL for availability checks |
 | `OSCORPEX_CAPABILITY_CACHE_TTL_MS` | 300000 | Health cache TTL for capability checks |
 | `OSCORPEX_PREFLIGHT_ENABLED` | true | Enable preflight warm-up health checks |
+| `OSCORPEX_RECOVERY_CONCURRENCY` | 2 | Startup recovery: max projects recovered in parallel (clamped to 1-10; non-numeric falls back to 2) |
 
 ## Constraints
 
