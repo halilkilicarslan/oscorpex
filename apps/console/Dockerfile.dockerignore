@@ -1,0 +1,91 @@
+# Allow-list build context for the console image (BuildKit picks this file up next to
+# apps/console/Dockerfile; context = repo root). Exclude everything, re-include only what
+# `pnpm install --frozen-lockfile` and `pnpm --filter console build` need.
+*
+
+# Root manifests (the root lockfile is authoritative; apps/console/pnpm-lock.yaml is stale and stays out)
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+
+# Every workspace manifest (required for a frozen-lockfile install)
+!apps/*/package.json
+!packages/*/package.json
+!adapters/*/package.json
+
+# Console
+!apps/console/index.html
+!apps/console/vite.config.ts
+!apps/console/tsconfig*.json
+!apps/console/nginx.conf
+!apps/console/src
+!apps/console/public/*.svg
+
+# The only workspace package the console imports
+!packages/control-plane/src
+!packages/control-plane/tsconfig*.json
+
+# Screenshots/images are gitignored (*.png) and never part of a clean checkout; keep local strays out too
+**/*.png
+
+# Re-exclude regardless of the above (last match wins)
+# >>> common-deny (keep identical in every .dockerignore)
+**/node_modules
+**/dist
+**/.env*
+**/.oscorpex
+**/.voltagent
+**/.serena
+**/.claude*
+**/.credentials.json
+**/.mcp.json
+**/.git
+**/.npmrc
+**/.yarnrc*
+**/.netrc
+**/.pgpass
+**/.git-credentials
+**/.aws
+**/.ssh
+**/.gnupg
+**/.kube
+**/.docker
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore
+**/*.ppk
+**/id_rsa*
+**/id_dsa*
+**/id_ecdsa*
+**/id_ed25519*
+**/credentials.json
+**/service-account*.json
+**/*.tfstate*
+**/*.sqlite*
+**/*.db
+**/*.dump
+**/*.log
+**/.history
+**/.idea
+**/.vscode
+**/.cursor
+**/.playwright-mcp
+**/*.swp
+**/*~
+**/.DS_Store
+**/.tmp
+**/coverage
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.test.js
+**/*.spec.ts
+**/*.spec.tsx
+**/*.js.map
+**/*.tsbuildinfo
+**/src/**/*.js
+# <<< common-deny

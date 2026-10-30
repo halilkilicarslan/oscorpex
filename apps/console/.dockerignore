@@ -1,52 +1,62 @@
-# Dependencies
-node_modules
-.pnp
-.pnp.js
+*
+# Legacy: the console image builds from the repo root; see apps/console/Dockerfile.dockerignore
 
-# Testing
-coverage
-.nyc_output
-
-# Build outputs
-dist
-build
-
-# Misc
-.DS_Store
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Editor directories and files
-.idea
-.vscode
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Git
-.git
-.gitignore
-
-# Environment files
-.env.local
-.env.development
-.env.test
-.env.production
-
-# Documentation
-README.md
-docs
-
-# CI/CD
-.github
-.gitlab-ci.yml
-.travis.yml
-
-# Parent directory files
-..
+# >>> common-deny (keep identical in every .dockerignore)
+**/node_modules
+**/dist
+**/.env*
+**/.oscorpex
+**/.voltagent
+**/.serena
+**/.claude*
+**/.credentials.json
+**/.mcp.json
+**/.git
+**/.npmrc
+**/.yarnrc*
+**/.netrc
+**/.pgpass
+**/.git-credentials
+**/.aws
+**/.ssh
+**/.gnupg
+**/.kube
+**/.docker
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore
+**/*.ppk
+**/id_rsa*
+**/id_dsa*
+**/id_ecdsa*
+**/id_ed25519*
+**/credentials.json
+**/service-account*.json
+**/*.tfstate*
+**/*.sqlite*
+**/*.db
+**/*.dump
+**/*.log
+**/.history
+**/.idea
+**/.vscode
+**/.cursor
+**/.playwright-mcp
+**/*.swp
+**/*~
+**/.DS_Store
+**/.tmp
+**/coverage
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.test.js
+**/*.spec.ts
+**/*.spec.tsx
+**/*.js.map
+**/*.tsbuildinfo
+**/src/**/*.js
+# <<< common-deny

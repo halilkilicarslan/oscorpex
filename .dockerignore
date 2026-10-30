@@ -1,57 +1,96 @@
-# Dependencies
-node_modules
-.pnp
-.pnp.js
+# Allow-list build context for the kernel image (BuildKit, context = repo root).
+# Exclude everything first, then re-include only what `pnpm install --frozen-lockfile` and
+# `pnpm --filter @oscorpex/kernel... build` need. New top-level files never leak by default.
+*
 
-# Testing
-coverage
-.nyc_output
+# Root manifests
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!tsconfig.json
 
-# Build outputs
-dist
-build
+# Every workspace manifest (required for a frozen-lockfile install; console ships only this file)
+!apps/*/package.json
+!packages/*/package.json
+!adapters/*/package.json
 
-# Misc
-.DS_Store
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Kernel
+!apps/kernel/src
+!apps/kernel/tsconfig*.json
+!apps/kernel/tsdown.config.ts
+!apps/kernel/scripts/init.sql
+!apps/kernel/scripts/admin-grant.ts
 
-# Editor directories and files
-.idea
-.vscode
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Workspace packages and adapters
+!packages/*/src
+!packages/*/tsconfig*.json
+!packages/*/tsdown.config.ts
+!adapters/*/src
+!adapters/*/tsconfig*.json
+!adapters/*/tsdown.config.ts
 
-# Git
-.git
-.gitignore
+# Claude CLI image assets (created in phase D3)
+!docker/claude-cli/package.json
+!docker/claude-cli/package-lock.json
 
-# Environment files (copy them separately)
-.env.local
-.env.development
-.env.test
-.env.production
-
-# Documentation
-README.md
-docs
-
-# CI/CD
-.github
-.gitlab-ci.yml
-.travis.yml
-
-# Runtime data
-.voltagent
-.vscode
-.planning
-
-# Console (has its own Dockerfile)
-apps/console
+# Re-exclude regardless of the above (last match wins)
+# >>> common-deny (keep identical in every .dockerignore)
+**/node_modules
+**/dist
+**/.env*
+**/.oscorpex
+**/.voltagent
+**/.serena
+**/.claude*
+**/.credentials.json
+**/.mcp.json
+**/.git
+**/.npmrc
+**/.yarnrc*
+**/.netrc
+**/.pgpass
+**/.git-credentials
+**/.aws
+**/.ssh
+**/.gnupg
+**/.kube
+**/.docker
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore
+**/*.ppk
+**/id_rsa*
+**/id_dsa*
+**/id_ecdsa*
+**/id_ed25519*
+**/credentials.json
+**/service-account*.json
+**/*.tfstate*
+**/*.sqlite*
+**/*.db
+**/*.dump
+**/*.log
+**/.history
+**/.idea
+**/.vscode
+**/.cursor
+**/.playwright-mcp
+**/*.swp
+**/*~
+**/.DS_Store
+**/.tmp
+**/coverage
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.test.js
+**/*.spec.ts
+**/*.spec.tsx
+**/*.js.map
+**/*.tsbuildinfo
+**/src/**/*.js
+# <<< common-deny

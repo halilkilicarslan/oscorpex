@@ -1,3 +1,7 @@
+# pnpm 12 otherwise prepends a "boot" document (packageManagerDependencies) to pnpm-lock.yaml, which
+# first-document-only scanners (osv-scanner: 676 -> 15 packages) read instead of the real graph.
+# The version stays enforced by corepack through the packageManager sha512 pin.
+pmOnFail: ignore
 packages:
   - "apps/*"
   - "packages/*"
