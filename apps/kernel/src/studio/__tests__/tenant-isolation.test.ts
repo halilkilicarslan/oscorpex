@@ -22,11 +22,12 @@ vi.mock("../db.js", () => ({
 }));
 
 import { queryOne as dbQueryOne, insertEvent } from "../db.js";
-import { execute } from "../pg.js";
+import { execute, queryOne as pgQueryOne } from "../pg.js";
 
 const mockExecute = vi.mocked(execute);
 const mockInsertEvent = vi.mocked(insertEvent);
 const mockDbQueryOne = vi.mocked(dbQueryOne);
+const mockPgQueryOne = vi.mocked(pgQueryOne);
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
@@ -343,12 +344,12 @@ describe("verifyProjectAccess — WS tenant filter simülasyonu", () => {
 		expect(result).toBe(false);
 	});
 
-	it("tenantId var + project.tenant_id null (legacy) → true döner", async () => {
+	it("tenantId var + project.tenant_id null (tenant'sız) → false döner (F3-e: legacy açık dal kaldırıldı)", async () => {
 		const { queryOne: pgQueryOne } = await import("../pg.js");
 		vi.mocked(pgQueryOne).mockResolvedValueOnce({ tenant_id: null });
 
 		const result = await verifyProjectAccess("legacy-project", "tenant-A");
-		expect(result).toBe(true);
+		expect(result).toBe(false);
 	});
 });
 
@@ -454,7 +455,7 @@ describe("hasPermission — scope baseline", () => {
 
 describe("WS manager — tenant isolation", () => {
 	it("rejects subscribe when tenant validation DB query fails (fail-closed)", async () => {
-		mockDbQueryOne.mockRejectedValueOnce(new Error("DB down"));
+		mockPgQueryOne.mockRejectedValueOnce(new Error("DB down"));
 
 		const { wsManager } = await import("../ws-manager.js");
 		const ws = { readyState: 1, send: vi.fn(), close: vi.fn(), terminate: vi.fn() } as any;
@@ -478,7 +479,7 @@ describe("WS manager — tenant isolation", () => {
 	});
 
 	it("rejects subscribe on tenant mismatch", async () => {
-		mockDbQueryOne.mockResolvedValueOnce({ tenant_id: "t2" });
+		mockPgQueryOne.mockResolvedValueOnce({ tenant_id: "t2" });
 
 		const { wsManager } = await import("../ws-manager.js");
 		const ws = { readyState: 1, send: vi.fn(), close: vi.fn(), terminate: vi.fn() } as any;
@@ -497,14 +498,13 @@ describe("WS manager — tenant isolation", () => {
 				}
 			})
 			.filter(Boolean);
-		const errorMsg = sent.find(
-			(m: any) => m.type === "error" && m.payload?.message === "Access denied: tenant mismatch",
-		);
+		// F3-e: a foreign project gives the same error as a missing one (no tenant-mismatch oracle).
+		const errorMsg = sent.find((m: any) => m.type === "error" && m.payload?.message === "Project not found");
 		expect(errorMsg).toBeDefined();
 	});
 
 	it("allows subscribe for matching tenant", async () => {
-		mockDbQueryOne.mockResolvedValueOnce({ tenant_id: "t1" });
+		mockPgQueryOne.mockResolvedValueOnce({ tenant_id: "t1" });
 
 		const { wsManager } = await import("../ws-manager.js");
 		const ws = { readyState: 1, send: vi.fn(), close: vi.fn(), terminate: vi.fn() } as any;
@@ -527,13 +527,14 @@ describe("WS manager — tenant isolation", () => {
 		expect(okMsg).toBeDefined();
 	});
 
-	it("allows legacy subscribe when auth disabled (backward compat)", async () => {
+	it("rejects subscribe for a tenant-less client (F3-e: legacy open path removed)", async () => {
 		const { wsManager } = await import("../ws-manager.js");
 		const ws = { readyState: 1, send: vi.fn(), close: vi.fn(), terminate: vi.fn() } as any;
 		const record = { ws, subscriptions: new Set<string>(), lastPong: Date.now(), tenantId: null };
 
 		(wsManager as any)._subscribe(ws, record, "p-1");
+		await new Promise((r) => setTimeout(r, 50));
 
-		expect(record.subscriptions.has("p-1")).toBe(true);
+		expect(record.subscriptions.has("p-1")).toBe(false);
 	});
 });

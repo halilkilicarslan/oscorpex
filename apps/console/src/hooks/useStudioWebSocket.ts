@@ -13,6 +13,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { StudioApiError, fetchWsTicket } from '../lib/studio-api/base';
 
 // ---------------------------------------------------------------------------
 // Tipler
@@ -71,18 +72,9 @@ function resolveWsBaseUrl(): string {
   return `ws://localhost:${STUDIO_WS_PORT}/api/studio/ws`;
 }
 
-function buildWsUrl(): string {
-  const wsBaseUrl = resolveWsBaseUrl();
-  const token = typeof window !== 'undefined' ? localStorage.getItem('oscorpex_token') : null;
-  if (!token) {
-    const apiKey = import.meta.env.VITE_API_KEY as string | undefined;
-    if (!apiKey) return wsBaseUrl;
-    const url = new URL(wsBaseUrl);
-    url.searchParams.set('apiKey', apiKey);
-    return url.toString();
-  }
-  const url = new URL(wsBaseUrl);
-  url.searchParams.set('token', token);
+function buildWsUrl(ticket: string): string {
+  const url = new URL(resolveWsBaseUrl());
+  url.searchParams.set('ticket', ticket);
   return url.toString();
 }
 
@@ -111,6 +103,7 @@ export function useStudioWebSocket(
   const heartbeatTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const pongTimeoutRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const projectIdRef       = useRef(projectId);
+  const connectingRef      = useRef(false);
 
   // projectId değiştiğinde ref'i güncelle
   useEffect(() => {
@@ -172,15 +165,45 @@ export function useStudioWebSocket(
   // Bağlantı
   // -------------------------------------------------------------------------
 
-  const connectInternal = useCallback(() => {
+  const connectInternal = useCallback(async () => {
     if (!mountedRef.current) return;
+    if (connectingRef.current) return;
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
 
     setConnectionState('connecting');
 
+    // Exponential backoff ile yeniden bağlan
+    const scheduleReconnect = () => {
+      const attempt = reconnectAttemptRef.current;
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
+      reconnectAttemptRef.current = attempt + 1;
+
+      reconnectTimerRef.current = setTimeout(() => {
+        if (mountedRef.current) void connectInternal();
+      }, delay);
+    };
+
+    // Her bağlantı (ve yeniden bağlantı) tek kullanımlık yeni bir bilet ister; token URL'ye girmez
+    let ticket: string;
+    connectingRef.current = true;
+    try {
+      ticket = await fetchWsTicket();
+    } catch (err) {
+      console.error('[useStudioWebSocket] WebSocket bileti alınamadı:', err);
+      if (!mountedRef.current) return;
+      setConnectionState('error');
+      // Oturum geçersiz: yeniden denemek işe yaramaz, oturum açılması gerekir
+      if (err instanceof StudioApiError && (err.status === 401 || err.status === 403)) return;
+      scheduleReconnect();
+      return;
+    } finally {
+      connectingRef.current = false;
+    }
+    if (!mountedRef.current) return;
+
     let ws: WebSocket;
     try {
-      ws = new WebSocket(buildWsUrl());
+      ws = new WebSocket(buildWsUrl(ticket));
     } catch (err) {
       console.error('[useStudioWebSocket] WebSocket oluşturulamadı:', err);
       setConnectionState('error');
@@ -247,21 +270,14 @@ export function useStudioWebSocket(
         wsRef.current = null;
       }
 
-      // Exponential backoff ile yeniden bağlan
-      const attempt = reconnectAttemptRef.current;
-      const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
-      reconnectAttemptRef.current = attempt + 1;
-
-      reconnectTimerRef.current = setTimeout(() => {
-        if (mountedRef.current) connectInternal();
-      }, delay);
+      scheduleReconnect();
     };
   }, [startHeartbeat, clearHeartbeat]);
 
   const connect = useCallback(() => {
     clearReconnect();
     reconnectAttemptRef.current = 0;
-    connectInternal();
+    void connectInternal();
   }, [clearReconnect, connectInternal]);
 
   const disconnect = useCallback(() => {
@@ -285,9 +301,9 @@ export function useStudioWebSocket(
 
     if (autoConnect) {
       if (connectDelay > 0) {
-        reconnectTimerRef.current = setTimeout(connectInternal, connectDelay);
+        reconnectTimerRef.current = setTimeout(() => void connectInternal(), connectDelay);
       } else {
-        connectInternal();
+        void connectInternal();
       }
     }
 

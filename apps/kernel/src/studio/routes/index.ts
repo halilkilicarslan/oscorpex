@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { compress } from "hono/compress";
 import { cors } from "hono/cors";
 import { accessGuard } from "../auth/access-guard.js";
+import { getAllowedOrigins } from "../auth/cors-origins.js";
 import { createLogger } from "../logger.js";
 import { correlationMiddleware } from "../middleware/correlation-middleware.js";
 
@@ -37,13 +38,16 @@ import { cliUsageRoutes } from "./cli-usage-routes.js";
 import { clusterRoutes } from "./cluster-routes.js";
 import { collaborationRoutes } from "./collaboration-routes.js";
 import { costRoutes } from "./cost-routes.js";
+import { gatewayRoutes } from "./gateway-routes.js";
 import { gitFileRoutes } from "./git-file-routes.js";
 import { graphRoutes } from "./graph-routes.js";
+import { hermesRoutes } from "./hermes-routes.js";
 import { inspectorRoutes } from "./inspector-routes.js";
 import { integrationRoutes } from "./integration-routes.js";
 import { jobRoutes } from "./job-routes.js";
 import { lifecycleRoutes } from "./lifecycle-routes.js";
 import { marketplaceRoutes } from "./marketplace-routes.js";
+import { mcpRoutes } from "./mcp-routes.js";
 import { memoryRoutes } from "./memory-routes.js";
 import { notificationRoutes } from "./notification-routes.js";
 import { pipelineRoutes } from "./pipeline-routes.js";
@@ -55,9 +59,6 @@ import { releaseRoutes } from "./releases.js";
 import { replayRoutes } from "./replay-routes.js";
 import { runtimeRoutes } from "./runtime-routes.js";
 import { sandboxRoutes } from "./sandbox-routes.js";
-import { gatewayRoutes } from "./gateway-routes.js";
-import { hermesRoutes } from "./hermes-routes.js";
-import { mcpRoutes } from "./mcp-routes.js";
 import { skillRoutes } from "./skill-routes.js";
 import { sprintRoutes } from "./sprint-routes.js";
 import { taskRoutes } from "./task-routes.js";
@@ -66,6 +67,7 @@ import { telemetryRoutes } from "./telemetry-routes.js";
 import { templateRoutes } from "./template-routes.js";
 import { terminalRoutes } from "./terminal-routes.js";
 import { workItemRoutes } from "./work-item-routes.js";
+import { wsTicketRoutes } from "./ws-ticket-routes.js";
 
 const studio = new Hono();
 
@@ -78,25 +80,7 @@ studio.use("*", securityHeaders);
 // ---------------------------------------------------------------------------
 // CORS
 // ---------------------------------------------------------------------------
-const allowedOrigins = (process.env.OSCORPEX_CORS_ORIGINS ?? "http://localhost:5173,http://localhost:4242")
-	.split(",")
-	.map((o) => o.trim())
-	.filter((o) => {
-		if (!o) return false;
-		// Reject wildcard origins when used with credentials-bearing endpoints
-		if (o === "*") {
-			log.warn("[routes] CORS wildcard '*' rejected — use explicit origins");
-			return false;
-		}
-		// Basic URL validation
-		try {
-			new URL(o);
-			return true;
-		} catch {
-			log.warn(`[routes] Invalid CORS origin rejected: "${o}"`);
-			return false;
-		}
-	});
+const allowedOrigins = getAllowedOrigins();
 
 studio.use(
 	"*",
@@ -193,6 +177,7 @@ studio.route("/", cliUsageRoutes);
 
 // Terminal routes (interactive CLI terminal in preview tab)
 studio.route("/", terminalRoutes);
+studio.route("/", wsTicketRoutes);
 
 // Control Plane — Phase 1
 studio.route("/", cpRegistryRoutes);

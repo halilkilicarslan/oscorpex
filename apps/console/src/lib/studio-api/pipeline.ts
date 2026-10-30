@@ -1,5 +1,5 @@
 import type { PipelineState, AgentProcessInfo, AgentRunHistory } from './types.js';
-import { API, json, httpPost, authHeaders } from './base.js';
+import { API, json, httpPost, authHeaders, fetchWsTicket, StudioApiError } from './base.js';
 
 // Pipeline'ı başlat
 export async function startPipeline(projectId: string): Promise<PipelineState> {
@@ -147,17 +147,13 @@ export async function getAgentRunHistory(
 //   // Durdur:
 //   stop();
 
-const STUDIO_WS_URL = `ws://localhost:${import.meta.env.VITE_STUDIO_WS_PORT ?? 3142}/api/studio/ws`;
+const STUDIO_WS_PORT = import.meta.env.VITE_STUDIO_WS_PORT ?? 3142;
 
-function buildStudioWsUrl(): string {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('oscorpex_token') : null;
-  const url = new URL(STUDIO_WS_URL);
-  if (token) {
-    url.searchParams.set('token', token);
-    return url.toString();
-  }
-  const apiKey = import.meta.env.VITE_API_KEY as string | undefined;
-  if (apiKey) url.searchParams.set('apiKey', apiKey);
+function buildStudioWsUrl(ticket: string): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const host = window.location.hostname || 'localhost';
+  const url = new URL(`${protocol}://${host}:${STUDIO_WS_PORT}/api/studio/ws`);
+  url.searchParams.set('ticket', ticket);
   return url.toString();
 }
 const WS_RECONNECT_BASE_MS = 1_000;
@@ -176,11 +172,31 @@ export function streamAgentOutputWS(
   let attempt = 0;
   let lineCounter = 0;
 
-  function connect() {
+  function scheduleReconnect() {
+    // Exponential backoff ile yeniden bağlan
+    const delay = Math.min(WS_RECONNECT_BASE_MS * 2 ** attempt, WS_RECONNECT_MAX_MS);
+    attempt += 1;
+    reconnectTimer = setTimeout(connect, delay);
+  }
+
+  async function connect() {
+    if (stopped) return;
+
+    let ticket: string;
+    try {
+      ticket = await fetchWsTicket();
+    } catch (err) {
+      if (stopped) return;
+      onError?.(err instanceof Error ? err : new Error(String(err)));
+      // Oturum geçersiz: yeniden denemek işe yaramaz
+      if (err instanceof StudioApiError && (err.status === 401 || err.status === 403)) return;
+      scheduleReconnect();
+      return;
+    }
     if (stopped) return;
 
     try {
-      ws = new WebSocket(buildStudioWsUrl());
+      ws = new WebSocket(buildStudioWsUrl(ticket));
     } catch (err) {
       onError?.(err instanceof Error ? err : new Error(String(err)));
       return;
@@ -233,14 +249,11 @@ export function streamAgentOutputWS(
     ws.onclose = () => {
       if (stopped) return;
       ws = null;
-      // Exponential backoff ile yeniden bağlan
-      const delay = Math.min(WS_RECONNECT_BASE_MS * 2 ** attempt, WS_RECONNECT_MAX_MS);
-      attempt += 1;
-      reconnectTimer = setTimeout(connect, delay);
+      scheduleReconnect();
     };
   }
 
-  connect();
+  void connect();
 
   return () => {
     stopped = true;

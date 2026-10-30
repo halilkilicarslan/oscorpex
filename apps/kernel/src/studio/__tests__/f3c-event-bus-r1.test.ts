@@ -13,9 +13,12 @@
 
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import pg from "pg";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { WebSocket } from "ws";
 
 const loggers = vi.hoisted(() => new Map<string, Record<string, ReturnType<typeof vi.fn>>>());
 const dbHooks = vi.hoisted(() => ({
@@ -93,6 +96,7 @@ import type { EventType, StudioEvent } from "../types.js";
 import { sendWebhookNotification } from "../webhook-sender.js";
 import { WsCluster } from "../ws-cluster.js";
 import { wsManager } from "../ws-manager.js";
+import { startWSServer } from "../ws-server.js";
 import { cleanupRunningProjects, seedRunningProjects } from "./helpers/background-fixtures.js";
 import * as strictScope from "./helpers/strict-scope.js";
 import { TENANT_A, TENANT_B, TENANT_LOCAL, seedTestTenants, withMigrator } from "./helpers/tenancy.js";
@@ -285,82 +289,59 @@ describe("R1-1 — __global__ platform events", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. WS env API key and null-tenant clients
+// 2. WS legacy credentials and null-tenant clients
+// F3-e removed the env API key / ?token= WS path: callers obtain a one-time ticket via POST /ws/ticket.
+// Full ticket coverage (single use, origin, expiry, dev bypass) lives in f3e-ws-ticket.test.ts.
 // ---------------------------------------------------------------------------
-describe("R1-2 — WS legacy API key and null tenant", () => {
-	function connect(apiKey?: string) {
-		const c = fakeWs();
-		wsi.wss.emit("connection", c.ws, { apiKey, headers: {}, url: "/ws" });
-		return c;
+describe("R1-2 — WS legacy credentials and null tenant", () => {
+	let httpServer: Server;
+	let port = 0;
+
+	beforeAll(async () => {
+		httpServer = startWSServer({ port: 0 });
+		if (!httpServer.listening) await new Promise<void>((r) => httpServer.once("listening", () => r()));
+		port = (httpServer.address() as AddressInfo).port;
+	});
+	afterAll(async () => {
+		await new Promise<void>((r) => httpServer.close(() => r()));
+	});
+
+	function upgradeStatus(query: string): Promise<number> {
+		return new Promise((resolve) => {
+			const ws = new WebSocket(`ws://127.0.0.1:${port}/api/studio/ws${query}`, {
+				headers: { Origin: "http://localhost:5161" },
+			});
+			ws.once("open", () => {
+				ws.terminate();
+				resolve(101);
+			});
+			ws.once("unexpected-response", (_req, res) => {
+				resolve(res.statusCode ?? 0);
+				ws.terminate();
+			});
+			ws.once("error", () => resolve(0));
+		});
 	}
-	function drop(c: ReturnType<typeof fakeWs>) {
-		c.ws.emit("close");
-		wsi.clients.delete(c.ws);
-	}
 
-	it("accepts the env key and maps it to LOCAL_TENANT_ID (non-production)", () => {
+	it("rejects an upgrade carrying the env API key (?apiKey=) with 401", async () => {
 		vi.stubEnv("OSCORPEX_AUTH_ENABLED", "true");
 		vi.stubEnv("OSCORPEX_API_KEY", "r1-secret-key");
-		const c = connect("r1-secret-key");
-		try {
-			expect(c.ws.close).not.toHaveBeenCalled();
-			expect(wsi.clients.get(c.ws)?.tenantId).toBe(TENANT_LOCAL);
-		} finally {
-			drop(c);
-		}
+		expect(await upgradeStatus("?apiKey=r1-secret-key")).toBe(401);
 	});
 
-	it("rejects the env key in production unless OSCORPEX_ALLOW_LEGACY_API_KEY=true", () => {
+	it("rejects an upgrade carrying ?token= with 401", async () => {
 		vi.stubEnv("OSCORPEX_AUTH_ENABLED", "true");
-		vi.stubEnv("OSCORPEX_API_KEY", "r1-secret-key");
-		vi.stubEnv("NODE_ENV", "production");
-		const denied = connect("r1-secret-key");
-		try {
-			expect(denied.ws.close).toHaveBeenCalled();
-			expect(wsi.clients.has(denied.ws)).toBe(false);
-		} finally {
-			drop(denied);
-		}
-
-		vi.stubEnv("OSCORPEX_ALLOW_LEGACY_API_KEY", "true");
-		const allowed = connect("r1-secret-key");
-		try {
-			expect(allowed.ws.close).not.toHaveBeenCalled();
-			expect(wsi.clients.get(allowed.ws)?.tenantId).toBe(TENANT_LOCAL);
-		} finally {
-			drop(allowed);
-		}
+		expect(await upgradeStatus("?token=some.jwt.value")).toBe(401);
 	});
 
-	it("rejects a wrong key (same length, same prefix, shorter) ", () => {
+	it("rejects an upgrade without a ticket with 401", async () => {
 		vi.stubEnv("OSCORPEX_AUTH_ENABLED", "true");
-		vi.stubEnv("OSCORPEX_API_KEY", "r1-secret-key");
-		for (const bad of ["r1-secret-kez", "r1-secret-ke", "r1-secret-key-and-more", ""]) {
-			const c = connect(bad);
-			try {
-				expect(c.ws.close, `key "${bad}"`).toHaveBeenCalled();
-				expect(wsi.clients.has(c.ws)).toBe(false);
-			} finally {
-				drop(c);
-			}
-		}
+		expect(await upgradeStatus("")).toBe(401);
 	});
 
-	it("compares the key in constant time (shares the HTTP legacy-key helpers, no === on the secret)", () => {
+	it("ws-manager no longer reads the env API key or compares legacy keys", () => {
 		const src = readFileSync(join(__dirname, "..", "ws-manager.ts"), "utf8");
-		expect(src).not.toMatch(/apiKey\s*===\s*envApiKey/);
-		expect(src).toMatch(/timingSafeEqual|legacyKeyMatches/);
-		expect(src).toMatch(/legacyKeyAllowed|OSCORPEX_ALLOW_LEGACY_API_KEY/);
-	});
-
-	it("with auth disabled the client tenant is LOCAL_TENANT_ID", () => {
-		vi.stubEnv("OSCORPEX_AUTH_ENABLED", "false");
-		const c = connect();
-		try {
-			expect(wsi.clients.get(c.ws)?.tenantId).toBe(TENANT_LOCAL);
-		} finally {
-			drop(c);
-		}
+		expect(src).not.toMatch(/OSCORPEX_API_KEY|legacyKeyMatches|legacyKeyAllowed/);
 	});
 
 	it("a client with a null tenant receives no events at all", async () => {

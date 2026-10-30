@@ -30,16 +30,32 @@ export interface AuthVariables {
 	apiKeyScopes: string[];
 	/** users.is_platform_admin (or dev bypass / legacy operator key). Never derived from the token. */
 	isPlatformAdmin: boolean;
+	/** api_keys.id of a DB-backed API key. */
+	apiKeyId: string;
+	/** JWT expiry, epoch seconds. */
+	tokenExp: number;
 }
 
 /** Actor recorded for the legacy OSCORPEX_API_KEY. */
 export const LEGACY_OPERATOR_ID = "legacy-operator";
 
+/** Actor recorded for the dev auth bypass. */
+export const DEV_USER_ID = "00000000-0000-0000-0000-000000000002";
+
+/** Dev auth bypass: explicit opt-in, never in production, never when an env API key is configured. */
+export function devAuthBypassEnabled(): boolean {
+	return (
+		!process.env.OSCORPEX_API_KEY &&
+		process.env.NODE_ENV !== "production" &&
+		process.env.OSCORPEX_DEV_NO_AUTH === "true"
+	);
+}
+
 /**
  * One round trip (SECURITY DEFINER, system scope): does the user still exist, what is their role in the token's
  * tenant, and are they a platform admin. Role and admin flag always come from the DB, never from the token.
  */
-async function lookupIdentity(
+export async function lookupIdentity(
 	userId: string,
 	tenantId: string,
 ): Promise<{ role: string | null; isPlatformAdmin: boolean } | null> {
@@ -51,6 +67,35 @@ async function lookupIdentity(
 	);
 	if (!row) return null;
 	return { role: row.role, isPlatformAdmin: row.is_platform_admin === true };
+}
+
+export interface ApiKeyRow {
+	id: string;
+	user_id: string;
+	tenant_id: string | null;
+	role: string | null;
+	scopes: string[] | null;
+	is_platform_admin: boolean | null;
+}
+
+export function hashApiKey(keyValue: string): string {
+	return createHash("sha256").update(keyValue).digest("hex");
+}
+
+/**
+ * Live (unexpired) DB API key joined with its owner's identity, or null. sys_api_key_lookup is SECURITY DEFINER:
+ * the only way to resolve a key before the tenant is known. A key whose user no longer exists matches nothing.
+ */
+export async function lookupApiKey(keyHash: string): Promise<ApiKeyRow | null> {
+	const row = await runSysLookupAtBoundary("auth:api-key-lookup", () =>
+		queryOne<ApiKeyRow>(
+			`SELECT k.id, k.user_id, k.tenant_id, k.scopes, i.role, i.is_platform_admin
+			 FROM sys_api_key_lookup($1) k
+			 JOIN LATERAL sys_identity_lookup(k.user_id, k.tenant_id) i ON true`,
+			[keyHash],
+		),
+	);
+	return row ?? null;
 }
 
 /** Constant-time comparison of the presented Authorization header against the legacy key. */
@@ -122,6 +167,7 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<undef
 				return c.json({ error: "Unauthorized" }, 401);
 			}
 			c.set("authType", "jwt");
+			c.set("tokenExp", payload.exp);
 			c.set("userId", payload.sub);
 			c.set("email", payload.email);
 			c.set("tenantId", payload.tenantId);
@@ -137,24 +183,8 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<undef
 	// ------------------------------------------------------------------
 	if (authHeader?.startsWith("Bearer osx_")) {
 		const keyValue = authHeader.slice(7);
-		const keyHash = createHash("sha256").update(keyValue).digest("hex");
-		// sys_api_key_lookup is SECURITY DEFINER: the only way to resolve a key before the tenant is known.
-		const row = await runSysLookupAtBoundary("auth:api-key-lookup", () =>
-			queryOne<{
-				id: string;
-				user_id: string;
-				tenant_id: string | null;
-				role: string | null;
-				scopes: string[] | null;
-				is_platform_admin: boolean | null;
-			}>(
-				// One query: key lookup + identity check (inner join: a key whose user no longer exists matches nothing)
-				`SELECT k.id, k.user_id, k.tenant_id, k.scopes, i.role, i.is_platform_admin
-				 FROM sys_api_key_lookup($1) k
-				 JOIN LATERAL sys_identity_lookup(k.user_id, k.tenant_id) i ON true`,
-				[keyHash],
-			),
-		);
+		const keyHash = hashApiKey(keyValue);
+		const row = await lookupApiKey(keyHash);
 		if (row && (!row.tenant_id || !row.role)) {
 			log.warn("[auth] API key without tenant or role rejected");
 			return c.json({ error: "Unauthorized" }, 401);
@@ -167,6 +197,7 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<undef
 		}
 		if (row) {
 			c.set("authType", "api-key-db");
+			c.set("apiKeyId", row.id);
 			c.set("userId", row.user_id);
 			c.set("tenantId", row.tenant_id);
 			c.set("userRole", row.role);
@@ -198,11 +229,11 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<undef
 			return c.json({ error: "Unauthorized — authentication not configured" }, 500);
 		}
 		// P0-5: Dev auth bypass requires explicit opt-in flag
-		if (process.env.OSCORPEX_DEV_NO_AUTH === "true") {
+		if (devAuthBypassEnabled()) {
 			log.warn("[auth] Auth disabled via OSCORPEX_DEV_NO_AUTH=true — using dev tenant context");
 			c.set("authType", "none");
-			c.set("userId", "00000000-0000-0000-0000-000000000002");
-			c.set("tenantId", "00000000-0000-0000-0000-000000000001");
+			c.set("userId", DEV_USER_ID);
+			c.set("tenantId", LOCAL_TENANT_ID);
 			c.set("userRole", "owner");
 			c.set("isPlatformAdmin", true);
 			c.set("email", "dev@oscorpex.local");

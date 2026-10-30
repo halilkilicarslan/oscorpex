@@ -2,7 +2,8 @@
 // Oscorpex — Simple In-Memory Rate Limiter
 // ---------------------------------------------------------------------------
 
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
+import { verifyJwt } from "../auth/jwt.js";
 import { createLogger } from "../logger.js";
 
 const log = createLogger("rate-limiter");
@@ -13,6 +14,12 @@ interface RateLimitEntry {
 }
 
 const store = new Map<string, RateLimitEntry>();
+const DEFAULT_MAX_KEYS = 10_000;
+const CALLER_KEY = "rateLimitCaller";
+
+export function rateLimitStoreSize(): number {
+	return store.size;
+}
 
 // Cleanup stale entries every 60s
 setInterval(() => {
@@ -22,24 +29,56 @@ setInterval(() => {
 	}
 }, 60_000).unref();
 
-export function rateLimiter(opts: { windowMs?: number; max?: number } = {}): MiddlewareHandler {
+/**
+ * Who is calling: the authenticated user when known (set by an earlier middleware, or a signature-verified JWT —
+ * checked without a DB round trip so the limiter can run before the access guard), else the client address.
+ * The address is the Node socket's; X-Forwarded-For is honoured only behind OSCORPEX_TRUSTED_PROXY=true.
+ */
+function callerKey(c: Context): { key: string; ip: string } {
+	const cached = c.get(CALLER_KEY) as { key: string; ip: string } | undefined;
+	if (cached) return cached;
+	const socketIp = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming?.socket
+		?.remoteAddress;
+	const forwarded =
+		process.env.OSCORPEX_TRUSTED_PROXY === "true"
+			? c.req.header("x-forwarded-for")?.split(",").pop()?.trim()
+			: undefined;
+	const ip = forwarded || socketIp || "unknown";
+
+	const authHeader = c.req.header("authorization");
+	const verified =
+		authHeader?.startsWith("Bearer ") && !authHeader.startsWith("Bearer osx_")
+			? verifyJwt(authHeader.slice(7))?.sub
+			: undefined;
+	const actorId = c.get("userId") || verified;
+	const caller = { key: actorId ? `actor:${actorId}` : `ip:${ip}`, ip };
+	c.set(CALLER_KEY, caller);
+	return caller;
+}
+
+export function rateLimiter(
+	opts: { windowMs?: number; max?: number; name?: string; maxKeys?: number } = {},
+): MiddlewareHandler {
 	const windowMs = opts.windowMs ?? 60_000;
 	const max = opts.max ?? 100;
+	const maxKeys = opts.maxKeys ?? DEFAULT_MAX_KEYS;
+	const scope = opts.name ? `${opts.name}:` : "";
 
 	return async (c, next) => {
-		// P1-5: Use authenticated actor ID as primary key when available
-		const actorId = c.get?.("userId") || c.get?.("tenantId");
-		const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-		// P1-5: Prefer actor-based keying; fall back to IP only when trusted proxy enabled
-		const key = actorId
-			? `actor:${actorId}:${c.req.path}`
-			: `${process.env.OSCORPEX_TRUSTED_PROXY === "true" ? ip : "anon"}:${c.req.path}`;
+		const caller = callerKey(c);
+		const key = `${scope}${caller.key}:${c.req.path}`;
 		const now = Date.now();
 
 		let entry = store.get(key);
 		if (!entry || entry.resetAt <= now) {
 			entry = { count: 0, resetAt: now + windowMs };
+			store.delete(key);
 			store.set(key, entry);
+			// Map iterates in insertion order, so the first keys are the oldest.
+			for (const oldest of store.keys()) {
+				if (store.size <= maxKeys) break;
+				store.delete(oldest);
+			}
 		}
 
 		entry.count++;
@@ -49,7 +88,7 @@ export function rateLimiter(opts: { windowMs?: number; max?: number } = {}): Mid
 		c.header("X-RateLimit-Reset", String(Math.ceil(entry.resetAt / 1000)));
 
 		if (entry.count > max) {
-			log.warn(`[rate-limiter] Rate limit exceeded: ${ip} on ${c.req.path}`);
+			log.warn(`[rate-limiter] Rate limit exceeded: ${caller.key} on ${c.req.path}`);
 			return c.json({ error: "Too many requests" }, 429);
 		}
 

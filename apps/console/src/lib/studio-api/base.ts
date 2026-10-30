@@ -1,16 +1,13 @@
 export const BASE = import.meta.env.VITE_API_BASE ?? '';
 export const API = `${BASE}/api/studio`;
 
-/** Build auth headers — JWT token takes precedence over VITE_API_KEY */
+/** Build auth headers from the stored login token; no static key ships in the bundle */
 function authHeaders(): Record<string, string> {
 	// JWT token from localStorage (set by auth flow)
 	const token = (typeof window !== 'undefined' && localStorage?.getItem)
 		? localStorage.getItem('oscorpex_token')
 		: null;
-	if (token) return { Authorization: `Bearer ${token}` };
-	// Fallback: static API key from env
-	const key = import.meta.env.VITE_API_KEY;
-	return key ? { Authorization: `Bearer ${key}` } : {};
+	return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export interface ApiError {
@@ -73,6 +70,21 @@ export async function studioFetch<T>(url: string, init?: RequestInit): Promise<T
 	}
 
 	return res.json() as Promise<T>;
+}
+
+/**
+ * One-time WebSocket ticket (POST /ws/ticket with the normal auth headers). A WebSocket upgrade cannot carry an
+ * Authorization header, and a token must never travel in the URL, so every connect (and reconnect) redeems a fresh one.
+ */
+export async function fetchWsTicket(): Promise<string> {
+	try {
+		const { ticket } = await studioFetch<{ ticket: string; expiresIn: number }>(`${API}/ws/ticket`, { method: 'POST' });
+		return ticket;
+	} catch (err) {
+		// studioFetch already announces 403; 401 is announced here so a terminal ticket failure surfaces exactly once.
+		if (err instanceof StudioApiError && err.status === 401) notifyForbidden(err.message, err.status);
+		throw err;
+	}
 }
 
 /** Shorthand: GET */

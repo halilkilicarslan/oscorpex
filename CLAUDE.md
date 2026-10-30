@@ -177,6 +177,12 @@ All performance/scheduling subsystems read from `performance-config.ts`. Key env
 | `OSCORPEX_AVAILABILITY_CACHE_TTL_MS` | 30000 | Health cache TTL for availability checks |
 | `OSCORPEX_CAPABILITY_CACHE_TTL_MS` | 300000 | Health cache TTL for capability checks |
 | `OSCORPEX_PREFLIGHT_ENABLED` | true | Enable preflight warm-up health checks |
+| `OSCORPEX_WS_MAX_PAYLOAD_BYTES` | 65536 | Max WebSocket message size (larger closes the socket with 1009) |
+| `OSCORPEX_WS_MAX_SUBSCRIPTIONS` | 50 | Max project subscriptions per WebSocket |
+| `OSCORPEX_WS_TICKET_STORE_MAX` | 10000 | Max outstanding WebSocket tickets (oldest evicted) |
+| `OSCORPEX_WS_TICKETS_PER_USER` | 20 | Max outstanding WebSocket tickets per user (that user's oldest evicted) |
+| `OSCORPEX_WS_TICKET_RATE_PER_MIN` | 30 | `POST /ws/ticket` requests per user per minute (429 beyond) |
+| `OSCORPEX_WS_SESSION_MAX_MS` | 900000 | Max WebSocket session lifetime; the socket closes at min(token expiry, this cap) |
 | `OSCORPEX_RECOVERY_CONCURRENCY` | 2 | Startup recovery: max projects recovered in parallel (clamped to 1-10; non-numeric falls back to 2) |
 
 ## Constraints

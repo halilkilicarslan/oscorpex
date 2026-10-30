@@ -40,6 +40,9 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: "/platform/stats", permission: "platform:admin", methods: ["GET"] },
 	{ pattern: "/platform/analytics", permission: "platform:admin", methods: ["GET"] },
 
+	// WebSocket ticket: the socket streams project events, so it needs the same permission as reading projects
+	{ pattern: "/ws/ticket", permission: "projects:read", methods: ["POST"] },
+
 	// Auth & User management
 	{ pattern: "/auth/me", permission: null },
 	{ pattern: "/auth/users", permission: "users:read" },

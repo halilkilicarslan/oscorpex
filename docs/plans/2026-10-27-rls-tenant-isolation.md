@@ -547,6 +547,29 @@ F2 ile istek bazlı tenant kapsamı ve gerçek RLS geldi. Etki analizi ve üç i
    - `tenant-isolation` WS testleri güncellenir.
    - Console'un canlı güncellemeleri tarayıcıda test edilemiyor; raporda belirtilir.
 
+**F3-e uygulamasında ortaya çıkanlar (kullanıcı kararlarıyla)**
+- **Origin başlığı olmayan bağlantı:** İzin verilir; tarayıcı dışı istemcilerin de bileti olmak zorunda. `null` ya da yabancı Origin reddedilir.
+- **API anahtarıyla WebSocket (korumalı destek):**
+  - Bilet için `projects:read` kapsamı gerekir.
+  - Anahtar her abonelikte yeniden doğrulanır.
+  - Silinmiş ya da süresi dolmuş anahtarın, ya da tenant'tan çıkarılmış sahibin soketi kapanır.
+- **Oturum üst sınırı:** Her soket en fazla `OSCORPEX_WS_SESSION_MAX_MS` (varsayılan 15 dk, en fazla 24 saat) ya da token süresi kadar açık kalır. Console yeni biletle otomatik bağlanır.
+- **Console:**
+  - `VITE_API_KEY` geri dönüşü kaldırıldı; eski operatör anahtarı artık pakete gömülmüyor.
+  - 401/403'te yeniden deneme durur ve `studio:api:error` yayılır.
+  - WebSocket adresi sayfanın protokolünden türetilir (`wss`).
+- **Genel rate limiter:**
+  - Kimliği doğrulanmamış istekler IP'ye, geçerli JWT'si olanlar kullanıcıya göre sayılır; JWT veritabanına gitmeden doğrulanır.
+  - Eskiden herkesin paylaştığı tek kova yok.
+  - `X-Forwarded-For` yalnızca mevcut `OSCORPEX_TRUSTED_PROXY=true` iken ve en sağdaki değeriyle kullanılır.
+  - Depo sınırlıdır (10k anahtar).
+- **Bilet kötüye kullanımı:** Kullanıcı başına bilet alma sınırı (`OSCORPEX_WS_TICKET_RATE_PER_MIN`, 30/dk) ve bekleyen bilet sınırı (`OSCORPEX_WS_TICKETS_PER_USER`, 20) var.
+- **Varsayılan CORS listesi:** `127.0.0.1:5161` eklendi, önizleme portu 4242 çıkarıldı.
+- **Sonraki işler:**
+  - Çok düğümlü bilet deposu.
+  - `auth/project-access.ts`'teki `lookupProjectTenant` barrel'daki `getProjectTenantId`'nin kopyası; bir test `pg.queryOne`'ı mock'ladığı için birleştirilemedi.
+  - API anahtarı kullananlar rate limiter'da IP'ye göre sayılıyor.
+
 ---
 
 ### F3-f — Control-plane sayımları

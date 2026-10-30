@@ -264,6 +264,39 @@ export function getDbPoolConfig(): DbPoolConfig {
 }
 
 // ---------------------------------------------------------------------------
+// WebSocket limits
+// ---------------------------------------------------------------------------
+
+export interface WsConfig {
+	maxPayloadBytes: number;
+	maxSubscriptionsPerSocket: number;
+	ticketStoreMax: number;
+	ticketsPerUserMax: number;
+	ticketIssuePerMinute: number;
+	sessionMaxMs: number;
+}
+
+const WS_SESSION_DEFAULT_MS = 15 * 60_000;
+const WS_SESSION_CEILING_MS = 24 * 60 * 60_000;
+
+function wsSessionMaxMs(): number {
+	const raw = Number(process.env.OSCORPEX_WS_SESSION_MAX_MS);
+	if (Number.isNaN(raw) || raw <= 0) return WS_SESSION_DEFAULT_MS;
+	return Math.min(raw, WS_SESSION_CEILING_MS);
+}
+
+export function getWsConfig(): WsConfig {
+	return {
+		maxPayloadBytes: Math.max(1_024, Number(process.env.OSCORPEX_WS_MAX_PAYLOAD_BYTES) || 64 * 1024),
+		maxSubscriptionsPerSocket: Math.max(1, Number(process.env.OSCORPEX_WS_MAX_SUBSCRIPTIONS) || 50),
+		ticketStoreMax: Math.max(1, Number(process.env.OSCORPEX_WS_TICKET_STORE_MAX) || 10_000),
+		ticketsPerUserMax: Math.max(1, Number(process.env.OSCORPEX_WS_TICKETS_PER_USER) || 20),
+		ticketIssuePerMinute: Math.max(1, Number(process.env.OSCORPEX_WS_TICKET_RATE_PER_MIN) || 30),
+		sessionMaxMs: wsSessionMaxMs(),
+	};
+}
+
+// ---------------------------------------------------------------------------
 // Full config snapshot (for telemetry / debugging)
 // ---------------------------------------------------------------------------
 

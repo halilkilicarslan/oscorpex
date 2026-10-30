@@ -94,7 +94,7 @@ export async function logTenantActivity(
 // ---------------------------------------------------------------------------
 // Project Ownership Verification
 // Returns true if tenantId is null (auth disabled), project tenant matches,
-// or project has no tenant (legacy project created before M6).
+// or the project belongs to the caller's tenant. A project without a tenant is never accessible.
 // ---------------------------------------------------------------------------
 
 export async function verifyProjectAccess(projectId: string, tenantId: string | null): Promise<boolean> {
@@ -114,9 +114,6 @@ export async function verifyProjectAccess(projectId: string, tenantId: string | 
 	// Project not found
 	if (!project) return false;
 
-	// Legacy project (no tenant assigned) — allow access
-	if (project.tenant_id === null || project.tenant_id === undefined) return true;
-
-	// Tenant must match
+	// Tenant must match (a tenant-less project never matches)
 	return project.tenant_id === tenantId;
 }

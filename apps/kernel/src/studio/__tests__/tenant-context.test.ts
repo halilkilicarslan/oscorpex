@@ -129,12 +129,12 @@ describe("verifyProjectAccess", () => {
 		expect(result).toBe(false);
 	});
 
-	it("returns true when project has no tenant_id (legacy project — backward compat)", async () => {
+	it("returns false when project has no tenant_id (legacy open branch removed in F3-e)", async () => {
 		mockQueryOne.mockResolvedValueOnce({ tenant_id: null });
 
 		const result = await verifyProjectAccess("project-1", "tenant-abc");
 
-		expect(result).toBe(true);
+		expect(result).toBe(false);
 	});
 
 	it("returns false when project does not exist", async () => {

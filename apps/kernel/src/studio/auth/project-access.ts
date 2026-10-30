@@ -4,12 +4,21 @@
 // ---------------------------------------------------------------------------
 
 import type { Context } from "hono";
+import { queryOne } from "../pg.js";
 import { projectBelongsToTenant } from "../tenancy/project-tenant-cache.js";
 import { runSysLookupAtBoundary } from "../tenancy/tenant-scope.js";
 import { LOCAL_TENANT_ID } from "./auth-middleware.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: routers declare differing Variables; helpers stay env-agnostic
 type AnyContext = Context<any>;
+
+/** Owner tenant of a project via the SECURITY DEFINER lookup (uncached, independent of RLS); null when missing. */
+export async function lookupProjectTenant(projectId: string): Promise<string | null> {
+	const row = await runSysLookupAtBoundary("ws:project-tenant", () =>
+		queryOne<{ tenant_id: string | null }>("SELECT sys_project_tenant($1) AS tenant_id", [projectId]),
+	);
+	return row?.tenant_id ?? null;
+}
 
 export { invalidateProjectAccessCache } from "../tenancy/project-tenant-cache.js";
 

@@ -13,10 +13,11 @@
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
-import { LOCAL_TENANT_ID, legacyKeyAllowed, legacyKeyMatches } from "./auth/auth-middleware.js";
-import { verifyJwt } from "./auth/jwt.js";
+import { lookupApiKey, lookupIdentity } from "./auth/auth-middleware.js";
+import { lookupProjectTenant } from "./auth/project-access.js";
 import { GLOBAL_PROJECT_ID, eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
+import { getWsConfig } from "./performance-config.js";
 import type { StudioEvent } from "./types.js";
 const log = createLogger("ws-manager");
 
@@ -49,12 +50,24 @@ export type WSMessageType =
 	| "subscribed" // Abone onayı
 	| "unsubscribed"; // Abonelik iptali onayı
 
-/** IncomingMessage augmented with WS upgrade query params set by ws-server during upgrade handling. */
+/** IncomingMessage augmented with the correlation id set by ws-server during upgrade handling. */
 interface AugmentedRequest extends IncomingMessage {
 	correlationId?: string;
-	token?: string;
-	apiKey?: string;
 }
+
+/** Identity the upgrade gate resolved from a ticket (or the dev bypass). */
+export interface WsIdentity {
+	userId: string;
+	tenantId: string;
+	/** Epoch ms at which the socket must end. */
+	endsAt: number;
+	/** No users row to re-check (legacy env key / dev bypass). */
+	systemIdentity?: boolean;
+	/** DB-backed API key the socket was opened with; re-validated on every subscribe. */
+	apiKey?: { id: string; hash: string };
+}
+
+const PROJECT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** Bağlı client'ı temsil eden dahili kayıt */
 interface ClientRecord {
@@ -68,11 +81,20 @@ interface ClientRecord {
 	/**
 	 * M6.4: Tenant isolation — JWT'den çıkarılan tenantId.
 	 * Dolu = sadece bu tenant'ın projeleri için gelen event'ler (ve platform-safe event'ler) iletilir.
-	 * null = tenant'ı çözülemeyen client: hiçbir event almaz.
+	 * null = tenant'ı çözülemeyen client: hiçbir event almaz ve hiçbir projeye abone olamaz.
 	 */
 	tenantId: string | null;
 	/** Correlation ID from the HTTP upgrade request (query param) */
 	correlationId?: string;
+	/** Ticket owner, re-checked on every subscribe */
+	userId?: string;
+	/** True when there is no users row to re-check */
+	systemIdentity?: boolean;
+	apiKey?: { id: string; hash: string };
+	/** Subscribes whose checks are still in flight (they count toward the per-socket limit); an unsubscribe drops the entry */
+	pendingSubscriptions?: Map<string, symbol>;
+	/** Closes the socket when the bound credential expires */
+	expiryTimer?: ReturnType<typeof setTimeout>;
 }
 
 /** Platform events ("__global__") that carry no tenant data and may reach every tenant's clients. */
@@ -120,7 +142,7 @@ class WebSocketManager {
 
 	constructor() {
 		// noServer: true — HTTP upgrade'ini kendimiz yöneteceğiz
-		this.wss = new WebSocketServer({ noServer: true });
+		this.wss = new WebSocketServer({ noServer: true, maxPayload: getWsConfig().maxPayloadBytes });
 		this._setupWSS();
 	}
 
@@ -132,9 +154,9 @@ class WebSocketManager {
 	 * HTTP upgrade isteğini WebSocket bağlantısına yükseltir.
 	 * `src/index.ts` veya Hono adapter'ından çağrılır.
 	 */
-	handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
+	handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, identity: WsIdentity): void {
 		this.wss.handleUpgrade(req, socket, head, (ws) => {
-			this.wss.emit("connection", ws, req);
+			this.wss.emit("connection", ws, req, identity);
 		});
 	}
 
@@ -227,54 +249,22 @@ class WebSocketManager {
 	// -------------------------------------------------------------------------
 
 	private _setupWSS(): void {
-		this.wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-			// M6.4: Tenant isolation — URL query param ?token=<jwt> から tenantId çıkar.
-			// Browser WS API header gönderemediğinden token query param olarak iletilir.
-			// Auth enabled + no valid token → connection rejected (fail-closed).
-			const augmented = req as AugmentedRequest;
-			let tenantId: string | null = LOCAL_TENANT_ID;
-			const authEnabled = process.env.OSCORPEX_AUTH_ENABLED === "true";
-			if (authEnabled) {
-				try {
-					const token = augmented.token;
-					const apiKey = augmented.apiKey;
-					const envApiKey = process.env.OSCORPEX_API_KEY;
-					if (token) {
-						const payload = verifyJwt(token);
-						if (payload) {
-							tenantId = payload.tenantId ?? null;
-						} else {
-							// Invalid token — close connection
-							ws.close(1008, "Invalid token");
-							return;
-						}
-					} else if (apiKey && envApiKey && legacyKeyMatches(`Bearer ${apiKey}`, envApiKey)) {
-						// Legacy env API key auth (same behavior as HTTP auth-middleware).
-						if (!legacyKeyAllowed()) {
-							ws.close(1008, "Authentication required");
-							return;
-						}
-						tenantId = LOCAL_TENANT_ID;
-					} else {
-						// Auth enabled but no token — close connection
-						ws.close(1008, "Authentication required");
-						return;
-					}
-				} catch {
-					// URL parse error — close connection in auth mode
-					ws.close(1008, "Invalid connection URL");
-					return;
-				}
-			}
-
+		this.wss.on("connection", (ws: WebSocket, req: IncomingMessage, identity: WsIdentity) => {
+			// Kimlik ve Origin ws-server'da yükseltmeden önce doğrulandı; burada yalnızca kayıt açılır.
 			const record: ClientRecord = {
 				ws,
 				subscriptions: new Set(),
 				lastPong: Date.now(),
-				tenantId,
-				correlationId: augmented.correlationId,
+				tenantId: identity.tenantId,
+				correlationId: (req as AugmentedRequest).correlationId,
+				userId: identity.userId,
+				systemIdentity: identity.systemIdentity,
+				apiKey: identity.apiKey,
 			};
 			this.clients.set(ws, record);
+
+			const remaining = Math.max(0, identity.endsAt - Date.now());
+			record.expiryTimer = setTimeout(() => ws.close(1008, "Session expired"), Math.min(remaining, 2 ** 31 - 1));
 
 			// Heartbeat başlat
 			record.pingTimer = setInterval(() => {
@@ -319,19 +309,20 @@ class WebSocketManager {
 					this._send(ws, { type: "error", payload: { message: "projectId zorunlu" } });
 					return;
 				}
-				// M6.4: tenantId varsa _subscribe async tenant kontrolü + "subscribed" yanıtı gönderir.
-				// tenantId yoksa (auth kapalı) senkron yol — burada "subscribed" gönderilir.
-				const isTenantScoped = record.tenantId !== null;
-				this._subscribe(ws, record, projectId);
-				if (!isTenantScoped) {
-					this._send(ws, { type: "subscribed", projectId });
+				// Malformed ids get the same answer as a missing project, without touching the DB.
+				if (typeof projectId !== "string" || !PROJECT_ID_PATTERN.test(projectId)) {
+					this._send(ws, { type: "error", payload: { message: "Project not found" } });
+					return;
 				}
+				// _subscribe async kimlik + tenant kontrolü yapar ve "subscribed" / "error" yanıtını kendisi gönderir.
+				void this._subscribe(ws, record, projectId);
 				break;
 			}
 
 			case "unsubscribe": {
 				const projectId = msg.projectId;
-				if (!projectId) return;
+				if (typeof projectId !== "string" || !projectId) return;
+				record.pendingSubscriptions?.delete(projectId);
 				this._unsubscribe(record, projectId);
 				this._send(ws, { type: "unsubscribed", projectId });
 				break;
@@ -352,48 +343,61 @@ class WebSocketManager {
 	// Abonelik yönetimi
 	// -------------------------------------------------------------------------
 
-	private _subscribe(ws: WebSocket, record: ClientRecord, projectId: string): void {
+	private async _subscribe(ws: WebSocket, record: ClientRecord, projectId: string): Promise<void> {
 		if (record.subscriptions.has(projectId)) return; // Zaten abone
 
-		// M6.4: Tenant isolation — eğer client'ın tenantId'si varsa, project'in
-		// tenant_id'si ile eşleştiğini async kontrol et. Kontrol başarısız olursa
-		// subscribe edilmez ve client'a error gönderilir. Auth kapalıysa (tenantId=null)
-		// kontrol atlanır (backward compat).
-		if (projectId === GLOBAL_PROJECT_ID) {
-			this._doSubscribe(record, projectId);
-			this._send(ws, { type: "subscribed", projectId });
+		const pending = record.pendingSubscriptions ?? new Map<string, symbol>();
+		record.pendingSubscriptions = pending;
+		if (pending.has(projectId)) return;
+		if (record.subscriptions.size + pending.size >= getWsConfig().maxSubscriptionsPerSocket) {
+			this._send(ws, { type: "error", payload: { message: "Subscription limit reached" } });
 			return;
 		}
-		if (record.tenantId !== null) {
-			import("./db.js")
-				.then(({ queryOne: qOne }) =>
-					qOne<{ tenant_id: string | null }>("SELECT tenant_id FROM projects WHERE id = $1", [projectId]),
-				)
-				.then((project) => {
-					if (!project) {
-						// Proje bulunamadı
-						this._send(ws, { type: "error", payload: { message: "Project not found" } });
-						return;
-					}
-					// Legacy projeler (tenant_id=null) tüm tenant'lara açık
-					if (project.tenant_id !== null && project.tenant_id !== record.tenantId) {
-						this._send(ws, { type: "error", payload: { message: "Access denied: tenant mismatch" } });
-						return;
-					}
-					// Erişim onaylandı — gerçek subscribe işlemi
-					this._doSubscribe(record, projectId);
-					this._send(ws, { type: "subscribed", projectId });
-				})
-				.catch(() => {
-					// DB hatası — fail-closed, subscribe etme
-					log.warn("[ws-manager] Tenant validation failed; subscription denied");
-					this._send(ws, { type: "error", payload: { message: "Tenant validation failed" } });
-				});
-			return; // Async yol — _handleClientMessage içindeki "subscribed" yanıtını engelle
+
+		// Tenant'ı olmayan client hiçbir projeye abone olamaz; yabancı, olmayan ve tenant'sız projeler aynı hatayı alır.
+		if (record.tenantId === null) {
+			this._send(ws, { type: "error", payload: { message: "Project not found" } });
+			return;
 		}
 
-		// Auth kapalı — doğrudan subscribe et
-		this._doSubscribe(record, projectId);
+		const token = Symbol(projectId);
+		pending.set(projectId, token);
+		try {
+			// Her abonelikte kimlik yeniden doğrulanır: silinmiş / tenant'tan çıkarılmış kullanıcının veya silinmiş / süresi
+			// dolmuş API anahtarının soketi kapanır.
+			if (record.apiKey) {
+				const key = await lookupApiKey(record.apiKey.hash);
+				if (!key || key.id !== record.apiKey.id || key.tenant_id !== record.tenantId || !key.role) {
+					ws.close(1008, "Session ended");
+					return;
+				}
+			} else if (record.userId && !record.systemIdentity) {
+				const identity = await lookupIdentity(record.userId, record.tenantId);
+				if (!identity || !identity.role) {
+					ws.close(1008, "Session ended");
+					return;
+				}
+			}
+
+			if (projectId !== GLOBAL_PROJECT_ID) {
+				const owner = await lookupProjectTenant(projectId);
+				if (!owner || owner !== record.tenantId) {
+					this._send(ws, { type: "error", payload: { message: "Project not found" } });
+					return;
+				}
+			}
+
+			// Kontroller sürerken soket kapanmış ya da abonelik iptal edilmiş olabilir; ref count sızdırma
+			if (ws.readyState !== WebSocket.OPEN || pending.get(projectId) !== token) return;
+			this._doSubscribe(record, projectId);
+			this._send(ws, { type: "subscribed", projectId });
+		} catch (err) {
+			// DB hatası — fail-closed, subscribe etme
+			log.warn({ err }, "[ws-manager] Tenant validation failed; subscription denied");
+			this._send(ws, { type: "error", payload: { message: "Tenant validation failed" } });
+		} finally {
+			if (pending.get(projectId) === token) pending.delete(projectId);
+		}
 	}
 
 	/** Gerçek abonelik mantığı — tenant kontrolü tamamlandıktan sonra çağrılır */
@@ -471,6 +475,9 @@ class WebSocketManager {
 		// Heartbeat timer'ı durdur
 		if (record.pingTimer) {
 			clearInterval(record.pingTimer);
+		}
+		if (record.expiryTimer) {
+			clearTimeout(record.expiryTimer);
 		}
 
 		// Tüm abonelikleri kaldır
