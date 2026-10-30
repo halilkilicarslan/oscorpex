@@ -589,6 +589,21 @@ F2 ile istek bazlı tenant kapsamı ve gerçek RLS geldi. Etki analizi ve üç i
 3. `sys_control_plane_summary` PUBLIC tarafından çalıştırılamaz ve yalnızca agrega döner.
 4. **Regresyon:** control-plane testleri ve console dashboard testleri yeşil.
 
+**F3-f uygulamasında ortaya çıkanlar (kullanıcı kararlarıyla)**
+- **Önceden var olan hatalar düzeltildi:**
+  - `/summary` her çağrıda 500 dönüyordu (olmayan `usage_telemetry` tablosu). Harcama artık `token_usage`'dan okunuyor.
+  - Bütçe sayımı yalnızca `max_usd`'yi okuyordu; console ise `maxCostUsd` yazıyor. Artık `budget-guard` ile aynı öncelik uygulanıyor: iki anahtar okunur, `maxCostUsd` önceliklidir, her proje bir kez sayılır.
+- **Tenant'a göre açık filtre:** `/summary`, `/queue-health` ve policy özeti tenant'a göre açık filtreyle çalışır; süper kullanıcı modunda da doğrudur.
+- **Policy servisi (kullanıcı kararıyla bu faza eklendi):**
+  - `/policy/projects/:id` artık 500 vermiyor.
+  - Policy özeti tenant kapsamlı.
+  - İstemciye ham hata metni dönmüyor.
+  - Son policy kararları sorgusu `replay_snapshots.run_id`'nin gerçek içeriğine göre (`runs.id` ya da proje kimliği) düzeltildi.
+- **En az yetki:** `oscorpex_sysread`'in `project_settings` tablosuna erişimi kaldırıldı. Bu tabloda şifreli GitHub token'ları da var. Bütçe, yalnızca `category='budget'` satırlarını gösteren `project_budget_settings` view'ından okunuyor. View'in sahibi `oscorpex_owner`; okuma yetkisi yalnızca sysread'de.
+- **Sonraki işler:**
+  - Bütçe öncelik SQL'i projections ve policy servislerinde tekrarlanıyor; ortak sabite taşınmalı.
+  - Bütçe değerlerinin ayrıştırılması `budget-guard` ile birebir aynı değil: `"0"`, `".5"` ve `"1e3"` farklı yorumlanıyor. Bu yalnızca dashboard sayılarını etkiliyor.
+
 ---
 
 ### F3-g — İş kuyruğunun silinmesi
@@ -660,6 +675,8 @@ F2 ile istek bazlı tenant kapsamı ve gerçek RLS geldi. Etki analizi ve üç i
 ## F5 — Kalan tablolar (alan bazında gruplar)
 
 Her grup: `tenant_id TEXT NOT NULL DEFAULT app_tenant()` + ebeveynden backfill + (varsa) kompozit FK + `(tenant_id, project_id)` index + ENABLE/FORCE RLS + USING/WITH CHECK.
+
+**F3-f'den gelen not:** `sys_control_plane_summary()` şu tabloları okuyor: `approvals`, `agent_instances`, `incidents`, `project_settings`. Bunlara FORCE RLS açılırken `oscorpex_sysread` için `sysread_select` politikası da eklenmeli; aksi halde fonksiyon sessizce 0 ya da yanlış sayı döner. `project_settings`'te sysread'e yalnızca sütun bazlı okuma yetkisi verilir.
 
 | Grup | Tablolar |
 |---|---|

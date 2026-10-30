@@ -2,7 +2,7 @@
 // Control Plane — Dashboard Projections Service
 // ---------------------------------------------------------------------------
 
-import { query } from "../pg.js";
+import { query, queryOne } from "../pg.js";
 
 export interface ControlPlaneSummary {
 	pendingApprovals: number;
@@ -13,13 +13,24 @@ export interface ControlPlaneSummary {
 	lastUpdatedAt: string;
 }
 
-export async function getControlPlaneSummary(): Promise<ControlPlaneSummary> {
+export async function getControlPlaneSummary(tenantId: string): Promise<ControlPlaneSummary> {
+	// Explicit JOIN projects: the tenant filter holds even when RLS is bypassed (superuser mode). Rows with a
+	// NULL project_id never join, so they are not counted.
 	const [pendingApprovals, activeAgents, cooldownProviders, openIncidents, projectsOverBudget] = await Promise.all([
-		query<{ n: string }>("SELECT COUNT(*) as n FROM approvals WHERE status = 'pending'"),
-		query<{ n: string }>("SELECT COUNT(*) as n FROM agent_instances WHERE status = 'active'"),
+		query<{ n: string }>(
+			"SELECT COUNT(*) as n FROM approvals x JOIN projects p ON p.id = x.project_id AND p.tenant_id = $1 WHERE x.status = 'pending'",
+			[tenantId],
+		),
+		query<{ n: string }>(
+			"SELECT COUNT(*) as n FROM agent_instances x JOIN projects p ON p.id = x.project_id AND p.tenant_id = $1 WHERE x.status = 'active'",
+			[tenantId],
+		),
 		query<{ n: string }>("SELECT COUNT(*) as n FROM provider_runtime_registry WHERE status = 'cooldown'"),
-		query<{ n: string }>("SELECT COUNT(*) as n FROM incidents WHERE status IN ('open','acknowledged')"),
-		getProjectsOverBudget(),
+		query<{ n: string }>(
+			"SELECT COUNT(*) as n FROM incidents x JOIN projects p ON p.id = x.project_id AND p.tenant_id = $1 WHERE x.status IN ('open','acknowledged')",
+			[tenantId],
+		),
+		getProjectsOverBudget(tenantId),
 	]);
 
 	return {
@@ -32,22 +43,22 @@ export async function getControlPlaneSummary(): Promise<ControlPlaneSummary> {
 	};
 }
 
-async function getProjectsOverBudget(): Promise<number> {
-	const rows = await query<{ project_id: string; value: string }>(
-		"SELECT project_id, value FROM project_settings WHERE category = 'budget' AND key = 'max_usd'",
+async function getProjectsOverBudget(tenantId: string): Promise<number> {
+	// Mirrors budget-guard.ts: one budget row per project, maxCostUsd preferred over max_usd.
+	const rows = await query<{ n: string }>(
+		`SELECT COUNT(*) AS n FROM (
+		   SELECT DISTINCT ON (s.project_id) s.project_id,
+		          CASE WHEN s.value ~ '^[0-9]+(\\.[0-9]+)?$' THEN s.value::numeric ELSE 0 END AS max_usd
+		   FROM project_settings s
+		   JOIN projects p ON p.id = s.project_id AND p.tenant_id = $1
+		   WHERE s.category = 'budget' AND s.key IN ('maxCostUsd', 'max_usd')
+		   ORDER BY s.project_id, CASE s.key WHEN 'maxCostUsd' THEN 0 ELSE 1 END
+		 ) b
+		 WHERE b.max_usd > 0
+		   AND (SELECT COALESCE(SUM(t.cost_usd), 0) FROM token_usage t WHERE t.project_id = b.project_id) >= b.max_usd`,
+		[tenantId],
 	);
-	let overBudget = 0;
-	for (const r of rows) {
-		const maxBudget = Number(r.value);
-		if (!isNaN(maxBudget) && maxBudget > 0) {
-			const costRow = await query<{ n: string }>(
-				"SELECT COALESCE(SUM(cost_usd), 0) as n FROM usage_telemetry WHERE project_id = $1",
-				[r.project_id],
-			);
-			if (costRow[0] && Number(costRow[0].n) >= maxBudget) overBudget++;
-		}
-	}
-	return overBudget;
+	return Number(rows[0]?.n ?? 0);
 }
 
 export interface ApprovalSummary {
@@ -57,24 +68,48 @@ export interface ApprovalSummary {
 	byKind: Record<string, number>;
 }
 
-export async function getApprovalSummary(): Promise<ApprovalSummary> {
-	const [pending, expired, escalated] = await Promise.all([
-		query<{ n: string }>("SELECT COUNT(*) as n FROM approvals WHERE status = 'pending'"),
-		query<{ n: string }>("SELECT COUNT(*) as n FROM approvals WHERE status = 'expired'"),
-		query<{ n: string }>("SELECT COUNT(*) as n FROM approvals WHERE status = 'escalated'"),
-	]);
-	const byKindRows = await query<{ kind: string; n: string }>(
-		"SELECT kind, COUNT(*) as n FROM approvals WHERE status = 'pending' GROUP BY kind",
+export async function getApprovalSummary(tenantId: string): Promise<ApprovalSummary> {
+	const rows = await query<{ status: string; kind: string; n: string }>(
+		`SELECT x.status, x.kind, COUNT(*) as n FROM approvals x
+		 JOIN projects p ON p.id = x.project_id AND p.tenant_id = $1
+		 WHERE x.status IN ('pending','expired','escalated') GROUP BY x.status, x.kind`,
+		[tenantId],
 	);
+	const totals: Record<string, number> = { pending: 0, expired: 0, escalated: 0 };
 	const byKind: Record<string, number> = {};
-	for (const r of byKindRows) {
-		byKind[r.kind] = Number(r.n);
+	for (const r of rows) {
+		totals[r.status] += Number(r.n);
+		if (r.status === "pending") byKind[r.kind] = Number(r.n);
 	}
 	return {
-		pendingCount: Number(pending[0]?.n ?? 0),
-		expiredCount: Number(expired[0]?.n ?? 0),
-		escalatedCount: Number(escalated[0]?.n ?? 0),
+		pendingCount: totals.pending,
+		expiredCount: totals.expired,
+		escalatedCount: totals.escalated,
 		byKind,
+	};
+}
+
+export interface PlatformControlPlaneSummary {
+	pendingApprovals: number;
+	expiredApprovals: number;
+	escalatedApprovals: number;
+	activeAgents: number;
+	openIncidents: number;
+	projectsOverBudget: number;
+}
+
+/** Platform-wide aggregates from sys_control_plane_summary() (SECURITY DEFINER). Callers run in system scope. */
+// Platform totals include rows with a NULL project_id, which tenant totals exclude.
+export async function getPlatformControlPlaneSummary(): Promise<PlatformControlPlaneSummary> {
+	const row = await queryOne<{ s: Record<string, number> }>("SELECT sys_control_plane_summary() AS s");
+	const s = row?.s ?? {};
+	return {
+		pendingApprovals: Number(s.pending_approvals ?? 0),
+		expiredApprovals: Number(s.expired_approvals ?? 0),
+		escalatedApprovals: Number(s.escalated_approvals ?? 0),
+		activeAgents: Number(s.active_agents ?? 0),
+		openIncidents: Number(s.open_incidents ?? 0),
+		projectsOverBudget: Number(s.projects_over_budget ?? 0),
 	};
 }
 
@@ -164,12 +199,15 @@ export interface QueueHealth {
 	failedToday: number;
 }
 
-export async function getQueueHealth(): Promise<QueueHealth> {
+export async function getQueueHealth(tenantId: string): Promise<QueueHealth> {
 	const [pausedFlag, queued, dispatching, failedToday] = await Promise.all([
 		query<{ value: string }>("SELECT value FROM operator_flags WHERE key = 'queue-paused'"),
-		query<{ n: string }>("SELECT COUNT(*) as n FROM tasks WHERE status = 'queued'"),
-		query<{ n: string }>("SELECT COUNT(*) as n FROM tasks WHERE status = 'running'"),
-		query<{ n: string }>("SELECT COUNT(*) as n FROM tasks WHERE status = 'failed' AND completed_at > now() - INTERVAL '24 hours'"),
+		query<{ n: string }>("SELECT COUNT(*) as n FROM tasks WHERE tenant_id = $1 AND status = 'queued'", [tenantId]),
+		query<{ n: string }>("SELECT COUNT(*) as n FROM tasks WHERE tenant_id = $1 AND status = 'running'", [tenantId]),
+		query<{ n: string }>(
+			"SELECT COUNT(*) as n FROM tasks WHERE tenant_id = $1 AND status = 'failed' AND completed_at > now() - INTERVAL '24 hours'",
+			[tenantId],
+		),
 	]);
 
 	return {

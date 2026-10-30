@@ -2775,6 +2775,38 @@ CREATE OR REPLACE FUNCTION sys_platform_series() RETURNS jsonb
 		)
 	$fn$;
 
+-- Budget-only projection of project_settings for sysread: the table itself (github token etc.) stays unreadable to it.
+CREATE OR REPLACE VIEW public.project_budget_settings AS
+	SELECT project_id, key, value FROM public.project_settings WHERE category = 'budget';
+ALTER VIEW public.project_budget_settings OWNER TO oscorpex_owner;
+REVOKE ALL ON public.project_budget_settings FROM PUBLIC;
+GRANT SELECT ON public.project_budget_settings TO oscorpex_sysread;
+
+CREATE OR REPLACE FUNCTION sys_control_plane_summary() RETURNS jsonb
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+	AS $fn$
+		-- Platform totals: unlike the tenant summary (which joins projects), rows with a NULL project_id are included.
+		SELECT pg_catalog.jsonb_build_object(
+			'pending_approvals', (SELECT count(*) FROM public.approvals WHERE status = 'pending'),
+			'expired_approvals', (SELECT count(*) FROM public.approvals WHERE status = 'expired'),
+			'escalated_approvals', (SELECT count(*) FROM public.approvals WHERE status = 'escalated'),
+			'active_agents', (SELECT count(*) FROM public.agent_instances WHERE status = 'active'),
+			'open_incidents', (SELECT count(*) FROM public.incidents WHERE status IN ('open', 'acknowledged')),
+			'projects_over_budget', (
+				-- one row per project, maxCostUsd preferred over max_usd (budget-guard.ts)
+				SELECT count(*) FROM (
+					SELECT DISTINCT ON (b.project_id) b.project_id,
+						CASE WHEN b.value ~ '^[0-9]+(\.[0-9]+)?$' THEN b.value::numeric ELSE 0 END AS max_usd
+					FROM public.project_budget_settings b
+					WHERE b.key IN ('maxCostUsd', 'max_usd')
+					ORDER BY b.project_id, CASE b.key WHEN 'maxCostUsd' THEN 0 ELSE 1 END
+				) s
+				WHERE s.max_usd > 0
+				  AND (SELECT coalesce(sum(t.cost_usd), 0) FROM public.token_usage t WHERE t.project_id = s.project_id) >= s.max_usd
+			)
+		)
+	$fn$;
+
 DO $$
 DECLARE
 	fn TEXT;
@@ -2783,7 +2815,7 @@ BEGIN
 	GRANT CREATE ON SCHEMA public TO oscorpex_sysread;
 	FOREACH fn IN ARRAY ARRAY['sys_project_tenant(text)', 'sys_event_tenant(text)', 'sys_running_project_phases()',
 	                          'sys_running_projects()', 'sys_api_key_lookup(text)', 'sys_platform_stats()',
-	                          'sys_platform_series()', 'sys_identity_lookup(text, text)']
+	                          'sys_platform_series()', 'sys_identity_lookup(text, text)', 'sys_control_plane_summary()']
 	LOOP
 		EXECUTE format('ALTER FUNCTION public.%s OWNER TO oscorpex_sysread', fn);
 		EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);
@@ -3050,10 +3082,12 @@ DECLARE
 	t TEXT;
 BEGIN
 	FOREACH t IN ARRAY ARRAY['projects','pipeline_runs','project_plans','phases','tasks','events','token_usage',
-	                         'api_keys','user_roles','users']
+	                         'api_keys','user_roles','users','approvals','agent_instances','incidents']
 	LOOP
 		EXECUTE format('GRANT SELECT ON public.%I TO oscorpex_sysread', t);
 	END LOOP;
+	-- project_settings holds secrets (encrypted github token); sysread reads budgets via project_budget_settings only.
+	REVOKE ALL ON public.project_settings FROM oscorpex_sysread;
 	IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oscorpex_sysread' AND rolbypassrls) THEN
 		ALTER ROLE oscorpex_sysread NOBYPASSRLS;
 	END IF;
@@ -3138,6 +3172,9 @@ END $$;
 
 -- schema_meta is bookkeeping for the migrator only; revoked after the blanket DML grant above.
 REVOKE ALL ON public.schema_meta FROM oscorpex_app;
+
+-- project_budget_settings is for sysread only (the blanket DML grant above also covers views).
+REVOKE ALL ON public.project_budget_settings FROM oscorpex_app;
 
 -- F2d: tenant_id is mandatory on the direct tables; projects → tenants is RESTRICT (a tenant with data cannot
 -- be deleted). Constraint first as NOT VALID (rejects new NULLs immediately), then VALIDATE, then SET NOT NULL.

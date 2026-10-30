@@ -30,6 +30,7 @@ const SYS_FUNCTION_NAMES = [
 	"sys_platform_stats",
 	"sys_platform_series",
 	"sys_identity_lookup",
+	"sys_control_plane_summary",
 ] as const;
 const SYSREAD_POLICY_TABLES = [
 	"projects",

@@ -43,6 +43,8 @@ export {
 	getRuntimeHealthSummary,
 	getProviderOps,
 	getQueueHealth,
+	getPlatformControlPlaneSummary,
+	 type PlatformControlPlaneSummary,
 	 type ProviderOpsDetail,
 	 type QueueHealth,
 } from "./service.js";
