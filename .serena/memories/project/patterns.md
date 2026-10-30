@@ -4,7 +4,7 @@
 - `import { createLogger } from "./logger.js"` then `const log = createLogger("module-name")`
 - Pino: `log.info("msg")`, `log.warn({ err }, "msg")` — NEVER `log.warn("msg", err)` (type error)
 - JSON output: `{"level":"warn","time":...,"service":"oscorpex","module":"...","msg":"..."}`
-- 4 files keep console.* for test compatibility: telemetry, shared-state, plugin-registry, job-queue
+- 3 files keep console.* for test compatibility: telemetry, shared-state, plugin-registry
 
 ## Graph Safety (NEW — 2026-04-22)
 - `validateAddEdge()` before every `applyAddEdge()` — cycle DFS, self-edge, duplicate check

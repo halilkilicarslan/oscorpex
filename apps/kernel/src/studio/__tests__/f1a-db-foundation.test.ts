@@ -425,9 +425,6 @@ describe("no runtime DDL", () => {
 	it("indexes formerly created at runtime exist in the DB catalog", async () => {
 		const expected = [
 			"idx_rag_docs_kb",
-			"idx_jobs_queue_status",
-			"idx_jobs_status",
-			"idx_jobs_created",
 			"idx_cli_probe_events_provider",
 			"idx_cli_usage_snapshots_captured",
 			"idx_cli_usage_snapshots_provider",

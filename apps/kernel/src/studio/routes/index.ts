@@ -44,7 +44,6 @@ import { graphRoutes } from "./graph-routes.js";
 import { hermesRoutes } from "./hermes-routes.js";
 import { inspectorRoutes } from "./inspector-routes.js";
 import { integrationRoutes } from "./integration-routes.js";
-import { jobRoutes } from "./job-routes.js";
 import { lifecycleRoutes } from "./lifecycle-routes.js";
 import { marketplaceRoutes } from "./marketplace-routes.js";
 import { mcpRoutes } from "./mcp-routes.js";
@@ -146,13 +145,12 @@ studio.route("/", sandboxRoutes);
 studio.route("/", graphRoutes);
 studio.route("/", agenticRoutes);
 
-// Management — lifecycle, sprint, work items, templates, CI, jobs
+// Management — lifecycle, sprint, work items, templates, CI
 studio.route("/", lifecycleRoutes);
 studio.route("/", sprintRoutes);
 studio.route("/", workItemRoutes);
 studio.route("/templates", templateRoutes);
 studio.route("/ci", ciRoutes);
-studio.route("/jobs", jobRoutes);
 
 // Integration — git, plugins, external integrations
 studio.route("/", gitFileRoutes);

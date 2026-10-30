@@ -621,6 +621,32 @@ F2 ile istek bazlı tenant kapsamı ve gerçek RLS geldi. Etki analizi ve üç i
 2. Şema uygulandıktan sonra `jobs` tablosu yok. Sınıflandırma testi yeşil.
 3. Kalan import yok; typecheck temiz.
 
+**F3-g uygulamasında ortaya çıkanlar**
+- `/jobs` rotaları artık access-guard'ın "bilinmeyen rota" varsayılan reddine takılıyor (403); bu bilinçli olarak korundu.
+- Yalnızca silinen testin kullandığı `db/job-repo.ts` de kaldırıldı.
+- Şema testi, F3-g öncesinden kalan bir `jobs` tablosunun da düşürüldüğünü doğruluyor.
+
+**F3 durumu (2026-10-31): tamamlandı.** Alt fazların commit'leri:
+
+| Alt faz | Commit |
+|---|---|
+| F3-0 | `a006ae4` |
+| F3-a | `ef3f31e` |
+| F3-b | `2eb506e` |
+| F3-c | `c26a163` |
+| F3-d | `174efc5` |
+| F3-e | `c8b9b2d` |
+| F3-f | `7402acd` |
+| F3-g | bu commit |
+
+F4'ten önceki zorunlu işler:
+- Production Docker imajı
+- Tenant iş yükü izolasyonu epic'i
+
+F4'te kapanacak açıklar:
+- Süper kullanıcı modunda alt kaynak bağlama açığı
+- Strict kapsam modunun varsayılan yapılması
+
 ---
 
 ### Riskler

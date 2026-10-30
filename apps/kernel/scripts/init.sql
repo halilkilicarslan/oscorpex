@@ -1316,26 +1316,10 @@ CREATE TABLE IF NOT EXISTS ci_trackings (
 CREATE INDEX IF NOT EXISTS idx_ci_trackings_project ON ci_trackings(project_id);
 
 -- ---------------------------------------------------------------------------
--- V6 M4: Durable Job Queue
+-- F3-g: the unused durable job queue was removed; drop the table (and its indexes) on existing DBs.
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS jobs (
-  id          TEXT PRIMARY KEY,
-  queue       TEXT NOT NULL DEFAULT 'task-execution',
-  data        JSONB NOT NULL DEFAULT '{}',
-  status      TEXT NOT NULL DEFAULT 'created',
-  output      JSONB,
-  error       TEXT,
-  retry_count INTEGER DEFAULT 0,
-  max_retries INTEGER DEFAULT 3,
-  started_at  TIMESTAMPTZ,
-  completed_at TIMESTAMPTZ,
-  created_at  TIMESTAMPTZ DEFAULT now(),
-  updated_at  TIMESTAMPTZ DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_jobs_queue_status ON jobs(queue, status);
-CREATE INDEX IF NOT EXISTS idx_jobs_status       ON jobs(status);
-CREATE INDEX IF NOT EXISTS idx_jobs_created      ON jobs(created_at);
+DROP TABLE IF EXISTS jobs;
 
 -- ---------------------------------------------------------------------------
 -- V6 M6 F6: Agent Marketplace

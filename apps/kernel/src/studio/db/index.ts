@@ -45,8 +45,6 @@ export * from "./test-results-repo.js";
 export * from "./template-repo.js";
 // V6 M3 F12: CI Tracking
 export * from "./ci-repo.js";
-// V6 M4: Durable Job Queue
-export * from "./job-repo.js";
 // V6 M6 F6: Agent Marketplace
 export * from "./marketplace-repo.js";
 

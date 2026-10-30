@@ -44,7 +44,6 @@ const EXPECTED_SYSTEM = [
 	"schema_meta",
 ];
 const EXPECTED_LEGACY = [
-	"jobs",
 	"marketplace_items",
 	"voltagent_memory_conversations",
 	"voltagent_memory_messages",

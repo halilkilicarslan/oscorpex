@@ -296,11 +296,6 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 	{ pattern: "/ci/", permission: "settings:read", methods: ["GET"] },
 	{ pattern: "/ci", permission: "settings:write", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 	{ pattern: "/ci/", permission: "settings:write", methods: ["POST", "PUT", "PATCH", "DELETE"] },
-	// Jobs (sub-paths: /jobs/stats, /jobs/:id/retry, /jobs/cleanup)
-	{ pattern: "/jobs", permission: "settings:read", methods: ["GET"] },
-	{ pattern: "/jobs/", permission: "settings:read", methods: ["GET"] },
-	{ pattern: "/jobs", permission: "settings:write", methods: ["POST", "PUT", "PATCH", "DELETE"] },
-	{ pattern: "/jobs/", permission: "settings:write", methods: ["POST", "PUT", "PATCH", "DELETE"] },
 
 	// Analytics & Telemetry
 	{ pattern: "/analytics", permission: "projects:read", methods: ["GET"] },

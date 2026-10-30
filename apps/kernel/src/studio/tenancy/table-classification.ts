@@ -207,7 +207,6 @@ export const TABLE_CLASSIFICATION: Record<string, TableClassification> = {
 	schema_meta: other("system", "system-only", "db-bootstrap.ts; hash of the last applied init.sql"),
 
 	// --- legacy: unused --------------------------------------------------------
-	jobs: other("legacy", "system-only", "job-queue and /jobs routes to be deleted in F3"),
 	marketplace_items: other("legacy", "system-only", "marketplace route is not mounted"),
 	voltagent_memory_conversations: other("legacy", "system-only", "VoltAgent library memory adapter only"),
 	voltagent_memory_messages: other("legacy", "system-only", "VoltAgent library memory adapter only"),
