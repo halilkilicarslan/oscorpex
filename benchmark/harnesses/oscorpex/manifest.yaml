@@ -1,13 +1,11 @@
-# Oscorpex benchmark adapter (upstream harness-benchmark contract)
-# This is an integration template; copy this folder to harness-benchmark/harnesses/oscorpex.
+# Oscorpex harness manifest — requires upstream registration/metric parser.
 name: oscorpex
 version: "0.1.0"
-install: "echo 'Install Oscorpex monorepo separately and set OSCORPEX_ROOT'"
+install: 'echo "Oscorpex checkout must be available at OSCORPEX_ROOT"'
 invoke:
   command: 'bash "$OSCORPEX_ROOT/scripts/benchmark-oscorpex.sh" "$PROMPT_FILE" "$WORKDIR" "$MODEL_NAME"'
   model_flag: ""
 setup: |
   test -d "$OSCORPEX_ROOT" || { echo "OSCORPEX_ROOT is missing" >&2; exit 1; }
-# Custom events require a metrics parser in upstream harness-benchmark.
 metric_source: events.jsonl
 metric_format: oscorpex
