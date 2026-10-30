@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { createLogger } from "./logger.js";
 import { getDbPoolConfig } from "./performance-config.js";
@@ -110,11 +111,106 @@ export function callerHint(stack?: string): string {
 		.join(" <- ");
 }
 
+export interface ImplicitScopeCaller {
+	repoFrame: string;
+	entryFrame: string;
+	origin: "test" | "detached";
+	trigger?: "timer" | "event" | "unknown";
+	count: number;
+}
+
+const INVENTORY_MAX = 500;
+const INVENTORY_STACK_DEPTH = 200;
+const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
+let _inventoryOn = false;
+const _implicitCallers = new Map<string, ImplicitScopeCaller>();
+
+/** Test helper (VITEST only): record the call sites of queries that only resolve through the implicit test scope. */
+export function enableImplicitScopeInventory(on: boolean): void {
+	_inventoryOn = on && !!process.env.VITEST;
+}
+
+/** Detached records first, then test records; each group by descending count. */
+export function getImplicitScopeCallers(): ImplicitScopeCaller[] {
+	const rank = (c: ImplicitScopeCaller) => (c.origin === "detached" ? 0 : 1);
+	return [..._implicitCallers.values()].map((c) => ({ ...c })).sort((a, b) => rank(a) - rank(b) || b.count - a.count);
+}
+
+export function resetImplicitScopeCallers(): void {
+	_implicitCallers.clear();
+}
+
+interface StackFrame {
+	label: string;
+	path: string;
+}
+
+function parseFrame(line: string): StackFrame | undefined {
+	const m = /^\s*at (?:async )?(?:(.*?) \()?(.+?)(?::\d+){0,2}\)?$/.exec(line);
+	if (!m) return undefined;
+	let path = m[2];
+	if (path.startsWith("file://")) path = fileURLToPath(path);
+	if (path.startsWith(REPO_ROOT)) path = path.slice(REPO_ROOT.length);
+	return { label: m[1] ? `${m[1]} (${path})` : path, path };
+}
+
+function recordImplicitCaller(): void {
+	const limit = Error.stackTraceLimit;
+	Error.stackTraceLimit = INVENTORY_STACK_DEPTH;
+	const holder: { stack?: string } = {};
+	try {
+		Error.captureStackTrace(holder, recordImplicitCaller);
+	} finally {
+		Error.stackTraceLimit = limit;
+	}
+	const frames = (holder.stack ?? "")
+		.split("\n")
+		.slice(1)
+		.map(parseFrame)
+		.filter((f): f is StackFrame => f !== undefined);
+	const repo = frames.find((f) => !PG_FRAME.test(f.path));
+	const outsideRepoLayer = frames.filter((f) => !PG_FRAME.test(f.path) && !/(^|[\\/])db[\\/]/.test(f.path));
+	const entry =
+		outsideRepoLayer.find((f) => !/[\\/]__tests__[\\/]|node_modules|^node:|^<anonymous>$|^index \d+$/.test(f.path)) ??
+		outsideRepoLayer[0];
+	if (!repo || !entry) return;
+	const isTest = frames.some((f) => /[\\/]__tests__[\\/]/.test(f.path));
+	let trigger: ImplicitScopeCaller["trigger"];
+	if (!isTest) {
+		if (frames.some((f) => f.path.includes("node:internal/timers"))) trigger = "timer";
+		else if (frames.some((f) => /^(node:)?events$/.test(f.path))) trigger = "event";
+		else trigger = "unknown";
+	}
+	const key = `${repo.label}|${entry.label}`;
+	const existing = _implicitCallers.get(key);
+	if (existing) {
+		existing.count++;
+		return;
+	}
+	if (_implicitCallers.size >= INVENTORY_MAX) return;
+	_implicitCallers.set(key, {
+		repoFrame: repo.label,
+		entryFrame: entry.label,
+		origin: isTest ? "test" : "detached",
+		...(trigger ? { trigger } : {}),
+		count: 1,
+	});
+}
+
 /** Resolve the tenant GUC value for the current scope; undefined = unscoped (warn mode only). */
 function resolveTenantGuc(): string | undefined {
 	const scope = currentScope();
 	if (scope?.kind === "tenant") {
-		if (isImplicitScope()) _implicitCount++;
+		if (isImplicitScope()) {
+			_implicitCount++;
+			if (_inventoryOn) {
+				try {
+					recordImplicitCaller();
+				} catch {
+					// Test-only diagnostics must never fail the query itself.
+				}
+			}
+		}
 		return scope.tenantId;
 	}
 	if (scope?.kind === "system") return "";

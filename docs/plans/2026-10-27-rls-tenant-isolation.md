@@ -285,6 +285,21 @@ F2 ile istek bazlı tenant kapsamı ve gerçek RLS geldi. Etki analizi ve üç i
 3. Envanter çalışır ve test dışı çağıranları listeler.
 4. Fikstür idempotenttir; temizlikten sonra satır kalmaz.
 
+**F3-a uygulamasında ortaya çıkanlar**
+- **Plan sapması (kullanıcı onayladı; dosya düzeyi varyant F3-c başında eklenir):** Opt-out dosya bazında değil test bazında yapıldı: `itStrict` ve `withStrictScope`. Hook'lar (`beforeAll`, `beforeEach`) hâlâ örtük kapsamda çalışır. `itStrict`, test sırasında örtük kapsamda sorgu çalışırsa testi düşürür.
+- **Envanter:**
+  - Her kayıt `{repoFrame, entryFrame, origin: test|detached, trigger, count}` biçimindedir.
+  - Yığın yalnızca envanter açıkken derin yakalanır. Envanter yalnızca vitest altında açılabilir ve 500 kayıtla sınırlıdır.
+  - İlk ölçümde 621 kayıt çıktı; bunların 45'i testten kopuk (fire-and-forget). Yoğun kaynaklar: `event-bus.ts`, görev tamamlama efektleri, çalışma belleği, oturum kapatma, diff yakalama, öğrenme çıkarımı, görev dağıtıcısı. Bu liste F3-c ve F3-d'nin kontrol listesidir.
+- **F3-c'den önce yapılacaklar:**
+  - Hook'ları da kapsayan dosya düzeyi strict varyantı.
+  - `itStrict`'in aynı dosyadaki önceki testlerden kalan işleri yanlış pozitif sayma riski: kopuk kayıtlar uyarıya düşürülür.
+  - Zaman aşımından sonra geç biten bir gövdenin sonraki testin modunu bozmasını önleyen bir "generation" belirteci.
+- **Sonraki işler:**
+  - Fikstürün veritabanı korumasına host ve port karşılaştırması eklenmesi; temizleme adımı da korunmalı.
+  - `onTestFinished` testinin davranışsal hale getirilmesi.
+  - Derin yığın testinin varsayılan yığın sınırını aşacak şekilde düzeltilmesi.
+
 ---
 
 ### F3-b — Genel proje erişim kontrolü ve SSE

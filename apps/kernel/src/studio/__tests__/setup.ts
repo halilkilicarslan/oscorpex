@@ -8,7 +8,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import dotenv from "dotenv";
-import { afterAll, beforeAll } from "vitest";
+import { afterAll, beforeAll, expect } from "vitest";
 import { applySchema } from "../db-bootstrap.js";
 import { enterTenantScopeForTests } from "../tenancy/tenant-scope.js";
 import { closeTestPool } from "./helpers/tenancy.js";
@@ -26,7 +26,16 @@ process.env.DATABASE_URL =
 // runner's async context for hooks and test bodies of this file.
 enterTenantScopeForTests("00000000-0000-0000-0000-000000000001");
 
+const implicitScopeReport = process.env.OSCORPEX_IMPLICIT_SCOPE_REPORT;
+
 beforeAll(async () => {
+	if (implicitScopeReport) {
+		try {
+			(await import("../pg.js")).enableImplicitScopeInventory(true);
+		} catch {
+			// vi.mock("../pg.js") without the inventory API
+		}
+	}
 	// SKIP_DB_SETUP=1 allows pure unit-test files (e.g. schema validation) to run without a DB.
 	if (process.env.SKIP_DB_SETUP === "1") return;
 	try {
@@ -54,12 +63,29 @@ async function initControlPlaneDb(): Promise<void> {
 }
 
 afterAll(async () => {
-	// Lazy import: a static import here would load pg.ts (and its logger) before test files can vi.mock the logger.
 	try {
-		const { closePool } = await import("../pg.js");
-		await closePool();
-	} catch {
-		// Test files that vi.mock("../pg.js") without closePool have no real pool to close.
+		if (implicitScopeReport) {
+			const pgMod = await import("../pg.js");
+			let hasInventory = true;
+			try {
+				hasInventory = typeof pgMod.getImplicitScopeCallers === "function";
+			} catch {
+				hasInventory = false; // vi.mock("../pg.js") without the inventory API
+			}
+			if (hasInventory) {
+				const { flushImplicitScopeReport } = await import("./helpers/implicit-scope-report.js");
+				flushImplicitScopeReport(implicitScopeReport, expect.getState().testPath ?? "unknown");
+				pgMod.resetImplicitScopeCallers();
+			}
+		}
+	} finally {
+		// Lazy import: a static import here would load pg.ts (and its logger) before test files can vi.mock the logger.
+		try {
+			const { closePool } = await import("../pg.js");
+			await closePool();
+		} catch {
+			// Test files that vi.mock("../pg.js") without closePool have no real pool to close.
+		}
+		await closeTestPool();
 	}
-	await closeTestPool();
 });
