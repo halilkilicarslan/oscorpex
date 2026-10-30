@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../auth/project-access.js";
 import { ciTracker } from "../ci-tracker.js";
 import { createCITracking, getCITrackings } from "../db.js";
 import type { CIProvider } from "../db.js";
@@ -19,6 +20,8 @@ const router = new Hono();
 router.get("/status/:projectId", async (c) => {
 	try {
 		const { projectId } = c.req.param();
+		const denied = await assertProjectInTenant(c, projectId);
+		if (denied) return denied;
 		const trackings = await getCITrackings(projectId);
 		return c.json(trackings);
 	} catch (err) {
@@ -45,6 +48,9 @@ router.post("/track", async (c) => {
 		if (!body.projectId || !body.provider || !body.prId) {
 			return c.json({ error: "projectId, provider, and prId are required" }, 400);
 		}
+
+		const denied = await assertProjectInTenant(c, body.projectId);
+		if (denied) return denied;
 
 		const validProviders: CIProvider[] = ["github", "gitlab"];
 		if (!validProviders.includes(body.provider as CIProvider)) {
@@ -76,6 +82,10 @@ router.post("/webhook/github", async (c) => {
 	try {
 		const payload = await c.req.json<Record<string, unknown>>();
 		const projectId = c.req.query("projectId") ?? undefined;
+		if (projectId) {
+			const denied = await assertProjectInTenant(c, projectId);
+			if (denied) return denied;
+		}
 
 		const updated = await ciTracker.processWebhook("github", payload, projectId);
 
@@ -96,6 +106,10 @@ router.post("/webhook/gitlab", async (c) => {
 	try {
 		const payload = await c.req.json<Record<string, unknown>>();
 		const projectId = c.req.query("projectId") ?? undefined;
+		if (projectId) {
+			const denied = await assertProjectInTenant(c, projectId);
+			if (denied) return denied;
+		}
 
 		const updated = await ciTracker.processWebhook("gitlab", payload, projectId);
 

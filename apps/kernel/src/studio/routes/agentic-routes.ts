@@ -9,6 +9,7 @@ import { formatBehavioralPrompt, loadBehavioralContext } from "../agent-runtime/
 import { BUILTIN_STRATEGIES } from "../agent-runtime/agent-strategy.js";
 import { proposeTask } from "../agent-runtime/task-injection.js";
 import { getAgenticMetrics } from "../agentic-metrics.js";
+import { assertProjectInTenant } from "../auth/project-access.js";
 import {
 	approveProposal,
 	createApprovalRule,
@@ -293,6 +294,10 @@ agenticRoutes.post("/proposals/:proposalId/reject", async (c) => {
 agenticRoutes.post("/classify-risk", async (c) => {
 	try {
 		const body = await c.req.json();
+		if (body.projectId) {
+			const denied = await assertProjectInTenant(c, body.projectId);
+			if (denied) return denied;
+		}
 		const riskLevel = classifyRisk(body);
 		const autoApproveResult = body.projectId
 			? await canAutoApprove(body.projectId, body)

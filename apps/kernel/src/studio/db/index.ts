@@ -5,6 +5,7 @@
 export { query, queryOne, execute, withTransaction } from "../pg.js";
 export * from "./helpers.js";
 export * from "./project-repo.js";
+export * from "./project-guard-repo.js";
 export * from "./task-repo.js";
 export * from "./agent-repo.js";
 export * from "./team-repo.js";

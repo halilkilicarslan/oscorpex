@@ -6,6 +6,7 @@ import { mkdir, readFile, realpath, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Hono } from "hono";
 import { createAgentFiles } from "../agent-files.js";
+import { invalidateProjectAccessCache } from "../auth/project-access.js";
 import { requirePermission } from "../auth/rbac.js";
 import { isPlatformAdminRequest } from "../auth/request-identity.js";
 import { getTenantContext, verifyProjectAccess } from "../auth/tenant-context.js";
@@ -273,6 +274,7 @@ projectCrudRoutes.patch("/projects/:id", requirePermission("projects:update"), a
 projectCrudRoutes.delete("/projects/:id", requirePermission("projects:delete"), async (c) => {
 	const id = c.req.param("id") ?? "";
 	const ok = await deleteProject(id);
+	invalidateProjectAccessCache(id);
 	if (!ok) return c.json({ error: "Project not found" }, 404);
 	return c.json({ success: true });
 });

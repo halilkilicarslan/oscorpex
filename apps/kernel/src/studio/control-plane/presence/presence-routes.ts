@@ -11,6 +11,7 @@ import {
 	recordHeartbeat,
 } from "@oscorpex/control-plane";
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../../auth/project-access.js";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-presence-routes");
@@ -48,6 +49,10 @@ cpPresenceRoutes.post("/presence/heartbeat", async (c) => {
 			state: PresenceState;
 			payload?: Record<string, unknown>;
 		};
+		if (body.projectId) {
+			const denied = await assertProjectInTenant(c, body.projectId);
+			if (denied) return denied;
+		}
 		const hb = await recordHeartbeat(body);
 		return c.json({ heartbeat: hb });
 	} catch (err) {

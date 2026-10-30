@@ -10,6 +10,7 @@ import {
 	listRegistryProviders,
 } from "@oscorpex/control-plane";
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../../auth/project-access.js";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-registry-routes");
@@ -19,6 +20,10 @@ export const cpRegistryRoutes = new Hono();
 cpRegistryRoutes.get("/registry/agents", async (c) => {
 	try {
 		const projectId = c.req.query("projectId") ?? undefined;
+		if (projectId) {
+			const denied = await assertProjectInTenant(c, projectId);
+			if (denied) return denied;
+		}
 		const agents = await listRegistryAgents(projectId);
 		return c.json({ agents });
 	} catch (err) {

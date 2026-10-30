@@ -14,6 +14,7 @@ import {
 	updateIncidentSeverity,
 } from "@oscorpex/control-plane";
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../../auth/project-access.js";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-incident-routes");
@@ -65,6 +66,10 @@ cpIncidentRoutes.post("/incidents", async (c) => {
 			description?: string;
 			severity?: string;
 		};
+		if (body.projectId) {
+			const denied = await assertProjectInTenant(c, body.projectId);
+			if (denied) return denied;
+		}
 		const incident = await openIncident(body);
 		return c.json({ incident }, 201);
 	} catch (err) {

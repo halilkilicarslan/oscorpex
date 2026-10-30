@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../auth/project-access.js";
 import { createLogger } from "../logger.js";
 import { applyApprovedWrite } from "../mcp-bridge/approval-apply.js";
 import { type McpRequestContext, handleJsonRpcRequest } from "../mcp-bridge/protocol/json-rpc.js";
@@ -15,7 +16,7 @@ mcpRoutes.use("*", rateLimiter({ windowMs: 60_000, max: 100 }));
 mcpRoutes.post("/mcp/invoke", async (c) => {
 	// Build context from auth middleware
 	const context: McpRequestContext = {
-		tenantId: (c.get as (key: string) => string | undefined)("tenantId") ?? "dev_tenant_id",
+		tenantId: (c.get as (key: string) => string | undefined)("tenantId") ?? "",
 		projectId: c.req.header("x-project-id") ?? "",
 		actorId: (c.get as (key: string) => string | undefined)("userId") ?? "anonymous",
 		source: (c.req.header("x-mcp-source") as "user" | "llm" | "provider" | "system") ?? "user",
@@ -25,6 +26,9 @@ mcpRoutes.post("/mcp/invoke", async (c) => {
 		log.warn("[mcp-routes] Missing x-project-id header");
 		return c.json({ jsonrpc: "2.0", id: 0, error: { code: -32602, message: "x-project-id header required" } }, 400);
 	}
+
+	const denied = await assertProjectInTenant(c, context.projectId);
+	if (denied) return denied;
 
 	let body: unknown;
 	try {
@@ -44,11 +48,15 @@ mcpRoutes.post("/mcp/write/apply", async (c) => {
 	if (!body || !body.approvalId || !body.toolName) {
 		return c.json({ error: "approvalId and toolName required" }, 400);
 	}
+	const writeProjectId = c.req.header("x-project-id") ?? body.projectId ?? "";
+	if (!writeProjectId) return c.json({ error: "projectId required (x-project-id header or body)" }, 400);
+	const denied = await assertProjectInTenant(c, writeProjectId);
+	if (denied) return denied;
 	const result = await applyApprovedWrite({
 		approvalId: body.approvalId,
 		checkpointId: body.checkpointId ?? "",
-		tenantId: (c.get as (key: string) => string | undefined)("tenantId") ?? "dev_tenant_id",
-		projectId: c.req.header("x-project-id") ?? body.projectId ?? "",
+		tenantId: (c.get as (key: string) => string | undefined)("tenantId") ?? "",
+		projectId: writeProjectId,
 		actorId: (c.get as (key: string) => string | undefined)("userId") ?? "anonymous",
 		toolName: body.toolName,
 		args: body.args ?? {},

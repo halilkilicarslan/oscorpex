@@ -349,6 +349,26 @@ F2 ile istek bazlı tenant kapsamı ve gerçek RLS geldi. Etki analizi ve üç i
 7. **Performans:** Önbellek isabetinde ek sorgu yoktur. İlk istekte tek `sys_*` çağrısı yapılır; p50 önce ve sonra ölçülüp raporlanır.
 8. **Regresyon:** Access-guard, SSE ve tenant-isolation testleri yeşil.
 
+**F3-b uygulamasında ortaya çıkanlar**
+- **Tasarım:**
+  - Kontrol `auth/project-access.ts` içinde ve RBAC'tan önce çalışır, bu yüzden yabancı proje asla 403 almaz.
+  - Yol segmentlere ayrılıp decode edilir; `..`, `.`, bozuk kodlama ve id içinde `/` ya da `\` → 404.
+  - Önbellek tenant ve projeye göre anahtarlanır, yalnızca olumlu sonuçları tutar: LRU, 5000 kayıt, 5 dk. Proje silinince temizlenir.
+- **Performans:** `sys_project_tenant` gidiş-dönüş süresi yerelde p50 0,08 ms, p95 0,18 ms; `SELECT 1` ile aynı. Önbellek ıskasında istek başına tenant kapsamlı tek bir sorgu (yaklaşık 0,1–0,3 ms), isabette sıfır.
+- **İnceleme bulguları (düzeltme turunda):**
+  - Yolun ortasında `/projects/:id` taşıyan rotalar: `/policy`, `/usage`, `/cost`.
+  - Gövdedeki `projectId` ile yabancı projeye yazma: audit, incidents, presence, work-item.
+  - Sandbox görev kontrolü, Hermes başlığı, gateway'in `x-tenant-id` geri dönüşü.
+  - Testlerdeki zayıflıklar.
+- **Karar (kullanıcı):** Alt kaynak bağlama açığı F4'e bırakıldı. Örnek: `/projects/A/tasks/<B'nin görevi>`, süper kullanıcı modunda B'nin görevini okuyup çalıştırabiliyor. F4'te uygulama kısıtlı role geçince RLS bu sorguları tenant'a göre süzer ve açık kapanır. O zamana kadar çok tenant'lı production kullanımı yok; izolasyon epic'i de ön koşul. Aynı tenant içindeki proje ile alt kaynak tutarlılığı sonraki işlere.
+- **İkinci tur sonrası küçük temizlik:** Gateway'deki `x-tenant-id`/`x-actor-id` ile mcp ve hermes'teki `"dev_tenant_id"` geri dönüşleri kaldırıldı; bunlar erişilemez durumdaydı. Hermes invoke ve mcp write/apply'da boş `projectId` için açık 400.
+- **Sonraki işler:**
+  - Görev SSE akışı callback bitince kapanıyor; çalışan görevin canlı logu akmıyor (önceden var olan hata).
+  - Yaklaşık 11 çağrı noktası için yabancı proje negatif testi yok: cost insights, classify-risk, mcp invoke/apply, hermes invoke, gateway, registry, audit/security-events GET, notifications, ci webhook. Kapsama taraması da handler düzeyine indirilmeli.
+  - Onay ve skill rotaları `isProjectInTenant`'tan `assertProjectInTenant`'a taşınmalı.
+  - `/policy/projects/:id` kendi projesinde de 500 dönüyor (SQL'de `project_id` sütunu yok; önceden var olan hata).
+  - `openIncident` gövdeden `id` kabul ediyor. Bu, F4'e bırakılan alt kaynak sınıfında; tek satırlık düzeltmesi F4'te yapılabilir.
+
 ---
 
 ### F3-c — Event bus, NOTIFY ve anlık olaylar

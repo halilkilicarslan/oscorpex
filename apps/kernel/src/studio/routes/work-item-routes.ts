@@ -68,7 +68,7 @@ workItemRoutes.post("/projects/:id/work-items", async (c) => {
 			return c.json({ error: "type and title are required" }, 400);
 		}
 
-		const item = await createWorkItem({ projectId, ...body });
+		const item = await createWorkItem({ ...body, projectId });
 		return c.json(item, 201);
 	} catch (err) {
 		log.error("[work-item-routes] create item failed:" + " " + String(err));

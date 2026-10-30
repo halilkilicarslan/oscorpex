@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../auth/project-access.js";
 import { costOptimizer } from "../cost-optimizer.js";
 import { getProject } from "../db.js";
 import { createLogger } from "../logger.js";
@@ -20,6 +21,8 @@ const router = new Hono();
 
 router.get("/insights/:projectId", async (c) => {
 	const projectId = c.req.param("projectId");
+	const denied = await assertProjectInTenant(c, projectId);
+	if (denied) return denied;
 	try {
 		const project = await getProject(projectId);
 		if (!project) return c.json({ error: "Project not found" }, 404);
@@ -42,6 +45,8 @@ router.get("/insights/:projectId", async (c) => {
 
 router.get("/recommendation/:projectId", async (c) => {
 	const projectId = c.req.param("projectId");
+	const denied = await assertProjectInTenant(c, projectId);
+	if (denied) return denied;
 	try {
 		const project = await getProject(projectId);
 		if (!project) return c.json({ error: "Project not found" }, 404);
@@ -69,6 +74,8 @@ router.get("/recommendation/:projectId", async (c) => {
 
 router.get("/efficiency/:projectId", async (c) => {
 	const projectId = c.req.param("projectId");
+	const denied = await assertProjectInTenant(c, projectId);
+	if (denied) return denied;
 	try {
 		const project = await getProject(projectId);
 		if (!project) return c.json({ error: "Project not found" }, 404);

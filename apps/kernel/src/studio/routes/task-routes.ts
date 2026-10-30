@@ -8,7 +8,6 @@ import { agentRuntime } from "../agent-runtime.js";
 import { containerManager } from "../container-manager.js";
 import { withCorrelation } from "../correlation-context.js";
 import {
-	appendTaskLogs,
 	countProjectTasks,
 	getProject,
 	getTask,
@@ -258,7 +257,7 @@ taskRoutes.get("/projects/:id/tasks/:taskId/stream", async (c) => {
 	const taskId = c.req.param("taskId");
 
 	const task = await getTask(taskId);
-	if (!task) return c.json({ error: "Task not found" }, 404);
+	if (!task || task.projectId !== projectId) return c.json({ error: "Task not found" }, 404);
 
 	return streamSSE(c, async (stream) => {
 		if (task.status === "done" || task.status === "failed") {
@@ -294,7 +293,6 @@ taskRoutes.get("/projects/:id/tasks/:taskId/stream", async (c) => {
 						event: "log",
 						data: JSON.stringify({ text }),
 					});
-					if (text) await appendTaskLogs(taskId, [text]);
 				}
 
 				if ((event.type === "task:completed" || event.type === "task:failed") && event.taskId === taskId) {

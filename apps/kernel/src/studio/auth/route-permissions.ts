@@ -373,7 +373,7 @@ export const ROUTE_PERMISSIONS: RoutePermissionEntry[] = [
 
 	// Scheduler
 	{ pattern: "/scheduler/jobs", permission: "projects:read", methods: ["GET"] },
-	{ pattern: "/scheduler/soak", permission: "projects:update", methods: ["POST"] },
+	{ pattern: "/scheduler/soak", permission: "platform:admin", methods: ["POST"] },
 
 	// Platform-wide endpoints
 	{ pattern: "/avatars", permission: "projects:read", methods: ["GET"] },

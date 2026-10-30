@@ -473,10 +473,9 @@ agentRoutes.get("/projects/:id/agents/:agentId/stream", async (c) => {
 	let readable = agentRuntime.streamAgentOutput(projectId, agentId);
 	if (!readable) {
 		const agent = (await listProjectAgents(projectId)).find((a) => a.id === agentId);
-		if (agent) {
-			agentRuntime.ensureVirtualProcess(projectId, agentId, agent.name);
-			readable = agentRuntime.streamAgentOutput(projectId, agentId);
-		}
+		if (!agent) return c.json({ error: "Agent bulunamadı" }, 404);
+		agentRuntime.ensureVirtualProcess(projectId, agentId, agent.name);
+		readable = agentRuntime.streamAgentOutput(projectId, agentId);
 	}
 
 	if (!readable) {

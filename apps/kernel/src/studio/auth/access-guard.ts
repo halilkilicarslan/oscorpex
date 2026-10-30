@@ -7,17 +7,12 @@
 import type { Context, Next } from "hono";
 import { createLogger } from "../logger.js";
 import { enterRequestTenant, runAsSystemAtBoundary, runWithoutScopeAtBoundary } from "../tenancy/tenant-scope.js";
-import { LOCAL_TENANT_ID, authMiddleware } from "./auth-middleware.js";
+import { authMiddleware } from "./auth-middleware.js";
+import { checkProjectPathAccess, resolveRequestTenant } from "./project-access.js";
 import { getRoutePermission, isKnownRoute, isPublicRoute } from "./route-permissions.js";
 import { requireTenantContext } from "./tenant-context.js";
 
 const log = createLogger("access-guard");
-
-/** Tenant of the authenticated request; the dev bypass (authType "none") always maps to the local tenant. */
-function resolveRequestTenant(c: Context): string | null | undefined {
-	if (c.get("authType") === "none") return LOCAL_TENANT_ID;
-	return c.get("tenantId") as string | null | undefined;
-}
 
 /**
  * Unified access guard middleware.
@@ -59,6 +54,16 @@ export async function accessGuard(c: Context, next: Next): Promise<void | Respon
 	const tenantError = requireTenantContext(c);
 	if (tenantError) return tenantError;
 
+	const tenantId = resolveRequestTenant(c);
+	if (!tenantId) {
+		log.warn(`[access-guard] No tenant after authentication: ${method} ${originalPath}`);
+		return c.json({ error: "Forbidden — tenant context required" }, 403);
+	}
+
+	// 4b. Project ownership for /projects/:id/... (before RBAC so a foreign project never answers 403)
+	const projectDenied = await checkProjectPathAccess(c, path, tenantId);
+	if (projectDenied) return projectDenied;
+
 	// 5. Route-level permission check (from permission matrix)
 	const routePermission = getRoutePermission(path, method);
 	if (routePermission !== null && routePermission !== undefined) {
@@ -84,11 +89,6 @@ export async function accessGuard(c: Context, next: Next): Promise<void | Respon
 	}
 
 	// 7. Run the downstream handler inside the request's tenant scope (RLS: app.current_tenant_id)
-	const tenantId = resolveRequestTenant(c);
-	if (!tenantId) {
-		log.warn(`[access-guard] No tenant after authentication: ${method} ${originalPath}`);
-		return c.json({ error: "Forbidden — tenant context required" }, 403);
-	}
 	// Platform-wide aggregate endpoints read cross-tenant data through sys_* functions: system scope.
 	// Only for /platform/* — other platform:admin routes (providers, plugins, …) keep the caller's tenant scope.
 	if (routePermission === "platform:admin" && path.startsWith("/platform/")) {

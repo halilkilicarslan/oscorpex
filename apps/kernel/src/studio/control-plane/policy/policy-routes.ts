@@ -4,6 +4,7 @@
 
 import { getGlobalPolicySummary, getProjectPolicySummary } from "@oscorpex/control-plane";
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../../auth/project-access.js";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-policy-routes");
@@ -21,6 +22,8 @@ cpPolicyRoutes.get("/policy/summary", async (c) => {
 });
 
 cpPolicyRoutes.get("/policy/projects/:id", async (c) => {
+	const denied = await assertProjectInTenant(c, c.req.param("id"));
+	if (denied) return denied;
 	try {
 		const summary = await getProjectPolicySummary(c.req.param("id"));
 		return c.json(summary);

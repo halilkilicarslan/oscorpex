@@ -4,6 +4,7 @@
 
 import { getProjectBudgetStatus, getProjectUsageRollup, getProviderCostRollup } from "@oscorpex/control-plane";
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../../auth/project-access.js";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-usage-cost-routes");
@@ -11,6 +12,8 @@ const log = createLogger("cp-usage-cost-routes");
 export const cpUsageCostRoutes = new Hono();
 
 cpUsageCostRoutes.get("/usage/projects/:id", async (c) => {
+	const denied = await assertProjectInTenant(c, c.req.param("id"));
+	if (denied) return denied;
 	try {
 		const days = Math.min(Number.parseInt(c.req.query("days") ?? "30", 10), 365);
 		const rollup = await getProjectUsageRollup(c.req.param("id"), days);
@@ -22,6 +25,8 @@ cpUsageCostRoutes.get("/usage/projects/:id", async (c) => {
 });
 
 cpUsageCostRoutes.get("/cost/projects/:id", async (c) => {
+	const denied = await assertProjectInTenant(c, c.req.param("id"));
+	if (denied) return denied;
 	try {
 		const days = Math.min(Number.parseInt(c.req.query("days") ?? "30", 10), 365);
 		const [rollup, budget] = await Promise.all([

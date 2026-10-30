@@ -4,6 +4,7 @@
 
 import { appendAuditEvent, appendSecurityEvent, listAuditEvents, listSecurityEvents } from "@oscorpex/control-plane";
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../../auth/project-access.js";
 import { createLogger } from "../../logger.js";
 
 const log = createLogger("cp-audit-routes");
@@ -11,12 +12,17 @@ const log = createLogger("cp-audit-routes");
 export const cpAuditRoutes = new Hono();
 
 cpAuditRoutes.get("/audit", async (c) => {
+	const projectId = c.req.query("projectId") ?? undefined;
+	if (projectId) {
+		const denied = await assertProjectInTenant(c, projectId);
+		if (denied) return denied;
+	}
 	try {
 		const events = await listAuditEvents({
 			category: c.req.query("category") ?? undefined,
 			severity: c.req.query("severity") ?? undefined,
 			actor: c.req.query("actor") ?? undefined,
-			projectId: c.req.query("projectId") ?? undefined,
+			projectId,
 			limit: Number(c.req.query("limit") ?? "100"),
 		});
 		return c.json({ events });
@@ -27,11 +33,16 @@ cpAuditRoutes.get("/audit", async (c) => {
 });
 
 cpAuditRoutes.get("/security-events", async (c) => {
+	const projectId = c.req.query("projectId") ?? undefined;
+	if (projectId) {
+		const denied = await assertProjectInTenant(c, projectId);
+		if (denied) return denied;
+	}
 	try {
 		const events = await listSecurityEvents({
 			severity: c.req.query("severity") ?? undefined,
 			eventType: c.req.query("eventType") ?? undefined,
-			projectId: c.req.query("projectId") ?? undefined,
+			projectId,
 			limit: Number(c.req.query("limit") ?? "100"),
 		});
 		return c.json({ events });
@@ -51,6 +62,10 @@ cpAuditRoutes.post("/audit", async (c) => {
 			action: string;
 			details?: Record<string, unknown>;
 		};
+		if (body.projectId) {
+			const denied = await assertProjectInTenant(c, body.projectId);
+			if (denied) return denied;
+		}
 		const event = await appendAuditEvent(body);
 		return c.json({ event }, 201);
 	} catch (err) {

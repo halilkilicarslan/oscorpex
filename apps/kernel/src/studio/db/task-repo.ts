@@ -456,25 +456,6 @@ export async function moveTaskToPhase(taskId: string, newPhaseId: string): Promi
 	await execute("UPDATE tasks SET phase_id = $1 WHERE id = $2", [newPhaseId, taskId]);
 }
 
-/**
- * Append log lines to a task's output.logs without replacing other output fields.
- * Atomic JSONB append — no read-modify-write, no race condition under concurrent callers.
- */
-export async function appendTaskLogs(taskId: string, logs: string[]): Promise<void> {
-	if (logs.length === 0) return;
-	// jsonb_set atomically splices the new log entries into the existing array.
-	// COALESCE ensures a well-formed default when output is NULL.
-	// The || operator concatenates jsonb arrays server-side — no JS read required.
-	await execute(
-		`UPDATE tasks SET output = jsonb_set(
-			COALESCE(output::jsonb, '{"filesCreated":[],"filesModified":[],"logs":[]}'::jsonb),
-			'{logs}',
-			COALESCE(output::jsonb -> 'logs', '[]'::jsonb) || $1::jsonb
-		) WHERE id = $2`,
-		[JSON.stringify(logs), taskId],
-	);
-}
-
 // ---------------------------------------------------------------------------
 // Aggregate Queries (extracted from consumer modules — repo pattern enforcement)
 // ---------------------------------------------------------------------------

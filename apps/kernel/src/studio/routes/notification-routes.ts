@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../auth/project-access.js";
 import {
 	countUnread,
 	deleteNotification,
@@ -24,6 +25,10 @@ const router = new Hono();
 router.get("/", async (c) => {
 	try {
 		const projectId = c.req.query("projectId");
+		if (projectId) {
+			const denied = await assertProjectInTenant(c, projectId);
+			if (denied) return denied;
+		}
 		const unreadOnly = c.req.query("unreadOnly") === "true";
 		const limit = Math.min(Number(c.req.query("limit") ?? "50"), 200);
 		const offset = Number(c.req.query("offset") ?? "0");
@@ -50,6 +55,10 @@ router.get("/", async (c) => {
 router.get("/unread-count", async (c) => {
 	try {
 		const projectId = c.req.query("projectId") ?? undefined;
+		if (projectId) {
+			const denied = await assertProjectInTenant(c, projectId);
+			if (denied) return denied;
+		}
 		const userId = (c.var as Record<string, unknown>)["userId"] as string | undefined;
 		const count = await countUnread({ userId, projectId });
 		return c.json({ count });
@@ -80,6 +89,10 @@ router.patch("/:id/read", async (c) => {
 router.post("/mark-all-read", async (c) => {
 	try {
 		const projectId = c.req.query("projectId") ?? undefined;
+		if (projectId) {
+			const denied = await assertProjectInTenant(c, projectId);
+			if (denied) return denied;
+		}
 		const userId = (c.var as Record<string, unknown>)["userId"] as string | undefined;
 		await markAllNotificationsAsRead({ userId, projectId });
 		return c.json({ ok: true });

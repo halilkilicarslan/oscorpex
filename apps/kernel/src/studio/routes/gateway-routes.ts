@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../auth/project-access.js";
 import { createLogger } from "../logger.js";
 import { handleGatewayRequest } from "../gateway/index.js";
 import { rateLimiter } from "../middleware/rate-limiter.js";
@@ -13,9 +14,13 @@ gatewayRoutes.use("*", rateLimiter({ windowMs: 60_000, max: gatewayRateLimit }))
 // POST /gateway/invoke — invoke a read-only MCP tool via gateway
 gatewayRoutes.post("/gateway/invoke", async (c) => {
 	const ctx = c as typeof c & { get(key: string): string | undefined };
-	const tenantId = ctx.get("tenantId") ?? c.req.header("x-tenant-id") ?? "";
+	const tenantId = ctx.get("tenantId") ?? "";
 	const projectId = c.req.header("x-project-id") ?? "";
-	const actorId = ctx.get("userId") ?? c.req.header("x-actor-id") ?? "anonymous";
+	if (projectId) {
+		const denied = await assertProjectInTenant(c, projectId);
+		if (denied) return denied;
+	}
+	const actorId = ctx.get("userId") ?? "anonymous";
 
 	let body: { toolName?: string; args?: Record<string, unknown> };
 	try {

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../auth/project-access.js";
 import { createLogger } from "../logger.js";
 import { handleHermesInvocation, createSession, isHermesEnabled, getHermesAllowedTools } from "../hermes/index.js";
 import { rateLimiter } from "../middleware/rate-limiter.js";
@@ -20,6 +21,8 @@ hermesRoutes.post("/hermes/session", async (c) => {
 	if (!tenantId || !projectId) {
 		return c.json({ error: "tenantId and projectId required" }, 400);
 	}
+	const denied = await assertProjectInTenant(c, projectId);
+	if (denied) return denied;
 
 	const body = await c.req.json().catch(() => ({}));
 	const maxToolCalls = typeof body?.maxToolCalls === "number" ? (body.maxToolCalls as number) : undefined;
@@ -53,6 +56,11 @@ hermesRoutes.post("/hermes/invoke", async (c) => {
 	const tenantId = (c.get as (k: string) => string | undefined)("tenantId") ?? "";
 	const projectId = c.req.header("x-project-id") ?? (body.projectId as string | undefined) ?? "";
 	const actorId = (c.get as (k: string) => string | undefined)("userId") ?? "hermes-client";
+	if (!projectId) {
+		return c.json({ ok: false, error: { code: "INVALID_REQUEST", message: "projectId required" } }, 400);
+	}
+	const denied = await assertProjectInTenant(c, projectId);
+	if (denied) return denied;
 
 	const result = await handleHermesInvocation({
 		sessionId: body.sessionId as string,
@@ -83,8 +91,11 @@ hermesRoutes.post("/hermes/soak", async (c) => {
 		return c.json({ error: "Soak not available in production" }, 403);
 	}
 	const { runHermesSoak } = await import("../hermes/index.js");
-	const tenantId = (c.get as (k: string) => string | undefined)("tenantId") ?? "dev_tenant_id";
-	const projectId = c.req.header("x-project-id") ?? "soak-project";
+	const tenantId = (c.get as (k: string) => string | undefined)("tenantId") ?? "";
+	const projectId = c.req.header("x-project-id");
+	if (!projectId) return c.json({ error: "x-project-id header is required" }, 400);
+	const denied = await assertProjectInTenant(c, projectId);
+	if (denied) return denied;
 	const result = await runHermesSoak(tenantId, projectId);
 	return c.json(result);
 });

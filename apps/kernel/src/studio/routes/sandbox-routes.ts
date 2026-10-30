@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { assertProjectInTenant } from "../auth/project-access.js";
 import { getTask } from "../db.js";
 import { createLogger } from "../logger.js";
 import { createSandboxPolicy, getSandboxPolicy, getSessionViolations, resolveTaskPolicy } from "../sandbox-manager.js";
@@ -52,11 +53,13 @@ sandboxRoutes.post("/projects/:projectId/sandbox-policy", async (c) => {
 
 sandboxRoutes.get("/tasks/:taskId/sandbox-policy", async (c) => {
 	try {
-		const task = await getTask(c.req.param("taskId"));
-		if (!task) return c.json({ error: "Task not found" }, 404);
-		const agentRole = c.req.query("agentRole") ?? task.assignedAgent;
 		const projectId = c.req.query("projectId");
 		if (!projectId) return c.json({ error: "projectId query param required" }, 400);
+		const denied = await assertProjectInTenant(c, projectId);
+		if (denied) return denied;
+		const task = await getTask(c.req.param("taskId"));
+		if (!task || task.projectId !== projectId) return c.json({ error: "Task not found" }, 404);
+		const agentRole = c.req.query("agentRole") ?? task.assignedAgent;
 		const policy = await resolveTaskPolicy(projectId, task, agentRole);
 		return c.json(policy);
 	} catch (err) {
