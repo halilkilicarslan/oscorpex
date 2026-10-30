@@ -3,8 +3,10 @@
 // Listens to StudioEvent bus and creates in-app notifications.
 // ---------------------------------------------------------------------------
 
-import { createNotification, type Notification } from "./db.js";
+import { type Notification, createNotification, getProjectTenantId } from "./db.js";
 import { createLogger } from "./logger.js";
+import { projectBelongsToTenant } from "./tenancy/project-tenant-cache.js";
+import { currentScope, isImplicitScope, runInTenant } from "./tenancy/tenant-scope.js";
 import type { EventType, StudioEvent } from "./types.js";
 const log = createLogger("notification-service");
 
@@ -59,19 +61,34 @@ export async function processEventForNotification(event: StudioEvent): Promise<N
 	const notifData = mapper(event);
 	if (!notifData) return null;
 
-	return createNotification({
-		tenantId: null, // TODO: project → tenant lookup
-		userId: null, // broadcast: all project members
-		projectId: event.projectId,
-		type: notifData.type,
-		title: notifData.title,
-		body: notifData.body,
-		data: {
-			eventId: event.id,
-			eventType: event.type,
-			taskId: event.taskId,
-			agentId: event.agentId,
-			...event.payload,
-		},
-	});
+	// Bus-dispatched events run in their verified tenant scope; everything else is resolved from the project itself.
+	const scope = currentScope();
+	const tenantId =
+		scope?.kind === "tenant" && !isImplicitScope()
+			? (await projectBelongsToTenant(event.projectId, scope.tenantId))
+				? scope.tenantId
+				: null
+			: await getProjectTenantId(event.projectId);
+	if (!tenantId) {
+		log.warn({ projectId: event.projectId, eventType: event.type }, "notification skipped: project has no tenant");
+		return null;
+	}
+
+	return runInTenant(tenantId, () =>
+		createNotification({
+			tenantId,
+			userId: null, // broadcast: all project members
+			projectId: event.projectId,
+			type: notifData.type,
+			title: notifData.title,
+			body: notifData.body,
+			data: {
+				eventId: event.id,
+				eventType: event.type,
+				taskId: event.taskId,
+				agentId: event.agentId,
+				...event.payload,
+			},
+		}),
+	);
 }

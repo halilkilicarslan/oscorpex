@@ -174,14 +174,18 @@ function recordImplicitCaller(): void {
 		outsideRepoLayer.find((f) => !/[\\/]__tests__[\\/]|node_modules|^node:|^<anonymous>$|^index \d+$/.test(f.path)) ??
 		outsideRepoLayer[0];
 	if (!repo || !entry) return;
-	const isTest = frames.some((f) => /[\\/]__tests__[\\/]/.test(f.path));
+	const timerRooted = frames.some((f) => f.path.includes("node:internal/timers"));
+	// The outermost project frame owns the work: a timer armed by production code stays detached even when its
+	// callback closes over test code, while the current test's own timers and awaits root in a test file.
+	const root = frames.filter((f) => !/node_modules|^node:|^<anonymous>$|^index \d+$/.test(f.path)).at(-1);
+	const isTest = root !== undefined && /[\\/]__tests__[\\/]/.test(root.path);
 	let trigger: ImplicitScopeCaller["trigger"];
 	if (!isTest) {
-		if (frames.some((f) => f.path.includes("node:internal/timers"))) trigger = "timer";
+		if (timerRooted) trigger = "timer";
 		else if (frames.some((f) => /^(node:)?events$/.test(f.path))) trigger = "event";
 		else trigger = "unknown";
 	}
-	const key = `${repo.label}|${entry.label}`;
+	const key = `${isTest ? "test" : "detached"}|${repo.label}|${entry.label}`;
 	const existing = _implicitCallers.get(key);
 	if (existing) {
 		existing.count++;

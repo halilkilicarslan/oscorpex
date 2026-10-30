@@ -6,6 +6,7 @@
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
 import { processEventForNotification } from "../notification-service.js";
+import { rethrowScopeError } from "../tenancy/tenant-scope.js";
 import type { EventType } from "../types.js";
 
 const log = createLogger("composition:notification-bridge");
@@ -14,10 +15,13 @@ const NOTIFICATION_EVENTS: EventType[] = ["task:completed", "task:failed", "pipe
 
 export function registerNotificationBridge(): void {
 	for (const eventType of NOTIFICATION_EVENTS) {
-		eventBus.on(eventType, (event) => {
-			processEventForNotification(event).catch((err) => {
+		eventBus.on(eventType, async (event) => {
+			try {
+				await processEventForNotification(event);
+			} catch (err) {
+				rethrowScopeError(err);
 				log.warn({ err }, `Notification bridge error for ${eventType}`);
-			});
+			}
 		});
 	}
 }

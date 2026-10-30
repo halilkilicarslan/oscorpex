@@ -13,8 +13,9 @@
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
+import { LOCAL_TENANT_ID, legacyKeyAllowed, legacyKeyMatches } from "./auth/auth-middleware.js";
 import { verifyJwt } from "./auth/jwt.js";
-import { eventBus } from "./event-bus.js";
+import { GLOBAL_PROJECT_ID, eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
 import type { StudioEvent } from "./types.js";
 const log = createLogger("ws-manager");
@@ -66,12 +67,28 @@ interface ClientRecord {
 	pingTimer?: ReturnType<typeof setInterval>;
 	/**
 	 * M6.4: Tenant isolation — JWT'den çıkarılan tenantId.
-	 * null = auth kapalı (backward compat) → tüm project event'leri iletilir.
-	 * Dolu = sadece bu tenant'ın projeleri için gelen event'ler iletilir.
+	 * Dolu = sadece bu tenant'ın projeleri için gelen event'ler (ve platform-safe event'ler) iletilir.
+	 * null = tenant'ı çözülemeyen client: hiçbir event almaz.
 	 */
 	tenantId: string | null;
 	/** Correlation ID from the HTTP upgrade request (query param) */
 	correlationId?: string;
+}
+
+/** Platform events ("__global__") that carry no tenant data and may reach every tenant's clients. */
+const PLATFORM_SAFE_TYPES: ReadonlySet<string> = new Set(["provider:degraded"]);
+
+function isPlatformSafe(projectId: string, message: WSMessage): boolean {
+	if (projectId !== GLOBAL_PROJECT_ID || message.type !== "event") return false;
+	const type = (message.payload as { type?: unknown } | null | undefined)?.type;
+	return typeof type === "string" && PLATFORM_SAFE_TYPES.has(type);
+}
+
+/** Tenant carried by an event message; anything else has no tenant and only reaches tenant-less clients. */
+function tenantOf(message: WSMessage): string | undefined {
+	if (message.type !== "event") return undefined;
+	const tenantId = (message.payload as { tenantId?: unknown } | null | undefined)?.tenantId;
+	return typeof tenantId === "string" ? tenantId : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,8 +110,11 @@ class WebSocketManager {
 	private projectUnsubscribers = new Map<string, () => void>();
 	/** projectId -> aktif client sayısı */
 	private projectRefCounts = new Map<string, number>();
-	/** Batching: 50ms penceresi içinde biriken mesajlar (projectId -> mesaj listesi) */
-	private _pendingBroadcasts = new Map<string, Array<{ type: string; payload: unknown }>>();
+	/** Batching: 50ms penceresi içinde biriken mesajlar (projectId -> mesaj listesi); tenant mesaj başına tutulur */
+	private _pendingBroadcasts = new Map<
+		string,
+		Array<{ type: string; payload: unknown; tenantId?: string; platform: boolean }>
+	>();
 	/** Batching: proje başına zamanlayıcı (projectId -> timer handle) */
 	private _flushTimers = new Map<string, NodeJS.Timeout>();
 
@@ -133,7 +153,12 @@ class WebSocketManager {
 			pending = [];
 			this._pendingBroadcasts.set(projectId, pending);
 		}
-		pending.push({ type: message.type, payload: message });
+		pending.push({
+			type: message.type,
+			payload: message,
+			tenantId: tenantOf(message),
+			platform: isPlatformSafe(projectId, message),
+		});
 
 		// 20 mesaja ulaşıldığında hemen gönder
 		if (pending.length >= 20) {
@@ -160,17 +185,32 @@ class WebSocketManager {
 		this._pendingBroadcasts.delete(projectId);
 		if (!messages || messages.length === 0) return;
 
-		// Tek mesajsa doğrudan obje, birden fazlaysa dizi olarak gönder
-		const data =
-			messages.length === 1 ? JSON.stringify(messages[0].payload) : JSON.stringify(messages.map((m) => m.payload));
+		// Filtreleme mesaj başına yapılır: tenant'lı client yalnızca kendi tenant'ının event'lerini alır.
+		// tenantId=null client hiçbir mesaj almaz; platform-safe mesajlar tüm tenant'lı client'lara gider. Flush sırasında DB işi yapılmaz.
+		const serialized = new Map<string | null, string | null>();
+		const payloadFor = (tenantId: string | null): string | null => {
+			if (tenantId === null) return null;
+			if (serialized.has(tenantId)) return serialized.get(tenantId) ?? null;
+			const visible = messages.filter((m) => m.platform || m.tenantId === tenantId);
+			// Tek mesajsa doğrudan obje, birden fazlaysa dizi olarak gönder
+			const data =
+				visible.length === 0
+					? null
+					: visible.length === 1
+						? JSON.stringify(visible[0].payload)
+						: JSON.stringify(visible.map((m) => m.payload));
+			serialized.set(tenantId, data);
+			return data;
+		};
 
 		for (const [ws, record] of this.clients) {
-			if (record.subscriptions.has(projectId) && ws.readyState === WebSocket.OPEN) {
-				try {
-					ws.send(data);
-				} catch {
-					// Gönderme hatası — yoksay
-				}
+			if (!record.subscriptions.has(projectId) || ws.readyState !== WebSocket.OPEN) continue;
+			const data = payloadFor(record.tenantId);
+			if (data === null) continue;
+			try {
+				ws.send(data);
+			} catch {
+				// Gönderme hatası — yoksay
 			}
 		}
 	}
@@ -192,7 +232,7 @@ class WebSocketManager {
 			// Browser WS API header gönderemediğinden token query param olarak iletilir.
 			// Auth enabled + no valid token → connection rejected (fail-closed).
 			const augmented = req as AugmentedRequest;
-			let tenantId: string | null = null;
+			let tenantId: string | null = LOCAL_TENANT_ID;
 			const authEnabled = process.env.OSCORPEX_AUTH_ENABLED === "true";
 			if (authEnabled) {
 				try {
@@ -208,9 +248,13 @@ class WebSocketManager {
 							ws.close(1008, "Invalid token");
 							return;
 						}
-					} else if (apiKey && envApiKey && apiKey === envApiKey) {
+					} else if (apiKey && envApiKey && legacyKeyMatches(`Bearer ${apiKey}`, envApiKey)) {
 						// Legacy env API key auth (same behavior as HTTP auth-middleware).
-						tenantId = null;
+						if (!legacyKeyAllowed()) {
+							ws.close(1008, "Authentication required");
+							return;
+						}
+						tenantId = LOCAL_TENANT_ID;
 					} else {
 						// Auth enabled but no token — close connection
 						ws.close(1008, "Authentication required");
@@ -315,6 +359,11 @@ class WebSocketManager {
 		// tenant_id'si ile eşleştiğini async kontrol et. Kontrol başarısız olursa
 		// subscribe edilmez ve client'a error gönderilir. Auth kapalıysa (tenantId=null)
 		// kontrol atlanır (backward compat).
+		if (projectId === GLOBAL_PROJECT_ID) {
+			this._doSubscribe(record, projectId);
+			this._send(ws, { type: "subscribed", projectId });
+			return;
+		}
 		if (record.tenantId !== null) {
 			import("./db.js")
 				.then(({ queryOne: qOne }) =>

@@ -9,6 +9,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../db.js", () => ({
 	insertEvent: vi.fn(),
 	getEvent: vi.fn(),
+	getProjectTenantId: vi.fn(async () => "00000000-0000-0000-0000-000000000001"),
+	getEventTenantId: vi.fn(async () => "00000000-0000-0000-0000-000000000001"),
 }));
 
 vi.mock("../pg-listener.js", () => ({
@@ -31,6 +33,8 @@ vi.mock("../logger.js", () => ({
 		debug: vi.fn(),
 	}),
 }));
+
+const LOCAL_TENANT = "00000000-0000-0000-0000-000000000001";
 
 // Dynamic import AFTER mocks so the module picks up mocked dependencies.
 const { eventBus } = await import("../event-bus.js");
@@ -76,7 +80,7 @@ describe("P2-2: Event Bus — on() / emit()", () => {
 		await new Promise((r) => setImmediate(r));
 
 		expect(handler).toHaveBeenCalledOnce();
-		expect(handler).toHaveBeenCalledWith(persisted);
+		expect(handler).toHaveBeenCalledWith({ ...persisted, tenantId: LOCAL_TENANT });
 
 		unsub();
 	});
@@ -93,7 +97,7 @@ describe("P2-2: Event Bus — on() / emit()", () => {
 		await new Promise((r) => setImmediate(r));
 
 		expect(handler).toHaveBeenCalledOnce();
-		expect(handler).toHaveBeenCalledWith(persisted);
+		expect(handler).toHaveBeenCalledWith({ ...persisted, tenantId: LOCAL_TENANT });
 
 		unsub();
 	});
@@ -213,17 +217,19 @@ describe("P2-2: Event Bus — emitTransient()", () => {
 		vi.clearAllMocks();
 	});
 
-	it("emitTransient() calls project handlers without persisting to DB", () => {
+	it("emitTransient() calls project handlers without persisting to DB", async () => {
 		const handler = vi.fn();
 		const data = makeEventData({ projectId: "proj-transient" });
 
 		const unsub = eventBus.onProject("proj-transient", handler);
 
 		eventBus.emitTransient(data);
+		// tenant resolution is async; delivery follows within microtasks
+		await new Promise((r) => setImmediate(r));
 
 		// No DB call
 		expect(insertEvent).not.toHaveBeenCalled();
-		// Handler called synchronously
+		// Handler called without a DB round trip
 		expect(handler).toHaveBeenCalledOnce();
 		const received = handler.mock.calls[0][0];
 		expect(received.projectId).toBe("proj-transient");
@@ -232,13 +238,14 @@ describe("P2-2: Event Bus — emitTransient()", () => {
 		unsub();
 	});
 
-	it("emitTransient() calls type handlers without persisting to DB", () => {
+	it("emitTransient() calls type handlers without persisting to DB", async () => {
 		const handler = vi.fn();
 		const data = makeEventData({ type: "agent:output" });
 
 		const unsub = eventBus.on("agent:output" as any, handler);
 
 		eventBus.emitTransient(data);
+		await new Promise((r) => setImmediate(r));
 
 		expect(insertEvent).not.toHaveBeenCalled();
 		expect(handler).toHaveBeenCalledOnce();
@@ -246,7 +253,7 @@ describe("P2-2: Event Bus — emitTransient()", () => {
 		unsub();
 	});
 
-	it("emitTransient() handler errors do not propagate and remaining handlers still run", () => {
+	it("emitTransient() handler errors do not propagate and remaining handlers still run", async () => {
 		const throwingHandler = vi.fn(() => {
 			throw new Error("transient boom");
 		});
@@ -258,6 +265,7 @@ describe("P2-2: Event Bus — emitTransient()", () => {
 
 		// Must not throw
 		expect(() => eventBus.emitTransient(data)).not.toThrow();
+		await new Promise((r) => setImmediate(r));
 		expect(safeHandler).toHaveBeenCalled();
 
 		unsub();
@@ -295,7 +303,7 @@ describe("P2-2: Event Bus — off() / unsubscribe", () => {
 		expect(handler).not.toHaveBeenCalled();
 	});
 
-	it("unsubscribing one handler does not affect other registered handlers for the same project", () => {
+	it("unsubscribing one handler does not affect other registered handlers for the same project", async () => {
 		const handlerA = vi.fn();
 		const handlerB = vi.fn();
 		const data = makeEventData({ projectId: "proj-multi-unsub" });
@@ -305,6 +313,7 @@ describe("P2-2: Event Bus — off() / unsubscribe", () => {
 
 		unsubA();
 		eventBus.emitTransient(data);
+		await new Promise((r) => setImmediate(r));
 
 		expect(handlerA).not.toHaveBeenCalled();
 		expect(handlerB).toHaveBeenCalledOnce();

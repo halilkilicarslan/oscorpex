@@ -1,29 +1,19 @@
 // ---------------------------------------------------------------------------
 // Project ownership checks: generic `/projects/:id` guard + assertProjectInTenant for ids outside the path.
-// Only positive lookups are cached (a project's tenant never changes); deleting a project evicts it.
+// The positive ownership cache lives in tenancy/project-tenant-cache.ts.
 // ---------------------------------------------------------------------------
 
 import type { Context } from "hono";
-import { getProjectTenantId } from "../db.js";
+import { projectBelongsToTenant } from "../tenancy/project-tenant-cache.js";
 import { runSysLookupAtBoundary } from "../tenancy/tenant-scope.js";
 import { LOCAL_TENANT_ID } from "./auth-middleware.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: routers declare differing Variables; helpers stay env-agnostic
 type AnyContext = Context<any>;
 
-const CACHE_MAX = 5000;
-const CACHE_TTL_MS = 5 * 60_000;
+export { invalidateProjectAccessCache } from "../tenancy/project-tenant-cache.js";
+
 const COLLECTION_SEGMENTS = new Set(["import", "from-template"]);
-
-const cache = new Map<string, number>();
-
-const cacheKey = (tenantId: string, projectId: string) => `${tenantId}\u0000${projectId}`;
-
-export function invalidateProjectAccessCache(projectId: string): void {
-	for (const key of cache.keys()) {
-		if (key.endsWith(`\u0000${projectId}`)) cache.delete(key);
-	}
-}
 
 /** Tenant of the authenticated request; the dev bypass (authType "none") always maps to the local tenant. */
 export function resolveRequestTenant(c: AnyContext): string | null | undefined {
@@ -33,26 +23,6 @@ export function resolveRequestTenant(c: AnyContext): string | null | undefined {
 
 export function projectNotFoundResponse(c: AnyContext): Response {
 	return c.json({ error: "Project not found" }, 404);
-}
-
-async function projectBelongsToTenant(projectId: string, tenantId: string): Promise<boolean> {
-	const key = cacheKey(tenantId, projectId);
-	const expires = cache.get(key);
-	if (expires !== undefined) {
-		cache.delete(key);
-		if (expires > Date.now()) {
-			cache.set(key, expires);
-			return true;
-		}
-	}
-	const owner = await getProjectTenantId(projectId);
-	if (owner === null || owner !== tenantId) return false;
-	cache.set(key, Date.now() + CACHE_TTL_MS);
-	if (cache.size > CACHE_MAX) {
-		const oldest = cache.keys().next().value;
-		if (oldest !== undefined) cache.delete(oldest);
-	}
-	return true;
 }
 
 /**

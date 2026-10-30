@@ -19,14 +19,6 @@ export interface InstanceInfo {
 	lastHeartbeat: string; // ISO timestamp
 }
 
-export interface ClusterEvent {
-	type: string;
-	projectId: string;
-	payload: unknown;
-	originInstanceId: string;
-	timestamp: string;
-}
-
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -35,7 +27,6 @@ const HEARTBEAT_INTERVAL_MS = 30_000; // 30 seconds
 const STALE_THRESHOLD_MS = 90_000; // 90 seconds — instance is considered dead
 const INSTANCE_KEY_PREFIX = "cluster:instance:";
 const INSTANCE_LIST_KEY = "cluster:instances";
-const PROJECT_CHANNEL_PREFIX = "project:events:";
 
 // ---------------------------------------------------------------------------
 // WsCluster
@@ -45,7 +36,6 @@ export class WsCluster {
 	private provider: SharedStateProvider;
 	private instanceId: string;
 	private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-	private projectSubscriptions = new Map<string, Set<() => void>>(); // channel → unsubscribe fns
 	private registered = false;
 
 	constructor(provider: SharedStateProvider, instanceId?: string) {
@@ -160,52 +150,6 @@ export class WsCluster {
 		}
 
 		return active;
-	}
-
-	// ---------------------------------------------------------------------------
-	// Pub/sub
-	// ---------------------------------------------------------------------------
-
-	/**
-	 * Broadcast an event to all instances subscribed to the project channel.
-	 */
-	async broadcastToProject(
-		projectId: string,
-		event: Omit<ClusterEvent, "originInstanceId" | "timestamp">,
-	): Promise<void> {
-		const message: ClusterEvent = {
-			...event,
-			originInstanceId: this.instanceId,
-			timestamp: new Date().toISOString(),
-		};
-
-		await this.provider.publish(`${PROJECT_CHANNEL_PREFIX}${projectId}`, message);
-	}
-
-	/**
-	 * Subscribe to project events. Returns unsubscribe function.
-	 */
-	subscribeToProject(projectId: string, handler: (event: ClusterEvent) => void): () => void {
-		const channel = `${PROJECT_CHANNEL_PREFIX}${projectId}`;
-
-		const unsubscribe = this.provider.subscribe(channel, (message) => {
-			handler(message as ClusterEvent);
-		});
-
-		// Track subscriptions for cleanup
-		if (!this.projectSubscriptions.has(channel)) {
-			this.projectSubscriptions.set(channel, new Set());
-		}
-		this.projectSubscriptions.get(channel)?.add(unsubscribe);
-
-		return () => {
-			unsubscribe();
-			const subs = this.projectSubscriptions.get(channel);
-			if (subs) {
-				subs.delete(unsubscribe);
-				if (subs.size === 0) this.projectSubscriptions.delete(channel);
-			}
-		};
 	}
 
 	// ---------------------------------------------------------------------------

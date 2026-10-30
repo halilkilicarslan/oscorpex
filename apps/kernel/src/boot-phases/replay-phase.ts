@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { eventBus } from "../studio/event-bus.js";
 import { createLogger } from "../studio/logger.js";
 import { createCheckpointSnapshot } from "../studio/replay-store.js";
+import { rethrowScopeError } from "../studio/tenancy/tenant-scope.js";
 
 const log = createLogger("boot:replay");
 
@@ -19,6 +20,7 @@ export function replayPhase(): void {
 			await createCheckpointSnapshot(projectId, `stage-${stageIndex}`, randomUUID);
 			log.info(`Checkpoint created for project ${projectId} at stage ${stageIndex}`);
 		} catch (err) {
+			rethrowScopeError(err);
 			log.warn({ err }, `Checkpoint failed for ${projectId}`);
 		}
 	});
@@ -29,6 +31,7 @@ export function replayPhase(): void {
 			await createCheckpointSnapshot(projectId, "final", randomUUID);
 			log.info(`Final checkpoint created for project ${projectId}`);
 		} catch (err) {
+			rethrowScopeError(err);
 			log.warn({ err }, `Final checkpoint failed for ${projectId}`);
 		}
 	});

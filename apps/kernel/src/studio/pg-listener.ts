@@ -15,10 +15,9 @@ const CHANNEL = "oscorpex_events";
 const RECONNECT_DELAY_MS = 2000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
+/** The payload carries only the event id; the tenant is resolved server-side (sys_event_tenant). */
 type NotificationPayload = {
 	id: string;
-	projectId: string;
-	type: string;
 };
 
 type NotificationHandler = (payload: NotificationPayload) => void;
@@ -74,7 +73,7 @@ class PgListener {
 					}
 				}
 			} catch {
-				log.warn("[pg-listener] Failed to parse notification payload:" + " " + String(msg.payload));
+				log.warn({ length: msg.payload.length }, "[pg-listener] Failed to parse notification payload");
 			}
 		});
 

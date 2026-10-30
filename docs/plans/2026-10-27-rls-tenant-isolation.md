@@ -416,6 +416,36 @@ F2 ile istek bazlı tenant kapsamı ve gerçek RLS geldi. Etki analizi ve üç i
 8. Olaydan oluşan bildirim, projenin tenant'ını alır.
 9. **Regresyon:** `p2-event-bus`, `pg-listener`, bildirim, webhook ve plugin testleri yeşil.
 
+**F3-c uygulamasında ortaya çıkanlar**
+- **Test altyapısı (F3-a'dan devreden):**
+  - `useStrictScopeForFile()` ile hook'lar dahil tüm dosya strict modda çalışır.
+  - Önceki testlerden kalan kopuk sorgular uyarıya düşer.
+  - Generation belirteci, geç biten bir testin sonraki testin modunu bozmasını önler.
+  - Envanter kaydının anahtarı köken (origin) bilgisini de içerir.
+- **Tasarım:**
+  - Olayın tenant'ı bus tarafından belirlenir:
+    - Tenant kapsamında ortam tenant'ı kullanılır ve projenin tenant'ıyla eşleşmesi zorunludur; eşleşmezse olay reddedilir ve sayılır.
+    - Sistem kapsamında tenant `sys_project_tenant` ile bulunur.
+    - Proje→tenant önbelleği paylaşılır.
+  - Her handler, olayın tenant'ında ve kendi hata yakalamasıyla çalışır. Tenant'sız olaylar yalnızca kapsamsız (`runOutsideScope`) dağıtılır.
+  - Proje başına ayrı DB yazma ve anlık olay zincirleri vardır; agent çıktısı DB yazımını beklemez.
+- **`__global__` platform olayları:** Reddedilmez. Tenant istemcilerine yalnızca `provider:degraded` gider. `learningPatternsPromoted` tenant bilgisi taşıdığı için hiçbir tenant istemcisine gitmez.
+- **WebSocket ara çözümü (F3-e'ye kadar):**
+  - Env API anahtarı HTTP ile aynı kuralla (`legacyKeyMatches`/`legacyKeyAllowed`) `local` tenant'a eşlenir.
+  - Tenant'sız istemci hiçbir olay almaz.
+- **Kayıt kuralları:**
+  - `on()` tenant kapsamında çağrılamaz; `onProject()` kayıt anındaki tenant'a bağlanır.
+  - Görev bölme handler'ı açılışta `registerGraphSplitBridge()` ile kaydedilir.
+- **NOTIFY:** Yük yalnızca `{id}` taşır. 30 saniyeden eski olaylar ve yeniden okuma hataları düşürülür; ham yük loglanmaz.
+- **Diğer:**
+  - `ws-cluster` olay aktarımı kaldırıldı.
+  - Bildirimin tenant'ı projeden türetilir; tenant'ı NULL olan proje atlanır.
+  - Köprüler kapsam hatalarını bus'a iletir.
+- **Sonraki işler:**
+  - Üretimde görev iptal ve silme olayı yayılmıyor; bu yüzden bölme tablosu iptal edilen görevi yalnızca üst sınır (1000) ve süre sınırı (24 saat) ile temizler. İptal için gerçek bir olay yayılması gerekiyor.
+  - Olay zincirinde zaman aşımı ve pg `statement_timeout` yok.
+  - Kapsamsız olay yaymada `callSite()` her seferinde yığın üretiyor.
+
 ---
 
 ### F3-d — Zamanlayıcılar, watchdog, kurtarma, seeder'lar, provider-state

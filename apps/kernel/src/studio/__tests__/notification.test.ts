@@ -8,6 +8,7 @@ const mockCreateNotification = vi.fn();
 
 vi.mock("../db.js", () => ({
 	createNotification: (...args: unknown[]) => mockCreateNotification(...args),
+	getProjectTenantId: vi.fn(async () => "00000000-0000-0000-0000-000000000001"),
 }));
 
 import { processEventForNotification } from "../notification-service.js";
@@ -159,7 +160,7 @@ describe("notification-service — processEventForNotification", () => {
 		);
 	});
 
-	it("tenantId ve userId null olmali (broadcast)", async () => {
+	it("tenantId projenin tenant'i, userId null olmali (broadcast)", async () => {
 		const event = makeEvent({
 			type: "task:completed",
 			payload: { title: "Test" },
@@ -169,7 +170,7 @@ describe("notification-service — processEventForNotification", () => {
 
 		expect(mockCreateNotification).toHaveBeenCalledWith(
 			expect.objectContaining({
-				tenantId: null,
+				tenantId: "00000000-0000-0000-0000-000000000001",
 				userId: null,
 			}),
 		);

@@ -37,6 +37,8 @@ const mockExecute = vi.fn();
 vi.mock("../db.js", () => ({
 	execute: mockExecute,
 	queryOne: vi.fn().mockResolvedValue(null),
+	getProjectTenantId: vi.fn().mockResolvedValue("00000000-0000-0000-0000-000000000001"),
+	getEventTenantId: vi.fn().mockResolvedValue("00000000-0000-0000-0000-000000000001"),
 	insertEvent: vi.fn().mockResolvedValue({
 		id: "evt-001",
 		projectId: "proj-001",
@@ -112,7 +114,7 @@ describe("PgListener — notify()", () => {
 	it("pgListener.notify should resolve without error", async () => {
 		// Gerçek pgListener mock'lu olduğundan bu import'u kullanırız
 		const { pgListener } = await import("../pg-listener.js");
-		await expect(pgListener.notify({ id: "x", projectId: "p", type: "t" })).resolves.toBeUndefined();
+		await expect(pgListener.notify({ id: "x" })).resolves.toBeUndefined();
 	});
 });
 
@@ -204,11 +206,7 @@ describe("EventBus PG integration", () => {
 		// Promise chain'in tamamlanmasını bekle
 		await new Promise((r) => setImmediate(r));
 
-		expect(mockPgListenerNotify).toHaveBeenCalledWith({
-			id: "evt-emit-1",
-			projectId: "proj-emit",
-			type: "task:completed",
-		});
+		expect(mockPgListenerNotify).toHaveBeenCalledWith({ id: "evt-emit-1" });
 	});
 
 	// -------------------------------------------------------------------------
@@ -232,11 +230,7 @@ describe("EventBus PG integration", () => {
 			payload: {},
 		});
 
-		expect(mockPgListenerNotify).toHaveBeenCalledWith({
-			id: "evt-async-1",
-			projectId: "proj-async",
-			type: "task:failed",
-		});
+		expect(mockPgListenerNotify).toHaveBeenCalledWith({ id: "evt-async-1" });
 	});
 
 	// -------------------------------------------------------------------------

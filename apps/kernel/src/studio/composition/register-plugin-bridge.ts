@@ -6,6 +6,7 @@
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
 import { notifyPlugins, pluginRegistry } from "../plugin-registry.js";
+import { rethrowScopeError } from "../tenancy/tenant-scope.js";
 import type { EventType } from "../types.js";
 
 const log = createLogger("composition:plugin-bridge");
@@ -66,7 +67,8 @@ const ALL_PLUGIN_EVENTS: EventType[] = [
 export function registerPluginBridge(): void {
 	for (const eventType of ALL_PLUGIN_EVENTS) {
 		eventBus.on(eventType, (event) => {
-			pluginRegistry.notifyPlugins(event).catch((err) => {
+			const notified = pluginRegistry.notifyPlugins(event).catch((err) => {
+				rethrowScopeError(err);
 				log.warn({ err }, `Error notifying plugins for ${eventType}`);
 			});
 
@@ -96,6 +98,7 @@ export function registerPluginBridge(): void {
 					phaseId: String(payload.phaseId ?? ""),
 				}).catch((err) => log.warn({ err }, "plugin onPhaseComplete failed"));
 			}
+			return notified;
 		});
 	}
 }

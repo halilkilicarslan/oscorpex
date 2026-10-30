@@ -29,6 +29,11 @@ export class UnscopedQueryError extends Error {
 	}
 }
 
+/** For fire-and-forget bridges: let scope violations reach the event bus (which counts them), swallow nothing else here. */
+export function rethrowScopeError(err: unknown): void {
+	if (err instanceof TenantScopeError || err instanceof UnscopedQueryError) throw err;
+}
+
 const MAX_TENANT_ID_LENGTH = 128;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control characters is the point
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;

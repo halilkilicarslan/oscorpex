@@ -389,6 +389,8 @@ export type EmitInput<T extends EventType> = Omit<TypedEvent<T>, "id" | "timesta
 export interface StudioEvent {
 	id: string;
 	projectId: string;
+	/** Stamped by the event bus from the project's owner; a caller-provided value is ignored. */
+	tenantId?: string;
 	type: EventType;
 	agentId?: string;
 	taskId?: string;

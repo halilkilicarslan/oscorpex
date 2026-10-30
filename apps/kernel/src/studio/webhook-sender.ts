@@ -9,6 +9,7 @@ import { insertWebhookDelivery, listWebhooksForEvent } from "./db.js";
 import type { Webhook } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
+import { rethrowScopeError } from "./tenancy/tenant-scope.js";
 import type { EventType, StudioEvent } from "./types.js";
 import { validateWebhookUrl } from "./utils/url-validator.js";
 const log = createLogger("webhook-sender");
@@ -244,8 +245,8 @@ class WebhookSender {
 
 		for (const type of eventTypes) {
 			eventBus.on(type, (event) => {
-				// Arka planda çalışır — event akışını bloklamamak için
-				this.processEvent(event).catch((err) => {
+				return this.processEvent(event).catch((err) => {
+					rethrowScopeError(err);
 					log.warn(`[webhook-sender] processEvent hatasi (${type}):`, err instanceof Error ? err.message : err);
 				});
 			});
@@ -266,6 +267,7 @@ class WebhookSender {
 		try {
 			webhooks = await listWebhooksForEvent(event.projectId, webhookEventType);
 		} catch (err) {
+			rethrowScopeError(err);
 			log.warn("[webhook-sender] Webhook listesi alinamadi: " + (err instanceof Error ? err.message : String(err)));
 			return;
 		}

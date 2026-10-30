@@ -54,7 +54,7 @@ async function lookupIdentity(
 }
 
 /** Constant-time comparison of the presented Authorization header against the legacy key. */
-function legacyKeyMatches(authHeader: string | undefined, envApiKey: string): boolean {
+export function legacyKeyMatches(authHeader: string | undefined, envApiKey: string): boolean {
 	if (!authHeader) return false;
 	// Hash both sides so lengths are equal and timingSafeEqual never throws or leaks the key length.
 	const a = createHash("sha256").update(authHeader).digest();
@@ -63,7 +63,7 @@ function legacyKeyMatches(authHeader: string | undefined, envApiKey: string): bo
 }
 
 /** In production with auth enabled the legacy key must be re-enabled explicitly. */
-function legacyKeyAllowed(): boolean {
+export function legacyKeyAllowed(): boolean {
 	if (process.env.NODE_ENV === "production" && process.env.OSCORPEX_AUTH_ENABLED === "true") {
 		return process.env.OSCORPEX_ALLOW_LEGACY_API_KEY === "true";
 	}

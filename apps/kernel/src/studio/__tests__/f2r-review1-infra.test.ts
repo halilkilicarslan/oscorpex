@@ -158,7 +158,8 @@ describe("source guard — scope-escape helpers have a closed importer set", () 
 			.map(rel);
 
 	it("runOutsideScope and enterTenantScopeForTests are not used by production code", () => {
-		expect(importers("runOutsideScope")).toEqual([]);
+		// The bus-private dispatch boundary is the single, explicit exemption.
+		expect(importers("runOutsideScope")).toEqual(["apps/kernel/src/studio/event-bus.ts"]);
 		expect(importers("enterTenantScopeForTests")).toEqual([]);
 	});
 

@@ -28,6 +28,7 @@ import {
 	registerSeeders,
 	registerWebhookBridge,
 } from "./studio/composition/index.js";
+import { registerGraphSplitBridge } from "./studio/graph-coordinator.js";
 
 const log = createLogger("boot");
 
@@ -86,6 +87,7 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 	registerEventBridges();
 	registerWebhookBridge();
 	registerPluginBridge();
+	registerGraphSplitBridge();
 	registerNotificationBridge();
 	log.info("[boot] Application composition wired");
 

@@ -5,7 +5,9 @@
 // ---------------------------------------------------------------------------
 
 import { randomUUID } from "node:crypto";
+import { createCheckpoint } from "./checkpoint/index.js";
 import {
+	type GraphMutationType,
 	createTask,
 	getGraphMutation,
 	getPipelineRun,
@@ -15,14 +17,12 @@ import {
 	recordGraphMutation,
 	updateGraphMutation,
 	updateTask,
-	type GraphMutationType,
 } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
 import { queryOne } from "./pg.js";
 import { currentScope, runAsSystem } from "./tenancy/tenant-scope.js";
 import type { Task } from "./types.js";
-import { createCheckpoint } from "./checkpoint/index.js";
 
 const log = createLogger("graph-coordinator");
 
@@ -112,42 +112,85 @@ async function applySplitTask(
 	await updateTask(params.parentTaskId, { status: "blocked" });
 
 	// Register child completion listener for parent state propagation
-	registerSplitCompletionListener(params.parentTaskId, childIds);
+	registerSplitCompletionListener(projectId, params.parentTaskId, childIds);
 
 	return { parentTaskId: params.parentTaskId, childIds };
+}
+
+type OpenSplit = { projectId: string; parentTaskId: string; childIds: string[]; expiresAt: number };
+
+const SPLIT_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_OPEN_SPLITS = 1000;
+
+/** Open splits by child task id. The bus handlers are registered at boot (registerGraphSplitBridge) and run in each event's tenant scope. */
+const openSplits = new Map<string, OpenSplit>();
+const splitOrder = new Set<OpenSplit>();
+
+function dropSplit(split: OpenSplit): void {
+	for (const id of split.childIds) openSplits.delete(id);
+	splitOrder.delete(split);
+}
+
+function pruneSplits(): void {
+	const now = Date.now();
+	for (const split of splitOrder) {
+		if (split.expiresAt <= now || splitOrder.size > MAX_OPEN_SPLITS) dropSplit(split);
+		else break;
+	}
 }
 
 /**
  * Propagate child task completion to split parent.
  * All children done → parent done. Any child failed → parent failed.
  */
-function registerSplitCompletionListener(parentTaskId: string, childIds: string[]): void {
-	const childSet = new Set(childIds);
-	let unsubComplete: (() => void) | undefined;
-	let unsubFailed: (() => void) | undefined;
+function registerSplitCompletionListener(projectId: string, parentTaskId: string, childIds: string[]): void {
+	pruneSplits();
+	const split: OpenSplit = { projectId, parentTaskId, childIds, expiresAt: Date.now() + SPLIT_TTL_MS };
+	for (const id of childIds) openSplits.set(id, split);
+	splitOrder.add(split);
+}
 
-	const checkPropagation = async (event: { taskId?: string }) => {
-		if (!event.taskId || !childSet.has(event.taskId)) return;
+function splitFor(event: { taskId?: string; projectId?: string }): OpenSplit | undefined {
+	const split = event.taskId ? openSplits.get(event.taskId) : undefined;
+	return split && split.projectId === event.projectId ? split : undefined;
+}
 
-		const children = await Promise.all(childIds.map((id) => getTask(id)));
-		const statuses = children.map((c) => c?.status);
+async function propagateSplit(event: { taskId?: string; projectId?: string }): Promise<void> {
+	const split = splitFor(event);
+	if (!split) return;
 
-		if (statuses.some((s) => s === "failed")) {
-			await updateTask(parentTaskId, { status: "failed" });
-			unsubComplete?.();
-			unsubFailed?.();
-			return;
-		}
+	const children = await Promise.all(split.childIds.map((id) => getTask(id)));
+	const statuses = children.map((c) => c?.status);
+	const resolved = statuses.some((s) => s === "failed")
+		? "failed"
+		: statuses.every((s) => s === "done")
+			? "done"
+			: null;
+	if (!resolved) return;
 
-		if (statuses.every((s) => s === "done")) {
-			await updateTask(parentTaskId, { status: "done" });
-			unsubComplete?.();
-			unsubFailed?.();
-		}
-	};
+	await updateTask(split.parentTaskId, { status: resolved });
+	dropSplit(split);
+}
 
-	unsubComplete = eventBus.on("task:completed", checkPropagation);
-	unsubFailed = eventBus.on("task:failed", checkPropagation);
+function discardSplit(event: { taskId?: string; projectId?: string }): void {
+	const split = splitFor(event);
+	if (split) dropSplit(split);
+}
+
+let splitBridgeRegistered = false;
+
+export function registerGraphSplitBridge(): void {
+	if (splitBridgeRegistered) return;
+	splitBridgeRegistered = true;
+	eventBus.on("task:completed", propagateSplit);
+	eventBus.on("task:failed", propagateSplit);
+	// No production emitter of a cancel/delete event exists yet; handled so a future one cannot leak splits.
+	for (const type of ["task:cancelled", "task:deleted"]) {
+		(eventBus as unknown as { on(t: string, h: (e: { taskId?: string; projectId?: string }) => void): void }).on(
+			type,
+			discardSplit,
+		);
+	}
 }
 
 async function applyAddEdge(

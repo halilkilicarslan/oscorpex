@@ -5,8 +5,9 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getCurrentCorrelationId, hasCorrelationContext, withCorrelation } from "../../correlation-context.js";
+import { createProject, deleteProject } from "../../db.js";
 import { eventBus } from "../../event-bus.js";
 import { createLogger } from "../../logger.js";
 import { correlationMiddleware } from "../../middleware/correlation-middleware.js";
@@ -61,24 +62,29 @@ describe("Correlation ID Logger Injection", () => {
 
 describe("Correlation ID Event Bus Propagation", () => {
 	it("event emit picks up correlationId from async context", async () => {
-		await withCorrelation(async () => {
-			const ctxId = getCurrentCorrelationId();
+		const project = await createProject({ name: "corr-event", description: "", techStack: [], repoPath: "" });
+		try {
+			await withCorrelation(async () => {
+				const ctxId = getCurrentCorrelationId();
 
-			const events: any[] = [];
-			const unsubscribe = eventBus.on("task:completed", (event) => {
-				events.push(event);
-			});
+				const events: any[] = [];
+				const unsubscribe = eventBus.on("task:completed", (event) => {
+					events.push(event);
+				});
 
-			eventBus.emitTransient({
-				projectId: "p-test",
-				type: "task:completed",
-				payload: { data: 1 },
-			});
+				eventBus.emitTransient({
+					projectId: project.id,
+					type: "task:completed",
+					payload: { data: 1 },
+				});
 
-			expect(events.length).toBeGreaterThan(0);
-			expect(events[0].correlationId).toBe(ctxId);
+				await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
+				expect(events[0].correlationId).toBe(ctxId);
 
-			unsubscribe();
-		}, "ctx-event-1");
+				unsubscribe();
+			}, "ctx-event-1");
+		} finally {
+			await deleteProject(project.id);
+		}
 	});
 });
