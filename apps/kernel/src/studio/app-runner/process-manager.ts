@@ -3,10 +3,13 @@
 // ---------------------------------------------------------------------------
 
 import { spawn } from "node:child_process";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { postStartHealthCheck } from "./port-manager.js";
 import { runningApps } from "./state.js";
 import type { RunningService, ServiceConfig } from "./types.js";
+
+const CONTAINER_BINARIES = new Set(["docker", "docker-compose", "podman", "nerdctl"]);
 
 export function startService(
 	repoPath: string,
@@ -16,6 +19,15 @@ export function startService(
 	return new Promise((resolve, reject) => {
 		const servicePath = config.path.startsWith("/") ? config.path : join(repoPath, config.path);
 		const command = config.command.replace(/\$\{PORT\}/g, String(config.port));
+
+		// Defense-in-depth guard, not an isolation boundary; isolation is a separate epic.
+		if (
+			process.env.OSCORPEX_AUTH_ENABLED === "true" &&
+			CONTAINER_BINARIES.has(basename(command.trim().split(/\s+/)[0] ?? ""))
+		) {
+			reject(new Error("Docker/container commands are disabled in multi-tenant mode (auth enabled)"));
+			return;
+		}
 
 		// Validate readyPattern to prevent ReDoS from untrusted .studio.json
 		let readyPattern: RegExp;
@@ -34,9 +46,12 @@ export function startService(
 		const bin = parts[0];
 		const args = parts.slice(1);
 
+		const childEnv = buildSafeChildEnv({ profile: "app_runner", extra: { PORT: String(config.port) } });
+		for (const [key, value] of Object.entries(config.env ?? {})) childEnv[key] = value;
+
 		const proc = spawn(bin, args, {
 			cwd: servicePath,
-			env: { ...process.env, PORT: String(config.port), ...config.env },
+			env: childEnv,
 			stdio: ["ignore", "pipe", "pipe"],
 			detached: true, // isolate from main process group — prevents killing console Vite
 		});

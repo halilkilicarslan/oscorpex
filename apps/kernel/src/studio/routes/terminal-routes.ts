@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import { Hono } from "hono";
 import { getProject } from "../db.js";
 import { createLogger } from "../logger.js";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 
 const log = createLogger("terminal-routes");
 
@@ -88,7 +89,7 @@ terminalRoutes.post("/projects/:id/terminal/exec", async (c) => {
 			timeout: 30_000,
 			encoding: "utf8",
 			stdio: ["pipe", "pipe", "pipe"],
-			env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+			env: buildSafeChildEnv({ profile: "build_tool", extra: { FORCE_COLOR: "0", NO_COLOR: "1" } }),
 		});
 		return c.json({ output: output.slice(0, 10_000), exitCode: 0 });
 	} catch (err: unknown) {

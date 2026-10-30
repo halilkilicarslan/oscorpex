@@ -2,6 +2,7 @@
 // Rolls back the git repo to a previously captured checkpoint's HEAD SHA.
 import { execFileSync } from "node:child_process";
 import { createLogger } from "../logger.js";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { assertInsideWorkspace } from "../security/workspace-resolver.js";
 import type { GitCheckpoint } from "./git-types.js";
 
@@ -35,6 +36,7 @@ export function rollbackToCheckpoint(opts: {
 			cwd: repoPath,
 			encoding: "utf8",
 			timeout: 10_000,
+			env: buildSafeChildEnv({ profile: "build_tool" }),
 		}).trim();
 	} catch (err) {
 		return { status: "failed", error: `Failed to read HEAD: ${err instanceof Error ? err.message : String(err)}` };
@@ -60,6 +62,7 @@ export function rollbackToCheckpoint(opts: {
 			cwd: repoPath,
 			encoding: "utf8",
 			timeout: 30_000,
+			env: buildSafeChildEnv({ profile: "build_tool" }),
 		});
 
 		log.info(

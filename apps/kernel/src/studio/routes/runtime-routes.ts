@@ -5,6 +5,7 @@
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { getAppStatus, getResolvedConfig, startApp, stopApp, switchPreviewService } from "../app-runner.js";
 import { containerPool } from "../container-pool.js";
 import { getDbStatus, parseCloudUrl, provisionDatabase, stopAllDatabases, stopDatabase } from "../db-provisioner.js";
@@ -14,6 +15,7 @@ import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
 import { analyzeProject, writeEnvFile } from "../runtime-analyzer.js";
 import type { DatabaseType } from "../runtime-analyzer.js";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { ensureProjectTeamInitialized } from "./team-init-guard.js";
 const log = createLogger("runtime-routes");
 
@@ -85,11 +87,59 @@ runtimeRoutes.post("/projects/:id/app/switch-preview", async (c) => {
 
 // ---- App Preview Proxy ----------------------------------------------------
 
+const PROXY_FORWARD_HEADERS = new Set([
+	"accept",
+	"accept-language",
+	"content-type",
+	"content-length",
+	"user-agent",
+	"if-none-match",
+	"if-modified-since",
+	"range",
+	"cache-control",
+	"if-match",
+	"if-unmodified-since",
+	"if-range",
+]);
+
+const PROXY_RESPONSE_HEADERS = new Set([
+	"content-type",
+	"content-length",
+	"cache-control",
+	"etag",
+	"last-modified",
+	"expires",
+	"vary",
+	"content-language",
+	"content-disposition",
+	"location",
+	"date",
+	"accept-ranges",
+	"content-range",
+]);
+
+const UPSTREAM_AUTH_HEADER = "x-oscorpex-upstream-authorization";
+
+const PROXY_CSP = "sandbox allow-scripts allow-forms allow-popups allow-modals";
+
+function withProxySecurityHeaders(headers: Headers): Headers {
+	headers.set("content-security-policy", PROXY_CSP);
+	headers.set("x-content-type-options", "nosniff");
+	return headers;
+}
+
+function proxyJsonError(message: string): Response {
+	return new Response(JSON.stringify({ error: message }), {
+		status: 502,
+		headers: withProxySecurityHeaders(new Headers({ "content-type": "application/json" })),
+	});
+}
+
 runtimeRoutes.all("/projects/:id/app/proxy/*", async (c) => {
 	const projectId = c.req.param("id");
 	const status = getAppStatus(projectId);
 	if (!status.running || !status.previewUrl) {
-		return c.json({ error: "App is not running" }, 502);
+		return proxyJsonError("App is not running");
 	}
 
 	try {
@@ -103,29 +153,32 @@ runtimeRoutes.all("/projects/:id/app/proxy/*", async (c) => {
 
 		const reqHeaders: Record<string, string> = {};
 		c.req.raw.headers.forEach((val, key) => {
-			if (["host", "connection", "transfer-encoding"].includes(key.toLowerCase())) return;
+			if (!PROXY_FORWARD_HEADERS.has(key.toLowerCase())) return;
 			reqHeaders[key] = val;
 		});
+		const upstreamAuth = c.req.raw.headers.get(UPSTREAM_AUTH_HEADER);
+		if (upstreamAuth) reqHeaders.authorization = upstreamAuth;
 		reqHeaders.host = `${targetBase.hostname}:${targetBase.port || 80}`;
 
 		const proxyRes = await fetch(targetUrl, {
 			method: c.req.method,
 			headers: reqHeaders,
+			redirect: "manual",
 			body: c.req.method !== "GET" && c.req.method !== "HEAD" ? await c.req.raw.arrayBuffer() : undefined,
 		});
 
 		const resHeaders = new Headers();
-		const blockedHeaders = new Set([
-			"x-frame-options",
-			"content-security-policy",
-			"cross-origin-opener-policy",
-			"cross-origin-resource-policy",
-		]);
 		proxyRes.headers.forEach((val, key) => {
-			if (!blockedHeaders.has(key.toLowerCase())) {
+			if (PROXY_RESPONSE_HEADERS.has(key.toLowerCase())) {
 				resHeaders.set(key, val);
 			}
 		});
+		// The console fetches this route same-origin; a real 3xx Location would make the browser follow it.
+		if (proxyRes.status >= 300 && proxyRes.status < 400) {
+			const upstreamLocation = resHeaders.get("location");
+			resHeaders.delete("location");
+			if (upstreamLocation) resHeaders.set("x-oscorpex-upstream-location", upstreamLocation);
+		}
 
 		if (subPath === "/" && proxyRes.status === 404) {
 			const html = `<!DOCTYPE html>
@@ -149,7 +202,7 @@ runtimeRoutes.all("/projects/:id/app/proxy/*", async (c) => {
 </div></body></html>`;
 			return new Response(html, {
 				status: 200,
-				headers: { "content-type": "text/html; charset=utf-8" },
+				headers: withProxySecurityHeaders(new Headers({ "content-type": "text/html; charset=utf-8" })),
 			});
 		}
 
@@ -161,19 +214,23 @@ runtimeRoutes.all("/projects/:id/app/proxy/*", async (c) => {
 				html = html.replace("<head>", `<head>${baseTag}`);
 			}
 			resHeaders.set("content-type", ct);
+			resHeaders.delete("content-length");
+			resHeaders.delete("content-encoding");
 			return new Response(html, {
 				status: proxyRes.status,
-				headers: resHeaders,
+				headers: withProxySecurityHeaders(resHeaders),
 			});
 		}
 
+		resHeaders.delete("content-length");
+		resHeaders.delete("content-encoding");
 		return new Response(proxyRes.body, {
 			status: proxyRes.status,
-			headers: resHeaders,
+			headers: withProxySecurityHeaders(resHeaders),
 		});
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
-		return c.json({ error: `Proxy error: ${msg}` }, 502);
+		return proxyJsonError(`Proxy error: ${msg}`);
 	}
 });
 
@@ -324,6 +381,7 @@ runtimeRoutes.post("/projects/:id/runtime/install", async (c) => {
 				encoding: "utf-8",
 				timeout: 120000,
 				stdio: "pipe",
+				env: buildSafeChildEnv({ profile: "build_tool" }),
 			});
 			results.push({ name: svc.name, success: true });
 		} catch (err) {

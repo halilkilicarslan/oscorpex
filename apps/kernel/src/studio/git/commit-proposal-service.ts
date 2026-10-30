@@ -5,12 +5,13 @@
 // The proposal status is set to "failed" immediately if secrets are found.
 // ---------------------------------------------------------------------------
 
-import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createLogger } from "../logger.js";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { validateCommitMessage } from "./commit-message-policy.js";
-import { scanStagedForSecrets } from "./secret-scan.js";
 import type { CommitProposal, GitCheckpoint } from "./git-types.js";
+import { scanStagedForSecrets } from "./secret-scan.js";
 
 const log = createLogger("commit-proposal");
 
@@ -39,6 +40,7 @@ export function createCommitProposal(opts: {
 		cwd: opts.repoPath,
 		encoding: "utf8",
 		timeout: 30_000,
+		env: buildSafeChildEnv({ profile: "build_tool" }),
 	});
 
 	// --- Secret scan (P9-D) ---

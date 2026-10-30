@@ -103,7 +103,7 @@ studio.use(
 	cors({
 		origin: allowedOrigins,
 		allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-		allowHeaders: ["Content-Type", "Authorization"],
+		allowHeaders: ["Content-Type", "Authorization", "X-Oscorpex-Upstream-Authorization"],
 		maxAge: 86400,
 	}),
 );

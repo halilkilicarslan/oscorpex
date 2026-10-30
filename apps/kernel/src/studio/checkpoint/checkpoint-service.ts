@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createLogger } from "../logger.js";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { ToolPolicyDeniedError, enforceToolPolicy } from "../security/tool-policy-enforcer.js";
 import * as repo from "./checkpoint-repo.js";
 import type { CheckpointRecord, CreateCheckpointInput, RollbackRequest, RollbackResult } from "./types.js";
@@ -97,6 +98,7 @@ async function applyRollback(checkpoint: CheckpointRecord): Promise<RollbackResu
 						timeout: 30_000,
 						encoding: "utf8",
 						stdio: "pipe",
+						env: buildSafeChildEnv({ profile: "build_tool" }),
 					});
 				} catch (err) {
 					return {
@@ -117,10 +119,7 @@ async function applyRollback(checkpoint: CheckpointRecord): Promise<RollbackResu
 				status: "applied",
 				changedFiles,
 				restoredState: [`Filesystem checkpoint ${checkpoint.ref}: ${changedFiles.length} files tracked`],
-				warnings:
-					changedFiles.length === 0
-						? ["No file manifest in checkpoint metadata — restore limited"]
-						: [],
+				warnings: changedFiles.length === 0 ? ["No file manifest in checkpoint metadata — restore limited"] : [],
 			};
 		}
 		case "task-state":

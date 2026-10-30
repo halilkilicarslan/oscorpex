@@ -85,10 +85,14 @@ export async function sendProxyRequest(
   body?: string,
 ): Promise<{ status: number; headers: Record<string, string>; body: string; duration: number }> {
   const proxyPath = `/api/studio/projects/${projectId}/app/proxy${path.startsWith('/') ? path : '/' + path}`;
+  const outHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers ?? {})) {
+    outHeaders[k.toLowerCase() === 'authorization' ? 'x-oscorpex-upstream-authorization' : k] = v;
+  }
   const start = performance.now();
   const res = await fetch(proxyPath, { // DIRECT_FETCH_INTENTIONAL: API explorer must expose raw proxied status, headers, and text body.
     method,
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json', ...outHeaders },
     body: method !== 'GET' && method !== 'DELETE' ? body : undefined,
   });
   const duration = Math.round(performance.now() - start);

@@ -6,6 +6,7 @@
 import { startApp, stopApp } from "./app-runner.js";
 import { createLogger } from "./logger.js";
 import { analyzeProject } from "./runtime-analyzer.js";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 import type { Task, TaskOutput } from "./types.js";
 const log = createLogger("task-runners");
 
@@ -229,7 +230,13 @@ export async function runCliDemo(repoPath: string, task: Task, onLog: (msg: stri
 	let built = false;
 	for (const step of buildSteps) {
 		try {
-			execFileSync(step.bin, step.args, { cwd: repoPath, timeout: 60_000, encoding: "utf8", stdio: "pipe" });
+			execFileSync(step.bin, step.args, {
+				cwd: repoPath,
+				timeout: 60_000,
+				encoding: "utf8",
+				stdio: "pipe",
+				env: buildSafeChildEnv({ profile: "build_tool" }),
+			});
 			emit(`[cli-demo] Build successful: ${step.bin} ${step.args.join(" ")}`);
 			built = true;
 			break;

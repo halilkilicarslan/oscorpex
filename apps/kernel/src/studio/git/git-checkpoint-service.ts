@@ -4,9 +4,10 @@
 // before any commit operation. TTL: 60 minutes.
 // ---------------------------------------------------------------------------
 
-import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createLogger } from "../logger.js";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { assertInsideWorkspace } from "../security/workspace-resolver.js";
 import type { GitCheckpoint } from "./git-types.js";
 
@@ -36,6 +37,7 @@ export function createGitCheckpoint(opts: {
 		cwd: opts.repoPath,
 		encoding: "utf8",
 		timeout: 10_000,
+		env: buildSafeChildEnv({ profile: "build_tool" }),
 	}).trim();
 
 	// Capture current branch
@@ -43,6 +45,7 @@ export function createGitCheckpoint(opts: {
 		cwd: opts.repoPath,
 		encoding: "utf8",
 		timeout: 10_000,
+		env: buildSafeChildEnv({ profile: "build_tool" }),
 	}).trim();
 
 	// Capture staged file list (may be empty)
@@ -50,6 +53,7 @@ export function createGitCheckpoint(opts: {
 		cwd: opts.repoPath,
 		encoding: "utf8",
 		timeout: 10_000,
+		env: buildSafeChildEnv({ profile: "build_tool" }),
 	}).trim();
 	const stagedFiles = stagedOutput ? stagedOutput.split("\n") : [];
 

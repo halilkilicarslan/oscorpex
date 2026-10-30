@@ -7,13 +7,14 @@ import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/pro
 import { basename, dirname, join, normalize, relative, sep } from "node:path";
 import { type SimpleGit, simpleGit } from "simple-git";
 import { createLogger } from "./logger.js";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 import { enforceGitPolicy } from "./security/git-file-policy.js";
 import type { FileTreeNode, GitLogEntry, GitStatus, MergeResult } from "./types.js";
 const log = createLogger("git-manager");
 
 class GitManager {
 	private getGit(repoPath: string): SimpleGit {
-		return simpleGit(repoPath);
+		return simpleGit(repoPath).env(buildSafeChildEnv({ profile: "build_tool" }) as Record<string, string>);
 	}
 
 	// -------------------------------------------------------------------------

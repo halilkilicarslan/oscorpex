@@ -168,26 +168,366 @@ Ardından yalnızca bu maddelere odaklı tek bir hedefli güvenlik doğrulaması
 
 ---
 
-## F3 — Arka plan ve gerçek zamanlı yollar (#4)
+## F3 — Arka plan, gerçek zamanlı yollar ve proje erişimi (ayrıntılı plan 2026-10-28, onaylandı)
 
-- **Event bus** (`event-bus.ts:96,242`): `emit` olaya `tenantId` damgalar (kapsamdan veya `sys_project_tenant`); kayıt o tenant'ta yapılır; her dinleyici `runInTenant(event.tenantId)` içinde çalışır; kayıt hatası error log + metrik (sessiz değil); NOTIFY yükü `tenantId + id` taşır, yeniden okuma kapsamlı.
-- **Watchdog / kurtarma** (`execution/dispatch-coordinator.ts:49`, `execution-recovery.ts:35`): keşif `runAsSystem` + `sys_running_project_phases` / `sys_running_projects`; proje işi `runInTenant(row.tenant_id)`.
-- **`pg-listener.ts`:** yük yalnızca ID; yeniden okuma kapsamlı.
-- **WebSocket** (`ws-manager.ts:205-213,319-329`, `ws-server.ts:83`): tenant'sız bağlantı yalnızca auth kapalıyken `local`, aksi halde red; abonelikte proje tenant kontrolü; giden olaylar `event.tenantId` ile filtrelenir; Origin izin listesi.
-- **SSE** (`task-routes.ts:256,287,297`, `project-execution-routes.ts:122`): `task.projectId === :id` ve tenant doğrulaması; dinleyiciler istek tenant'ında.
-- **Zamanlayıcılar** (9 `setInterval`: adaptive-concurrency, agent-runtime, collaboration, container-pool, execution-watchdog, job-queue, rate-limiter, ws-cluster, ws-manager): açılışta sistem kapsamında başlar, istek içinde tembel başlatılmaz.
-- **control-plane projections:** tenant'lar arası sayımlar `sys_*` veya tenant başına.
-- **job-queue / scheduler:** `startWorker`'ın çağıranı yok → worker silinir; scheduler işleri tenant kapsamlı.
+### Bağlam
 
-**Test senaryoları**
-1. Kurtarma ve watchdog A ile B'nin takılı görevlerini işler; oluşan events/token_usage doğru tenant'ı taşır.
-2. Sistem kapsamından yayılan olayın dinleyicileri olayın tenant'ında çalışır; ikinci bağlantıdan gelen NOTIFY doğru çözülür.
-3. Olay kaydı hatası error log + sayaç üretir.
-4. WS: env anahtarı / tenant'sız JWT / A'nın JWT'si B'nin projesine abone olamaz; yabancı Origin el sıkışması reddedilir.
-5. SSE: A'nın görevi + B'nin proje id'si → 404, olay yok.
-6. İstek içinden tetiklenen zamanlayıcı o tenant'ı yakalamaz.
+F2 ile istek bazlı tenant kapsamı ve gerçek RLS geldi. Etki analizi ve üç inceleme (mimari, güvenlik, backend) şunları gösterdi:
+- **Arka plan yolları RLS altında çalışmıyor.** Watchdog, açılış kurtarması ve NOTIFY ile gelen olayın yeniden okunması kapsamsız. Süper kullanıcı olmayan rolle 0 satır görüyorlar. Yerel geliştirme artık bu durumda; testlerdeki örtük tenant kapsamı bunu gizliyor.
+- **Olaylarda tenant yok.** Dinleyiciler olayı yayan kodun kapsamında çalışıyor. Toplu gönderimler tenant karıştırabiliyor.
+- **Proje erişimi yalnızca RLS'e dayanıyor.** Bellekte projectId'ye bağlı tutulan durumlar (agent çıktı akışı, önizleme, switch-preview) RLS korumasında değil. Docker/CI F4'e kadar süper kullanıcı.
+- **WebSocket zayıf.**
+  - Token URL'de.
+  - Kimlik yeniden doğrulanmıyor.
+  - Origin kontrolü yok ve `0.0.0.0`'a bağlanıyor.
+  - Giden olaylar tenant'a göre süzülmüyor.
+- **Kritik:** Tenant kodu kernel sırlarıyla çalışıyor (`...process.env`). Önizleme proxy'si izleyicinin token'ını tenant uygulamasına iletiyor ve tenant HTML'ini console origin'inde sunuyor.
+
+**Hedef:** Her arka plan ve gerçek zamanlı yol doğru tenant'ta çalışsın. Hiçbir rota, akış ya da soket başka tenant'ın projesine ulaşamasın. Tenant kodu kernel sırlarını göremesin.
+
+### Kullanıcı kararları
+
+- **Proje kontrolü:** `/projects/:id/*` için access-guard'da genel bir proje sahipliği kontrolü. Platform admin muaf değil.
+- **WebSocket kimliği:** HTTP ile aynı kurallar ve **tek kullanımlık bilet**. Bilet 30 sn geçerli, kimlikli bir HTTP isteğiyle alınır.
+- **Origin ve bağlanma:** Mevcut `OSCORPEX_CORS_ORIGINS` kullanılır. Dev'de `127.0.0.1`'e bağlanılır.
+- **Control-plane sayımları:** Normal kullanıcı yalnızca kendi tenant'ını görür. Platform geneli sayımlar yalnızca platform admin içindir ve yeni bir `sys_*` fonksiyonuyla alınır.
+- **Kritikler:** F3-0 olarak en başta.
+- **Plugin'ler:** Platform seviyesinde kalır, olayları `tenantId` ile alır. Tenant bazlı plugin ayrı bir iş.
+- **Onay akışı:** Her alt faz için rapor → onay → tek commit.
+
+### Ortak kurallar (her alt faz)
+
+- **Yeniden kullanılacaklar:**
+  - `tenancy/tenant-scope.ts`: `runInTenant`, `runAsSystem`, `runOutsideScope`, `*AtBoundary`.
+  - `pg.ts`: `callerHint`, `getUnscopedQueryCount`.
+  - SQL fonksiyonları: `sys_project_tenant`, `sys_event_tenant`, `sys_running_projects`, `sys_running_project_phases`, `sys_identity_lookup`, `sys_api_key_lookup`.
+  - `auth/auth-middleware.ts`: kimlik doğrulama mantığı.
+  - `auth/request-identity.ts`, `security/env-sanitizer.ts` (`buildSafeChildEnv`).
+  - Örnek desen: `graph-coordinator.ts:301-307`.
+- **Kapsam hataları sessiz kalmaz.** `TenantScopeError` ve `UnscopedQueryError` sayaçla ve `log.error` ile raporlanır; `.catch` içinde yutulmaz.
+- **Gate:**
+  - Kernel paketi iki modda yeşil: yerel gerçek RLS ve CI simülasyonu.
+  - `pnpm -r typecheck` temiz.
+  - Console değiştiyse tsc ve vitest temiz.
+  - Lint'te dosya bazında yeni hata yok.
+- **Ajanlar:** Test yazarı, uygulamacı ve reviewer ayrı ajanlardır. Hiçbiri `$HOME` veya `/` altına yazmaz. İşi biten ajan kapatılır.
 
 ---
+
+### F3-0 — Kritik güvenlik düzeltmeleri
+
+**Tenant kodu kernel sırlarını almaz.**
+- Şu üç nokta `buildSafeChildEnv()`'e geçer:
+  - `app-runner/starter.ts:216`
+  - `app-runner/process-manager.ts:39`
+  - `routes/terminal-routes.ts:91`
+- Önizlemenin kendi veritabanı değişkenleri (`dbEnvVars`) `allow` listesiyle açıkça geçirilir.
+
+**Önizleme proxy'si** (`routes/runtime-routes.ts`):
+- İsteklerde yalnızca bir izin listesindeki başlıklar iletilir: `accept*`, `content-type`, `content-length`, `user-agent`, `if-*`, `range`. `authorization`, `cookie`, `x-api-key` ve `proxy-*` hiç iletilmez.
+- Yanıtlarda `set-cookie` atılır.
+- Tüm proxy yanıtlarına şu başlıklar eklenir:
+  - `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups allow-modals` (`allow-same-origin` yok)
+  - `X-Content-Type-Options: nosniff`
+
+**Console:** `LivePreview.tsx:472` iframe'inin `sandbox` özelliğinden `allow-same-origin` çıkarılır.
+
+**Test senaryoları**
+1. **Uygulama ortamı:** Önizleme ve terminal süreçlerine giden env'de şunlar yok: `DATABASE_URL`, `OSCORPEX_JWT_SECRET`, `OSCORPEX_API_KEY`, `OPENAI_API_KEY`, `PG*`, `*_SECRET`. `PATH` ve önizlemenin kendi veritabanı değişkenleri var. (spawn/execFileSync mock'lanır, env yakalanır.)
+2. **Proxy istekleri:** Upstream'e `Authorization`, `Cookie` ve `X-API-Key` ulaşmaz. Test için başlıkları geri döndüren yerel bir HTTP sunucusu kullanılır.
+3. **Proxy yanıtları:** Upstream'in `Set-Cookie`'si istemciye ulaşmaz. HTML, JS ve SVG yanıtlarında `sandbox` CSP'si (`allow-same-origin` olmadan) ve `nosniff` bulunur.
+4. **Regresyon:**
+   - Proxy'lenen HTML'e `<base>` etiketi eklenmeye devam eder.
+   - API-only 404 sayfası sunulmaya devam eder.
+   - Mevcut app-runner ve terminal testleri yeşil.
+   - Console iframe testi `allow-same-origin` olmadığını doğrular.
+
+**F3-0 uygulamasında ortaya çıkanlar (faz içinde eklendi, kullanıcı onaylı)**
+- **Kapsam genişletme:** Tenant reposunda ya da tenant girdisiyle çalışan ~21 alt süreç çağrısı daha vardı: lint, CLI demosu, kurulum komutları, git, MCP okuma araçları. Hepsi `buildSafeChildEnv`'e geçer. Statik koruma testi (AST tabanlı) `apps/kernel/src` ve `packages/provider-sdk/src` altındaki her `child_process` çağrısını denetler; yalnızca açık gerekçeli platform istisnaları muaftır.
+- **Iframe kararı değişti:** `allow-same-origin` geri eklenir. Iframe uygulamanın kendi adresini açıyor (farklı origin), console token'ı `localStorage`'da ve porta bağlı. Kaldırmak güvenlik kazandırmıyor, Vite uygulamalarını bozuyor. Proxy'deki sandbox CSP kalır.
+- **Ortam izin listesi:** Tenant kodu çalıştıran profiller (`app_runner`, `build_tool`, `test`) yasak listesi yerine izin listesi kullanır. Yalnızca PATH, HOME, USER, LOGNAME, SHELL, LANG/LC_*, TERM, TMPDIR/TMP/TEMP, NODE_ENV, CI, renk değişkenleri ve HTTP(S)_PROXY/NO_PROXY geçer. Uygulamanın kendi değişkenleri yalnızca açıkça eklenir; platform değerini çekmez.
+- **Proxy sertleştirme:**
+  - Yanıt başlıkları izin listesine tabidir; `Clear-Site-Data`, `NEL`, `Report-To` ve `Set-Cookie` düşer.
+  - Yönlendirme takip edilmez.
+  - 502 yanıtlarına da CSP eklenir.
+  - API Explorer'ın kullanıcı tanımlı `Authorization` başlığı `x-oscorpex-upstream-authorization` ile taşınır.
+- **Çok tenant'lı modda docker compose kapalı:** Auth açıkken tenant'ın `docker compose` ile önizleme başlatması reddedilir. Yerel dev'de açık kalır.
+  - Son durumda kontrol `startService` içinde, komutun ilk parçasının adına bakar: `docker`, `docker-compose`, `podman`, `nerdctl`.
+  - Bu yalnızca ek bir savunma katmanıdır; `sh -c` ile sarılan komutlar atlatabilir. Asıl çözüm izolasyon epic'idir.
+- **İkinci inceleme turunda bulunanlar (düzeltildi):**
+  - `git-manager.ts` içindeki `simpleGit` git'i tam ortamla başlatıyordu; güvenli ortama geçti ve statik teste kural eklendi.
+  - Proxy akış yolunda gzip'li yanıtlar kesiliyordu (stale `content-length`).
+  - 3xx yanıtlarda `location`, HTML dalı dahil `x-oscorpex-upstream-location` olarak taşınıyor.
+  - Platformun `claude /usage` sorgusu `provider` profiline döndü.
+  - İzin listesine `LC_*` ve Windows temel değişkenleri eklendi.
+- **Bilinen ödünleşim:** `SSH_AUTH_SOCK` düştüğü için tenant tarafındaki `git+ssh` private bağımlılık kurulumları çalışmaz.
+- **Sonraki işler:**
+  - API Explorer auth modunda 401 alıyor (önceden de böyleydi; kernel auth başlığını göndermiyor).
+  - AST koruma testi ek sertleştirme ister: `Object.assign(env, process.env)`, `cp["exec"]`.
+- **Yeni epic (F4'ten önce):** Tenant iş yükü izolasyonu. Tenant kodu ve agent'lar kernel ile aynı OS kullanıcısında çalışıyor; kernel'in `.env` dosyasını ve `ps` çıktısını okuyabilir, docker ile host'a erişebilir. Env temizliği bunu tek başına kapatmaz. Kalıcı çözüm: container ya da ayrı OS kullanıcısı (mevcut container pool altyapısı değerlendirilecek). Çok tenant'lı production kullanımından önce zorunlu.
+
+---
+
+### F3-a — Test altyapısı (örtük kapsamı kapatma)
+
+**Dosya bazında opt-out yardımcısı:** `__tests__/helpers/strict-scope.ts`.
+- Dosya bu yardımcıyı çağırınca testler örtük tenant kapsamı olmadan, `strict` modda çalışır.
+- Kapsamsız sorgu `UnscopedQueryError` verir.
+- Yeni F3 testleri bunu kullanır. Mevcut 197 dosya örtük kapsamda kalır.
+
+**Örtük kapsam envanteri:** `setup.ts`, test dışı kaynaklardan gelen örtük kapsam sorgularının `callerHint`'lerini toplar ve dosyaya yazar. Bu liste F3 kontrol listesi olarak kullanılır.
+
+**İki tenant'lı fikstür:** Arka plan testleri için A ve B projelerini, çalışan pipeline'larını, planlarını ve fazlarını oluşturur ve temizler. Mevcut `helpers/tenancy.ts` ve `f2r3-fixtures.ts` genişletilir.
+
+**Test senaryoları**
+1. Opt-out dosyasında kapsamsız sorgu `UnscopedQueryError` fırlatır. `runInTenant(A)` içinde yalnızca A'nın verisi görünür.
+2. Opt-out kullanmayan dosyalar eskisi gibi çalışır. Tam paket yeşil kalır.
+3. Envanter çalışır ve test dışı çağıranları listeler.
+4. Fikstür idempotenttir; temizlikten sonra satır kalmaz.
+
+---
+
+### F3-b — Genel proje erişim kontrolü ve SSE
+
+**Access-guard'da proje sahipliği kontrolü**
+- **Kapsanan yol:** `/projects/:id/...`. Şu yollar hariç: `/projects`, `/projects/import`, `/projects/from-template`.
+- **Kontrol:** `sys_project_tenant(id)` çağıranın tenant'ına eşit olmalı.
+  - Eşit değilse, NULL ise ya da proje yoksa aynı gövdeyle 404 döner.
+  - Platform admin muaf değil.
+  - Yalnızca olumlu sonuçlar önbelleğe alınır (LRU ve TTL). Projenin tenant'ı değişmez; proje silinince önbellekten çıkarılır.
+
+**Path dışında projectId alan yerler:** `assertProjectInTenant(c, projectId)` yardımcısı eklenir. Kapsananlar:
+- `ci-routes`
+- inspector `:projectId`
+- Hermes `x-project-id` başlığı
+- `/results/:projectId`
+- query/body'den `projectId` okuyan rotalar
+
+**SSE**
+- `/projects/:id/tasks/:taskId/stream`: `task.projectId === :id` olmalı. Dinleyici başına `appendTaskLogs` yazımı kaldırılır.
+- `/projects/:id/agents/:agentId/stream`: agent o projeye ait olmalı.
+
+**Soak zamanlayıcısı:** `POST /scheduler/soak` yalnızca admin'e açık. Her proje kendi tenant kapsamında çalışır.
+
+**Rota kapsama testi:** Kayıtlı bütün Hono rotaları taranır. Proje parametresi taşıyan her rota ya genel kontrolle ya da `assertProjectInTenant` ile korunmalı.
+
+**Test senaryoları** (iki modda, süper kullanıcı dahil)
+1. **Başka tenant'ın projesi:** A kullanıcısı B'nin projesine giden şu rotalardan 404 alır; gövde, olmayan projeyle aynıdır:
+   - proje detayı
+   - `agents/:id/stream`
+   - `app/proxy`
+   - `switch-preview`
+   - `terminal/info`
+   - `tasks/:taskId/stream`
+   - pipeline durumu (önbellekteki)
+   - `ci` durumu
+   - inspector
+   - Hermes başlığı
+2. **Yol varyantları:** Kodlanmış, sonu `/` ile biten, büyük-küçük harf farklı ve `..` içeren varyantlarla kontrol atlatılamaz.
+3. **Platform admin:** B'nin projesinde 404 alır.
+4. **Etkilenmeyen yollar:** `GET /projects`, `/projects/import` ve `/projects/from-template` eskisi gibi çalışır.
+5. **Görev akışı:**
+   - A'nın görevi B'nin projesiyle istenirse 404 döner ve hiçbir şey yazılmaz.
+   - Kendi görevi akar.
+   - İki izleyici açıkken loglar çoğalmaz.
+6. **Rota kapsama:** Kapsama testi yeşil. Yeni korumasız bir rota testi düşürür.
+7. **Performans:** Önbellek isabetinde ek sorgu yoktur. İlk istekte tek `sys_*` çağrısı yapılır; p50 önce ve sonra ölçülüp raporlanır.
+8. **Regresyon:** Access-guard, SSE ve tenant-isolation testleri yeşil.
+
+---
+
+### F3-c — Event bus, NOTIFY ve anlık olaylar
+
+**Olaylara tenant ekleme**
+- `StudioEvent`'e `tenantId` eklenir (`packages/event-schema`). `emit` ve `emitTransient`'ın yaklaşık 25 çağıranı (agent stdout dahil) kapsanır.
+- **Tenant kaynağı:** Çağıranın verdiği tenant yok sayılır.
+  - Tenant kapsamında: ortam tenant'ı kullanılır. Projenin tenant'ıyla uyuşmazsa olay **reddedilir** (`log.error` ve sayaç).
+  - Sistem kapsamında: tenant `sys_project_tenant(projectId)` ile alınır.
+  - Kapsamsız çağrıda warn (strict modda hata).
+
+**Dinleyicilere dağıtım**
+- Dağıtım bus'a özel bir sınırdan başlar: `runOutsideScope` → `runInTenant(event.tenantId)`.
+- Her handler ayrı çalışır, kendi try/catch'iyle; bir handler'ın hatası diğerlerini durdurmaz.
+- Async handler'lar kendi kapsamında await edilir.
+
+**Toplu gönderimler** (`event-bus.ts:100/195`, `ws-manager.ts:146/236`): Batch'ler tenant'a göre anahtarlanır. Flush sırasında veritabanı işi yapılmaz, filtreleme mesaj başına yapılır.
+
+**NOTIFY** (`pg-listener.ts`, `event-bus.ts:199/248`)
+- Yük yalnızca `id` taşır.
+- Dinleyici tenant'ı `sys_event_tenant(id)` ile bulur ve olayı `runInTenant` içinde yeniden okur.
+- Sahte ya da bilinmeyen kimlik yok sayılır ve sayaca yazılır.
+
+**Diğer düzeltmeler**
+- `ws-cluster.ts:172-188` olay aktarımı kaldırılır; tenant bilgisi yok ve cluster rotaları zaten ertelenmiş durumda.
+- `notification-service.ts:63`: `tenantId: null` yerine projenin tenant'ı yazılır.
+- Gözden geçirilecek dinleyiciler:
+  - `graph-coordinator.ts:149`
+  - `replay-phase.ts:15`
+  - `context-session.ts:117`
+  - `register-plugin-bridge.ts:68` (plugin'ler platform seviyesinde kalır, `tenantId` alır)
+  - webhook bridge ve `webhook-sender.ts:246`
+
+**Test senaryoları** (strict-scope dosyaları)
+1. A kapsamında A projesi için yayılan olay A tenant'ıyla kaydedilir. Handler A kapsamında çalışır ve B'nin verisini göremez.
+2. A kapsamında B projesi için yayılan olay reddedilir. B'nin hiçbir webhook, bildirim ya da plugin çağrısı tetiklenmez.
+3. Sistem kapsamında yayılan olayın tenant'ı projeden alınır ve handler o tenant'ta çalışır.
+4. Bir handler'ın fırlattığı hata (kapsam hatası dahil) diğer handler'ları durdurmaz ve sayaç artar.
+5. Aynı batch penceresindeki A ve B olaylarında her alıcı yalnızca kendi tenant'ının olayını alır.
+6. **NOTIFY:**
+   - Geçerli `id` doğru tenant'ta bir kez teslim edilir.
+   - Sahte tenant ya da proje içeren yük, tenant `sys_event_tenant` ile bulunduğu için etkisizdir.
+   - Bilinmeyen `id` düşürülür ve sayaca yazılır.
+7. `agent:output` gibi anlık olaylar `tenantId` taşır ve yalnızca o tenant'a gider.
+8. Olaydan oluşan bildirim, projenin tenant'ını alır.
+9. **Regresyon:** `p2-event-bus`, `pg-listener`, bildirim, webhook ve plugin testleri yeşil.
+
+---
+
+### F3-d — Zamanlayıcılar, watchdog, kurtarma, seeder'lar, provider-state
+
+**Watchdog** (`execution-watchdog.ts:21`, `dispatch-coordinator.ts`)
+- Tick gövdesi açıkça `runAsSystem` ile başlar. Çalışacak işler `sys_running_project_phases()` ile bulunur.
+- Her proje `runOutsideScope` → `runInTenant(tenant)` içinde, kendi try/catch'iyle işlenir.
+- Tenant'ı NULL olan satır atlanır ve `log.error` ile raporlanır.
+
+**Açılış kurtarması** (`recovery-phase.ts:21`, `execution-recovery.ts:39`)
+- `sys_running_projects()` kullanılır.
+- Projeler sırayla ve sınırlı eşzamanlılıkla yeniden başlatılır; bütçe aşılmışsa `enforceBudgetGuard` başlatmayı engeller.
+
+**Zamanlayıcılar:** Açılışta, herhangi bir kapsamın dışında başlar. İstek içinde tembel başlatma kaldırılır. Açılışta `currentScope()` boş olmalıdır (assert).
+
+**Seeder'lar** (`register-seeders.ts`): `runAsSystem` içinde çalışır. Presetler NULL tenant'lı global kayıtlar olarak kalır.
+
+**provider-state** (`provider-state.ts:101,116,144`): Tablo RLS'siz olduğu için yazım mevcut kapsamda yapılır. Kapsam geçişi yok, hata yutulmaz.
+
+**Test senaryoları** (strict-scope ve gerçek RLS)
+1. Watchdog A ve B'nin çalışan projelerini işler. Oluşan events ve token_usage doğru tenant'ı taşır.
+2. Tenant'ı NULL olan satır atlanır, hata loglanır, diğer projeler işlenir.
+3. **Kurtarma:**
+   - A ve B'de takılı kalmış işler devam ettirilir.
+   - Eşzamanlı yeniden başlatma sınırı aşılmaz.
+   - Bütçesi aşılmış proje başlatılmaz.
+4. İstek kapsamında oluşturulmuş bir zamanlayıcı o tenant'ı yakalamaz; tick sistemden tenant'a geçer.
+5. provider-state hem tenant kapsamından hem açılıştan kalıcı yazılır, kapsam hatası oluşmaz.
+6. Seed edilen presetlerin tenant'ı NULL'dur ve tüm tenant'lar görebilir.
+7. **Regresyon:** `execution-engine` ve `restart-recovery` testleri yeşil.
+
+---
+
+### F3-e — WebSocket ve console
+
+**Bilet alma:** `POST /ws/ticket` access-guard arkasındadır.
+- Bilet 32 rastgele bayt, bellekte tutulur, 30 sn geçerlidir ve tek kullanımlıktır.
+- Kullanıcıya, tenant'a, role ve token'ın son geçerlilik zamanına bağlıdır.
+- Tek düğüm içindir; bu bilinen bir sınır.
+
+**Bağlantı kurulumu** (`ws-server.ts` `verifyClient`)
+- Origin `OSCORPEX_CORS_ORIGINS` içinde olmalı; varsayılana `http://localhost:5161` eklenir.
+- Bilet geçerli olmalı; değilse yükseltme yapılmadan reddedilir. URL'deki `token` ve `apiKey` parametreleri artık kabul edilmez.
+- **Auth kapalıyken:** Yalnızca `OSCORPEX_DEV_NO_AUTH` açıksa ve production değilse `local` tenant kullanılır (HTTP ile aynı). Origin kontrolü yine yapılır.
+- Dev'de `127.0.0.1`'e bağlanılır (`HOST`, HTTP ile aynı).
+- `maxPayload` 64 KB, soket başına en fazla 50 abonelik.
+
+**Abonelik**
+- `sys_project_tenant(projectId)` soketin tenant'ına eşit olmalı. Değilse, olmayan projeyle aynı hata döner.
+- Her abonelikte kimlik `sys_identity_lookup` ile yeniden doğrulanır. Kullanıcı silinmiş ya da çıkarılmışsa soket kapanır.
+- Token'ın süresi dolduğunda soket kapanır.
+
+**Giden olaylar:** Mesaj başına `event.tenantId === soketin tenant'ı` kontrolü yapılır.
+
+**Eski kodun kaldırılması**
+- Tenant'sız projeleri herkese açan dallar silinir: `ws-manager.ts:330`, `auth/tenant-context.ts:118`.
+- Env anahtarının `===` ile karşılaştırması kaldırılır.
+
+**Console:** `hooks/useStudioWebSocket.ts` ve `lib/studio-api/pipeline.ts` bağlanmadan ve her yeniden bağlanmadan önce bilet alır. URL'de token taşınmaz.
+
+**Test senaryoları**
+1. **Bilet:**
+   - Kimliksiz istek 401 alır.
+   - Geçerli istek bilet alır.
+   - Aynı bilet ikinci kez reddedilir.
+   - Süresi dolmuş bilet reddedilir.
+   - Kullanıcısı silinmiş biletle bağlantı reddedilir.
+2. **Bağlantı:**
+   - Biletsiz bağlantı ve URL'de token kullanan eski usul reddedilir.
+   - Yabancı ya da `null` Origin reddedilir.
+3. **Abonelik:** B'nin projesine ve olmayan projeye abonelik aynı hatayı verir; kendi projesine abonelik başarılı.
+4. **Olay filtreleme:** A soketi, karışık batch'lerde ve anlık agent çıktısında dahil, B'nin hiçbir olayını almaz.
+5. **Oturum sonu:** Token süresi dolunca soket kapanır. Kullanıcı silinince bir sonraki abonelikte kapanır.
+6. **Limitler:** 64 KB'tan büyük mesaj soketi kapatır. 51. abonelik reddedilir.
+7. **Auth kapalı dev:** `local` tenant yalnızca `OSCORPEX_DEV_NO_AUTH` açıksa ve production değilse çalışır.
+8. **Console:**
+   - Hook bağlanmadan önce bilet alır.
+   - Yeniden bağlanırken yeni bilet alır.
+   - URL'de token olmaz.
+9. **Regresyon:**
+   - `tenant-isolation` WS testleri güncellenir.
+   - Console'un canlı güncellemeleri tarayıcıda test edilemiyor; raporda belirtilir.
+
+---
+
+### F3-f — Control-plane sayımları
+
+**Tenant'a göre sayımlar** (`packages/control-plane/src/projections/service.ts:16-79`)
+- `approvals`, `agent_instances`, `incidents`, `project_settings` ve `usage_telemetry` sayımları RLS'li `projects` tablosuyla birleştirilerek yapılır; böylece çağıranın tenant'ına kendiliğinden süzülür.
+- `project_id`'si NULL olan satırlar sayılmaz.
+- `provider_runtime_registry` ve `operator_flags` global olarak kalır.
+
+**Platform geneli sayımlar**
+- Yeni `sys_control_plane_summary()` fonksiyonu: SECURITY DEFINER, sahibi `oscorpex_sysread`, yalnızca agrega döner, `REVOKE PUBLIC`.
+- Yeni rota yalnızca `platform:admin` yetkisiyle erişilebilir.
+
+**Test senaryoları**
+1. B'nin verisi varken A kullanıcısı yalnızca A'nın sayılarını görür.
+2. Platform admin genel toplamı görür. Admin olmayan kullanıcı ve `platform:admin` kapsamı olmayan anahtar 403 alır.
+3. `sys_control_plane_summary` PUBLIC tarafından çalıştırılamaz ve yalnızca agrega döner.
+4. **Regresyon:** control-plane testleri ve console dashboard testleri yeşil.
+
+---
+
+### F3-g — İş kuyruğunun silinmesi
+
+- Silinecekler:
+  - `job-queue.ts`
+  - `routes/job-routes.ts`
+  - `routes/index.ts` içindeki mount
+  - `route-permissions.ts` kayıtları
+- Şema: `jobs` tablosu `DROP TABLE IF EXISTS` ile kaldırılır; `table-classification` güncellenir.
+- İlgili testler silinir ya da güncellenir.
+
+**Test senaryoları**
+1. `/jobs` artık erişilebilir değil.
+2. Şema uygulandıktan sonra `jobs` tablosu yok. Sınıflandırma testi yeşil.
+3. Kalan import yok; typecheck temiz.
+
+---
+
+### Riskler
+
+| Risk | Önlem |
+|---|---|
+| WebSocket protokolü kırılıyor (bilet) | Kernel ve console aynı commit'te (F3-e) |
+| Önizleme sandbox'ı bazı örnek uygulamaları bozabilir (`null` Origin) | Regresyon senaryosu, raporda belirtilir |
+| Watchdog ve kurtarma devreye girince birikmiş işler aynı anda başlar | Sırayla ve sınırlı başlatma, bütçe kontrolü |
+| Kapsam hataları `.catch` içinde kaybolur | Sayaç ve `log.error`, F3-a'daki strict testler |
+| F4'e kadar süper kullanıcı modunda uygulama kontrolleri tek bariyer | F3-b rota kapsama testi |
+| Bilet deposu tek düğüm | Bilinen sınır; çok düğümlü kurulum sonraki işler listesinde |
+
+### Sonraki işlere (backlog)
+
+- Tenant bazlı plugin etkinleştirme
+- JWT için `jti` iptal listesi
+- Çok düğümlü bilet deposu
+- `events.tenant_id` sütununun F5-7'den öne çekilmesi
+- Önizlemenin ayrı bir origin'e taşınması
+
+### Uçtan uca doğrulama
+
+- **Her alt faz:** Gate komutları ve o alt fazın senaryoları. Faz raporunda senaryo bazında sonuç verilir.
+- **F3 sonunda:**
+  - Kernel iki modda tam yeşil.
+  - Kapsamsız sorgu envanterinde test dışı çağıran kalmaz. Bu, F4'teki strict moda hazırlıktır.
+  - `pnpm dev` ile yerel duman testi: watchdog A ve B projelerini görür, WebSocket bilet ile bağlanır. Sizin onayınızla yapılır, çünkü agent çalıştırabilir.
 
 ## Ayrı iş (F4'ten önce) — Production Docker imajı
 

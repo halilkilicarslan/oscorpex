@@ -11,6 +11,7 @@ import { getDbConnectionInfo, provisionDatabase } from "../db-provisioner.js";
 import { createLogger } from "../logger.js";
 import { analyzeProject, generateStudioConfig, writeEnvFile } from "../runtime-analyzer.js";
 import type { DetectedService } from "../runtime-analyzer.js";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { detectDockerCompose, loadStudioConfig } from "./detection.js";
 import { resolvePort } from "./port-manager.js";
 import { startService, stopApp } from "./process-manager.js";
@@ -62,6 +63,10 @@ export async function startFromConfig(
 
 	const running: RunningService[] = [];
 	const isDocker = config.services.some((s) => s.command.startsWith("docker compose"));
+
+	if (isDocker && process.env.OSCORPEX_AUTH_ENABLED === "true") {
+		throw new Error("Docker Compose is disabled in multi-tenant mode (auth enabled)");
+	}
 
 	if (isDocker) {
 		onLog("[app-runner] Docker Compose başlatılıyor...");
@@ -213,7 +218,7 @@ export async function startApp(
 							encoding: "utf-8",
 							timeout: 30000,
 							stdio: "pipe",
-							env: { ...process.env, ...dbEnvVars },
+							env: { ...buildSafeChildEnv({ profile: "app_runner" }), ...dbEnvVars },
 						});
 						onLog("[app-runner] Migration başarılı");
 					}
@@ -238,6 +243,7 @@ export async function startApp(
 						encoding: "utf-8",
 						timeout: 120000,
 						stdio: "pipe",
+						env: buildSafeChildEnv({ profile: "app_runner" }),
 					});
 					onLog(`[app-runner] Bağımlılıklar kuruldu: ${svc.name}`);
 				} catch (err) {

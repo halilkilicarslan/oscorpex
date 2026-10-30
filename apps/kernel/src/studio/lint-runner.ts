@@ -9,6 +9,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 
 // ---------------------------------------------------------------------------
 // Default configs
@@ -115,7 +116,8 @@ interface LintResult {
 /** Run a command and capture stdout+stderr. Resolves even on non-zero exit. */
 function exec(cmd: string, args: string[], cwd: string): Promise<{ stdout: string; stderr: string; code: number }> {
 	return new Promise((resolve) => {
-		execFile(cmd, args, { cwd, timeout: 30_000, maxBuffer: 2 * 1024 * 1024 }, (err, stdout, stderr) => {
+		const env = buildSafeChildEnv({ profile: "build_tool" });
+		execFile(cmd, args, { cwd, timeout: 30_000, maxBuffer: 2 * 1024 * 1024, env }, (err, stdout, stderr) => {
 			const code =
 				err && "code" in err ? ((err as NodeJS.ErrnoException & { code: number }).code as unknown as number) : 0;
 			resolve({ stdout: stdout ?? "", stderr: stderr ?? "", code: typeof code === "number" ? code : 1 });

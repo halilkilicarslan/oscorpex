@@ -6,6 +6,7 @@
 import { execFileSync } from "node:child_process";
 import { insertTaskDiffs } from "./db.js";
 import { createLogger } from "./logger.js";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 import type { TaskOutput } from "./types.js";
 const log = createLogger("diff-capture");
 
@@ -49,6 +50,7 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 					cwd: repoPath,
 					encoding: "utf-8",
 					timeout: 5000,
+					env: buildSafeChildEnv({ profile: "build_tool" }),
 				}).trim();
 			} catch {
 				// Fallback: git show
@@ -57,6 +59,7 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 						cwd: repoPath,
 						encoding: "utf-8",
 						timeout: 5000,
+						env: buildSafeChildEnv({ profile: "build_tool" }),
 					}).trim();
 				} catch {
 					diff = "";
@@ -73,6 +76,7 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 				cwd: repoPath,
 				encoding: "utf-8",
 				timeout: 5000,
+				env: buildSafeChildEnv({ profile: "build_tool" }),
 			}).trim();
 
 			if (!diff) {
@@ -81,6 +85,7 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 					cwd: repoPath,
 					encoding: "utf-8",
 					timeout: 5000,
+					env: buildSafeChildEnv({ profile: "build_tool" }),
 				}).trim();
 			}
 		}

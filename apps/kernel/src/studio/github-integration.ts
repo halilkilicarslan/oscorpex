@@ -6,6 +6,7 @@
 import { execSync } from "node:child_process";
 import { Octokit } from "@octokit/rest";
 import { createLogger } from "./logger.js";
+import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 const log = createLogger("github-integration");
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,7 @@ export class GitHubIntegration {
 			const remote = execSync("git remote get-url origin", {
 				cwd: repoPath,
 				encoding: "utf8",
+				env: buildSafeChildEnv({ profile: "build_tool" }),
 			}).trim();
 
 			const sshMatch = remote.match(/git@github\.com:([^/]+)\/([^/.]+)/);

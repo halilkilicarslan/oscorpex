@@ -15,7 +15,8 @@ describe("P1-2: Environment sanitization", () => {
 		};
 		const result = buildSafeChildEnv({ profile: "app_runner", base });
 		expect(result.PATH).toBe("/usr/bin");
-		expect(result.SAFE_VAR).toBe("safe");
+		// app_runner is allowlist-based (F3-0): unknown vars are dropped, not just known secrets.
+		expect(result.SAFE_VAR).toBeUndefined();
 		expect(result.DATABASE_URL).toBeUndefined();
 		expect(result.OSCORPEX_JWT_SECRET).toBeUndefined();
 		expect(result.OSCORPEX_API_KEY).toBeUndefined();

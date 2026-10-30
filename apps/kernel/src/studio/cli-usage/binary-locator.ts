@@ -106,7 +106,7 @@ export function runCommand(
 	options?: { input?: string; timeoutMs?: number; envExclusions?: string[] },
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
 	return new Promise((resolve, reject) => {
-		const env = buildSafeChildEnv({ profile: "build_tool" });
+		const env = buildSafeChildEnv({ profile: "provider" });
 		for (const key of options?.envExclusions ?? []) {
 			delete (env as Record<string, string | undefined>)[key];
 		}

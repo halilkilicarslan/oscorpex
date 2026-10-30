@@ -51,6 +51,37 @@ const ALWAYS_ALLOWED = new Set([
 	"npm_lifecycle_event",
 ]);
 
+const ALLOWLIST_PROFILES = new Set<string>(["app_runner", "build_tool", "test"]);
+
+const BASE_ALLOWLIST = new Set([
+	"PATH",
+	"HOME",
+	"USER",
+	"LOGNAME",
+	"SHELL",
+	"LANG",
+	"LC_ALL",
+	"LC_CTYPE",
+	"TERM",
+	"TMPDIR",
+	"TMP",
+	"TEMP",
+	"NODE_ENV",
+	"CI",
+	"FORCE_COLOR",
+	"NO_COLOR",
+	"HTTP_PROXY",
+	"HTTPS_PROXY",
+	"NO_PROXY",
+	"http_proxy",
+	"https_proxy",
+	"no_proxy",
+	"SystemRoot",
+	"ComSpec",
+	"PATHEXT",
+	"WINDIR",
+]);
+
 export type ChildProcessEnvProfile =
 	| "provider"
 	| "app_runner"
@@ -75,9 +106,13 @@ export function buildSafeChildEnv(options: BuildChildEnvOptions): NodeJS.Process
 	const result: Record<string, string | undefined> = {};
 	const allowSet = new Set(allow);
 
+	const strict = ALLOWLIST_PROFILES.has(profile);
+
 	// Copy only safe vars from base
 	for (const [key, value] of Object.entries(base)) {
-		if (ALWAYS_ALLOWED.has(key) || allowSet.has(key)) {
+		if (strict) {
+			if (BASE_ALLOWLIST.has(key) || key.startsWith("LC_") || allowSet.has(key)) result[key] = value;
+		} else if (ALWAYS_ALLOWED.has(key) || allowSet.has(key)) {
 			result[key] = value;
 		} else if (!isSensitive(key)) {
 			result[key] = value;

@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { assertInsideWorkspace, resolveWorkspacePath } from "../security/workspace-resolver.js";
 import type { McpToolHandler, McpToolInvocation } from "./types.js";
 
@@ -80,10 +81,18 @@ export const gitStatus: McpToolHandler = async (inv) => {
 	try {
 		const { execFileSync } = await import("node:child_process");
 		const dir = getWorkspacePath(inv);
-		const output = execFileSync("git", ["status", "--porcelain"], { cwd: dir, encoding: "utf8", timeout: 10_000 });
+		const output = execFileSync("git", ["status", "--porcelain"], {
+			cwd: dir,
+			encoding: "utf8",
+			timeout: 10_000,
+			env: buildSafeChildEnv({ profile: "build_tool" }),
+		});
 		return { ok: true, data: { status: output.trim() } };
 	} catch (err) {
-		return { ok: false, error: { code: "GIT_STATUS_FAILED", message: err instanceof Error ? err.message : String(err) } };
+		return {
+			ok: false,
+			error: { code: "GIT_STATUS_FAILED", message: err instanceof Error ? err.message : String(err) },
+		};
 	}
 };
 
@@ -91,7 +100,12 @@ export const gitDiff: McpToolHandler = async (inv) => {
 	try {
 		const { execFileSync } = await import("node:child_process");
 		const dir = getWorkspacePath(inv);
-		const output = execFileSync("git", ["diff", "--stat"], { cwd: dir, encoding: "utf8", timeout: 10_000 });
+		const output = execFileSync("git", ["diff", "--stat"], {
+			cwd: dir,
+			encoding: "utf8",
+			timeout: 10_000,
+			env: buildSafeChildEnv({ profile: "build_tool" }),
+		});
 		return { ok: true, data: { diff: output.slice(0, 50_000) } };
 	} catch (err) {
 		return { ok: false, error: { code: "GIT_DIFF_FAILED", message: err instanceof Error ? err.message : String(err) } };
