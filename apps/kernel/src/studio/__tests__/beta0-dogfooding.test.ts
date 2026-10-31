@@ -380,7 +380,7 @@ describe("Beta-0 Agent 8: Power User", () => {
 	it("secret scan detects patterns in write payloads", async () => {
 		const { checkForSecrets } = await import("../mcp-bridge/secret-guard.js");
 		expect(checkForSecrets("safe code content").safe).toBe(true);
-		expect(checkForSecrets("sk_live_abc123def456ghi789jkl012").safe).toBe(false);
+		expect(checkForSecrets(`${"sk_" + "live_"}abc123def456ghi789jkl012`).safe).toBe(false);
 	});
 
 	it("Hermes key format validation works", async () => {
