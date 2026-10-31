@@ -10,6 +10,7 @@ import { accessGuard } from "../auth/access-guard.js";
 import { getAllowedOrigins } from "../auth/cors-origins.js";
 import { createLogger } from "../logger.js";
 import { correlationMiddleware } from "../middleware/correlation-middleware.js";
+import { originGuard } from "../middleware/origin-guard.js";
 
 const log = createLogger("routes");
 import { guaranteedCorrelationHeader } from "../middleware/guaranteed-correlation-header.js";
@@ -90,6 +91,9 @@ studio.use(
 		maxAge: 86400,
 	}),
 );
+
+// Browser CSRF guard: unsafe methods with a foreign Origin never reach auth or handlers
+studio.use("*", originGuard());
 
 // ---------------------------------------------------------------------------
 // Correlation ID — propagate request tracing across logs and events

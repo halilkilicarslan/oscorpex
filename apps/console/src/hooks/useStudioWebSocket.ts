@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StudioApiError, fetchWsTicket } from '../lib/studio-api/base';
+import { studioWsUrl } from '../lib/studio-api/ws-url';
 
 // ---------------------------------------------------------------------------
 // Tipler
@@ -61,19 +62,8 @@ export interface UseStudioWebSocketResult {
 // Sabitler
 // ---------------------------------------------------------------------------
 
-const STUDIO_WS_PORT: number = Number(import.meta.env.VITE_STUDIO_WS_PORT ?? 3142);
-
-function resolveWsBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const host = window.location.hostname || 'localhost';
-    return `${protocol}://${host}:${STUDIO_WS_PORT}/api/studio/ws`;
-  }
-  return `ws://localhost:${STUDIO_WS_PORT}/api/studio/ws`;
-}
-
 function buildWsUrl(ticket: string): string {
-  const url = new URL(resolveWsBaseUrl());
+  const url = new URL(studioWsUrl());
   url.searchParams.set('ticket', ticket);
   return url.toString();
 }

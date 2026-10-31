@@ -18,7 +18,7 @@
 !apps/console/index.html
 !apps/console/vite.config.ts
 !apps/console/tsconfig*.json
-!apps/console/nginx.conf
+!apps/console/nginx/*.conf
 !apps/console/src
 !apps/console/public/*.svg
 

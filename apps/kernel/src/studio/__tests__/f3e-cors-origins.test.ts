@@ -61,3 +61,11 @@ describe("memoized parsing", () => {
 		expect(getAllowedOrigins()).toEqual(["https://b.example.com"]);
 	});
 });
+
+describe("D4 — origin normalization", () => {
+	it("case and trailing slash are normalized; invalid entries are ignored", async () => {
+		process.env.OSCORPEX_CORS_ORIGINS = "http://Localhost:5161/,not a url";
+		const { getAllowedOrigins } = await freshModule();
+		expect(getAllowedOrigins()).toEqual(["http://localhost:5161"]);
+	});
+});

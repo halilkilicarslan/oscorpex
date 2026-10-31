@@ -32,18 +32,23 @@ setInterval(() => {
 /**
  * Who is calling: the authenticated user when known (set by an earlier middleware, or a signature-verified JWT —
  * checked without a DB round trip so the limiter can run before the access guard), else the client address.
- * The address is the Node socket's; X-Forwarded-For is honoured only behind OSCORPEX_TRUSTED_PROXY=true.
+ * The address comes from resolveClientIp.
  */
-function callerKey(c: Context): { key: string; ip: string } {
-	const cached = c.get(CALLER_KEY) as { key: string; ip: string } | undefined;
-	if (cached) return cached;
+/** Client address: the Node socket's; X-Forwarded-For (right-most entry) is honoured only behind OSCORPEX_TRUSTED_PROXY=true. */
+export function resolveClientIp(c: Context): string {
 	const socketIp = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming?.socket
 		?.remoteAddress;
 	const forwarded =
 		process.env.OSCORPEX_TRUSTED_PROXY === "true"
 			? c.req.header("x-forwarded-for")?.split(",").pop()?.trim()
 			: undefined;
-	const ip = forwarded || socketIp || "unknown";
+	return forwarded || socketIp || "unknown";
+}
+
+function callerKey(c: Context): { key: string; ip: string } {
+	const cached = c.get(CALLER_KEY) as { key: string; ip: string } | undefined;
+	if (cached) return cached;
+	const ip = resolveClientIp(c);
 
 	const authHeader = c.req.header("authorization");
 	const verified =

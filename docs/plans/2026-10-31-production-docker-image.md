@@ -185,6 +185,14 @@ F4'te uygulama kısıtlı role (`oscorpex_app`) geçecek ve şema ayrı bir migr
   - `server_tokens off`.
 - **Console WebSocket adresi** (`hooks/useStudioWebSocket.ts`, `lib/studio-api/pipeline.ts`): production derlemesinde aynı origin ve `/api/studio/ws`, port yok. Geliştirmede `VITE_STUDIO_WS_PORT` ile bugünkü davranış korunur.
 
+> **D4 uygulamasında netleşenler:**
+> - **API yanıtlarının CSP'si kernel'in işidir.** Önizleme proxy yanıtları sandbox CSP taşır. nginx `/api/` ve `/health` yanıtlarında kernel'in CSP ve `X-Frame-Options` başlıklarına dokunmaz. Yalnızca `nosniff`, `Referrer-Policy`, `Permissions-Policy` ve `Cache-Control: no-store` ekler. Tam console başlık seti statik sayfalar içindir.
+> - **Kernel kimlik doğrulaması:** Production'da `OSCORPEX_AUTH_ENABLED=true` iken kimliksiz istek 500 değil 401 alır. Planda yoktu; nginx üzerinden yapılan duman testinde ortaya çıktı.
+> - **D5 backend ortamı:** `OSCORPEX_TRUSTED_PROXY=true` verilir. Verilmezse nginx arkasındaki tüm anonim istemciler tek rate-limit kovasını paylaşır ve `/auth/*` limiti herkes için ortak olur. Docker Desktop port yayınında istemci IP'leri yine de gateway IP'sine dönüşebilir; bu kısıt belgelenir.
+> - **DNS rebinding ve CSRF:** Kernel, durum değiştiren istekleri (POST/PUT/PATCH/DELETE) `OSCORPEX_CORS_ORIGINS` dışında bir `Origin` ile gelirse reddeder. Bu, `127.0.0.1:5161`'e DNS rebinding ile yapılabilecek kayıt ve işlem saldırılarını da kapatır. `Origin` başlığı göndermeyen API istemcileri etkilenmez.
+> - **Origin koruması kök yollarda da uygulanır.** Koruma tüm `/api/*` yollarını kapsar; console'un kullandığı kök `/api/auth` ve `/api/observability` dahil. GET, HEAD ve OPTIONS dışındaki her metot denetlenir. `POST /api/auth/login` ve `/api/auth/register` dakikada 10 istekle sınırlıdır. `OSCORPEX_CORS_ORIGINS`, kullanıcıların tarayıcıda açtığı her origin'i içermelidir (`http://localhost:5161` ve `http://127.0.0.1:5161`). Girdiler normalize edilir.
+> - **Bilinen kısıtlar:** Docker'da LivePreview çalışmaz: uygulama portları yayınlanmaz ve `frame-src 'self'` doğrudan port iframe'ini engeller. `vite preview` WebSocket'i proxy etmez. İkisi de D5 kurulum notunda belirtilir.
+
 **Test senaryoları:**
 1. Console vitest:
    - production modunda WS adresi aynı origin'i kullanır, port içermez (https altında `wss`);

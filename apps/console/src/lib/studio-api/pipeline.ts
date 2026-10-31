@@ -1,5 +1,6 @@
 import type { PipelineState, AgentProcessInfo, AgentRunHistory } from './types.js';
 import { API, json, httpPost, authHeaders, fetchWsTicket, StudioApiError } from './base.js';
+import { studioWsUrl } from './ws-url.js';
 
 // Pipeline'ı başlat
 export async function startPipeline(projectId: string): Promise<PipelineState> {
@@ -147,12 +148,8 @@ export async function getAgentRunHistory(
 //   // Durdur:
 //   stop();
 
-const STUDIO_WS_PORT = import.meta.env.VITE_STUDIO_WS_PORT ?? 3142;
-
 function buildStudioWsUrl(ticket: string): string {
-  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  const host = window.location.hostname || 'localhost';
-  const url = new URL(`${protocol}://${host}:${STUDIO_WS_PORT}/api/studio/ws`);
+  const url = new URL(studioWsUrl());
   url.searchParams.set('ticket', ticket);
   return url.toString();
 }

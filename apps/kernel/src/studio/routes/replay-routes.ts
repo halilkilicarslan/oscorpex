@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { getCurrentCorrelationId } from "../correlation-context.js";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
+import { resolveClientIp } from "../middleware/rate-limiter.js";
 import { replayStore } from "../replay-store.js";
 import { restoreFromSnapshot } from "../replay-store.js";
 const log = createLogger("replay-routes");
@@ -71,7 +72,7 @@ replayRoutes.post("/runs/:runId/restore", async (c) => {
 
 		// Actor metadata from request context
 		const actor = {
-			ip: c.req.header("x-forwarded-for") ?? "unknown",
+			ip: resolveClientIp(c),
 			// tenant auth context — populated by auth middleware when enabled
 			userId: (c.get("userId" as never) as string | undefined) ?? "anonymous",
 			role: (c.get("userRole" as never) as string | undefined) ?? "unknown",

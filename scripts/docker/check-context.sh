@@ -188,6 +188,7 @@ packages/core/src
 adapters/provider-claude/src
 apps/console/src
 apps/console/public
+apps/console/nginx
 packages/control-plane/src
 docker/claude-cli
 docker/coder-agent"
@@ -594,6 +595,7 @@ $MANIFESTS_RE
 ^apps/console/tsconfig[^/]*\.json$
 ^apps/console/src/.+\.($exts)$
 ^apps/console/public/[^/]+\.svg$
+^apps/console/nginx/[^/]+\.conf$
 ^packages/control-plane/src/.+\.tsx?$
 ^packages/control-plane/tsconfig[^/]*\.json$
 EOF
@@ -606,10 +608,12 @@ EOF
 		fi
 		# vite.config.ts / tsconfig*.json / src import only @oscorpex/control-plane, never kernel sources
 		if has_prefix "apps/kernel/src/"; then fail "console context ships apps/kernel/src/ (console does not need it)"; else pass "console context: no apps/kernel/src/"; fi
-		for f in index.html vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json nginx.conf package.json; do
+		for f in index.html vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json package.json; do
 			require "apps/console/$f"
 		done
 		require_prefix "apps/console/src/"
+		# D4: nginx config + security-headers snippet (apps/console/nginx.conf may stay or go; the nginx/ dir must ship)
+		require_prefix "apps/console/nginx/"
 		# every tracked public asset must reach the console image; a future favicon.ico/robots.txt dropped by the
 		# public/*.svg rule must fail loudly
 		grep -E '^apps/console/public/' "$GIT_FILES" | while IFS= read -r pf; do

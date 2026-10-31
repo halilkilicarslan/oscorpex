@@ -13,24 +13,24 @@ let memo: { raw: string; origins: string[] } | undefined;
 export function getAllowedOrigins(): string[] {
 	const raw = process.env.OSCORPEX_CORS_ORIGINS ?? DEFAULT_ORIGINS;
 	if (memo?.raw === raw) return memo.origins;
-	const origins = raw
-		.split(",")
-		.map((o) => o.trim())
-		.filter((o) => {
-			if (!o) return false;
-			// Reject wildcard origins when used with credentials-bearing endpoints
-			if (o === "*") {
-				log.warn("[routes] CORS wildcard '*' rejected — use explicit origins");
-				return false;
-			}
-			try {
-				new URL(o);
-				return true;
-			} catch {
-				log.warn(`[routes] Invalid CORS origin rejected: "${o}"`);
-				return false;
-			}
-		});
+	const origins: string[] = [];
+	for (const entry of raw.split(",")) {
+		const o = entry.trim();
+		if (!o) continue;
+		// Reject wildcard origins when used with credentials-bearing endpoints
+		if (o === "*") {
+			log.warn("[routes] CORS wildcard '*' rejected — use explicit origins");
+			continue;
+		}
+		try {
+			// Browsers send the serialized origin: lowercase scheme/host, no trailing slash or path
+			const normalized = new URL(o).origin;
+			if (normalized === "null") throw new Error("opaque origin");
+			if (!origins.includes(normalized)) origins.push(normalized);
+		} catch {
+			log.warn(`[routes] Invalid CORS origin rejected: "${o}"`);
+		}
+	}
 	memo = { raw, origins };
 	return origins;
 }

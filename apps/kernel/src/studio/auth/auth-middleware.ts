@@ -224,6 +224,10 @@ export async function authMiddleware(c: Context<any>, next: Next): Promise<undef
 	// 4. No valid auth — P0-5: require explicit opt-in for auth bypass
 	// ------------------------------------------------------------------
 	if (!envApiKey) {
+		// JWT auth is configured: missing/invalid credentials are an ordinary 401, not a misconfiguration
+		if (process.env.OSCORPEX_AUTH_ENABLED === "true") {
+			return c.json({ error: "Unauthorized" }, 401);
+		}
 		if (process.env.NODE_ENV === "production") {
 			log.error("[auth] OSCORPEX_API_KEY not configured in production — rejecting request");
 			return c.json({ error: "Unauthorized — authentication not configured" }, 500);
