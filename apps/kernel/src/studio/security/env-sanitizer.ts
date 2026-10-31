@@ -4,6 +4,7 @@
 // Every child process spawn MUST use buildSafeChildEnv() instead of ...process.env.
 // ---------------------------------------------------------------------------
 
+import { mergeGitCeilings } from "../git/git-safe-config.js";
 import { createLogger } from "../logger.js";
 
 const log = createLogger("env-sanitizer");
@@ -169,6 +170,9 @@ export function buildSafeChildEnv(options: BuildChildEnvOptions): NodeJS.Process
 			}
 		}
 	}
+
+	// Stop git walking up from a project dir into the Oscorpex checkout; caller entries extend, never replace
+	result.GIT_CEILING_DIRECTORIES = mergeGitCeilings(result.GIT_CEILING_DIRECTORIES, extra.GIT_CEILING_DIRECTORIES);
 
 	return result as NodeJS.ProcessEnv;
 }

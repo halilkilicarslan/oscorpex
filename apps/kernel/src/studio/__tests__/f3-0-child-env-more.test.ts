@@ -57,7 +57,10 @@ vi.mock("../app-runner.js", () => ({
 }));
 vi.mock("../container-pool.js", () => ({ containerPool: { getStatus: vi.fn() } }));
 vi.mock("../routes/team-init-guard.js", () => ({ ensureProjectTeamInitialized: vi.fn() }));
-vi.mock("../security/workspace-resolver.js", () => ({ assertInsideWorkspace: vi.fn() }));
+vi.mock("../security/workspace-resolver.js", () => ({
+	assertInsideWorkspace: vi.fn(),
+	getWorkspaceRoot: () => "/tmp/oscx-ws-root",
+}));
 vi.mock("../security/tool-policy-enforcer.js", () => ({ enforceToolPolicy: vi.fn() }));
 vi.mock("../legacy/cli-runtime.js", () => ({ streamWithCLI: vi.fn() }));
 

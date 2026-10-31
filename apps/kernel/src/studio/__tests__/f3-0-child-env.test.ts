@@ -349,7 +349,8 @@ describe("F3-0 buildSafeChildEnv — allowlist for tenant-code profiles", () => 
 			const env = buildSafeChildEnv({ profile, base: base() });
 			for (const k of ALLOWED) expect(env[k], `${k} should pass`).toBe(`val-${k}`);
 			for (const k of DROPPED) expect(env[k], `${k} should be dropped`).toBeUndefined();
-			expect(Object.keys(env).sort()).toEqual([...ALLOWED].sort());
+			// GIT_CEILING_DIRECTORIES is always injected so git cannot walk up out of a project dir
+			expect(Object.keys(env).sort()).toEqual([...ALLOWED, "GIT_CEILING_DIRECTORIES"].sort());
 		});
 
 		it(`${profile}: explicit extra still passes`, () => {
