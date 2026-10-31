@@ -264,7 +264,10 @@ describe("projects → tenants foreign key", () => {
 				[pid, tid],
 			);
 			try {
-				await expect(c.query("DELETE FROM tenants WHERE id = $1", [tid])).rejects.toMatchObject({ code: "23001" });
+				// RESTRICT itself is asserted on the catalog above; PostgreSQL 18+ raises 23001, earlier versions 23503
+				await expect(c.query("DELETE FROM tenants WHERE id = $1", [tid])).rejects.toMatchObject({
+					code: expect.stringMatching(/^(23001|23503)$/),
+				});
 			} finally {
 				await c.query("DELETE FROM projects WHERE id = $1", [pid]);
 				await c.query("DELETE FROM tenants WHERE id = $1", [tid]);

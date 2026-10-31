@@ -12,6 +12,11 @@ vi.mock("../planner-cli.js", async (importOriginal) => {
 	const actual = await importOriginal<Record<string, unknown>>();
 	return {
 		...actual,
+		// The route requires an installed Claude CLI; report it available so the test doesn't depend on the host.
+		listPlannerCLIProviders: async () =>
+			(await (actual.listPlannerCLIProviders as () => Promise<Array<{ id: string }>>)()).map((p) =>
+				p.id === "claude-code" ? { ...p, available: true } : p,
+			),
 		streamPlannerWithCLI: (opts: Record<string, unknown>, cb: { onDone: (t: string) => void }) => {
 			planner.calls.push(opts);
 			setTimeout(() => cb.onDone("ok"), 0);

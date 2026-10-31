@@ -93,9 +93,10 @@ describe("catalog: projects → tenants foreign key", () => {
 			);
 		});
 		try {
-			// RESTRICT raises 23001 (restrict_violation); NO ACTION would raise 23503 — only the former is acceptable
+			// RESTRICT is asserted on the catalog above; the error code depends on the server version
+			// (PostgreSQL 18+ raises 23001 restrict_violation, earlier versions 23503 foreign_key_violation).
 			await expect(withMigrator((c) => c.query("DELETE FROM tenants WHERE id = $1", [tid]))).rejects.toMatchObject({
-				code: "23001",
+				code: expect.stringMatching(/^(23001|23503)$/),
 			});
 		} finally {
 			await withMigrator(async (c) => {
