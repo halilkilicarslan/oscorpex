@@ -4,6 +4,7 @@
   "description": "Cursor provider adapter for Oscorpex",
   "type": "module",
   "main": "./dist/index.js",
+  "files": ["dist"],
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsdown",

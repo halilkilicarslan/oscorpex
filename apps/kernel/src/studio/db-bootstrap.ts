@@ -56,6 +56,20 @@ export interface ApplySchemaOptions {
 	runtimeUrl?: string;
 	/** Apply even when the hash is unchanged and there is no drift. */
 	force?: boolean;
+	/** Path of the schema script. Default: `<cwd>/scripts/init.sql`. */
+	schemaPath?: string;
+}
+
+export interface VerifySchemaOptions {
+	/** Connection string of the runtime user. Default: DATABASE_URL. */
+	runtimeUrl?: string;
+	/** Path of the schema script. Default: `<cwd>/scripts/init.sql`. */
+	schemaPath?: string;
+}
+
+/** The database schema is not at the state this build expects; the migrate step has to run first. */
+export class SchemaNotReadyError extends Error {
+	override name = "SchemaNotReadyError";
 }
 
 export interface RuntimeIdentity {
@@ -107,14 +121,45 @@ export function checkRuntimeIsolation(info: RuntimeIdentity, _env?: unknown): Ru
 	return { fatal, warnings };
 }
 
+const defaultSchemaPath = (): string => join(process.cwd(), "scripts", "init.sql");
+
+/** Read the schema script. Missing: production (or `alwaysThrow`) throws, otherwise undefined. */
+async function readSchemaScript(schemaPath: string, alwaysThrow = false): Promise<string | undefined> {
+	try {
+		return await readFile(schemaPath, "utf8");
+	} catch {
+		if (alwaysThrow || isProduction()) throw new Error(`Schema script ${schemaPath} (init.sql) is missing`);
+		// No init script available — schema managed elsewhere (e.g. Docker entrypoint).
+		return undefined;
+	}
+}
+
+/** The hash apply stores and verify expects: derived from the server's pgvector availability. */
+async function expectedSchemaHash(client: pg.Client, raw: string): Promise<{ script: string; hash: string }> {
+	// pgvector is optional in local dev; skip vector-dependent DDL when it is not installed. A legacy
+	// rag_embeddings table whose "vector" column is not of type vector cannot take the ivfflat index either.
+	const avail = await client.query<{ available: boolean }>(
+		"SELECT EXISTS(SELECT 1 FROM pg_available_extensions WHERE name = 'vector') AS available",
+	);
+	const legacy = await client.query(
+		`SELECT 1 FROM pg_attribute a JOIN pg_type t ON t.oid = a.atttypid
+		 WHERE a.attrelid = to_regclass('public.rag_embeddings') AND a.attname = 'vector'
+		   AND NOT a.attisdropped AND t.typname <> 'vector'`,
+	);
+	const script = prepareSchemaSql(raw, {
+		hasVector: avail.rows[0]?.available === true && (legacy.rowCount ?? 0) === 0,
+	});
+	return { script, hash: schemaHash(script) };
+}
+
 function resolveMigrationUrl(explicit: string | undefined): string {
-	if (explicit) return explicit;
-	const fromEnv = process.env.OSCORPEX_MIGRATION_DATABASE_URL;
+	if (explicit?.trim()) return explicit.trim();
+	const fromEnv = process.env.OSCORPEX_MIGRATION_DATABASE_URL?.trim();
 	if (fromEnv) return fromEnv;
 	if (isProduction()) {
 		throw new Error("OSCORPEX_MIGRATION_DATABASE_URL is required in production (no DATABASE_URL fallback)");
 	}
-	const fallback = process.env.DATABASE_URL;
+	const fallback = process.env.DATABASE_URL?.trim();
 	if (!fallback) throw new Error("DATABASE_URL is not set");
 	return fallback;
 }
@@ -226,6 +271,17 @@ async function decideReason(client: pg.Client, hash: string, force: boolean): Pr
 	return (await catalogProblems(client)).length === 0 ? "unchanged" : "drift";
 }
 
+/** Evaluate and report the isolation verdict: production throws on fatal findings, warnings are always logged. */
+function reportRuntimeIsolation(identity: RuntimeIdentity): void {
+	const verdict = checkRuntimeIsolation(identity, process.env);
+	for (const w of verdict.warnings) log.error(`[db-bootstrap] ${w}: RLS not enforced until F4`);
+	if (verdict.fatal.length > 0) {
+		const msg = `Runtime isolation violated: ${verdict.fatal.join("; ")}`;
+		if (isProduction()) throw new Error(msg);
+		log.error(msg);
+	}
+}
+
 /**
  * Connect as the runtime login, make it a member of oscorpex_app (via the migration client) and verify
  * it is actually constrained by RLS. Production throws on fatal findings; warnings are always logged.
@@ -262,13 +318,7 @@ async function enforceRuntimeIsolation(migrator: pg.Client, runtimeUrl: string |
 			const r = await migrator.query<{ m: boolean }>("SELECT pg_has_role($1, $2, 'MEMBER') AS m", [runtimeUser, role]);
 			if (r.rows[0]?.m) memberOf.push(role);
 		}
-		const verdict = checkRuntimeIsolation({ runtimeUser, migratorUser, rolsuper, rolbypassrls, memberOf }, process.env);
-		for (const w of verdict.warnings) log.error(`[db-bootstrap] ${w}: RLS not enforced until F4`);
-		if (verdict.fatal.length > 0) {
-			const msg = `Runtime isolation violated: ${verdict.fatal.join("; ")}`;
-			if (isProduction()) throw new Error(msg);
-			log.error(msg);
-		}
+		reportRuntimeIsolation({ runtimeUser, migratorUser, rolsuper, rolbypassrls, memberOf });
 	} finally {
 		await runtime.end().catch(() => undefined);
 	}
@@ -282,13 +332,8 @@ export async function applySchema(opts: ApplySchemaOptions = {}): Promise<ApplyS
 	const migrationUrl = resolveMigrationUrl(opts.migrationUrl);
 	const runtimeUrl = opts.runtimeUrl ?? process.env.DATABASE_URL;
 
-	let raw: string;
-	try {
-		raw = await readFile(join(process.cwd(), "scripts", "init.sql"), "utf8");
-	} catch {
-		// No init script available — schema managed elsewhere (e.g. Docker entrypoint).
-		return { applied: false, reason: "unchanged" };
-	}
+	const raw = await readSchemaScript(opts.schemaPath ?? defaultSchemaPath());
+	if (raw === undefined) return { applied: false, reason: "unchanged" };
 
 	const client = new pg.Client({ connectionString: migrationUrl });
 	client.on("error", (err) => log.warn({ err }, "[db-bootstrap] migration client error"));
@@ -299,19 +344,7 @@ export async function applySchema(opts: ApplySchemaOptions = {}): Promise<ApplyS
 		locked = true;
 		await client.query("SET lock_timeout = '5s'");
 
-		// pgvector is optional in local dev; skip vector-dependent DDL when it is not installed. A legacy
-		// rag_embeddings table whose "vector" column is not of type vector cannot take the ivfflat index either.
-		const avail = await client.query<{ available: boolean }>(
-			"SELECT EXISTS(SELECT 1 FROM pg_available_extensions WHERE name = 'vector') AS available",
-		);
-		const legacy = await client.query(
-			`SELECT 1 FROM information_schema.columns
-			 WHERE table_schema = 'public' AND table_name = 'rag_embeddings' AND column_name = 'vector' AND udt_name <> 'vector'`,
-		);
-		const script = prepareSchemaSql(raw, {
-			hasVector: avail.rows[0]?.available === true && (legacy.rowCount ?? 0) === 0,
-		});
-		const hash = schemaHash(script);
+		const { script, hash } = await expectedSchemaHash(client, raw);
 
 		const reason = await decideReason(client, hash, opts.force === true);
 		if (reason !== "unchanged") {
@@ -342,9 +375,74 @@ export async function applySchema(opts: ApplySchemaOptions = {}): Promise<ApplyS
 	}
 }
 
-/** Boot entry point: warns and continues on failure, except in production where it rethrows. */
+/**
+ * Read-only readiness check for a runtime that does not own migrations: the stored init.sql hash must match
+ * the script this build ships, the catalog must show no tenancy drift, and the runtime login must be
+ * constrained by RLS. Never writes.
+ */
+export async function verifySchema(opts: VerifySchemaOptions = {}): Promise<void> {
+	const runtimeUrl = (opts.runtimeUrl ?? process.env.DATABASE_URL)?.trim();
+	if (!runtimeUrl) throw new Error("DATABASE_URL is not set");
+	// alwaysThrow: a missing script throws, so the result is always a string.
+	const raw = (await readSchemaScript(opts.schemaPath ?? defaultSchemaPath(), true)) as string;
+
+	const client = new pg.Client({ connectionString: runtimeUrl });
+	client.on("error", (err) => log.warn({ err }, "[db-bootstrap] runtime client error"));
+	await client.connect();
+	try {
+		await client.query("BEGIN TRANSACTION READ ONLY");
+		const notReady = (why: string) =>
+			new SchemaNotReadyError(`Database schema is not ready (${why}); run the migrate step before starting`);
+		const meta = await client.query<{ present: boolean }>(
+			"SELECT to_regclass('public.schema_meta') IS NOT NULL AS present",
+		);
+		if (!meta.rows[0]?.present) throw notReady("schema_meta table missing");
+		let stored: pg.QueryResult<{ value: string }>;
+		try {
+			stored = await client.query<{ value: string }>("SELECT value FROM public.schema_meta WHERE key = $1", [HASH_KEY]);
+		} catch (err) {
+			if ((err as { code?: string }).code === "42501") {
+				throw new SchemaNotReadyError(
+					"Database schema cannot be verified: the runtime login lacks the privilege to read public.schema_meta; " +
+						"until F4 the kernel must run with a login that can read it (and the migrate step must have run)",
+				);
+			}
+			throw err;
+		}
+		if (stored.rows.length === 0) throw notReady("schema hash row missing");
+		const { hash } = await expectedSchemaHash(client, raw);
+		if (stored.rows[0].value !== hash) throw notReady("init.sql hash differs from the migrated schema");
+		const problems = await catalogProblems(client);
+		if (problems.length > 0) throw notReady(`catalog drift: ${problems.join("; ")}`);
+
+		const who = await client.query<{ u: string; rolsuper: boolean; rolbypassrls: boolean }>(
+			"SELECT current_user AS u, r.rolsuper, r.rolbypassrls FROM pg_roles r WHERE r.rolname = current_user",
+		);
+		const { u: runtimeUser, rolsuper, rolbypassrls } = who.rows[0];
+		const memberOf: string[] = [];
+		for (const role of PRIVILEGED_ROLES) {
+			const r = await client.query<{ m: boolean }>("SELECT pg_has_role(current_user, $1, 'MEMBER') AS m", [role]);
+			if (r.rows[0]?.m) memberOf.push(role);
+		}
+		// The migrator identity is unknown here, so the "runtime login is the migrator" warning cannot fire.
+		reportRuntimeIsolation({ runtimeUser, migratorUser: "", rolsuper, rolbypassrls, memberOf });
+	} finally {
+		await client.query("ROLLBACK").catch(() => undefined);
+		await client.end().catch((err) => log.warn({ err }, "[db-bootstrap] client end failed"));
+	}
+}
+
+/**
+ * Boot entry point: warns and continues on failure, except in production where it rethrows. Production
+ * without a migration URL only verifies the schema (migrations run as a separate step).
+ */
 export async function applyDbBootstrap(): Promise<void> {
 	try {
+		if (isProduction() && !process.env.OSCORPEX_MIGRATION_DATABASE_URL?.trim()) {
+			await verifySchema();
+			log.info("[db-bootstrap] schema verified (migrations are applied by the migrate step)");
+			return;
+		}
 		await applySchema();
 	} catch (err) {
 		if (isProduction()) throw err;

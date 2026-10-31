@@ -689,6 +689,10 @@ F4'te kapanacak açıklar:
 - docker-compose: rolleri ve şifreleri env'den oluşturan init script'i; ayrı bağlantı dizeleri; 5432 yalnızca localhost. CI: aynı roller; kurulum migrator ile, testler app rolüyle.
 - Preflight script'leri (`production-preflight.sh`, `rc1-soak-runner.sh`, `tenant-isolation-smoke.sh`): rol kontrolleri + A/B smoke.
 - **Geri dönüş:** `DATABASE_URL`'i migrator'a çevirmek (belgelenir).
+- **Docker işinden (D2) gelenler:**
+  - **Verify modu:** Production'da migration bağlantısı olmadan açılan kernel `verifySchema()` çalıştırır. Bunun için runtime rolünün `public.schema_meta`'yı okuyabilmesi gerekir; `init.sql` bugün bu yetkiyi `oscorpex_app`'ten alıyor. F4'te ya `GRANT SELECT ON schema_meta TO oscorpex_app` verilir ya da hash'i dönen bir `sys_*` SECURITY DEFINER fonksiyonu eklenir.
+  - **Katalog okumaları:** `catalogProblems` sorguları (`pg_policies`, `pg_proc`, `pg_roles`) app rolüyle de çalışmalı; bu doğrulanır.
+  - **Migrate servisi:** `GRANT oscorpex_app TO <runtime>` adımını yürütebilmesi için compose'da `migrate` servisine runtime `DATABASE_URL` da verilir.
 
 **Test senaryoları**
 1. Kernel + console paketleri app rolüyle tamamen yeşil.

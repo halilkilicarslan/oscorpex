@@ -5,6 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": ["dist", "scripts/init.sql"],
   "scripts": {
     "dev": "tsx watch ./src",
     "build": "tsdown",
@@ -15,8 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "admin:grant": "tsx scripts/admin-grant.ts grant",
-    "admin:revoke": "tsx scripts/admin-grant.ts revoke"
+    "admin:grant": "tsx src/bin/admin-grant.ts grant",
+    "admin:revoke": "tsx src/bin/admin-grant.ts revoke"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.67",
