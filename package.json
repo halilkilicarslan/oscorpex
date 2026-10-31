@@ -18,7 +18,7 @@
 		"test": "pnpm --filter @oscorpex/kernel test",
 		"test:watch": "pnpm --filter @oscorpex/kernel test:watch",
 		"test:coverage": "pnpm --filter @oscorpex/kernel test:coverage",
-		"docker:up": "docker compose up -d",
+		"docker:up": "docker compose up -d --build",
 		"docker:down": "docker compose down",
 		"seed:beta05d": "npx tsx scripts/seed-beta05d-e2e.ts"
 	},

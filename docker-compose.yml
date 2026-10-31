@@ -1,114 +1,183 @@
 # ---------------------------------------------------------------------------
-# Oscorpex — Docker Compose
+# Oscorpex — Docker Compose (production stack)
 # ---------------------------------------------------------------------------
+# Stack: postgres -> migrate (one-shot schema apply) -> backend (kernel) -> console (nginx, same-origin proxy)
+#
+# Required variables (shell or .env next to this file; see docs/docker-setup.md):
+#   POSTGRES_PASSWORD      database password (use `openssl rand -hex 24`: it is embedded in a URL)
+#   OSCORPEX_JWT_SECRET    JWT signing secret (use `openssl rand -hex 32`)
+# Optional:
+#   OSCORPEX_CONSOLE_PORT  host port of the console (default 5161, bound to 127.0.0.1)
+#   ANTHROPIC_API_KEY      API key for provider calls that do not go through the claude CLI login
+#
 # Usage:
-#   docker-compose up -d                    # Start backend + console
-#   docker-compose --profile agents up -d   # Start with agent pool
-#   docker-compose down                     # Stop all services
+#   docker compose up -d --build                       # postgres + migrate + backend + console
+#   docker compose --profile agents up -d              # additionally start the agent pool
+#   docker compose run --rm migrate node dist/admin-grant.js grant <email>   # first platform admin
+#   docker compose down                                # stop (volumes are kept; add -v to wipe them)
+#
+# Only the console is published (127.0.0.1). The kernel and postgres have no host ports. The backend runs with a
+# read-only root filesystem, no capabilities and no-new-privileges; writable paths are volumes or tmpfs only.
 # ---------------------------------------------------------------------------
+
+# Kernel image: ONE image (named after the project) shared by migrate and backend. Both services carry the same
+# build definition; compose builds it once under the shared name and `pull_policy: build` never pulls it.
+x-kernel-image: &kernel-image
+  image: ${COMPOSE_PROJECT_NAME}-kernel
+  pull_policy: build
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+# Hardening shared by the kernel-image services and the console
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
+# Bounded logs (local driver, rotated) for every service
+x-logging: &logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
 
 services:
   # ---- PostgreSQL + pgvector -----------------------------------------------
+  # No initdb mount: the schema is applied by the migrate service, not by the first boot of this container.
   postgres:
-    image: pgvector/pgvector:pg16
-    container_name: oscorpex-postgres
+    image: pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f
     environment:
       POSTGRES_DB: oscorpex
       POSTGRES_USER: oscorpex
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-    ports:
-      - "127.0.0.1:5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD (openssl rand -hex 24)}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./apps/kernel/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
-      - studio-frontend
-      - studio-agents
+      - db
+    # The postgres entrypoint starts as root, chowns the data dir and drops to the postgres user
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+    mem_limit: ${OSCORPEX_POSTGRES_MEM_LIMIT:-2g}
+    pids_limit: 512
+    logging: *logging
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U oscorpex"]
+      test: ["CMD-SHELL", "pg_isready -U oscorpex -d oscorpex"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  # ---- Backend (Hono API Server) ------------------------------------------
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: oscorpex-backend
-    ports:
-      - "3141:3141"
+  # ---- Migrate (one-shot: apply schema, exit) -------------------------------
+  # Also hosts the admin tooling: docker compose run --rm migrate node dist/admin-grant.js grant <email>
+  # Runtime still uses the same superuser as the backend until F4 introduces dedicated migrator/app roles.
+  migrate:
+    <<: [*kernel-image, *hardening]
+    command: ["node", "dist/migrate.js"]
     environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://oscorpex:${POSTGRES_PASSWORD}@postgres:5432/oscorpex
-      # Schema migrations: same superuser as the runtime until F4 introduces a dedicated migrator login.
-      - OSCORPEX_MIGRATION_DATABASE_URL=postgresql://oscorpex:${POSTGRES_PASSWORD}@postgres:5432/oscorpex
-    env_file:
-      - .env
-    volumes:
-      - studio-data:/app/.voltagent
-      - repos:/app/.voltagent/repos
-      # P1-1: Docker socket removed from default. Use docker-compose.dev.yml override
-      # for local development: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
-      # - /var/run/docker.sock:/var/run/docker.sock
+      NODE_ENV: production
+      DATABASE_URL: postgresql://oscorpex:${POSTGRES_PASSWORD}@postgres:5432/oscorpex
+      OSCORPEX_MIGRATION_DATABASE_URL: postgresql://oscorpex:${POSTGRES_PASSWORD}@postgres:5432/oscorpex
+    tmpfs:
+      - /tmp:size=64m
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
-      - studio-frontend
-      - studio-agents
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3141/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - db
+    mem_limit: 512m
+    pids_limit: 128
+    logging: *logging
+    restart: "no"
 
-  # ---- Console (Vite Frontend) --------------------------------------------
+  # ---- Backend (Hono API server, agent execution) ---------------------------
+  # Explicit environment list (no env_file): the container never sees POSTGRES_PASSWORD or the migration URL.
+  backend:
+    <<: [*kernel-image, *hardening]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://oscorpex:${POSTGRES_PASSWORD}@postgres:5432/oscorpex
+      OSCORPEX_JWT_SECRET: ${OSCORPEX_JWT_SECRET:?Set OSCORPEX_JWT_SECRET (openssl rand -hex 32)}
+      OSCORPEX_AUTH_ENABLED: "true"
+      # nginx (console) is the only client: trust its X-Forwarded-For for rate limiting
+      OSCORPEX_TRUSTED_PROXY: "true"
+      # Must list every origin users type in the browser
+      OSCORPEX_CORS_ORIGINS: http://localhost:${OSCORPEX_CONSOLE_PORT:-5161},http://127.0.0.1:${OSCORPEX_CONSOLE_PORT:-5161}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    tmpfs:
+      # tmpfs pages count toward mem_limit
+      - /tmp:size=1g,exec
+      - /home/oscorpex:uid=1001,gid=1001,mode=0700,size=512m,exec
+    volumes:
+      - oscorpex-data:/app/.oscorpex
+      - studio-data:/app/.voltagent
+      # Claude CLI login (OAuth) and transcripts of every tenant: shared, kernel-only, 0700
+      - claude-home:/home/oscorpex/.claude
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - db
+      - frontend
+      - studio-agents
+    mem_limit: ${OSCORPEX_BACKEND_MEM_LIMIT:-8g}
+    pids_limit: ${OSCORPEX_BACKEND_PIDS_LIMIT:-2048}
+    # 0 = unlimited; set OSCORPEX_BACKEND_CPUS to cap (Docker rejects values above the host's CPU count)
+    cpus: ${OSCORPEX_BACKEND_CPUS:-0}
+    logging: *logging
+    restart: unless-stopped
+
+  # ---- Console (nginx: static SPA + same-origin proxy to backend) -----------
   console:
     build:
       context: .
       dockerfile: apps/console/Dockerfile
-    container_name: oscorpex-console
+    pull_policy: build
+    <<: *hardening
     ports:
-      - "5161:80"
+      - "127.0.0.1:${OSCORPEX_CONSOLE_PORT:-5161}:8080"
+    tmpfs:
+      - /tmp:size=64m
     depends_on:
-      postgres:
-        condition: service_healthy
       backend:
         condition: service_healthy
     networks:
-      - studio-frontend
+      - frontend
+    mem_limit: 256m
+    pids_limit: 256
+    logging: *logging
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
   # ---- Agent Pool (pre-warmed isolated containers) ------------------------
-  # Activate with: docker-compose --profile agents up -d
+  # Activate with: docker compose --profile agents up -d
+  # ISOLATED/DEV USE ONLY: the worker's /tool endpoint is unauthenticated (anything on studio-agents can call it).
+  # Worker auth is a follow-up in the workload-isolation epic. No host ports; own workspace volume (no tenant data).
   agent-1:
     build:
       context: ./docker/coder-agent
       dockerfile: Dockerfile
-    container_name: studio-pool-9900
     profiles: ["agents"]
-    ports:
-      - "9900:9900"
     environment:
       - WORKER_PORT=9900
       - HOST_API=http://backend:3141
       - WORKSPACE=/workspace
     volumes:
-      - repos:/workspace
+      - agent-workspace:/workspace
     networks:
       - studio-agents
-    deploy:
-      resources:
-        limits:
-          memory: 2g
-          cpus: '2'
+    mem_limit: 2g
+    cpus: ${OSCORPEX_AGENT_CPUS:-0}
     security_opt:
       - no-new-privileges
     cap_drop:
@@ -118,6 +187,8 @@ services:
       - SETUID
       - SETGID
       - DAC_OVERRIDE
+    pids_limit: 512
+    logging: *logging
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9900/health"]
@@ -130,23 +201,17 @@ services:
     build:
       context: ./docker/coder-agent
       dockerfile: Dockerfile
-    container_name: studio-pool-9901
     profiles: ["agents"]
-    ports:
-      - "9901:9900"
     environment:
       - WORKER_PORT=9900
       - HOST_API=http://backend:3141
       - WORKSPACE=/workspace
     volumes:
-      - repos:/workspace
+      - agent-workspace:/workspace
     networks:
       - studio-agents
-    deploy:
-      resources:
-        limits:
-          memory: 2g
-          cpus: '2'
+    mem_limit: 2g
+    cpus: ${OSCORPEX_AGENT_CPUS:-0}
     security_opt:
       - no-new-privileges
     cap_drop:
@@ -156,6 +221,8 @@ services:
       - SETUID
       - SETGID
       - DAC_OVERRIDE
+    pids_limit: 512
+    logging: *logging
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9900/health"]
@@ -166,11 +233,10 @@ services:
 
   # ---- SonarQube (optional) -----------------------------------------------
   sonarqube:
-    image: sonarqube:community
-    container_name: studio-sonarqube
+    image: sonarqube:community@sha256:f95aaa9016dd4e92c7d70691167a6d96dbb5d8acffd61eba1cb4335d364a7840
     profiles: ["sonar"]
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
     environment:
       - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
     volumes:
@@ -179,37 +245,41 @@ services:
       - sonar-extensions:/opt/sonarqube/extensions
     networks:
       - studio-agents
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 4g
+    pids_limit: 1024
+    logging: *logging
     restart: unless-stopped
 
 # ---------------------------------------------------------------------------
 # Networks
 # ---------------------------------------------------------------------------
 networks:
-  # Frontend network — backend <-> console only
-  studio-frontend:
+  # postgres <-> migrate <-> backend; no egress
+  db:
+    driver: bridge
+    internal: true
+
+  # backend <-> console; the only network with egress (Claude API) and the one the published port rides on
+  frontend:
     driver: bridge
 
-  # Agent network — backend <-> agent containers + sonarqube
-  # Agents cannot reach the internet or frontend
+  # backend <-> agent containers + sonarqube; no egress.
+  # Use docker-compose.dev.yml to open it (dev only).
   studio-agents:
     driver: bridge
-    # P1-4: Agent network isolated by default. API keys injected via env vars.
-    # Set OSCORPEX_ALLOW_AGENT_EGRESS=true and use docker-compose.dev.yml for open network.
     internal: true
 
 # ---------------------------------------------------------------------------
 # Volumes
 # ---------------------------------------------------------------------------
 volumes:
-  studio-data:
-    driver: local
-  repos:
-    driver: local
   pgdata:
-    driver: local
+  oscorpex-data:
+  agent-workspace:
+  studio-data:
+  claude-home:
   sonar-data:
-    driver: local
   sonar-logs:
-    driver: local
   sonar-extensions:
-    driver: local

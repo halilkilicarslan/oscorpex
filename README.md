@@ -105,8 +105,12 @@ git clone https://github.com/halilkilicarslan/oscorpex.git
 cd oscorpex
 pnpm install
 
-# Start PostgreSQL
-docker compose up -d postgres
+# Start PostgreSQL on 127.0.0.1:5432 (dev override; compose interpolates the whole file, so both
+# variables must be set — only for this command, not exported). Port taken? Set OSCORPEX_DEV_PG_PORT
+# and use it in DATABASE_URL.
+POSTGRES_PASSWORD=oscorpex_dev OSCORPEX_JWT_SECRET=dev \
+  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+# Full production stack: docs/docker-setup.md
 
 # Copy env
 cp .env.example .env

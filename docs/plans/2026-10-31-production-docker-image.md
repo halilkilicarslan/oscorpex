@@ -231,6 +231,18 @@ F4'te uygulama kısıtlı role (`oscorpex_app`) geçecek ve şema ayrı bir migr
 - **İlk admin:** `docker compose run --rm migrate node dist/admin-grant.js grant <email>`. Kısa bir kurulum notuna yazılır (README değil, `docs/`).
 - **Uyum:** `docker-compose.dev.yml` override'ı yeni yapıya uyarlanır.
 
+> **D5 uygulamasında netleşenler:**
+> - **Kernel imajı:** migrate ile backend tek bir imajı paylaşır (`${COMPOSE_PROJECT_NAME}-kernel`). Kernel imajı ve console `pull_policy: build` ile derlenir.
+> - **Backend:** `OSCORPEX_TRUSTED_PROXY=true` ve iki CORS origin'i (`localhost` / `127.0.0.1`, `OSCORPEX_CONSOLE_PORT`) alır. tmpfs'ler: `/tmp` 1g, HOME 512m.
+> - **Sınırlar:** Her serviste bellek ve süreç sayısı (pids) sınırı ile boyutu sınırlı `local` log sürücüsü vardır. CPU sınırı yalnızca değişkenle verilir; Docker, host CPU sayısından büyük değeri reddeder.
+> - **postgres:** `no-new-privileges`, `cap_drop: ALL` ve yalnızca gereken 5 yetenek. sonarqube digest ile sabitlenir.
+> - **Agent havuzu:** Kendi `agent-workspace` volume'ünü kullanır ve host portu yoktur. Worker'ın `/tool` uç noktası kimliksizdir; kimlik doğrulaması izolasyon epic'inde eklenecek.
+> - **Override'lar ikiye ayrılır:**
+>   - `docker-compose.dev.yml` yalnızca dev postgres'i `127.0.0.1:${OSCORPEX_DEV_PG_PORT:-5432}`'de yayınlar.
+>   - Docker socket yeni `docker-compose.pool.yml`'dedir ve `DOCKER_GID` zorunludur.
+>   - README'deki geliştirme komutu sabit `oscorpex_dev` parolasını kullanır.
+> - **Takip işi:** `OSCORPEX_TRUSTED_PROXY`, XFF başlığına backend'in ağlarındaki her eşten güvenir. XFF'e yalnızca nginx'ten güvenilecek.
+
 **Test senaryoları** (`scripts/docker/smoke-compose.sh`, `trap` ile `down -v`):
 1. Sıfırdan `down -v && up --wait`:
    - migrate 0 ile çıkar;

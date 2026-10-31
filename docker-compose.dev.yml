@@ -1,23 +1,25 @@
 # ---------------------------------------------------------------------------
-# Oscorpex — Docker Compose Development Override
+# Oscorpex — Docker Compose Development Override (dev postgres only)
 # ---------------------------------------------------------------------------
-# Usage:
-#   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# Publishes postgres on 127.0.0.1 for a host-run kernel (`pnpm dev`) and tests.
 #
-# This override enables:
-#   - Docker socket mount (required for container pool management)
-#   - Open agent network (for provider API access)
+# Usage (compose interpolates the whole file, so both variables must be set; any value works for local dev):
+#   POSTGRES_PASSWORD=oscorpex_dev OSCORPEX_JWT_SECRET=dev \
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+# Host port 5432 taken? Set OSCORPEX_DEV_PG_PORT (e.g. 55432) and use it in DATABASE_URL.
 #
-# WARNING: Do NOT use this file in production deployments.
+# DEV ONLY: never use this file in production. For the container pool see docker-compose.pool.yml.
 # ---------------------------------------------------------------------------
 
 services:
-  backend:
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - OSCORPEX_ENABLE_CONTAINER_RUNTIME=true
+  postgres:
+    ports:
+      - "127.0.0.1:${OSCORPEX_DEV_PG_PORT:-5432}:5432"
+    # `db` is internal (no host port mapping); dev-host gives postgres a routable network for the published port
+    networks:
+      - db
+      - dev-host
 
 networks:
-  studio-agents:
-    internal: false
+  dev-host:
+    driver: bridge
