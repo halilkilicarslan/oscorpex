@@ -257,6 +257,7 @@ fi
 # ---------------------------------------------------------------- production boot (verify mode)
 # Production boot requires a JWT secret at module load (before the DB phase); a throwaway value is enough.
 JWT_SECRET="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
+[ -z "${GITHUB_ACTIONS:-}" ] || echo "::add-mask::$JWT_SECRET"
 free_port() { node -e 'const s = require("net").createServer().listen(0, () => { console.log(s.address().port); s.close(); })'; }
 # boot_run <logfile> <env assignments...>  — runs `node dist/index.js` (cwd = out) with a 60s alarm; echoes the exit code
 boot_run() {

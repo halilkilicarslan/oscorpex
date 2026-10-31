@@ -307,7 +307,9 @@ fi
 if [ "$HAVE_RUNTIME" = 1 ]; then
 	echo "--- hardened run ---"
 	PGPW="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(18).toString("hex"))')"
+	[ -z "${GITHUB_ACTIONS:-}" ] || echo "::add-mask::$PGPW"
 	JWT="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+	[ -z "${GITHUB_ACTIONS:-}" ] || echo "::add-mask::$JWT"
 	docker network create "$NET" >/dev/null
 	docker volume create "$V_CLAUDE" >/dev/null
 	docker volume create "$V_OSC" >/dev/null
@@ -366,7 +368,7 @@ if [ "$HAVE_RUNTIME" = 1 ]; then
 		done
 		if [ "$health" = healthy ]; then pass "kernel container becomes healthy (hardened flags, verify mode)"; else
 			fail "kernel container health is '${health:-unknown}'"
-			docker logs --tail 15 "$K1" 2>&1 | indent
+			docker logs --tail 15 "$K1" 2>&1 | { grep -viE 'secret|password|database_url|token|api_key' || true; } | indent
 		fi
 
 		if docker exec "$K1" node -e "fetch('http://127.0.0.1:3141/health').then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then

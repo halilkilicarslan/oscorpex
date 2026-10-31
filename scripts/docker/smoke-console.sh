@@ -312,7 +312,9 @@ PORT="$free_port"
 ORIGIN="http://localhost:$PORT"
 BASE="http://127.0.0.1:$PORT"
 JWT_SECRET="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+[ -z "${GITHUB_ACTIONS:-}" ] || echo "::add-mask::$JWT_SECRET"
 PGPW="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(16).toString("hex"))')"
+[ -z "${GITHUB_ACTIONS:-}" ] || echo "::add-mask::$PGPW"
 URL="postgresql://postgres:$PGPW@$PG:5432/oscorpex"
 
 docker network create "$NET" >/dev/null
@@ -363,7 +365,7 @@ for _ in $(seq 1 90); do
 done
 if [ "$health" = healthy ]; then pass "kernel container becomes healthy"; else
 	fail "kernel container health is '${health:-unknown}'"
-	docker logs --tail 15 "$KC" 2>&1 | indent
+	docker logs --tail 15 "$KC" 2>&1 | { grep -viE 'secret|password|database_url|token|api_key' || true; } | indent
 	finish
 fi
 if [ "$(docker exec "$KC" printenv OSCORPEX_TRUSTED_PROXY 2>/dev/null || true)" = true ]; then pass "kernel container has OSCORPEX_TRUSTED_PROXY=true"; else fail "kernel container env lacks OSCORPEX_TRUSTED_PROXY=true"; fi
@@ -383,7 +385,7 @@ for _ in $(seq 1 45); do
 done
 if [ "$health" = healthy ]; then pass "console container becomes healthy (read-only rootfs, cap-drop ALL, no-new-privileges)"; else
 	fail "console container health is '${health:-unknown}'"
-	docker logs --tail 15 "$CC" 2>&1 | indent
+	docker logs --tail 15 "$CC" 2>&1 | { grep -viE 'secret|password|database_url|token|api_key' || true; } | indent
 	finish
 fi
 

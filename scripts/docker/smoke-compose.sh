@@ -193,7 +193,9 @@ done
 echo "--- env file ---"
 PORT="$(node -e 'const s=require("node:net").createServer();s.listen(0,"127.0.0.1",()=>{process.stdout.write(String(s.address().port));s.close()})')"
 PGPW="$(openssl rand -hex 16)"
+[ -z "${GITHUB_ACTIONS:-}" ] || echo "::add-mask::$PGPW"
 JWT_SECRET="$(openssl rand -hex 32)"
+[ -z "${GITHUB_ACTIONS:-}" ] || echo "::add-mask::$JWT_SECRET"
 ORIGIN="http://localhost:$PORT"
 BASE="http://127.0.0.1:$PORT"
 printf 'POSTGRES_PASSWORD=%s\nOSCORPEX_JWT_SECRET=%s\nOSCORPEX_CONSOLE_PORT=%s\nANTHROPIC_API_KEY=\n' "$PGPW" "$JWT_SECRET" "$PORT" >"$ENVF"
@@ -478,7 +480,7 @@ mid="$(cid migrate)"
 mstate="$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "${mid:-none}" 2>/dev/null || echo missing)"
 if [ "$mstate" = exited:0 ]; then pass "migrate exited with code 0"; else
 	fail "migrate state is '$mstate' (expected exited:0)"
-	[ -z "$mid" ] || docker logs --tail 15 "$mid" 2>&1 | indent
+	[ -z "$mid" ] || docker logs --tail 15 "$mid" 2>&1 | { grep -viE 'secret|password|database_url|token|api_key' || true; } | indent
 fi
 psql_in() { dc exec -T postgres sh -c 'psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-${POSTGRES_USER:-postgres}}" -qAt -v ON_ERROR_STOP=1'; }
 echo "select value from public.schema_meta where key = 'init_sql_sha256'" | psql_in >"$WORK/hash.out" 2>"$WORK/hash.err" || true
@@ -486,12 +488,12 @@ if grep -Eq '^[0-9a-f]{64}$' "$WORK/hash.out"; then pass "schema_meta holds init
 if dc exec -T postgres sh -c 'test ! -e /docker-entrypoint-initdb.d/init.sql'; then pass "postgres has no /docker-entrypoint-initdb.d/init.sql"; else fail "postgres container has /docker-entrypoint-initdb.d/init.sql"; fi
 if wait_healthy backend 90; then pass "backend becomes healthy"; else
 	fail "backend is not healthy"
-	dc logs --tail 15 backend 2>&1 | indent
+	dc logs --tail 15 backend 2>&1 | { grep -viE 'secret|password|database_url|token|api_key' || true; } | indent
 	finish
 fi
 if wait_healthy console 45; then pass "console becomes healthy"; else
 	fail "console is not healthy"
-	dc logs --tail 15 console 2>&1 | indent
+	dc logs --tail 15 console 2>&1 | { grep -viE 'secret|password|database_url|token|api_key' || true; } | indent
 	finish
 fi
 

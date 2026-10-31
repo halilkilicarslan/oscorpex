@@ -148,7 +148,7 @@ const [file, want] = process.argv.slice(2);
 const lines = fs.readFileSync(file, "utf8").split("\n");
 const indent = (l) => l.match(/^ */)[0].length;
 const isBlank = (l) => /^\s*(#.*)?$/.test(l);
-const out = (ok, msg) => console.log(`${ok ? "PASS" : "FAIL"}: ${msg}`);
+const out = (ok, msg) => console.log(`${ok ? "PASS" : "FAIL"}: ci.yml: ${msg.replace(/^ci\.yml /, "")}`);
 
 // top-level permissions block: key at column 0
 const permIdx = lines.findIndex((l) => /^permissions\s*:/.test(l));
@@ -209,34 +209,11 @@ out(onIdx >= 0 && risky.length === 0, `ci.yml on: has no pull_request_target/wor
 	out(npx.length === 0, `ci.yml uses no npx (use pnpm exec)${npx.length ? ` (${npx.length} lines, first ${npx.slice(0, 5).join(",")})` : ""}`);
 }
 
-// pnpm/action-setup: no version input, or it equals the pin
-let found = 0;
-const bad = [];
-const versionOf = (l) => {
-	const m = l.match(/^\s*(?:-\s+)?version\s*:\s*["']?([^"'#\s]+)/);
-	return m ? m[1] : null;
-};
-for (let i = 0; i < lines.length; i++) {
-	if (!/uses\s*:\s*pnpm\/action-setup@/.test(lines[i])) continue;
-	found++;
-	const stepIndent = indent(lines[i]);
-	for (let j = i + 1; j < lines.length; j++) {
-		if (isBlank(lines[j])) continue;
-		if (indent(lines[j]) < stepIndent || (/^\s*-\s/.test(lines[j]) && indent(lines[j]) <= stepIndent)) break;
-		const v = versionOf(lines[j]);
-		if (v && v !== want) bad.push(`${v} (line ${j + 1})`);
-	}
-	// `uses` may follow sibling keys of the same "- name:" item
-	for (let j = i - 1; j >= 0; j--) {
-		if (isBlank(lines[j])) continue;
-		if (indent(lines[j]) < stepIndent - 2) break;
-		const v = versionOf(lines[j]);
-		if (v && v !== want) bad.push(`${v} (line ${j + 1})`);
-		if (/^\s*-\s/.test(lines[j])) break;
-	}
+// pnpm/action-setup must be absent: pnpm is installed via corepack (integrity-checked against packageManager)
+{
+	const hits = code.filter(([l]) => /uses\s*:\s*pnpm\/action-setup\b/.test(l)).map((c) => c[1]);
+	out(hits.length === 0, `ci.yml does not use pnpm/action-setup (install pnpm via corepack)${hits.length ? ` (lines ${hits.join(",")})` : ""}`);
 }
-if (found === 0) out(false, "ci.yml has no pnpm/action-setup step");
-else out(bad.length === 0, `pnpm/action-setup has no version input differing from ${want}${bad.length ? `: ${bad.join(", ")}` : ""}`);
 NODE
 	cat "$CI_REPORT"
 	FAILS=$((FAILS + $(grep -c '^FAIL' "$CI_REPORT" || true)))

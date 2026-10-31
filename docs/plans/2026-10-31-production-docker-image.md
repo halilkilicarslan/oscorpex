@@ -275,6 +275,9 @@ F4'te uygulama kısıtlı role (`oscorpex_app`) geçecek ve şema ayrı bir migr
   - **Docker adımları:** `docker compose config` ve Docker derleme adımları `.env` olmadan çalışır; gizli değerler CI'da üretilir (D5 ile birlikte). Eski "Docker build backend/console" adımları D3/D4 Dockerfile'larıyla yenilenir. **Bu adımlar yenilenene kadar CI kırmızı kalır;** D1 öncesinde de kırmızıydı.
   - **Statik analiz:** `actionlint` ve `zizmor` ile workflow taraması yapılır.
   - **`check-toolchain.sh --install`:** yalnızca yerel `docker` driver'lı builder'da çalışır. CI'da `docker/setup-buildx-action`'dan önce koşturulur.
+  - **Uygulamada değişen:** `docker` job'u `setup-buildx-action`, `build-push-action` ve gha cache kullanmaz.
+    - **Neden:** Duman betikleri, bağlamın makineden çıkmaması için yalnızca yerel `docker` driver'ını kabul eder (canary ve `--real` güvencesi). gha cache ise `docker-container` driver'ı gerektirir.
+    - **Bedeli:** İmajlar her koşuda sıfırdan derlenir. Timeout'lar ilk gerçek koşudan elde edilecek süre ölçümüne göre yeniden ayarlanır.
   - **Sürüm kontrolü:** `pmOnFail: ignore` pnpm'in kendi sürüm kontrolünü kapatır. `error` ve `warn` de kilit dosyasına boot belgesini yazar, bu yüzden kullanılamaz. CI'daki `pnpm --version` = 12.6.0 adımı bu açığı kapatır.
   - **Bağımlılık taraması:** CI'a osv-scanner (ya da dependency-review) adımı eklenir. Kilit dosyasının tek belgeli kaldığı `check-toolchain.sh` ile zaten doğrulanır.
 
