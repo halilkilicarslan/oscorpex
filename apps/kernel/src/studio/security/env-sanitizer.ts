@@ -17,8 +17,14 @@ const SENSITIVE_PATTERNS = [
 	/^OSCORPEX_JWT_SECRET$/i,
 	/^OSCORPEX_API_KEY$/i,
 	/^OSCORPEX_VAULT_KEY$/i,
-	/_SECRET$/i,
+	/SECRET/i,
+	/PASSWD/i,
 	/_TOKEN$/i,
+	/_API_KEY$/i,
+	/_PRIVATE_KEY$/i,
+	/PASSWORD/i,
+	/CREDENTIAL/i,
+	/ADMIN.*KEY/i,
 	/^ANTHROPIC_API_KEY$/i,
 	/^OPENAI_API_KEY$/i,
 	/^GITHUB_TOKEN$/i,
@@ -70,6 +76,8 @@ const BASE_ALLOWLIST = new Set([
 	"CI",
 	"FORCE_COLOR",
 	"NO_COLOR",
+	"COREPACK_HOME",
+	"COREPACK_DEFAULT_TO_LATEST",
 	"HTTP_PROXY",
 	"HTTPS_PROXY",
 	"NO_PROXY",
@@ -97,8 +105,33 @@ export interface BuildChildEnvOptions {
 	allow?: string[];
 }
 
+/**
+ * Names that match the broad credential patterns but only carry a file PATH (no secret value). Cloud SDKs inside
+ * tenant tooling need them, so they are exempt from the deny patterns.
+ */
+const SENSITIVE_EXEMPT = new Set(["GOOGLE_APPLICATION_CREDENTIALS", "AWS_SHARED_CREDENTIALS_FILE"]);
+
 function isSensitive(key: string): boolean {
+	if (SENSITIVE_EXEMPT.has(key)) return false;
 	return SENSITIVE_PATTERNS.some((p) => p.test(key));
+}
+
+const PROVIDER_ENV_KEYS: Record<string, string[]> = {
+	gemini: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+	cursor: ["CURSOR_API_KEY"],
+};
+
+/**
+ * API key variables a provider CLI may receive. Claude/Codex are deliberately empty: their keys are only ever passed
+ * explicitly (agent-runtime), because an inherited ANTHROPIC_API_KEY would override OAuth billing.
+ */
+export function providerEnvKeys(provider: string): string[] {
+	return [...(PROVIDER_ENV_KEYS[provider] ?? [])];
+}
+
+/** `extra` entries for the given keys that are set in `source`. */
+export function pickEnv(keys: string[], source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+	return Object.fromEntries(keys.flatMap((k) => (source[k] !== undefined ? [[k, source[k] as string]] : [])));
 }
 
 export function buildSafeChildEnv(options: BuildChildEnvOptions): NodeJS.ProcessEnv {
@@ -138,6 +171,13 @@ export function buildSafeChildEnv(options: BuildChildEnvOptions): NodeJS.Process
 	}
 
 	return result as NodeJS.ProcessEnv;
+}
+
+/** Provider-profile child env carrying only that provider's own API keys (for adapters' runCLI env). */
+export function providerChildEnv(provider: string): Record<string, string> {
+	const keys = providerEnvKeys(provider);
+	const env = buildSafeChildEnv({ profile: "provider", extra: pickEnv(keys), allow: keys });
+	return Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => typeof e[1] === "string"));
 }
 
 /** Assert that an env object doesn't contain obvious sensitive values */

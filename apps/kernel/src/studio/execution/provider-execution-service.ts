@@ -31,6 +31,7 @@ import {
 	recordProviderFallback,
 	startProviderTelemetry,
 } from "../provider-telemetry.js";
+import { providerChildEnv } from "../security/env-sanitizer.js";
 import type { AgentCliTool } from "../types.js";
 
 const log = createLogger("provider-execution-service");
@@ -210,6 +211,7 @@ export class ProviderExecutionService {
 					signal,
 					allowedTools,
 					onLog,
+					env: providerChildEnv(adapterName),
 				});
 
 				// Mark success in provider state

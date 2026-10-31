@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { createLogger } from "../logger.js";
 import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { validateCommitMessage } from "./commit-message-policy.js";
+import { gitSafeEnv } from "./git-safe-config.js";
 import type { CommitProposal, GitCheckpoint } from "./git-types.js";
 import { scanStagedForSecrets } from "./secret-scan.js";
 
@@ -36,11 +37,11 @@ export function createCommitProposal(opts: {
 	}
 
 	// --- Diff snapshot ---
-	const diffFull = execFileSync("git", ["diff", "--cached"], {
+	const diffFull = execFileSync("git", ["diff", "--no-ext-diff", "--no-textconv", "--cached"], {
 		cwd: opts.repoPath,
 		encoding: "utf8",
 		timeout: 30_000,
-		env: buildSafeChildEnv({ profile: "build_tool" }),
+		env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
 	});
 
 	// --- Secret scan (P9-D) ---

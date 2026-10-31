@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { streamWithCLI } from "./legacy/cli-runtime.js";
 import { createLogger } from "./logger.js";
-import { buildSafeChildEnv } from "./security/env-sanitizer.js";
+import { buildSafeChildEnv, pickEnv, providerEnvKeys } from "./security/env-sanitizer.js";
 const log = createLogger("planner-cli");
 
 export type PlannerCLIProvider = "claude-code" | "codex" | "gemini";
@@ -198,7 +198,11 @@ function streamWithCodex(
 			cwd: repoPath,
 			stdio: ["pipe", "pipe", "pipe"],
 			shell: false,
-			env: buildSafeChildEnv({ profile: "provider" }),
+			env: buildSafeChildEnv({
+				profile: "provider",
+				extra: pickEnv(providerEnvKeys("codex")),
+				allow: providerEnvKeys("codex"),
+			}),
 		},
 	);
 
@@ -277,7 +281,11 @@ function streamWithGemini(
 		cwd: repoPath,
 		stdio: ["ignore", "pipe", "pipe"],
 		shell: false,
-		env: buildSafeChildEnv({ profile: "provider" }),
+		env: buildSafeChildEnv({
+			profile: "provider",
+			extra: pickEnv(providerEnvKeys("gemini")),
+			allow: providerEnvKeys("gemini"),
+		}),
 	});
 
 	let fullText = "";

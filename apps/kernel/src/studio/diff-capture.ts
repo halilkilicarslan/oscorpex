@@ -5,6 +5,7 @@
 
 import { execFileSync } from "node:child_process";
 import { insertTaskDiffs } from "./db.js";
+import { gitSafeEnv } from "./git/git-safe-config.js";
 import { createLogger } from "./logger.js";
 import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 import type { TaskOutput } from "./types.js";
@@ -46,20 +47,24 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 		if (diffType === "created") {
 			// For new files — use execFileSync with array args to prevent command injection
 			try {
-				diff = execFileSync("git", ["diff", "--no-color", "--", "/dev/null", filePath], {
-					cwd: repoPath,
-					encoding: "utf-8",
-					timeout: 5000,
-					env: buildSafeChildEnv({ profile: "build_tool" }),
-				}).trim();
-			} catch {
-				// Fallback: git show
-				try {
-					diff = execFileSync("git", ["show", `HEAD:${filePath}`], {
+				diff = execFileSync(
+					"git",
+					["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--", "/dev/null", filePath],
+					{
 						cwd: repoPath,
 						encoding: "utf-8",
 						timeout: 5000,
-						env: buildSafeChildEnv({ profile: "build_tool" }),
+						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+					},
+				).trim();
+			} catch {
+				// Fallback: git show
+				try {
+					diff = execFileSync("git", ["show", "--no-ext-diff", "--no-textconv", `HEAD:${filePath}`], {
+						cwd: repoPath,
+						encoding: "utf-8",
+						timeout: 5000,
+						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
 					}).trim();
 				} catch {
 					diff = "";
@@ -72,21 +77,25 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 			}
 		} else {
 			// For modified files — array args prevent shell injection via filePath
-			diff = execFileSync("git", ["diff", "--no-color", "HEAD", "--", filePath], {
+			diff = execFileSync("git", ["diff", "--no-ext-diff", "--no-textconv", "--no-color", "HEAD", "--", filePath], {
 				cwd: repoPath,
 				encoding: "utf-8",
 				timeout: 5000,
-				env: buildSafeChildEnv({ profile: "build_tool" }),
+				env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
 			}).trim();
 
 			if (!diff) {
 				// Try staged diff
-				diff = execFileSync("git", ["diff", "--no-color", "--cached", "--", filePath], {
-					cwd: repoPath,
-					encoding: "utf-8",
-					timeout: 5000,
-					env: buildSafeChildEnv({ profile: "build_tool" }),
-				}).trim();
+				diff = execFileSync(
+					"git",
+					["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--cached", "--", filePath],
+					{
+						cwd: repoPath,
+						encoding: "utf-8",
+						timeout: 5000,
+						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+					},
+				).trim();
 			}
 		}
 

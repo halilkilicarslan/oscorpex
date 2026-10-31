@@ -10,11 +10,12 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { claudeSafeSettingArgs } from "@oscorpex/provider-sdk";
 import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { execute, query, queryOne } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
-import { buildSafeChildEnv } from "./security/env-sanitizer.js";
+import { buildSafeChildEnv, pickEnv, providerEnvKeys } from "./security/env-sanitizer.js";
 import type { AgentProcessRecord, AgentProcessStatus, AgentRun } from "./types.js";
 const log = createLogger("agent-runtime");
 
@@ -88,10 +89,10 @@ function buildCommand(
 		case "claude-code":
 			if (taskPrompt) {
 				// Görev istemiyle yazdırma modunda çalıştır
-				return { cmd: "claude", args: ["--print", taskPrompt] };
+				return { cmd: "claude", args: [...claudeSafeSettingArgs(), "--print", taskPrompt] };
 			}
 			// İstemi yoksa etkileşimli mod (terminal'e bağlı değil — çıktı akışı okunur)
-			return { cmd: "claude", args: [] };
+			return { cmd: "claude", args: [...claudeSafeSettingArgs()] };
 
 		case "codex":
 			if (taskPrompt) {
@@ -173,7 +174,9 @@ export async function startAgent(
 			extra: {
 				...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
 				...(process.env.OPENAI_API_KEY ? { OPENAI_API_KEY: process.env.OPENAI_API_KEY } : {}),
+				...pickEnv(providerEnvKeys(agent.cliTool)),
 			},
+			allow: providerEnvKeys(agent.cliTool),
 		}),
 		// stdio akışlarını ayrı tutarak stdout/stderr'ı dinle
 		stdio: ["pipe", "pipe", "pipe"],

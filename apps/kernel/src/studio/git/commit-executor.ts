@@ -5,6 +5,7 @@ import { createLogger } from "../logger.js";
 import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { enforceToolPolicy } from "../security/tool-policy-enforcer.js";
 import { assertInsideWorkspace } from "../security/workspace-resolver.js";
+import { gitSafeEnv } from "./git-safe-config.js";
 import type { CommitProposal, GitCheckpoint } from "./git-types.js";
 
 const log = createLogger("commit-executor");
@@ -45,7 +46,7 @@ export function applyCommit(opts: {
 			cwd: repoPath,
 			encoding: "utf8",
 			timeout: 10_000,
-			env: buildSafeChildEnv({ profile: "build_tool" }),
+			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
 		}).trim();
 	} catch (err) {
 		return { status: "failed", error: `Failed to read HEAD: ${err instanceof Error ? err.message : String(err)}` };
@@ -88,14 +89,14 @@ export function applyCommit(opts: {
 			cwd: repoPath,
 			encoding: "utf8",
 			timeout: 30_000,
-			env: buildSafeChildEnv({ profile: "build_tool" }),
+			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
 		});
 
 		const resultSha = execFileSync("git", ["rev-parse", "HEAD"], {
 			cwd: repoPath,
 			encoding: "utf8",
 			timeout: 10_000,
-			env: buildSafeChildEnv({ profile: "build_tool" }),
+			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
 		}).trim();
 
 		log.info({ proposalId: proposal.id, resultSha }, "[commit-executor] Commit applied successfully");

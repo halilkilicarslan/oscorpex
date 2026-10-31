@@ -247,7 +247,7 @@ if [ "$INSTALL" -eq 1 ]; then
 	echo "--- install check ---"
 	# 1. never ship real files into a builder through a regressed ignore file
 	if ! "$REPO_ROOT/scripts/docker/check-context.sh" --real >"$WORK/context-real.log" 2>&1; then
-		grep -E '^(FAIL|RESULT)' "$WORK/context-real.log" | head -n 12 | sed 's/^/        /'
+		grep -m 12 -E '^(FAIL|RESULT)' "$WORK/context-real.log" | sed 's/^/        /'
 		fail "check-context.sh --real failed: refusing to run the install probes (real files could reach the builder)"
 		echo "---"
 		echo "RESULT: $FAILS check(s) failed"
@@ -255,7 +255,7 @@ if [ "$INSTALL" -eq 1 ]; then
 	fi
 	pass "check-context.sh --real passed"
 	# 2. only a local daemon builder: the context must not leave this machine
-	driver="$(docker buildx inspect 2>/dev/null | awk '/^Driver:/ { print $2; exit }')"
+	driver="$(docker buildx inspect 2>/dev/null | awk '/^Driver:/ && !d { print $2; d = 1 }')"
 	if [ "$driver" != docker ]; then
 		fail "current buildx builder driver is '${driver:-unknown}', expected 'docker' (local daemon); refusing to send the context"
 		echo "---"

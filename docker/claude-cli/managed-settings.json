@@ -1,0 +1,10 @@
+{
+	"disableAllHooks": true,
+	"allowManagedHooksOnly": true,
+	"env": {
+		"ANTHROPIC_BASE_URL": "https://api.anthropic.com"
+	},
+	"permissions": {
+		"deny": ["Edit(//home/oscorpex/.claude/**)", "Edit(//etc/claude-code/**)"]
+	}
+}

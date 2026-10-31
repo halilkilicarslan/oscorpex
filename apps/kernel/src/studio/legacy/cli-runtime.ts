@@ -7,6 +7,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { claudeSafeSettingArgs } from "@oscorpex/provider-sdk";
 import { agentRuntime } from "../agent-runtime.js";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
@@ -239,6 +240,7 @@ export function executeWithCLI(opts: {
 			allowedTools.join(","),
 			"--disable-slash-commands", // no skills/slash commands
 			"--no-session-persistence", // don't save session to disk
+			...claudeSafeSettingArgs(), // ignore user-level settings and unlisted MCP config
 			"--max-budget-usd",
 			String(Math.max(2, (timeoutMs / 60000) * 1)), // ~$1 per minute, min $2
 		];
@@ -589,6 +591,8 @@ export function streamWithCLI(
 		systemPrompt,
 		"--disable-slash-commands",
 		"--no-session-persistence",
+		// lockdown already passes an empty --setting-sources (stricter than project,local)
+		...(lockdown ? [] : claudeSafeSettingArgs()),
 		"--max-budget-usd",
 		"2",
 	];

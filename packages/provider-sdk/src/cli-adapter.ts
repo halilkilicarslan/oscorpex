@@ -15,6 +15,7 @@ export interface CLIAdapterOptions {
 	model?: string;
 	signal?: AbortSignal;
 	onLog?: (line: string) => void;
+	env?: Record<string, string>;
 }
 
 export interface CLIExecutionResult {
@@ -58,4 +59,11 @@ export function hasFullToolAccess(allowedTools?: string[]): boolean {
 		allowedTools.length === FULL_TOOL_ACCESS.length &&
 		FULL_TOOL_ACCESS.every((tool) => allowedTools.includes(tool))
 	);
+}
+/**
+ * Claude CLI flags that make a run ignore user-level settings (hooks, MCP servers) and any MCP config that is not
+ * explicitly passed. The kernel image shares one ~/.claude volume between runs, so user settings are not trusted.
+ */
+export function claudeSafeSettingArgs(): string[] {
+	return ["--setting-sources", "project,local", "--strict-mcp-config"];
 }

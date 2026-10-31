@@ -3,6 +3,7 @@
 // Docker container operations for agent runtimes
 // ---------------------------------------------------------------------------
 
+import { claudeSafeSettingArgs } from "@oscorpex/provider-sdk";
 import Dockerode from "dockerode";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
@@ -199,7 +200,13 @@ class ContainerManager {
 		agentId: string,
 		prompt: string,
 	): Promise<{ exitCode: number; output: string }> {
-		return this.execCommand(projectId, agentId, ["claude", "--dangerously-skip-permissions", "--message", prompt]);
+		return this.execCommand(projectId, agentId, [
+			"claude",
+			...claudeSafeSettingArgs(),
+			"--dangerously-skip-permissions",
+			"--message",
+			prompt,
+		]);
 	}
 
 	// -------------------------------------------------------------------------

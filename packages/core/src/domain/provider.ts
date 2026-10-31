@@ -14,6 +14,8 @@ export interface ProviderExecutionInput {
 	contextRefs?: string[];
 	signal?: AbortSignal;
 	onLog?: (line: string) => void;
+	/** Sanitized child-process environment; adapters hand it to the CLI (runCLI otherwise starts with an empty env). */
+	env?: Record<string, string>;
 }
 
 export interface ProviderExecutionUsage {

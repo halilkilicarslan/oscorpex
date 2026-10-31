@@ -497,7 +497,7 @@ check_secrets() { # check_secrets <ctx>
 			pass "$LABEL: none of the $(wc -l <"$WORK/ctx-canaries.txt" | tr -d ' ') planted canaries reached the context"
 		else
 			fail "$LABEL: $n planted canaries reached the context (first 10):"
-			printf '%s\n' "$hits" | head -n 10 | sed 's/^/        /'
+			head -n 10 <<<"$hits" | sed 's/^/        /'
 		fi
 	fi
 }
@@ -559,7 +559,7 @@ run_context() {
 ^(packages|adapters)/[^/]+/src/.+\.tsx?$
 ^(packages|adapters)/[^/]+/tsconfig[^/]*\.json$
 ^(packages|adapters)/[^/]+/tsdown\.config\.ts$
-^docker/claude-cli/(package\.json|package-lock\.json)$
+^docker/claude-cli/(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|managed-settings\.json)$
 EOF
 		check_allowed
 		check_workspace_manifests
@@ -569,6 +569,10 @@ EOF
 		require apps/kernel/tsconfig.json
 		require apps/kernel/scripts/init.sql
 		require apps/kernel/scripts/admin-grant.ts
+		require docker/claude-cli/package.json
+		require docker/claude-cli/pnpm-lock.yaml
+		require docker/claude-cli/pnpm-workspace.yaml
+		require docker/claude-cli/managed-settings.json
 		for d in $(workspace_dirs); do
 			case "$d" in
 			packages/* | adapters/*)

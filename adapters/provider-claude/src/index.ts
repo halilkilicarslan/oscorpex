@@ -13,6 +13,7 @@ import {
 	classifyExit,
 	checkBinaryAsync,
 	buildToolGovernanceSection,
+	claudeSafeSettingArgs,
 	hasFullToolAccess,
 	calculateCost,
 } from "@oscorpex/provider-sdk";
@@ -95,6 +96,7 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
 			(input.allowedTools?.length ? input.allowedTools : ["Read", "Edit", "Write", "Bash", "Glob", "Grep"]).join(","),
 			"--disable-slash-commands",
 			"--no-session-persistence",
+			...claudeSafeSettingArgs(),
 			"--max-budget-usd",
 			String(Math.max(2, (timeoutMs / 60000) * 1)),
 		];
@@ -108,6 +110,7 @@ export class ClaudeCodeAdapter implements ProviderAdapter {
 			binary: this.binary,
 			args,
 			cwd: input.repoPath,
+			env: input.env,
 			timeoutMs,
 			signal: input.signal,
 			stdin: fullPrompt,

@@ -36,7 +36,11 @@ export function assertNoTokenishValues(value: unknown, seen = new Set<unknown>()
 	}
 }
 
+const IS_PRODUCTION = () => process.env.NODE_ENV === "production";
+
+/** Production never probes HOME-based directories: HOME is a tenant-reachable volume in the container image. */
 function commonPaths(): string[] {
+	if (IS_PRODUCTION()) return ["/usr/local/bin", "/usr/bin"];
 	const home = homedir();
 	return [
 		`${home}/.local/bin`,
@@ -74,9 +78,13 @@ function findInCommonPaths(binary: string): string | undefined {
 
 export function locateBinary(binary: string): Promise<string | undefined> {
 	if (!/^[a-zA-Z0-9_-]+$/.test(binary)) return Promise.resolve(undefined);
+	// An operator-configured path (the image sets CLAUDE_CLI_PATH) wins over any discovery.
+	const configured = process.env[`${binary.toUpperCase().replace(/-/g, "_")}_CLI_PATH`];
+	if (configured && existsSync(configured)) return Promise.resolve(configured);
 	return new Promise((resolve) => {
 		const shell = process.env.SHELL || "/bin/zsh";
-		const proc = spawn(shell, ["-lc", `command -v ${binary}`], {
+		// A login shell sources profile files, which tenants can write; production uses a plain non-login shell.
+		const proc = spawn(shell, [IS_PRODUCTION() ? "-c" : "-lc", `command -v ${binary}`], {
 			stdio: ["ignore", "pipe", "ignore"],
 			env: buildSafeChildEnv({ profile: "build_tool" }),
 		});

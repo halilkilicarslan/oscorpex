@@ -17,7 +17,7 @@ import { executeWithCLI, isClaudeCliAvailable } from "../cli-runtime.js";
 import { createLogger } from "../logger.js";
 import { getFeatureFlags } from "../performance-config.js";
 import type { ProviderCapabilities } from "../provider-runtime-cache.js";
-import { buildSafeChildEnv } from "../security/env-sanitizer.js";
+import { buildSafeChildEnv, pickEnv, providerChildEnv, providerEnvKeys } from "../security/env-sanitizer.js";
 import type { AgentCliTool } from "../types.js";
 const log = createLogger("cli-adapter");
 
@@ -101,7 +101,11 @@ export class CodexAdapter implements CLIAdapter {
 			const proc = spawn("codex", args, {
 				cwd: opts.repoPath,
 				stdio: ["pipe", "pipe", "pipe"],
-				env: buildSafeChildEnv({ profile: "provider" }),
+				env: buildSafeChildEnv({
+					profile: "provider",
+					extra: pickEnv(providerEnvKeys("codex")),
+					allow: providerEnvKeys("codex"),
+				}),
 			});
 
 			let stdout = "";
@@ -220,7 +224,11 @@ export class CursorAdapter implements CLIAdapter {
 			const proc = spawn("cursor", args, {
 				cwd: opts.repoPath,
 				stdio: ["pipe", "pipe", "pipe"],
-				env: buildSafeChildEnv({ profile: "provider" }),
+				env: buildSafeChildEnv({
+					profile: "provider",
+					extra: pickEnv(providerEnvKeys("cursor")),
+					allow: providerEnvKeys("cursor"),
+				}),
 			});
 
 			let stdout = "";
@@ -328,6 +336,7 @@ class RegistryBackedCLIAdapter implements CLIAdapter {
 			model: opts.model,
 			signal: opts.signal,
 			onLog: opts.onLog,
+			env: opts.env ?? providerChildEnv(this.name),
 		});
 
 		return {

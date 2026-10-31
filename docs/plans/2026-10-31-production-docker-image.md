@@ -78,7 +78,7 @@ F4'te uygulama kısıtlı role (`oscorpex_app`) geçecek ve şema ayrı bir migr
 > **D1 uygulamasında netleşenler:**
 > - **`.env.example` da dışlanır.** İmaj derlemesi ona ihtiyaç duymuyor.
 > - **Ortak dışlama bloğu:** Her ignore dosyası (kök, `apps/console/Dockerfile.dockerignore`, `docker/coder-agent/.dockerignore`) aynı "common-deny" bloğuyla biter. Blok sır ve yerel durum adlarını kapsar: `.env*`, `.claude*`, `.npmrc`, `.netrc`, anahtar ve sertifika uzantıları, `id_*`, `*.db`, `*.log`, editör dizinleri, testler, `src` altındaki eski `.js` çıktıları. Bloğun her dosyada aynı olduğu test edilir.
-> - **`docker/claude-cli`'dan yalnızca iki manifest alınır:** `package.json` ve `package-lock.json`.
+> - **`docker/claude-cli`'dan yalnızca manifest ve kilit dosyaları alınır.** D3'te bunlar `package.json`, `pnpm-lock.yaml` ve `pnpm-workspace.yaml` oldu.
 > - **Console:** `public/` dizininden yalnızca `*.svg` alınır.
 > - **Eski bağlamlar:** Eski `apps/console/.dockerignore` her şeyi dışlar. `coder-agent` bağlamı da artık izin listesiyle korunur.
 > - **pnpm 12 kilit dosyası:** `packageManager` alanı eklenince pnpm 12, `pnpm-lock.yaml`'ın başına ayrı bir "boot" belgesi yazar (`packageManagerDependencies` ve pnpm ikililerinin bütünlük özetleri). Bu belge yalnızca ilk belgeyi okuyan tarayıcıları körleştirir: osv-scanner, HEAD'deki kilit dosyasında 676 paket ve 29 açıklı paket görüyor, boot belgeli dosyada ise 15 paket ve 0 açıklı paket. Bu yüzden boot belgesi commit'lenmez. `pnpm-workspace.yaml`'a `pmOnFail: ignore` eklenir; kilit dosyası tek belgeli kalır. Sürüm zorlaması Docker'da corepack'te (sha512 sabitleme), CI'da şimdilik `action-setup`'ın tam sürümünde, D6'dan itibaren corepack'te olur.
@@ -136,6 +136,21 @@ F4'te uygulama kısıtlı role (`oscorpex_app`) geçecek ve şema ayrı bir migr
   - `ENTRYPOINT ["tini","--"]`, `CMD ["node","dist/index.js"]`.
   - `HEALTHCHECK`: node fetch ile `/health`.
 - **Sağlayıcı CLI'ları:** Claude dışındakiler `ARG` ile isteğe bağlı (varsayılan kapalı).
+
+> **D3 öncesi uyarlamalar:**
+> - **Claude CLI kurulumu pnpm ile yapılır** (CLAUDE.md: yalnızca pnpm). `docker/claude-cli/` dizininde üç dosya bulunur: `package.json`, `pnpm-lock.yaml` ve `pnpm-workspace.yaml`. Dizin kökle aynı `packageManager` sabitlemesini, `pmOnFail: ignore` ayarını ve CLI'ın postinstall'u için `allowBuilds` iznini kullanır. Sürüm `@anthropic-ai/claude-code@2.1.302` (en az iki haftalık). Kurulum `--frozen-lockfile` ile yapılır. `npm ci` ve `package-lock.json` kullanılmaz.
+> - **`~/.claude` volume'ü:** CLI giriş durumunun bir kısmını HOME kökündeki `~/.claude.json`'da tutar. Bu yüzden `CLAUDE_CONFIG_DIR=/home/oscorpex/.claude` ayarlanır ve yalnızca bu dizin kalıcı volume olur. `/home/oscorpex`'in geri kalanı tmpfs'tir (uid 1001, `0700`). Kernel'in `provider` env profili `CLAUDE_CONFIG_DIR` ve `DISABLE_AUTOUPDATER` değişkenlerini CLI'a geçirir.
+> - **Diğer sağlayıcı CLI'ları:** Codex, Gemini vb. için `ARG` ile isteğe bağlı kurulum bu fazda yapılmaz. Kilit dosyası olmadan kurmak bütünlük garantisini bozar. Bu iş, her CLI için ayrı kilit dosyasıyla ayrı bir iş olarak ele alınacak.
+> - **`NODE_ENV=production` imaja sabitlenir** (D2 güvenlik incelemesi).
+>
+> **D3 incelemesinden çıkan kararlar (kullanıcı onaylı):**
+> - **Paylaşılan `~/.claude` volume'ünde bütünlük riski şimdi azaltılır.** Prompt injection'a uğrayan bir agent hook, `settings.json` ya da `CLAUDE.md` yazıp sonraki tüm tenant'larda kalıcı kod çalıştırabilir. Önlemler:
+>   - Tüm `claude` çağrılarına `--setting-sources project,local --strict-mcp-config` verilir. Kullanıcı düzeyindeki ayarlar ve MCP yüklenmez; yerelde de Oscorpex agent'ları kişisel `~/.claude/settings.json`'ı kullanmaz.
+>   - İmaja root'a ait bir `/etc/claude-code/managed-settings.json` eklenir.
+> - **Aynı uid kabul edilmiş kalan risktir.** Kernel ve agent CLI aynı uid'le (1001) çalışır. Bir agent `/proc` üzerinden kernel'in ortam değişkenlerini (`DATABASE_URL`, JWT sırrı) okuyabilir; tenant repoları da birbirini okuyabilir. Host kurulumunda da durum aynıdır. Gerçek çözüm (ayrı uid ya da sandbox) tenant workload izolasyonu epic'indedir.
+> - **Env filtresi genişletilir.** `provider` profili deny-list ile çalışır; filtre admin anahtarlarını (`ANTHROPIC_ADMIN_API_KEY` vb.) ve `*_PASSWORD`, `*CREDENTIAL*` ile genel anahtar desenlerini de engelleyecek şekilde genişletilir. Sağlayıcı anahtarları zaten `extra` ile açıkça verilir.
+> - **Git:** Kernel'in git çağrıları tenant repolarındaki hook'ları çalıştırmaz (`core.hooksPath=/dev/null`, `core.fsmonitor=false`).
+> - **Runtime ayarları:** `tini -g` kullanılır. Runtime imajında `corepack enable` (pnpm shim'i) çalıştırılır. tmpfs'ler `exec` ve boyut sınırıyla bağlanır.
 
 **Test senaryoları** (`scripts/docker/smoke-kernel.sh`):
 1. İmaj `--no-cache` ile derlenir.

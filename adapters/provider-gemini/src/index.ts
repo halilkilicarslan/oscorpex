@@ -96,6 +96,7 @@ export class GeminiAdapter implements ProviderAdapter {
 			binary: this.binary,
 			args,
 			cwd: input.repoPath,
+			env: input.env,
 			timeoutMs,
 			signal: input.signal,
 			stdin: fullPrompt,

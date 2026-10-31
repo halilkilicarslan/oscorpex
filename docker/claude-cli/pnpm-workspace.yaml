@@ -1,0 +1,4 @@
+# Keep pnpm-lock.yaml single-document (same reason as the root workspace); corepack enforces the pinned version.
+pmOnFail: ignore
+allowBuilds:
+  '@anthropic-ai/claude-code': true

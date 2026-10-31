@@ -12,7 +12,7 @@ export type { ProviderAdapter } from "@oscorpex/core";
 
 // CLI-specific types
 export type { CLIAdapter, CLIAdapterOptions, CLIExecutionResult } from "./cli-adapter.js";
-export { FULL_TOOL_ACCESS, buildToolGovernanceSection, hasFullToolAccess } from "./cli-adapter.js";
+export { FULL_TOOL_ACCESS, buildToolGovernanceSection, claudeSafeSettingArgs, hasFullToolAccess } from "./cli-adapter.js";
 
 // CLI runner — shared spawn wrapper for all provider adapters
 export type {

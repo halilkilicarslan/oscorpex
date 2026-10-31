@@ -15,8 +15,9 @@ import type {
 	LanguageModelV3StreamPart,
 	LanguageModelV3StreamResult,
 } from "@ai-sdk/provider";
+import { claudeSafeSettingArgs } from "@oscorpex/provider-sdk";
 import { createLogger } from "./logger.js";
-import { buildSafeChildEnv } from "./security/env-sanitizer.js";
+import { buildSafeChildEnv, pickEnv, providerEnvKeys } from "./security/env-sanitizer.js";
 import type { ProviderCliTool } from "./types.js";
 const log = createLogger("cli-language-model");
 
@@ -109,6 +110,7 @@ function buildInvocation(tool: ProviderCliTool, model: string, system: string): 
 				"bypassPermissions",
 				"--disable-slash-commands",
 				"--no-session-persistence",
+				...claudeSafeSettingArgs(),
 			];
 			if (system) args.push("--system-prompt", system);
 			return {
@@ -203,7 +205,11 @@ async function runCli(
 	return new Promise((resolvePromise, rejectPromise) => {
 		const proc = spawn(bin, args, {
 			stdio: ["pipe", "pipe", "pipe"],
-			env: buildSafeChildEnv({ profile: "provider" }),
+			env: buildSafeChildEnv({
+				profile: "provider",
+				extra: pickEnv(providerEnvKeys(tool)),
+				allow: providerEnvKeys(tool),
+			}),
 		});
 
 		let stdout = "";

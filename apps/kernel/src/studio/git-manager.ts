@@ -6,6 +6,7 @@
 import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, normalize, relative, sep } from "node:path";
 import { type SimpleGit, simpleGit } from "simple-git";
+import { gitSafeEnv } from "./git/git-safe-config.js";
 import { createLogger } from "./logger.js";
 import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 import { enforceGitPolicy } from "./security/git-file-policy.js";
@@ -14,7 +15,7 @@ const log = createLogger("git-manager");
 
 class GitManager {
 	private getGit(repoPath: string): SimpleGit {
-		return simpleGit(repoPath).env(buildSafeChildEnv({ profile: "build_tool" }) as Record<string, string>);
+		return simpleGit(repoPath).env(gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })) as Record<string, string>);
 	}
 
 	// -------------------------------------------------------------------------
@@ -242,15 +243,15 @@ class GitManager {
 		const git = this.getGit(projectPath);
 
 		if (ref) {
-			return git.diff([ref]);
+			return git.diff(["--no-ext-diff", "--no-textconv", ref]);
 		}
 		// Unstaged + staged changes
-		return git.diff(["HEAD"]);
+		return git.diff(["--no-ext-diff", "--no-textconv", "HEAD"]);
 	}
 
 	async getDiffBetween(projectPath: string, from: string, to: string): Promise<string> {
 		const git = this.getGit(projectPath);
-		return git.diff([`${from}...${to}`]);
+		return git.diff(["--no-ext-diff", "--no-textconv", `${from}...${to}`]);
 	}
 
 	// -------------------------------------------------------------------------

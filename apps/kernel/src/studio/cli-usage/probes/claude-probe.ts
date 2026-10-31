@@ -6,9 +6,15 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { claudeSafeSettingArgs } from "@oscorpex/provider-sdk";
 import { createLogger } from "../../logger.js";
-import { sanitizeError, runCommand } from "../binary-locator.js";
-import { claudeOAuthNeedsRefresh, loadClaudeOAuthCredentials, refreshClaudeOAuthToken, CLAUDE_OAUTH_CLIENT_ID } from "../oauth.js";
+import { runCommand, sanitizeError } from "../binary-locator.js";
+import {
+	CLAUDE_OAUTH_CLIENT_ID,
+	claudeOAuthNeedsRefresh,
+	loadClaudeOAuthCredentials,
+	refreshClaudeOAuthToken,
+} from "../oauth.js";
 import type {
 	AuthStatus,
 	CLIProviderDef,
@@ -267,7 +273,7 @@ async function probeClaudeAdminAPI(): Promise<GlobalUsageSnapshot | null> {
 	const records: unknown[] = [];
 	let page: string | undefined;
 	for (let i = 0; i < 5; i++) {
-		const body = await fetchClaudeAdminUsagePage(adminKey, page) as Record<string, unknown>;
+		const body = (await fetchClaudeAdminUsagePage(adminKey, page)) as Record<string, unknown>;
 		if (Array.isArray(body.data)) records.push(...body.data);
 		if (!body.has_more || !body.next_page) break;
 		page = body.next_page as string;
@@ -518,7 +524,7 @@ export async function probeClaude(
 
 	// Strategy 3: CLI /usage (fragile — parses text output)
 	try {
-		const usage = await runCommand(binaryPath, ["/usage", "--allowed-tools", ""], {
+		const usage = await runCommand(binaryPath, ["/usage", "--allowed-tools", "", ...claudeSafeSettingArgs()], {
 			timeoutMs: 20_000,
 			envExclusions: ["CLAUDE_CODE_OAUTH_TOKEN"],
 		});
@@ -537,7 +543,7 @@ export async function probeClaude(
 
 	// Strategy 4: CLI /cost (for API billing accounts)
 	try {
-		const cost = await runCommand(binaryPath, ["/cost", "--allowed-tools", ""], {
+		const cost = await runCommand(binaryPath, ["/cost", "--allowed-tools", "", ...claudeSafeSettingArgs()], {
 			timeoutMs: 15_000,
 			envExclusions: ["CLAUDE_CODE_OAUTH_TOKEN"],
 		});

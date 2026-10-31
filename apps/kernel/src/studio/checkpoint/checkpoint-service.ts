@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { gitSafeEnv } from "../git/git-safe-config.js";
 import { createLogger } from "../logger.js";
 import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { ToolPolicyDeniedError, enforceToolPolicy } from "../security/tool-policy-enforcer.js";
@@ -98,7 +99,7 @@ async function applyRollback(checkpoint: CheckpointRecord): Promise<RollbackResu
 						timeout: 30_000,
 						encoding: "utf8",
 						stdio: "pipe",
-						env: buildSafeChildEnv({ profile: "build_tool" }),
+						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
 					});
 				} catch (err) {
 					return {

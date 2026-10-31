@@ -19,9 +19,12 @@ export const terminalRoutes = new Hono();
 // Allowlisted commands — never pass raw user strings to shell
 // ---------------------------------------------------------------------------
 const ALLOWED_COMMANDS: Record<string, { bin: string; args: string[] }> = {
-	git_status: { bin: "git", args: ["status"] },
-	git_diff: { bin: "git", args: ["diff"] },
-	git_log: { bin: "git", args: ["log", "--oneline", "-20"] },
+	git_status: { bin: "git", args: ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "status"] },
+	git_diff: { bin: "git", args: ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "diff"] },
+	git_log: {
+		bin: "git",
+		args: ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "log", "--oneline", "-20"],
+	},
 	pnpm_typecheck: { bin: "pnpm", args: ["typecheck"] },
 	pnpm_test: { bin: "pnpm", args: ["test"] },
 	pnpm_build: { bin: "pnpm", args: ["build"] },

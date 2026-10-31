@@ -32,7 +32,9 @@
 
 # Claude CLI image assets (created in phase D3)
 !docker/claude-cli/package.json
-!docker/claude-cli/package-lock.json
+!docker/claude-cli/managed-settings.json
+!docker/claude-cli/pnpm-lock.yaml
+!docker/claude-cli/pnpm-workspace.yaml
 
 # Re-exclude regardless of the above (last match wins)
 # >>> common-deny (keep identical in every .dockerignore)

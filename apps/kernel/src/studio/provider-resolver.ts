@@ -6,13 +6,14 @@
 
 import type { ProviderTelemetryCollector } from "@oscorpex/provider-sdk";
 import type { ProviderErrorClassification } from "@oscorpex/provider-sdk";
-import type { CLIAdapter, CLIAdapterOptions } from "./legacy/cli-adapter.js";
 import { markProviderUnavailable, shouldSkipProvider, sortAdapterChain } from "./fallback-decision.js";
 import { providerRegistry } from "./kernel/provider-registry.js";
+import type { CLIAdapter, CLIAdapterOptions } from "./legacy/cli-adapter.js";
 import { createLogger } from "./logger.js";
 import type { ProviderCapabilities } from "./provider-runtime-cache.js";
 import { providerRuntimeCache } from "./provider-runtime-cache.js";
 import { providerState } from "./provider-state.js";
+import { providerChildEnv } from "./security/env-sanitizer.js";
 import type { AgentCliTool } from "./types.js";
 
 const log = createLogger("provider-resolver");
@@ -200,6 +201,7 @@ export async function createProviderResolver(
 					model: opts.model,
 					signal: opts.signal,
 					onLog: opts.onLog,
+					env: opts.env ?? providerChildEnv(provider.id),
 				});
 
 				return {
