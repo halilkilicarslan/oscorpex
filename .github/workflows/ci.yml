@@ -80,6 +80,10 @@ jobs:
       - name: Verify lockfile unchanged
         run: git diff --exit-code pnpm-lock.yaml
 
+      # Workspace packages resolve each other through dist/ (types and runtime), so typecheck and tests need it first.
+      - name: Build
+        run: pnpm build
+
       - name: Lint
         run: pnpm lint
 
@@ -144,9 +148,6 @@ jobs:
 
       - name: Console tests
         run: pnpm --filter console test:run
-
-      - name: Build
-        run: pnpm build
 
   docker:
     runs-on: ubuntu-24.04
