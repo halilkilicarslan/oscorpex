@@ -152,20 +152,31 @@ describe("docker compose hardening", () => {
 		});
 	}
 
-	it("docker-compose.yml: kernel service defines OSCORPEX_MIGRATION_DATABASE_URL via ${...} interpolation", () => {
-		const block = serviceBlock(files[0].text, "backend");
-		expect(block, "backend service block").not.toBeNull();
-		const line = (block ?? "").split("\n").find((l) => l.includes("OSCORPEX_MIGRATION_DATABASE_URL="));
-		expect(line, "OSCORPEX_MIGRATION_DATABASE_URL line in backend service").toBeDefined();
+	// Compose environment entries use either list (`- KEY=value`) or mapping (`KEY: value`) syntax.
+	const envLine = (block: string, key: string): string | undefined =>
+		block.split("\n").find((l) => new RegExp(`(^|[\\s-])${key}\\s*[=:]`).test(l));
+
+	it("docker-compose.yml: the one-shot migrate service defines OSCORPEX_MIGRATION_DATABASE_URL via ${...} interpolation", () => {
+		const block = serviceBlock(files[0].text, "migrate");
+		expect(block, "migrate service block").not.toBeNull();
+		const line = envLine(block ?? "", "OSCORPEX_MIGRATION_DATABASE_URL");
+		expect(line, "OSCORPEX_MIGRATION_DATABASE_URL line in migrate service").toBeDefined();
 		expect(line).toMatch(/\$\{[A-Z_]*PASSWORD/);
 		expect(line).not.toContain("oscorpex_dev");
 	});
 
-	it("docker-compose.yml: requires POSTGRES_PASSWORD and interpolates it into DATABASE_URL", () => {
+	it("docker-compose.yml: the backend never receives the migration URL or POSTGRES_PASSWORD", () => {
+		const block = serviceBlock(files[0].text, "backend");
+		expect(block, "backend service block").not.toBeNull();
+		expect(envLine(block ?? "", "OSCORPEX_MIGRATION_DATABASE_URL")).toBeUndefined();
+		expect(envLine(block ?? "", "POSTGRES_PASSWORD")).toBeUndefined();
+	});
+
+	it("docker-compose.yml: requires POSTGRES_PASSWORD and interpolates it into the backend DATABASE_URL", () => {
 		const text = files[0].text;
 		expect(text).toContain("${POSTGRES_PASSWORD:?");
-		const dbUrl = text.split("\n").find((l) => l.includes("DATABASE_URL="));
-		expect(dbUrl, "kernel DATABASE_URL line").toBeDefined();
+		const dbUrl = envLine(serviceBlock(text, "backend") ?? "", "DATABASE_URL");
+		expect(dbUrl, "backend DATABASE_URL line").toBeDefined();
 		expect(dbUrl).toContain("${POSTGRES_PASSWORD");
 	});
 });
