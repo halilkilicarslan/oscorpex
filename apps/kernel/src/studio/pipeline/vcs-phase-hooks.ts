@@ -48,7 +48,7 @@ export class PipelineBranchManager {
 				payload: { branch: branchName, stageIndex },
 			});
 		} catch (err) {
-			log.warn(`[vcs-phase-hooks] Branch oluşturulamadı: ${branchName}` + " " + String(err));
+			log.warn(`[vcs-phase-hooks] Branch oluşturulamadı: ${branchName} ${String(err)}`);
 		}
 	}
 
@@ -77,10 +77,7 @@ export class PipelineBranchManager {
 			const hasChanges = status.modified.length > 0 || status.untracked.length > 0 || status.staged.length > 0;
 
 			if (hasChanges) {
-				await gitManager.commit(
-					project.repoPath,
-					`feat: phase ${stageIndex} tamamlandı (${roleSlug || "stage"})`,
-				);
+				await gitManager.commit(project.repoPath, `feat: phase ${stageIndex} tamamlandı (${roleSlug || "stage"})`);
 			}
 
 			// main branch'e merge et
@@ -94,19 +91,13 @@ export class PipelineBranchManager {
 				});
 			} else {
 				// Conflict varsa main'e geri dön
-				log.warn(
-					`[vcs-phase-hooks] Merge conflict tespit edildi: ${branchName} → main` +
-						" " +
-						String(result.conflicts),
-				);
+				log.warn(`[vcs-phase-hooks] Merge conflict tespit edildi: ${branchName} → main ${String(result.conflicts)}`);
 				await gitManager
 					.checkout(project.repoPath, "main")
-					.catch((err) =>
-						log.warn("[vcs-phase-hooks] Non-blocking operation failed:", err?.message ?? err),
-					);
+					.catch((err) => log.warn("[vcs-phase-hooks] Non-blocking operation failed:", err?.message ?? err));
 			}
 		} catch (err) {
-			log.warn(`[vcs-phase-hooks] Branch merge atlandı: ${branchName}` + " " + String(err));
+			log.warn(`[vcs-phase-hooks] Branch merge atlandı: ${branchName} ${String(err)}`);
 		}
 	}
 

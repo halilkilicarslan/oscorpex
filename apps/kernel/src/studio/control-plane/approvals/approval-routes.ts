@@ -42,7 +42,7 @@ cpApprovalRoutes.get("/control-plane/approvals", async (c) => {
 		const approvals = await listApprovalsWithSla(status, tenantOf(c));
 		return c.json({ approvals });
 	} catch (err) {
-		log.error("[approvals] list failed: " + String(err));
+		log.error(`[approvals] list failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -53,7 +53,7 @@ cpApprovalRoutes.get("/control-plane/approvals/:id", async (c) => {
 		if (!result) return c.json({ error: "Approval not found" }, 404);
 		return c.json(result);
 	} catch (err) {
-		log.error("[approvals] get failed: " + String(err));
+		log.error(`[approvals] get failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -64,7 +64,7 @@ cpApprovalRoutes.post("/control-plane/approvals/:id/approve", async (c) => {
 		if (!approval) return c.json({ error: "Approval not found" }, 404);
 		return c.json({ approval });
 	} catch (err) {
-		log.error("[approvals] approve failed: " + String(err));
+		log.error(`[approvals] approve failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -75,7 +75,7 @@ cpApprovalRoutes.post("/control-plane/approvals/:id/reject", async (c) => {
 		if (!approval) return c.json({ error: "Approval not found" }, 404);
 		return c.json({ approval });
 	} catch (err) {
-		log.error("[approvals] reject failed: " + String(err));
+		log.error(`[approvals] reject failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -100,7 +100,7 @@ cpApprovalRoutes.post("/control-plane/approvals", async (c) => {
 		const approval = await requestApproval({ ...body, requestedBy: actorOf(c) });
 		return c.json({ approval }, 201);
 	} catch (err) {
-		log.error("[approvals] create failed: " + String(err));
+		log.error(`[approvals] create failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -110,7 +110,7 @@ cpApprovalRoutes.post("/control-plane/approvals/expire-stale", async (c) => {
 		const count = await expireStaleApprovals(tenantOf(c));
 		return c.json({ expired: count });
 	} catch (err) {
-		log.error("[approvals] expire-stale failed: " + String(err));
+		log.error(`[approvals] expire-stale failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -123,7 +123,7 @@ cpApprovalRoutes.post("/control-plane/approvals/:id/escalate", async (c) => {
 		if (!approval) return c.json({ error: "Approval not found" }, 404);
 		return c.json({ approval });
 	} catch (err) {
-		log.error("[approvals] escalate failed: " + String(err));
+		log.error(`[approvals] escalate failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });

@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
-import { createLogger } from "../logger.js";
 import { getTaskSessionInspector } from "../inspector/index.js";
+import { createLogger } from "../logger.js";
 
 const log = createLogger("inspector-routes");
 const router = new Hono();

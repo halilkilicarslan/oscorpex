@@ -25,7 +25,7 @@ router.get("/status/:projectId", async (c) => {
 		const trackings = await getCITrackings(projectId);
 		return c.json(trackings);
 	} catch (err) {
-		log.error("[ci-routes] GET /ci/status/:projectId:" + " " + String(err));
+		log.error(`[ci-routes] GET /ci/status/:projectId: ${String(err)}`);
 		return c.json({ error: "Failed to fetch CI trackings" }, 500);
 	}
 });
@@ -67,7 +67,7 @@ router.post("/track", async (c) => {
 
 		return c.json(result.tracking, 201);
 	} catch (err) {
-		log.error("[ci-routes] POST /ci/track:" + " " + String(err));
+		log.error(`[ci-routes] POST /ci/track: ${String(err)}`);
 		return c.json({ error: "Failed to create CI tracking" }, 500);
 	}
 });
@@ -91,7 +91,7 @@ router.post("/webhook/github", async (c) => {
 
 		return c.json({ ok: true, updated: updated ?? null });
 	} catch (err) {
-		log.error("[ci-routes] POST /ci/webhook/github:" + " " + String(err));
+		log.error(`[ci-routes] POST /ci/webhook/github: ${String(err)}`);
 		return c.json({ error: "Failed to process GitHub webhook" }, 500);
 	}
 });
@@ -115,7 +115,7 @@ router.post("/webhook/gitlab", async (c) => {
 
 		return c.json({ ok: true, updated: updated ?? null });
 	} catch (err) {
-		log.error("[ci-routes] POST /ci/webhook/gitlab:" + " " + String(err));
+		log.error(`[ci-routes] POST /ci/webhook/gitlab: ${String(err)}`);
 		return c.json({ error: "Failed to process GitLab webhook" }, 500);
 	}
 });

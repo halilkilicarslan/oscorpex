@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UpdateProjectSchema, CreateAgentSchema, parseBody } from "../routes/validation-schemas.js";
+import { CreateAgentSchema, UpdateProjectSchema, parseBody } from "../routes/validation-schemas.js";
 
 describe("P1-6: Zod validation schemas", () => {
 	it("rejects unknown fields in project update (strict mode)", () => {

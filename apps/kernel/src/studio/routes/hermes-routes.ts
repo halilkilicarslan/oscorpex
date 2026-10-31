@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { assertProjectInTenant } from "../auth/project-access.js";
+import { createSession, getHermesAllowedTools, handleHermesInvocation, isHermesEnabled } from "../hermes/index.js";
 import { createLogger } from "../logger.js";
-import { handleHermesInvocation, createSession, isHermesEnabled, getHermesAllowedTools } from "../hermes/index.js";
 import { rateLimiter } from "../middleware/rate-limiter.js";
 
 const log = createLogger("hermes-routes");
@@ -47,10 +47,7 @@ hermesRoutes.post("/hermes/invoke", async (c) => {
 
 	const body = await c.req.json().catch(() => null);
 	if (!body?.sessionId || !body?.toolName) {
-		return c.json(
-			{ ok: false, error: { code: "INVALID_REQUEST", message: "sessionId and toolName required" } },
-			400,
-		);
+		return c.json({ ok: false, error: { code: "INVALID_REQUEST", message: "sessionId and toolName required" } }, 400);
 	}
 
 	const tenantId = (c.get as (k: string) => string | undefined)("tenantId") ?? "";

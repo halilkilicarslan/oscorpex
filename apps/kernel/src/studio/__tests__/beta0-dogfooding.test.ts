@@ -320,7 +320,7 @@ describe("Beta-0 Agent 6: Compliance Officer", () => {
 	it("secret guard correctly redacts content for audit logs", async () => {
 		const { redactForAudit } = await import("../mcp-bridge/secret-guard.js");
 		// Use a GitHub PAT pattern (ghp_ + 36+ alphanum) which the guard matches exactly
-		const rawKey = "ghp_" + "a".repeat(36);
+		const rawKey = `ghp_${"a".repeat(36)}`;
 		const redacted = redactForAudit(`token=${rawKey}`);
 		expect(redacted).toContain("[REDACTED]");
 		expect(redacted).not.toContain(rawKey);
@@ -385,18 +385,18 @@ describe("Beta-0 Agent 8: Power User", () => {
 
 	it("Hermes key format validation works", async () => {
 		const { validateHermesKeyFormat } = await import("../hermes/hermes-key-management.js");
-		expect(validateHermesKeyFormat("hms_" + "a".repeat(64))).toBe(true);
+		expect(validateHermesKeyFormat(`hms_${"a".repeat(64)}`)).toBe(true);
 		expect(validateHermesKeyFormat("invalid")).toBe(false);
 	});
 
 	it("Hermes key rejects wrong prefix", async () => {
 		const { validateHermesKeyFormat } = await import("../hermes/hermes-key-management.js");
-		expect(validateHermesKeyFormat("sk-ant-" + "a".repeat(64))).toBe(false);
+		expect(validateHermesKeyFormat(`sk-ant-${"a".repeat(64)}`)).toBe(false);
 	});
 
 	it("Hermes key rejects uppercase hex", async () => {
 		const { validateHermesKeyFormat } = await import("../hermes/hermes-key-management.js");
-		expect(validateHermesKeyFormat("hms_" + "A".repeat(64))).toBe(false);
+		expect(validateHermesKeyFormat(`hms_${"A".repeat(64)}`)).toBe(false);
 	});
 });
 

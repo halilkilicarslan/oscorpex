@@ -38,7 +38,7 @@ router.post("/join", async (c) => {
 
 		return c.json({ ok: true, presence });
 	} catch (err) {
-		log.error("[collaboration-routes] POST /join:" + " " + String(err));
+		log.error(`[collaboration-routes] POST /join: ${String(err)}`);
 		return c.json({ error: "Failed to join collaboration session" }, 500);
 	}
 });
@@ -59,7 +59,7 @@ router.post("/leave", async (c) => {
 		const removed = collaboration.leave(body.projectId, body.userId);
 		return c.json({ ok: true, removed });
 	} catch (err) {
-		log.error("[collaboration-routes] POST /leave:" + " " + String(err));
+		log.error(`[collaboration-routes] POST /leave: ${String(err)}`);
 		return c.json({ error: "Failed to leave collaboration session" }, 500);
 	}
 });
@@ -86,7 +86,7 @@ router.post("/heartbeat", async (c) => {
 
 		return c.json({ ok: true });
 	} catch (err) {
-		log.error("[collaboration-routes] POST /heartbeat:" + " " + String(err));
+		log.error(`[collaboration-routes] POST /heartbeat: ${String(err)}`);
 		return c.json({ error: "Failed to process heartbeat" }, 500);
 	}
 });
@@ -122,7 +122,7 @@ router.patch("/presence", async (c) => {
 
 		return c.json({ ok: true, presence });
 	} catch (err) {
-		log.error("[collaboration-routes] PATCH /presence:" + " " + String(err));
+		log.error(`[collaboration-routes] PATCH /presence: ${String(err)}`);
 		return c.json({ error: "Failed to update presence" }, 500);
 	}
 });
@@ -143,7 +143,7 @@ router.get("/presence/:projectId", async (c) => {
 		const presenceList = collaboration.getPresence(projectId);
 		return c.json(presenceList);
 	} catch (err) {
-		log.error("[collaboration-routes] GET /presence/:projectId:" + " " + String(err));
+		log.error(`[collaboration-routes] GET /presence/:projectId: ${String(err)}`);
 		return c.json({ error: "Failed to fetch presence" }, 500);
 	}
 });
@@ -158,7 +158,7 @@ router.get("/stats", async (c) => {
 		const stats = collaboration.getCollaborationStats();
 		return c.json(stats);
 	} catch (err) {
-		log.error("[collaboration-routes] GET /stats:" + " " + String(err));
+		log.error(`[collaboration-routes] GET /stats: ${String(err)}`);
 		return c.json({ error: "Failed to fetch collaboration stats" }, 500);
 	}
 });

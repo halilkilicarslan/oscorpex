@@ -36,8 +36,8 @@ function generateReport(results: BenchmarkResult[]): string {
 			successes.length > 0 ? Math.round(successes.reduce((s, r) => s + r.latencyMs, 0) / successes.length) : 0;
 		const avgCost = successes.length > 0 ? successes.reduce((s, r) => s + r.costUsd, 0) / successes.length : 0;
 
-		md += `| Metric | Value |\n`;
-		md += `|--------|-------|\n`;
+		md += "| Metric | Value |\n";
+		md += "|--------|-------|\n";
 		md += `| Total runs | ${prs.length} |\n`;
 		md += `| Success | ${successes.length} |\n`;
 		md += `| Failure | ${failures.length} |\n`;

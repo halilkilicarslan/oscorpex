@@ -150,9 +150,7 @@ describe("TaskSessionInspector", () => {
 		expect(result!.task.title).toBe("Implement login");
 		expect(result!.task.status).toBe("done");
 		expect(result!.session).toBeUndefined();
-		expect(result!.warnings).toContainEqual(
-			expect.objectContaining({ code: "NO_SESSION" }),
-		);
+		expect(result!.warnings).toContainEqual(expect.objectContaining({ code: "NO_SESSION" }));
 	});
 
 	it("includes session when exists", async () => {
@@ -256,8 +254,22 @@ describe("TaskSessionInspector", () => {
 	it("includes gate results from verification_results", async () => {
 		mockGetTaskForInspector.mockResolvedValue(makeTaskRow());
 		mockListVerificationResults.mockResolvedValue([
-			{ id: "vr-1", task_id: TASK_ID, verification_type: "test", status: "passed", details: "{}", created_at: new Date() },
-			{ id: "vr-2", task_id: TASK_ID, verification_type: "sandbox", status: "failed", details: '{"reason":"path escape"}', created_at: new Date() },
+			{
+				id: "vr-1",
+				task_id: TASK_ID,
+				verification_type: "test",
+				status: "passed",
+				details: "{}",
+				created_at: new Date(),
+			},
+			{
+				id: "vr-2",
+				task_id: TASK_ID,
+				verification_type: "sandbox",
+				status: "failed",
+				details: '{"reason":"path escape"}',
+				created_at: new Date(),
+			},
 		]);
 
 		const result = await getTaskSessionInspector(PROJECT_ID, TASK_ID);
@@ -284,9 +296,7 @@ describe("TaskSessionInspector", () => {
 	});
 
 	it("does not expose sensitive keys in raw data", async () => {
-		mockGetTaskForInspector.mockResolvedValue(
-			makeTaskRow({ api_key: "sk-secret-123", token: "jwt-token-456" }),
-		);
+		mockGetTaskForInspector.mockResolvedValue(makeTaskRow({ api_key: "sk-secret-123", token: "jwt-token-456" }));
 
 		const result = await getTaskSessionInspector(PROJECT_ID, TASK_ID);
 

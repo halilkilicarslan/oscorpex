@@ -4,13 +4,13 @@
 // All operations are fire-and-forget (.catch() logged, never thrown).
 // ---------------------------------------------------------------------------
 
+import { indexTaskOutput } from "../context-sandbox.js";
 import { getProject, listProjectAgents, listTokenUsageForTask, upsertAgentDailyStat } from "../db.js";
+import { captureTaskDiffs } from "../diff-capture.js";
 import { applyPostCompletionHooks } from "../edge-hooks.js";
 import { createLogger } from "../logger.js";
 import { recordAgentStep } from "../memory-bridge.js";
 import { updateWorkingMemory } from "../memory-manager.js";
-import { indexTaskOutput } from "../context-sandbox.js";
-import { captureTaskDiffs } from "../diff-capture.js";
 import type { Task, TaskOutput } from "../types.js";
 
 const log = createLogger("task-completion-effects");
@@ -37,17 +37,17 @@ export function fireTaskCompletionEffects(
 ): void {
 	// v3.1: Execution-time edge hooks
 	applyPostCompletionHooks(projectId, updatedTask, output).catch((err) => {
-		log.warn("[task-completion-effects] applyPostCompletionHooks failed:" + " " + String(err));
+		log.warn(`[task-completion-effects] applyPostCompletionHooks failed: ${String(err)}`);
 	});
 
 	// v3.4: Refresh working memory snapshot
 	updateWorkingMemory(projectId).catch((err) => {
-		log.warn("[task-completion-effects] updateWorkingMemory failed:" + " " + String(err));
+		log.warn(`[task-completion-effects] updateWorkingMemory failed: ${String(err)}`);
 	});
 
 	// v4.0: Index task output for FTS cross-agent context
 	indexTaskOutput(projectId, taskId, task.title, output).catch((err) => {
-		log.warn("[task-completion-effects] indexTaskOutput failed:" + " " + String(err));
+		log.warn(`[task-completion-effects] indexTaskOutput failed: ${String(err)}`);
 	});
 
 	// v4.1: Capture file diffs for DiffViewer + agent daily stat
@@ -55,7 +55,7 @@ export function fireTaskCompletionEffects(
 		.then((proj) => {
 			if (proj?.repoPath) {
 				captureTaskDiffs(taskId, proj.repoPath, output).catch((err) => {
-					log.warn("[task-completion-effects] captureTaskDiffs failed:" + " " + String(err));
+					log.warn(`[task-completion-effects] captureTaskDiffs failed: ${String(err)}`);
 				});
 			}
 
@@ -63,7 +63,7 @@ export function fireTaskCompletionEffects(
 			const today = new Date().toISOString().slice(0, 10);
 			const agentId = task.assignedAgentId || task.assignedAgent;
 			if (!agentId) {
-				log.warn("[task-completion-effects] No agentId for task " + taskId + " — skipping daily stat");
+				log.warn(`[task-completion-effects] No agentId for task ${taskId} — skipping daily stat`);
 			} else {
 				const taskTimeMs = task.startedAt ? Date.now() - new Date(task.startedAt).getTime() : 0;
 				listTokenUsageForTask(taskId)
@@ -82,7 +82,7 @@ export function fireTaskCompletionEffects(
 						});
 					})
 					.catch((err) => {
-						log.warn("[task-completion-effects] upsertAgentDailyStat failed:" + " " + String(err));
+						log.warn(`[task-completion-effects] upsertAgentDailyStat failed: ${String(err)}`);
 					});
 			}
 
@@ -98,16 +98,14 @@ export function fireTaskCompletionEffects(
 							agent?.name || task.assignedAgent,
 							task.title,
 							output.logs?.[0] || null,
-						).catch((err) =>
-							log.warn("[task-completion-effects] Non-blocking operation failed:", err?.message ?? err),
-						);
+						).catch((err) => log.warn("[task-completion-effects] Non-blocking operation failed:", err?.message ?? err));
 					})
 					.catch((err) => {
-						log.warn("[task-completion-effects] listProjectAgents failed:" + " " + String(err));
+						log.warn(`[task-completion-effects] listProjectAgents failed: ${String(err)}`);
 					});
 			}
 		})
 		.catch((err) => {
-			log.warn("[task-completion-effects] getProject for completion effects failed:" + " " + String(err));
+			log.warn(`[task-completion-effects] getProject for completion effects failed: ${String(err)}`);
 		});
 }

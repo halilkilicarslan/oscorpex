@@ -11,7 +11,14 @@ export {
 } from "./provider-execution-service.js";
 export { TaskExecutor, TaskTimeoutError } from "./task-executor.js";
 export { assemblePrompt, type PromptAssemblyResult } from "./prompt-assembler.js";
-export { resolveTaskAgent, resolveTaskTools, resolveTaskModel, type AgentResolution, type ToolResolution, type ModelResolution } from "./agent-resolver.js";
+export {
+	resolveTaskAgent,
+	resolveTaskTools,
+	resolveTaskModel,
+	type AgentResolution,
+	type ToolResolution,
+	type ModelResolution,
+} from "./agent-resolver.js";
 export { startTaskForExecution } from "./task-start-service.js";
 export { runProviderTask } from "./provider-task-runner.js";
 export { executeSpecialTask } from "./special-task-runner.js";

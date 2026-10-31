@@ -163,17 +163,17 @@ export class TaskApprovalManager {
 	): Promise<{ exceeded: boolean; level: "warning" | "error"; message: string } | null> {
 		try {
 			const settingsMap = await getProjectSettingsMap(projectId);
-			const budgetSettings = settingsMap["budget"];
+			const budgetSettings = settingsMap.budget;
 
 			// Budget özelliği aktif değilse kontrol etme
-			if (!budgetSettings || budgetSettings["enabled"] !== "true") return null;
+			if (!budgetSettings || budgetSettings.enabled !== "true") return null;
 
-			const maxCostStr = budgetSettings["maxCostUsd"];
-			const warnThresholdStr = budgetSettings["warningThreshold"];
+			const maxCostStr = budgetSettings.maxCostUsd;
+			const warnThresholdStr = budgetSettings.warningThreshold;
 
 			// maxCostUsd tanımlı değilse kontrol etme
 			const maxCost = maxCostStr ? Number.parseFloat(maxCostStr) : null;
-			if (maxCost === null || isNaN(maxCost) || maxCost <= 0) return null;
+			if (maxCost === null || Number.isNaN(maxCost) || maxCost <= 0) return null;
 
 			// Mevcut harcamayı al
 			const costSummary = await getProjectCostSummary(projectId);
@@ -190,7 +190,7 @@ export class TaskApprovalManager {
 
 			// Uyarı eşiği kontrolü
 			const warnThreshold = warnThresholdStr ? Number.parseFloat(warnThresholdStr) : null;
-			if (warnThreshold !== null && !isNaN(warnThreshold) && warnThreshold > 0 && currentCost >= warnThreshold) {
+			if (warnThreshold !== null && !Number.isNaN(warnThreshold) && warnThreshold > 0 && currentCost >= warnThreshold) {
 				return {
 					exceeded: false,
 					level: "warning",
@@ -199,9 +199,9 @@ export class TaskApprovalManager {
 			}
 
 			// Agent-level budget kontrolü
-			const agentMaxCostStr = budgetSettings["agent_max_cost_usd"];
+			const agentMaxCostStr = budgetSettings.agent_max_cost_usd;
 			const agentMaxCost = agentMaxCostStr ? Number.parseFloat(agentMaxCostStr) : null;
-			if (agentId && agentMaxCost && !isNaN(agentMaxCost) && agentMaxCost > 0) {
+			if (agentId && agentMaxCost && !Number.isNaN(agentMaxCost) && agentMaxCost > 0) {
 				const agentCost = await getAgentCostSummary(projectId, agentId);
 				if (agentCost.totalCostUsd >= agentMaxCost) {
 					return {

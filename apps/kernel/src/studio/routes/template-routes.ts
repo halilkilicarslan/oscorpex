@@ -57,7 +57,7 @@ router.get("/", async (c) => {
 		c.header("X-Total-Count", String(total));
 		return c.json(templates);
 	} catch (err) {
-		log.error("[template-routes] GET /templates:" + " " + String(err));
+		log.error(`[template-routes] GET /templates: ${String(err)}`);
 		return c.json({ error: "Failed to fetch templates" }, 500);
 	}
 });
@@ -72,7 +72,7 @@ router.get("/:id", async (c) => {
 		if (!template || !canRead(template, caller(c))) return c.json({ error: "Template not found" }, 404);
 		return c.json(template);
 	} catch (err) {
-		log.error("[template-routes] GET /templates/:id:" + " " + String(err));
+		log.error(`[template-routes] GET /templates/:id: ${String(err)}`);
 		return c.json({ error: "Failed to fetch template" }, 500);
 	}
 });
@@ -110,7 +110,7 @@ router.post("/", async (c) => {
 
 		return c.json(template, 201);
 	} catch (err) {
-		log.error("[template-routes] POST /templates:" + " " + String(err));
+		log.error(`[template-routes] POST /templates: ${String(err)}`);
 		return c.json({ error: "Failed to create template" }, 500);
 	}
 });
@@ -147,7 +147,7 @@ router.patch("/:id", async (c) => {
 		if (!updated) return c.json({ error: "Template not found" }, 404);
 		return c.json(updated);
 	} catch (err) {
-		log.error("[template-routes] PATCH /templates/:id:" + " " + String(err));
+		log.error(`[template-routes] PATCH /templates/:id: ${String(err)}`);
 		return c.json({ error: "Failed to update template" }, 500);
 	}
 });
@@ -163,7 +163,7 @@ router.delete("/:id", async (c) => {
 		await deleteTemplate(c.req.param("id"));
 		return c.json({ ok: true });
 	} catch (err) {
-		log.error("[template-routes] DELETE /templates/:id:" + " " + String(err));
+		log.error(`[template-routes] DELETE /templates/:id: ${String(err)}`);
 		return c.json({ error: "Failed to delete template" }, 500);
 	}
 });
@@ -180,7 +180,7 @@ router.post("/:id/use", async (c) => {
 		await incrementTemplateUsage(id);
 		return c.json({ ...template, usageCount: template.usageCount + 1 });
 	} catch (err) {
-		log.error("[template-routes] POST /templates/:id/use:" + " " + String(err));
+		log.error(`[template-routes] POST /templates/:id/use: ${String(err)}`);
 		return c.json({ error: "Failed to use template" }, 500);
 	}
 });
@@ -202,7 +202,7 @@ router.post("/:id/rate", async (c) => {
 		await rateTemplate(id, rating);
 		return c.json({ ok: true });
 	} catch (err) {
-		log.error("[template-routes] POST /templates/:id/rate:" + " " + String(err));
+		log.error(`[template-routes] POST /templates/:id/rate: ${String(err)}`);
 		return c.json({ error: "Failed to rate template" }, 500);
 	}
 });

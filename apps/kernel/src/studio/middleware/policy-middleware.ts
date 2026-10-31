@@ -18,12 +18,12 @@ export function budgetGuard(): MiddlewareHandler {
 
 		try {
 			const settings = await getProjectSettingsMap(projectId);
-			const budgetSettings = settings["budget"];
+			const budgetSettings = settings.budget;
 
-			if (!budgetSettings || budgetSettings["enabled"] !== "true") return next();
+			if (!budgetSettings || budgetSettings.enabled !== "true") return next();
 
-			const maxCost = budgetSettings["maxCostUsd"] ? Number.parseFloat(budgetSettings["maxCostUsd"]) : null;
-			if (!maxCost || isNaN(maxCost) || maxCost <= 0) return next();
+			const maxCost = budgetSettings.maxCostUsd ? Number.parseFloat(budgetSettings.maxCostUsd) : null;
+			if (!maxCost || Number.isNaN(maxCost) || maxCost <= 0) return next();
 
 			const costSummary = await getProjectCostSummary(projectId);
 
@@ -40,7 +40,7 @@ export function budgetGuard(): MiddlewareHandler {
 			}
 		} catch (err) {
 			// Budget check failure should not block requests
-			log.warn("[policy-middleware] Budget check failed (non-blocking):" + " " + String(err));
+			log.warn(`[policy-middleware] Budget check failed (non-blocking): ${String(err)}`);
 		}
 
 		return next();

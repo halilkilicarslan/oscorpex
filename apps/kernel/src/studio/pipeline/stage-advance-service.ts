@@ -6,8 +6,8 @@
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
 import type { PipelineState } from "../types.js";
-import { canAdvance } from "./replan-gate.js";
 import type { PipelineStateManager } from "./pipeline-state-service.js";
+import { canAdvance } from "./replan-gate.js";
 
 const log = createLogger("stage-advance-service");
 
@@ -84,10 +84,7 @@ export class StageAdvanceOrchestrator {
 
 		const decision = decideStageAdvance(statuses);
 		if (decision === "failed") {
-			await this.callbacks.markFailed(
-				projectId,
-				`Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`,
-			);
+			await this.callbacks.markFailed(projectId, `Aşama ${currentIndex} (order=${currentStage.order}) görev hatası`);
 		} else if (decision === "completed") {
 			await this.callbacks.completeStage(projectId, currentIndex);
 		}

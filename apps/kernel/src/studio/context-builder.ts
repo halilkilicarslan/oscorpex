@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { searchContext } from "./context-store.js";
-import { createLogger } from "./logger.js";
 import { query, queryOne } from "./db.js";
+import { createLogger } from "./logger.js";
 import { searchSimilar } from "./vector-store.js";
 const log = createLogger("context-builder");
 
@@ -69,7 +69,7 @@ async function findProjectKB(projectId: string): Promise<{ kbId: string; name: s
 
 		return null;
 	} catch (err) {
-		log.warn("[context-builder] findProjectKB failed:" + " " + String(err));
+		log.warn(`[context-builder] findProjectKB failed: ${String(err)}`);
 		return null;
 	}
 }

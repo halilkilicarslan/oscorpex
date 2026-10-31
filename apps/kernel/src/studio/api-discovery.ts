@@ -194,8 +194,7 @@ function parseRouteFile(filePath: string): { routes: DiscoveredRoute[]; mounts: 
 		// Route pattern'lerini ara
 		for (const pattern of ROUTE_PATTERNS) {
 			pattern.lastIndex = 0;
-			let match;
-			while ((match = pattern.exec(content)) !== null) {
+			for (let match = pattern.exec(content); match !== null; match = pattern.exec(content)) {
 				const method = match[1].toUpperCase() as HttpMethod;
 				const path = match[2] || "/";
 				const params = (path.match(/:(\w+)/g) || []).map((p) => p.slice(1));
@@ -219,8 +218,7 @@ function parseRouteFile(filePath: string): { routes: DiscoveredRoute[]; mounts: 
 		// Mount prefix'lerini ara
 		for (const pattern of MOUNT_PATTERNS) {
 			pattern.lastIndex = 0;
-			let match;
-			while ((match = pattern.exec(content)) !== null) {
+			for (let match = pattern.exec(content); match !== null; match = pattern.exec(content)) {
 				mounts.push({
 					prefix: match[1],
 					routerName: match[2] || "",
@@ -463,6 +461,6 @@ export async function saveCollection(collection: ApiCollection): Promise<void> {
 		await mkdir(COLLECTIONS_BASE, { recursive: true });
 		await writeFile(collectionPath(collection.projectId), JSON.stringify(collection, null, 2), "utf-8");
 	} catch (err) {
-		log.warn("[api-discovery] Collection kaydedilemedi: " + (err instanceof Error ? err.message : String(err)));
+		log.warn(`[api-discovery] Collection kaydedilemedi: ${err instanceof Error ? err.message : String(err)}`);
 	}
 }

@@ -41,14 +41,12 @@ export class PipelineTaskHook {
 								this.debouncedAdvance(projectId);
 							}
 						} catch (err) {
-							log.error(
-								`[pipeline-engine] otomatik pipeline başlatma hatası (proje=${projectId}):` + " " + String(err),
-							);
+							log.error(`[pipeline-engine] otomatik pipeline başlatma hatası (proje=${projectId}): ${String(err)}`);
 						}
 					}
 				})
 				.catch((err) => {
-					log.error(`[pipeline-engine] getPipelineRun hatası (proje=${projectId}):` + " " + String(err));
+					log.error(`[pipeline-engine] getPipelineRun hatası (proje=${projectId}): ${String(err)}`);
 				});
 		});
 	}
@@ -60,7 +58,7 @@ export class PipelineTaskHook {
 		const timer = setTimeout(() => {
 			this.advancePending.delete(projectId);
 			this.advanceStage(projectId).catch((err) => {
-				log.error(`[pipeline-engine] advanceStage hatası (proje=${projectId}):` + " " + String(err));
+				log.error(`[pipeline-engine] advanceStage hatası (proje=${projectId}): ${String(err)}`);
 			});
 		}, 200);
 		this.advancePending.set(projectId, timer);

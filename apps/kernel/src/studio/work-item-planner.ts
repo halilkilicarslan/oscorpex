@@ -33,7 +33,6 @@ function roleForType(type: WorkItemType): string {
 			return "backend-dev";
 		case "improvement":
 			return "tech-lead";
-		case "feature":
 		default:
 			return "backend-dev";
 	}
@@ -58,7 +57,6 @@ function complexityForPriority(priority: WorkItemPriority): TaskComplexity {
 			return "M";
 		case "medium":
 			return "S";
-		case "low":
 		default:
 			return "S";
 	}

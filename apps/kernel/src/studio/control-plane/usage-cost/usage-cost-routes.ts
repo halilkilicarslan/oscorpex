@@ -19,7 +19,7 @@ cpUsageCostRoutes.get("/usage/projects/:id", async (c) => {
 		const rollup = await getProjectUsageRollup(c.req.param("id"), days);
 		return c.json({ rollup });
 	} catch (err) {
-		log.error("[usage-cost] project usage failed: " + String(err));
+		log.error(`[usage-cost] project usage failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -35,7 +35,7 @@ cpUsageCostRoutes.get("/cost/projects/:id", async (c) => {
 		]);
 		return c.json({ rollup, budget });
 	} catch (err) {
-		log.error("[usage-cost] project cost failed: " + String(err));
+		log.error(`[usage-cost] project cost failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -46,7 +46,7 @@ cpUsageCostRoutes.get("/cost/providers", async (c) => {
 		const rollup = await getProviderCostRollup(days);
 		return c.json({ rollup });
 	} catch (err) {
-		log.error("[usage-cost] provider cost failed: " + String(err));
+		log.error(`[usage-cost] provider cost failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });

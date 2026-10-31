@@ -6,11 +6,11 @@
 
 // Import + re-export canonical union types from @oscorpex/core
 import type {
-	TaskStatus as _TaskStatus,
 	ApprovalStatus as _ApprovalStatus,
-	TaskComplexity as _TaskComplexity,
-	TaskType as _TaskType,
 	RiskLevel as _RiskLevel,
+	TaskComplexity as _TaskComplexity,
+	TaskStatus as _TaskStatus,
+	TaskType as _TaskType,
 } from "@oscorpex/core";
 export type TaskStatus = _TaskStatus;
 export type ApprovalStatus = _ApprovalStatus;

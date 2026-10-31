@@ -57,17 +57,17 @@ export async function createIntakeQuestions(
 }
 
 export async function getIntakeQuestion(id: string): Promise<IntakeQuestion | null> {
-	const row = await queryOne<any>(`SELECT * FROM intake_questions WHERE id = $1`, [id]);
+	const row = await queryOne<any>("SELECT * FROM intake_questions WHERE id = $1", [id]);
 	return row ? rowToIntakeQuestion(row) : null;
 }
 
 export async function listIntakeQuestions(projectId: string, status?: IntakeQuestionStatus): Promise<IntakeQuestion[]> {
 	const rows = status
-		? await query<any>(`SELECT * FROM intake_questions WHERE project_id = $1 AND status = $2 ORDER BY created_at ASC`, [
+		? await query<any>("SELECT * FROM intake_questions WHERE project_id = $1 AND status = $2 ORDER BY created_at ASC", [
 				projectId,
 				status,
 			])
-		: await query<any>(`SELECT * FROM intake_questions WHERE project_id = $1 ORDER BY created_at ASC`, [projectId]);
+		: await query<any>("SELECT * FROM intake_questions WHERE project_id = $1 ORDER BY created_at ASC", [projectId]);
 	return rows.map(rowToIntakeQuestion);
 }
 
@@ -102,5 +102,5 @@ export async function skipIntakeQuestion(id: string): Promise<IntakeQuestion | n
 }
 
 export async function clearIntakeQuestions(projectId: string): Promise<void> {
-	await execute(`DELETE FROM intake_questions WHERE project_id = $1`, [projectId]);
+	await execute("DELETE FROM intake_questions WHERE project_id = $1", [projectId]);
 }

@@ -23,7 +23,7 @@ router.get("/instances", async (c) => {
 			currentInstanceId: wsCluster.currentInstanceId,
 		});
 	} catch (err) {
-		log.error("[cluster-routes] getActiveInstances error:" + " " + String(err));
+		log.error(`[cluster-routes] getActiveInstances error: ${String(err)}`);
 		return c.json({ error: "Failed to retrieve cluster instances" }, 500);
 	}
 });
@@ -49,7 +49,7 @@ router.get("/status", async (c) => {
 			},
 		});
 	} catch (err) {
-		log.error("[cluster-routes] status error:" + " " + String(err));
+		log.error(`[cluster-routes] status error: ${String(err)}`);
 		return c.json({ error: "Failed to retrieve cluster status" }, 500);
 	}
 });

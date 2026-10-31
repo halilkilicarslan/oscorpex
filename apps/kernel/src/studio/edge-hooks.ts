@@ -55,7 +55,7 @@ export async function applyPostCompletionHooks(
 	try {
 		deps = depsOverride ?? (await listAgentDependencies(projectId));
 	} catch (err) {
-		log.warn("[edge-hooks] listAgentDependencies failed:" + " " + String(err));
+		log.warn(`[edge-hooks] listAgentDependencies failed: ${String(err)}`);
 		return result;
 	}
 
@@ -81,7 +81,7 @@ export async function applyPostCompletionHooks(
 			);
 			result.notificationsSent += 1;
 		} catch (err) {
-			log.warn(`[edge-hooks] notification → ${edge.toAgentId} failed:` + " " + String(err));
+			log.warn(`[edge-hooks] notification → ${edge.toAgentId} failed: ${String(err)}`);
 		}
 	}
 
@@ -100,7 +100,7 @@ export async function applyPostCompletionHooks(
 			);
 			result.mentoringMessagesSent += 1;
 		} catch (err) {
-			log.warn(`[edge-hooks] mentoring → ${edge.toAgentId} failed:` + " " + String(err));
+			log.warn(`[edge-hooks] mentoring → ${edge.toAgentId} failed: ${String(err)}`);
 		}
 	}
 
@@ -120,7 +120,7 @@ export async function applyPostCompletionHooks(
 					{ taskId: task.id, edgeType: "handoff", severity: "warning" },
 				);
 			} catch (err) {
-				log.warn(`[edge-hooks] handoff warning → ${edge.toAgentId} failed:` + " " + String(err));
+				log.warn(`[edge-hooks] handoff warning → ${edge.toAgentId} failed: ${String(err)}`);
 			}
 		}
 		log.warn(
@@ -146,7 +146,7 @@ export async function taskNeedsApprovalFromEdges(
 	try {
 		deps = depsOverride ?? (await listAgentDependencies(projectId));
 	} catch (err) {
-		log.warn("[edge-hooks] listAgentDependencies failed:" + " " + String(err));
+		log.warn(`[edge-hooks] listAgentDependencies failed: ${String(err)}`);
 		return false;
 	}
 

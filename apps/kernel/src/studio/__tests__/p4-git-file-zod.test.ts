@@ -31,10 +31,7 @@ describe("P4-3: File policy wiring", () => {
 		const { readFileSync, existsSync } = await import("node:fs");
 		const { join } = await import("node:path");
 		// Check at least one file write path has policy
-		const paths = [
-			"src/studio/execution/task-output-handler.ts",
-			"src/studio/docs-generator.ts",
-		];
+		const paths = ["src/studio/execution/task-output-handler.ts", "src/studio/docs-generator.ts"];
 		const hasPolicy = paths.some((p) => {
 			const full = join(process.cwd(), p);
 			if (!existsSync(full)) return false;

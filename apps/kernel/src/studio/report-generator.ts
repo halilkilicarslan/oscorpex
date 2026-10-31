@@ -75,7 +75,7 @@ function calcQualityMetrics(tasks: Task[], events: StudioEvent[]) {
 
 	// Review pass rate: tasks approved by reviewer vs total done tasks
 	const reviewApprovedEvents = events.filter(
-		(e) => e.type === "task:completed" && e.payload["reviewApproved"] === true,
+		(e) => e.type === "task:completed" && e.payload.reviewApproved === true,
 	).length;
 	const totalWithReview = events.filter((e) => e.type === "task:completed" && "reviewApproved" in e.payload).length;
 	const reviewPassRate = totalWithReview > 0 ? reviewApprovedEvents / totalWithReview : 1;
@@ -181,26 +181,26 @@ export async function generateStakeholderReport(projectId: string): Promise<stri
 	const lines = [
 		`# Project Report: ${report.projectName}`,
 		"",
-		`## Executive Summary`,
+		"## Executive Summary",
 		`The project "${report.projectName}" completed ${successIndicator}. ` +
 			`Out of ${report.totalTasks} total tasks, ${report.completedTasks} were completed (${completionPct}%) ` +
 			`and ${report.failedTasks} failed.`,
 		"",
-		`## Duration`,
+		"## Duration",
 		`The project ran for approximately ${durationHours} hours.`,
 		"",
-		`## Quality`,
+		"## Quality",
 		qualitySummary,
 		`First-pass success rate: ${Math.round(report.qualityMetrics.firstPassRate * 100)}%. ` +
 			`Average revisions per task: ${report.qualityMetrics.avgRevisions}.`,
 		"",
-		`## Cost`,
+		"## Cost",
 		costSummary,
 		"",
-		`## Deliverables`,
+		"## Deliverables",
 		filesSummary,
 		"",
-		`## Status`,
+		"## Status",
 		`Current project status: **${report.status}**.`,
 		"",
 		`_Report generated at ${new Date().toISOString()}_`,

@@ -43,7 +43,7 @@ async function handleStandup(c: Context) {
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);
-		log.error("[ceremony-routes] standup failed:" + " " + String(err));
+		log.error(`[ceremony-routes] standup failed: ${String(err)}`);
 		return c.json({ error: msg }, 500);
 	}
 }
@@ -72,7 +72,7 @@ async function handleRetrospective(c: Context) {
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);
-		log.error("[ceremony-routes] retrospective failed:" + " " + String(err));
+		log.error(`[ceremony-routes] retrospective failed: ${String(err)}`);
 		return c.json({ error: msg }, 500);
 	}
 }

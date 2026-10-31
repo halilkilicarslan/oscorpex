@@ -7,7 +7,13 @@ import { randomUUID } from "node:crypto";
 import { execute, query, queryOne } from "../db.js";
 import { createLogger } from "../logger.js";
 import { assertNoTokenishValues } from "./binary-locator.js";
-import type { CLIProbeEvent, CLIProviderId, CLIUsageSnapshot, CLIUsageTrendPoint, ProviderProbePermission } from "./types.js";
+import type {
+	CLIProbeEvent,
+	CLIProviderId,
+	CLIUsageSnapshot,
+	CLIUsageTrendPoint,
+	ProviderProbePermission,
+} from "./types.js";
 
 const log = createLogger("cli-usage:persistence");
 
@@ -35,10 +41,9 @@ function lowestPercentRemaining(quotas: import("./types.js").UsageQuota[]): numb
 }
 
 export async function getCLIProbeSettings(providerId: CLIProviderId): Promise<ProviderProbePermission> {
-	const row = await queryOne<Record<string, unknown>>(
-		"SELECT * FROM cli_probe_settings WHERE provider_id = $1",
-		[providerId],
-	);
+	const row = await queryOne<Record<string, unknown>>("SELECT * FROM cli_probe_settings WHERE provider_id = $1", [
+		providerId,
+	]);
 	return {
 		enabled: Boolean(row?.enabled),
 		allowAuthFileRead: Boolean(row?.allow_auth_file_read),
@@ -83,7 +88,7 @@ export async function recordProbeEvent(providerId: CLIProviderId, status: string
 	await execute(
 		"INSERT INTO cli_probe_events (id, provider_id, status, message, created_at) VALUES ($1, $2, $3, $4, $5)",
 		[randomUUID(), providerId, status, message.slice(0, 500), now()],
-	).catch((err) => log.warn("[cli-usage] recordProbeEvent failed:" + " " + String((err as Error).message)));
+	).catch((err) => log.warn(`[cli-usage] recordProbeEvent failed: ${String((err as Error).message)}`));
 }
 
 export async function persistSnapshot(snapshot: CLIUsageSnapshot): Promise<void> {
@@ -147,13 +152,12 @@ export async function getCLIProbeEvents(providerId?: CLIProviderId, limit = 50):
 	const cappedLimit = Math.min(Math.max(limit, 1), 200);
 	const rows = providerId
 		? await query<Record<string, string>>(
-				`SELECT * FROM cli_probe_events WHERE provider_id = $1 ORDER BY created_at DESC LIMIT $2`,
+				"SELECT * FROM cli_probe_events WHERE provider_id = $1 ORDER BY created_at DESC LIMIT $2",
 				[providerId, cappedLimit],
 			)
-		: await query<Record<string, string>>(
-				`SELECT * FROM cli_probe_events ORDER BY created_at DESC LIMIT $1`,
-				[cappedLimit],
-			);
+		: await query<Record<string, string>>("SELECT * FROM cli_probe_events ORDER BY created_at DESC LIMIT $1", [
+				cappedLimit,
+			]);
 
 	return rows.map((row) => ({
 		id: row.id,

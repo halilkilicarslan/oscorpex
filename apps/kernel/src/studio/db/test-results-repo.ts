@@ -136,7 +136,7 @@ export async function getTestResults(projectId: string, opts: GetTestResultsOpts
 
 export async function getLatestTestResult(projectId: string): Promise<TestResult | null> {
 	const row = await queryOne<Record<string, unknown>>(
-		`SELECT * FROM test_results WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1`,
+		"SELECT * FROM test_results WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1",
 		[projectId],
 	);
 	return row ? rowToTestResult(row) : null;
@@ -201,5 +201,5 @@ export async function getTestSummary(projectId: string): Promise<TestSummary> {
 // ---------------------------------------------------------------------------
 
 export async function deleteTestResult(id: string): Promise<void> {
-	await execute(`DELETE FROM test_results WHERE id = $1`, [id]);
+	await execute("DELETE FROM test_results WHERE id = $1", [id]);
 }

@@ -115,7 +115,7 @@ describe("validateCommitMessage", () => {
 	});
 
 	it("rejects a subject that exceeds 72 characters", () => {
-		const long = "fix: " + "a".repeat(80); // 85 chars total
+		const long = `fix: ${"a".repeat(80)}`; // 85 chars total
 		const result = validateCommitMessage(long);
 		expect(result.valid).toBe(false);
 		expect(result.errors.some((e) => e.includes("exceeds 72 characters"))).toBe(true);

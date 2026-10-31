@@ -232,14 +232,14 @@ export async function getApprovalRule(
 ): Promise<ApprovalRule | undefined> {
 	// Project-specific first
 	const projectRule = await queryOne<any>(
-		`SELECT * FROM approval_rules WHERE project_id = $1 AND action_type = $2 AND risk_level = $3`,
+		"SELECT * FROM approval_rules WHERE project_id = $1 AND action_type = $2 AND risk_level = $3",
 		[projectId, actionType, riskLevel],
 	);
 	if (projectRule) return rowToRule(projectRule);
 
 	// Global fallback
 	const globalRule = await queryOne<any>(
-		`SELECT * FROM approval_rules WHERE project_id IS NULL AND action_type = $1 AND risk_level = $2`,
+		"SELECT * FROM approval_rules WHERE project_id IS NULL AND action_type = $1 AND risk_level = $2",
 		[actionType, riskLevel],
 	);
 	return globalRule ? rowToRule(globalRule) : undefined;
@@ -258,7 +258,7 @@ export async function requiresApproval(projectId: string, actionType: string, ri
 /** List all rules for a project (including globals) */
 export async function listApprovalRules(projectId: string): Promise<ApprovalRule[]> {
 	const rows = await query<any>(
-		`SELECT * FROM approval_rules WHERE project_id = $1 OR project_id IS NULL ORDER BY action_type, risk_level`,
+		"SELECT * FROM approval_rules WHERE project_id = $1 OR project_id IS NULL ORDER BY action_type, risk_level",
 		[projectId],
 	);
 	return rows.map(rowToRule);

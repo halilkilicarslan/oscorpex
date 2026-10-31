@@ -29,7 +29,7 @@ describe("Beta-0.5: UI Page Inventory", () => {
 		it(`${page.split("/").pop()} exists`, async () => {
 			const { existsSync } = await import("node:fs");
 			const { join } = await import("node:path");
-			expect(existsSync(join(process.cwd(), "../../" + page))).toBe(true);
+			expect(existsSync(join(process.cwd(), `../../${page}`))).toBe(true);
 		});
 	}
 
@@ -106,7 +106,7 @@ describe("Beta-0.5: UI Page Inventory", () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
 		for (const page of REQUIRED_PAGES) {
-			const src = readFileSync(join(process.cwd(), "../../" + page), "utf8");
+			const src = readFileSync(join(process.cwd(), `../../${page}`), "utf8");
 			expect(src, `${page} must not use alert()`).not.toMatch(/\balert\s*\(/);
 		}
 	});
@@ -121,7 +121,7 @@ describe("Beta-0.5: UI Page Inventory", () => {
 			/-----BEGIN (RSA|EC|DSA) PRIVATE KEY-----/,
 		];
 		for (const page of REQUIRED_PAGES) {
-			const src = readFileSync(join(process.cwd(), "../../" + page), "utf8");
+			const src = readFileSync(join(process.cwd(), `../../${page}`), "utf8");
 			for (const pattern of secretPatterns) {
 				expect(src, `${page} must not contain raw secret matching ${pattern}`).not.toMatch(pattern);
 			}
@@ -135,7 +135,7 @@ describe("Beta-0.5: UI Page Inventory", () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
 		for (const page of REQUIRED_PAGES) {
-			const src = readFileSync(join(process.cwd(), "../../" + page), "utf8");
+			const src = readFileSync(join(process.cwd(), `../../${page}`), "utf8");
 			expect(src, `${page} must use #0a0a0a dark background`).toContain("#0a0a0a");
 		}
 	});
@@ -145,7 +145,7 @@ describe("Beta-0.5: UI Page Inventory", () => {
 		const { join } = await import("node:path");
 		let found = false;
 		for (const page of REQUIRED_PAGES) {
-			const src = readFileSync(join(process.cwd(), "../../" + page), "utf8");
+			const src = readFileSync(join(process.cwd(), `../../${page}`), "utf8");
 			if (src.includes("#22c55e")) found = true;
 		}
 		expect(found).toBe(true);
@@ -159,7 +159,7 @@ describe("Beta-0.5: UI Page Inventory", () => {
 		const { join } = await import("node:path");
 		let hasAccessibleFocus = false;
 		for (const page of REQUIRED_PAGES) {
-			const src = readFileSync(join(process.cwd(), "../../" + page), "utf8");
+			const src = readFileSync(join(process.cwd(), `../../${page}`), "utf8");
 			if (src.includes("focus-visible") || src.includes("focus:ring")) {
 				hasAccessibleFocus = true;
 			}
@@ -170,10 +170,7 @@ describe("Beta-0.5: UI Page Inventory", () => {
 	it("HermesKeysPage uses focus-visible:ring pattern on inputs", async () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		const src = readFileSync(
-			join(process.cwd(), "../../apps/console/src/pages/studio/HermesKeysPage.tsx"),
-			"utf8",
-		);
+		const src = readFileSync(join(process.cwd(), "../../apps/console/src/pages/studio/HermesKeysPage.tsx"), "utf8");
 		expect(src).toContain("focus-visible");
 	});
 
@@ -184,7 +181,7 @@ describe("Beta-0.5: UI Page Inventory", () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
 		for (const page of REQUIRED_PAGES) {
-			const src = readFileSync(join(process.cwd(), "../../" + page), "utf8");
+			const src = readFileSync(join(process.cwd(), `../../${page}`), "utf8");
 			// console.warn/error are acceptable for error handling; bare console.log is not
 			expect(src, `${page} must not contain bare console.log`).not.toMatch(/\bconsole\.log\s*\(/);
 		}
@@ -197,7 +194,7 @@ describe("Beta-0.5: UI Page Inventory", () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
 		for (const page of REQUIRED_PAGES) {
-			const src = readFileSync(join(process.cwd(), "../../" + page), "utf8");
+			const src = readFileSync(join(process.cwd(), `../../${page}`), "utf8");
 			// Disallow `as any` casts (not `// any` comments or type names)
 			expect(src, `${page} must not use 'as any'`).not.toMatch(/\bas any\b/);
 		}
@@ -211,28 +208,20 @@ describe("Beta-0.5: Playwright Test File", () => {
 	it("e2e test file exists at apps/console/e2e/beta05-ui-dogfooding.spec.ts", async () => {
 		const { existsSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		expect(
-			existsSync(join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts")),
-		).toBe(true);
+		expect(existsSync(join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"))).toBe(true);
 	});
 
 	it("Playwright spec imports from @playwright/test", async () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		const spec = readFileSync(
-			join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"),
-			"utf8",
-		);
-		expect(spec).toContain('@playwright/test');
+		const spec = readFileSync(join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"), "utf8");
+		expect(spec).toContain("@playwright/test");
 	});
 
 	it("Playwright spec covers all 8 agent personas", async () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		const spec = readFileSync(
-			join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"),
-			"utf8",
-		);
+		const spec = readFileSync(join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"), "utf8");
 		// Agent personas 1–8 must all appear as describe headings
 		for (let i = 1; i <= 8; i++) {
 			expect(spec, `Spec must include Agent ${i}`).toContain(`Agent ${i}:`);
@@ -242,10 +231,7 @@ describe("Beta-0.5: Playwright Test File", () => {
 	it("Playwright spec tests approvals, audit, and metrics pages", async () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		const spec = readFileSync(
-			join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"),
-			"utf8",
-		);
+		const spec = readFileSync(join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"), "utf8");
 		expect(spec).toContain("/studio/mcp/approvals");
 		expect(spec).toContain("/studio/mcp/audit");
 		expect(spec).toContain("/studio/mcp/metrics");
@@ -254,10 +240,7 @@ describe("Beta-0.5: Playwright Test File", () => {
 	it("Playwright spec tests secret pattern absence", async () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		const spec = readFileSync(
-			join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"),
-			"utf8",
-		);
+		const spec = readFileSync(join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"), "utf8");
 		// The spec must verify no raw secrets are rendered
 		expect(spec).toContain("sk-");
 		expect(spec).toContain("ghp_");
@@ -266,20 +249,14 @@ describe("Beta-0.5: Playwright Test File", () => {
 	it("Playwright spec tests for no window.alert dialogs", async () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		const spec = readFileSync(
-			join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"),
-			"utf8",
-		);
+		const spec = readFileSync(join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"), "utf8");
 		expect(spec).toContain("alertCalled");
 	});
 
 	it("Playwright spec has page load performance assertions", async () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		const spec = readFileSync(
-			join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"),
-			"utf8",
-		);
+		const spec = readFileSync(join(process.cwd(), "../../apps/console/e2e/beta05-ui-dogfooding.spec.ts"), "utf8");
 		expect(spec).toContain("toBeLessThan(5000)");
 	});
 });

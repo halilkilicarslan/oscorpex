@@ -40,7 +40,7 @@ export {
  */
 export async function getPolicies(projectId: string): Promise<PolicyRule[]> {
 	const settingsMap = await getProjectSettingsMap(projectId);
-	const raw = settingsMap["policy"]?.["rules"];
+	const raw = settingsMap.policy?.rules;
 	const customPolicies = parsePolicies(raw);
 
 	// Built-in rules always exist (represented as synthetic PolicyRule objects)
@@ -88,7 +88,7 @@ export async function evaluatePolicies(
 	task: Task,
 ): Promise<{ allowed: boolean; violations: string[] }> {
 	const settingsMap = await getProjectSettingsMap(projectId);
-	const raw = settingsMap["policy"]?.["rules"];
+	const raw = settingsMap.policy?.rules;
 	const customRules = parsePolicies(raw);
 
 	const result = evaluatePolicyRules(task, settingsMap as Record<string, Record<string, string>>, customRules);

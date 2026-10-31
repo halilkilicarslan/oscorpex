@@ -43,7 +43,7 @@ workItemRoutes.get("/projects/:id/work-items", async (c) => {
 		c.header("X-Total-Count", String(total));
 		return c.json(items);
 	} catch (err) {
-		log.error("[work-item-routes] list items failed:" + " " + String(err));
+		log.error(`[work-item-routes] list items failed: ${String(err)}`);
 		return c.json({ error: "Failed to list work items" }, 500);
 	}
 });
@@ -71,7 +71,7 @@ workItemRoutes.post("/projects/:id/work-items", async (c) => {
 		const item = await createWorkItem({ ...body, projectId });
 		return c.json(item, 201);
 	} catch (err) {
-		log.error("[work-item-routes] create item failed:" + " " + String(err));
+		log.error(`[work-item-routes] create item failed: ${String(err)}`);
 		return c.json({ error: "Failed to create work item" }, 500);
 	}
 });
@@ -83,7 +83,7 @@ workItemRoutes.get("/projects/:id/work-items/:itemId", async (c) => {
 		if (!item) return c.json({ error: "Work item not found" }, 404);
 		return c.json(item);
 	} catch (err) {
-		log.error("[work-item-routes] get item failed:" + " " + String(err));
+		log.error(`[work-item-routes] get item failed: ${String(err)}`);
 		return c.json({ error: "Failed to get work item" }, 500);
 	}
 });
@@ -96,7 +96,7 @@ workItemRoutes.patch("/projects/:id/work-items/:itemId", async (c) => {
 		if (!item) return c.json({ error: "Work item not found" }, 404);
 		return c.json(item);
 	} catch (err) {
-		log.error("[work-item-routes] update item failed:" + " " + String(err));
+		log.error(`[work-item-routes] update item failed: ${String(err)}`);
 		return c.json({ error: "Failed to update work item" }, 500);
 	}
 });
@@ -117,7 +117,7 @@ workItemRoutes.post("/projects/:id/work-items/:itemId/plan", async (c) => {
 		// If the project was previously completed/idle, kick execution so newly
 		// planned backlog tasks do not remain queued indefinitely.
 		kernel.startProjectExecution(result.workItem.projectId).catch((err) => {
-			log.error("[kernel] startProjectExecution failed after work-item planning:" + " " + String(err));
+			log.error(`[kernel] startProjectExecution failed after work-item planning: ${String(err)}`);
 		});
 		return c.json(result, 201);
 	} catch (err) {
@@ -126,7 +126,7 @@ workItemRoutes.post("/projects/:id/work-items/:itemId/plan", async (c) => {
 		if (message.includes("not open") || message.includes("No plan")) {
 			return c.json({ error: message }, 409);
 		}
-		log.error("[work-item-routes] planWorkItem failed:" + " " + String(err));
+		log.error(`[work-item-routes] planWorkItem failed: ${String(err)}`);
 		return c.json({ error: message }, 500);
 	}
 });

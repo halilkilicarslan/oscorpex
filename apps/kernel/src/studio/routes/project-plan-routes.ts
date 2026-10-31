@@ -318,7 +318,7 @@ projectPlanRoutes.get("/projects/:id/plan", async (c) => {
 		if (!plan) return c.json(null, 200);
 		return c.json(plan);
 	} catch (err) {
-		log.error("[project-plan-routes] get plan failed:" + " " + String(err));
+		log.error(`[project-plan-routes] get plan failed: ${String(err)}`);
 		return c.json({ error: "Failed to get plan" }, 500);
 	}
 });
@@ -342,7 +342,7 @@ projectPlanRoutes.post("/projects/:id/plan/approve", async (c) => {
 	});
 
 	kernel.startProjectExecution(projectId).catch((err) => {
-		log.error("[kernel] startProjectExecution failed:" + " " + String(err));
+		log.error(`[kernel] startProjectExecution failed: ${String(err)}`);
 	});
 
 	let pipelineStarted = false;
@@ -360,7 +360,7 @@ projectPlanRoutes.post("/projects/:id/plan/approve", async (c) => {
 		}
 	} catch (err) {
 		pipelineWarning = err instanceof Error ? err.message : String(err);
-		log.error("[kernel] auto-start hatası (execution devam ediyor):" + " " + String(err));
+		log.error(`[kernel] auto-start hatası (execution devam ediyor): ${String(err)}`);
 	}
 
 	return c.json({

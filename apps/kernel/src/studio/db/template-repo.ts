@@ -196,7 +196,7 @@ export async function countTemplates(opts: Omit<ListTemplatesOpts, "limit" | "of
 // ---------------------------------------------------------------------------
 
 export async function getTemplate(id: string): Promise<ProjectTemplate | null> {
-	const row = await queryOne<Record<string, unknown>>(`SELECT * FROM project_templates WHERE id = $1`, [id]);
+	const row = await queryOne<Record<string, unknown>>("SELECT * FROM project_templates WHERE id = $1", [id]);
 	return row ? rowToTemplate(row) : null;
 }
 
@@ -256,7 +256,7 @@ export async function updateTemplate(id: string, data: UpdateTemplateData): Prom
 // ---------------------------------------------------------------------------
 
 export async function deleteTemplate(id: string): Promise<void> {
-	await execute(`DELETE FROM project_templates WHERE id = $1`, [id]);
+	await execute("DELETE FROM project_templates WHERE id = $1", [id]);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ export async function deleteTemplate(id: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function incrementTemplateUsage(id: string): Promise<void> {
-	await execute(`UPDATE project_templates SET usage_count = usage_count + 1, updated_at = now() WHERE id = $1`, [id]);
+	await execute("UPDATE project_templates SET usage_count = usage_count + 1, updated_at = now() WHERE id = $1", [id]);
 }
 
 // ---------------------------------------------------------------------------

@@ -113,10 +113,7 @@ export async function resolveAndValidateUrl(url: string): Promise<DnsValidationR
 	// We treat DNS resolution failures as non-fatal for individual record types
 	// (a host may legitimately have only A or only AAAA records).
 	// If *both* resolutions fail we cannot validate — reject conservatively.
-	const [ipv4Result, ipv6Result] = await Promise.allSettled([
-		dns.resolve4(hostname),
-		dns.resolve6(hostname),
-	]);
+	const [ipv4Result, ipv6Result] = await Promise.allSettled([dns.resolve4(hostname), dns.resolve6(hostname)]);
 
 	const resolvedIps: string[] = [];
 

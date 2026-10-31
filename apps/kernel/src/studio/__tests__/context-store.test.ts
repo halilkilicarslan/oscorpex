@@ -208,7 +208,7 @@ describe("indexContent", () => {
 	});
 
 	it("should detect markdown and index chunks", async () => {
-		const md = `# Hello\nWorld\n## Section\nContent`;
+		const md = "# Hello\nWorld\n## Section\nContent";
 		const count = await indexContent("p1", md, "readme");
 
 		expect(upsertContextSource).toHaveBeenCalledWith("p1", "readme", expect.any(Number), expect.any(Number));

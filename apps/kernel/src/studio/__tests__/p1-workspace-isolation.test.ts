@@ -4,10 +4,10 @@
 
 import { describe, expect, it } from "vitest";
 import {
-	resolveWorkspacePath,
-	assertInsideWorkspace,
-	validateRepoPath,
 	WorkspaceViolationError,
+	assertInsideWorkspace,
+	resolveWorkspacePath,
+	validateRepoPath,
 } from "../security/workspace-resolver.js";
 
 const scope = { tenantId: "tenant-abc", projectId: "project-123" };
@@ -66,9 +66,9 @@ describe("P1-3: Workspace isolation", () => {
 		const { join } = await import("node:path");
 		const compose = readFileSync(join(process.cwd(), "../../docker-compose.yml"), "utf8");
 		// Active Docker socket mount line should be commented out
-		const activeSocketLines = compose.split("\n").filter(
-			(l) => l.includes("/var/run/docker.sock") && !l.trim().startsWith("#"),
-		);
+		const activeSocketLines = compose
+			.split("\n")
+			.filter((l) => l.includes("/var/run/docker.sock") && !l.trim().startsWith("#"));
 		expect(activeSocketLines).toHaveLength(0);
 	});
 

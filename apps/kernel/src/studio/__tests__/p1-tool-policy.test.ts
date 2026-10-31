@@ -1,9 +1,9 @@
 // P1-7: Pre-execution tool-policy enforcement tests
 // No DB required — evaluateToolPolicy() is a pure function.
 
-import { describe, expect, it } from "vitest";
 import { evaluateToolPolicy } from "@oscorpex/policy-kit";
 import type { ToolInvocationRequest, ToolPolicyContext } from "@oscorpex/policy-kit";
+import { describe, expect, it } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Shared test contexts
@@ -25,7 +25,9 @@ const prodCtx: ToolPolicyContext = {
 // Helper to build a minimal request
 // ---------------------------------------------------------------------------
 
-function req(overrides: Partial<ToolInvocationRequest> & Pick<ToolInvocationRequest, "source" | "tool" | "action" | "riskLevel">): ToolInvocationRequest {
+function req(
+	overrides: Partial<ToolInvocationRequest> & Pick<ToolInvocationRequest, "source" | "tool" | "action" | "riskLevel">,
+): ToolInvocationRequest {
 	return {
 		actorId: "actor-test",
 		tenantId: "tenant-test",
@@ -61,10 +63,7 @@ describe("P1-7: LLM source restrictions", () => {
 	});
 
 	it("allows LLM read operations", () => {
-		const result = evaluateToolPolicy(
-			req({ source: "llm", tool: "file", action: "read", riskLevel: "read" }),
-			devCtx,
-		);
+		const result = evaluateToolPolicy(req({ source: "llm", tool: "file", action: "read", riskLevel: "read" }), devCtx);
 		expect(result.decision).toBe("allow");
 	});
 
@@ -459,10 +458,7 @@ describe("P1-7: Destructive action approval", () => {
 
 describe("P1-7: Default allow rule", () => {
 	it("allows safe read operation from llm (Rule 10)", () => {
-		const result = evaluateToolPolicy(
-			req({ source: "llm", tool: "file", action: "read", riskLevel: "read" }),
-			devCtx,
-		);
+		const result = evaluateToolPolicy(req({ source: "llm", tool: "file", action: "read", riskLevel: "read" }), devCtx);
 		expect(result.decision).toBe("allow");
 	});
 

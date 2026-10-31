@@ -61,7 +61,7 @@ export async function getStrategiesForRole(agentRole: string, taskType?: string)
 		);
 		return rows.map(rowToStrategy);
 	}
-	const rows = await query<any>(`SELECT * FROM agent_strategies WHERE agent_role = $1 ORDER BY is_default DESC, name`, [
+	const rows = await query<any>("SELECT * FROM agent_strategies WHERE agent_role = $1 ORDER BY is_default DESC, name", [
 		agentRole,
 	]);
 	return rows.map(rowToStrategy);
@@ -70,7 +70,7 @@ export async function getStrategiesForRole(agentRole: string, taskType?: string)
 /** Get the default strategy for a role */
 export async function getDefaultStrategy(agentRole: string): Promise<AgentStrategy | undefined> {
 	const row = await queryOne<any>(
-		`SELECT * FROM agent_strategies WHERE agent_role = $1 AND is_default = true LIMIT 1`,
+		"SELECT * FROM agent_strategies WHERE agent_role = $1 AND is_default = true LIMIT 1",
 		[agentRole],
 	);
 	return row ? rowToStrategy(row) : undefined;

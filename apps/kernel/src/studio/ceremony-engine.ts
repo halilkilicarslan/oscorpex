@@ -48,11 +48,11 @@ function buildBlockers(agentId: string, events: StudioEvent[]): string[] {
 	return events
 		.filter(
 			(e) =>
-				(e.agentId === agentId || e.payload["agentId"] === agentId) &&
+				(e.agentId === agentId || e.payload.agentId === agentId) &&
 				(e.type === "task:failed" || e.type === "escalation:user") &&
 				isRecent(e.timestamp),
 		)
-		.map((e) => String(e.payload["error"] ?? e.payload["question"] ?? e.type));
+		.map((e) => String(e.payload.error ?? e.payload.question ?? e.type));
 }
 
 // ---------------------------------------------------------------------------

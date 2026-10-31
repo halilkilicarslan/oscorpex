@@ -39,7 +39,7 @@ export async function createRun(run: Run): Promise<Run> {
 }
 
 export async function getRun(id: string): Promise<Run | null> {
-	const row = await queryOne<Record<string, unknown>>(`SELECT * FROM runs WHERE id = $1`, [id]);
+	const row = await queryOne<Record<string, unknown>>("SELECT * FROM runs WHERE id = $1", [id]);
 	return row ? rowToRun(row) : null;
 }
 

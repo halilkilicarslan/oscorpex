@@ -59,7 +59,7 @@ export const repoSearch: McpToolHandler = async (inv) => {
 						const content = readFileSync(full, "utf8");
 						content.split("\n").forEach((line, i) => {
 							if (results.length < 50 && line.includes(query)) {
-								results.push({ file: full.replace(dir + "/", ""), line: i + 1, text: line.trim().slice(0, 200) });
+								results.push({ file: full.replace(`${dir}/`, ""), line: i + 1, text: line.trim().slice(0, 200) });
 							}
 						});
 					} catch {

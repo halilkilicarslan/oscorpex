@@ -57,10 +57,10 @@ function makeChildMock(stdout: string, stderr = "", exitCode = 0) {
 			for (const cb of listeners[event] ?? []) cb(...args);
 		},
 		emitStdout(chunk: string) {
-			for (const cb of stdoutListeners["data"] ?? []) cb(Buffer.from(chunk));
+			for (const cb of stdoutListeners.data ?? []) cb(Buffer.from(chunk));
 		},
 		emitStderr(chunk: string) {
-			for (const cb of stderrListeners["data"] ?? []) cb(Buffer.from(chunk));
+			for (const cb of stderrListeners.data ?? []) cb(Buffer.from(chunk));
 		},
 	};
 

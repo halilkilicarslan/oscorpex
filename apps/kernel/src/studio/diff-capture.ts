@@ -105,7 +105,7 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 		const maxBytes = 50_000;
 		if (Buffer.byteLength(diff, "utf-8") > maxBytes) {
 			const { added, removed } = countDiffLines(diff);
-			diff = diff.slice(0, maxBytes) + `\n... (truncated, ${added} additions, ${removed} deletions total)`;
+			diff = `${diff.slice(0, maxBytes)}\n... (truncated, ${added} additions, ${removed} deletions total)`;
 		}
 
 		const { added, removed } = countDiffLines(diff);

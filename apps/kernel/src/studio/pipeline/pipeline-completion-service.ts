@@ -6,11 +6,11 @@
 import { mutatePipelineState } from "../db.js";
 import { generateReadme } from "../docs-generator.js";
 import { eventBus } from "../event-bus.js";
-import { createLogger } from "../logger.js";
 import { transitionProject } from "../lifecycle-manager.js";
+import { createLogger } from "../logger.js";
 import type { PipelineStage, PipelineStatus } from "../types.js";
-import { PipelineStateManager } from "./pipeline-state-service.js";
-import { PipelineBranchManager } from "./vcs-phase-hooks.js";
+import type { PipelineStateManager } from "./pipeline-state-service.js";
+import type { PipelineBranchManager } from "./vcs-phase-hooks.js";
 
 const log = createLogger("pipeline-completion-service");
 
@@ -43,15 +43,15 @@ export class PipelineCompletionService {
 		generateReadme(projectId, (msg) => {
 			log.info(`[pipeline-engine] ${msg}`);
 		}).catch((err) => {
-			log.error("[pipeline-engine] README oluşturma hatası:" + " " + String(err));
+			log.error(`[pipeline-engine] README oluşturma hatası: ${String(err)}`);
 		});
 
 		this.branchManager.tryCreatePR(projectId).catch((err) => {
-			log.warn("[pipeline-engine] Auto PR oluşturulamadı:" + " " + String(err));
+			log.warn(`[pipeline-engine] Auto PR oluşturulamadı: ${String(err)}`);
 		});
 
 		transitionProject(projectId, "completed").catch((err) => {
-			log.warn("[pipeline-engine] lifecycle transition → completed failed:" + " " + String(err));
+			log.warn(`[pipeline-engine] lifecycle transition → completed failed: ${String(err)}`);
 			eventBus.emit({
 				projectId,
 				type: "lifecycle:transition",

@@ -83,18 +83,13 @@ describe("P11-J: Memory Pruning UI", () => {
 	it("MemoryPruningPage.tsx exists", async () => {
 		const { existsSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		expect(
-			existsSync(join(process.cwd(), "../../apps/console/src/pages/studio/MemoryPruningPage.tsx")),
-		).toBe(true);
+		expect(existsSync(join(process.cwd(), "../../apps/console/src/pages/studio/MemoryPruningPage.tsx"))).toBe(true);
 	});
 
 	it("MemoryPruningPage.tsx contains expected component elements", async () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		const src = readFileSync(
-			join(process.cwd(), "../../apps/console/src/pages/studio/MemoryPruningPage.tsx"),
-			"utf8",
-		);
+		const src = readFileSync(join(process.cwd(), "../../apps/console/src/pages/studio/MemoryPruningPage.tsx"), "utf8");
 		expect(src).toContain("MemoryPruningPage");
 		expect(src).toContain("PruningCandidate");
 		expect(src).toContain("/api/studio/scheduler/jobs");
@@ -114,18 +109,13 @@ describe("P11-K: Hermes Design", () => {
 	it("hermes-bridge-design-v2.md exists", async () => {
 		const { existsSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		expect(existsSync(join(process.cwd(), "../../docs/architecture/hermes-bridge-design-v2.md"))).toBe(
-			true,
-		);
+		expect(existsSync(join(process.cwd(), "../../docs/architecture/hermes-bridge-design-v2.md"))).toBe(true);
 	});
 
 	it("hermes-bridge-design-v2.md covers required sections", async () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		const src = readFileSync(
-			join(process.cwd(), "../../docs/architecture/hermes-bridge-design-v2.md"),
-			"utf8",
-		);
+		const src = readFileSync(join(process.cwd(), "../../docs/architecture/hermes-bridge-design-v2.md"), "utf8");
 		expect(src).toContain("Auth Flow");
 		expect(src).toContain("Tenant Isolation");
 		expect(src).toContain("Rate Limiting");

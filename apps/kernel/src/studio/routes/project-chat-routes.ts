@@ -129,7 +129,13 @@ projectChatRoutes.post("/projects/:id/chat", async (c) => {
 		return c.json({ error: "Project has no planner agent configured." }, 400);
 	}
 	const pmAgentIds = new Set(plannerAgents.map((a) => a.id));
-	const plannerAgent = plannerAgents[0] ?? { name: "PM Assistant", role: "product-owner", personality: "Friendly project manager", skills: [], systemPrompt: "" };
+	const plannerAgent = plannerAgents[0] ?? {
+		name: "PM Assistant",
+		role: "product-owner",
+		personality: "Friendly project manager",
+		skills: [],
+		systemPrompt: "",
+	};
 
 	const teamInfo = agents
 		.map((a) => {
@@ -212,7 +218,7 @@ ${
 			].join("\n")
 }${
 	mode === "intake"
-		? "\n\n## INTAKE MODE\nYou are in intake/discovery mode. Your ONLY job is to understand the project through conversation. Do NOT create a plan yet. Do NOT use createProjectPlan tool. Ask questions, understand scope, and when ready output a scope-json block:\n```scope-json\n{\"problemStatement\": \"...\", \"goals\": [\"...\"], \"features\": [\"...\"], \"constraints\": [\"...\"], \"techPreferences\": [\"...\"]}\n```"
+		? '\n\n## INTAKE MODE\nYou are in intake/discovery mode. Your ONLY job is to understand the project through conversation. Do NOT create a plan yet. Do NOT use createProjectPlan tool. Ask questions, understand scope, and when ready output a scope-json block:\n```scope-json\n{"problemStatement": "...", "goals": ["..."], "features": ["..."], "constraints": ["..."], "techPreferences": ["..."]}\n```'
 		: ""
 }`;
 
@@ -306,7 +312,7 @@ ${
 											log.info(`[Planner] Registered ${created.length} intake questions for project ${projectId}`);
 										}
 									} catch (parseErr) {
-										log.error("[Planner] Failed to parse askuser-json:" + " " + String(parseErr));
+										log.error(`[Planner] Failed to parse askuser-json: ${String(parseErr)}`);
 									}
 								}
 
@@ -330,7 +336,7 @@ ${
 											log.info(`[Planner] Plan created for project ${projectId} (${planData.phases.length} phases)`);
 										}
 									} catch (parseErr) {
-										log.error("[Planner] Failed to parse plan-json:" + " " + String(parseErr));
+										log.error(`[Planner] Failed to parse plan-json: ${String(parseErr)}`);
 									}
 								}
 
@@ -367,14 +373,13 @@ ${
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : "Unknown error";
 			log.error(
-				"[Planner Error] " +
-					JSON.stringify({
-						projectId,
-						provider: selectedProvider,
-						model: plannerModel,
-						effort: plannerEffort ?? null,
-						error: errorMsg,
-					}),
+				`[Planner Error] ${JSON.stringify({
+					projectId,
+					provider: selectedProvider,
+					model: plannerModel,
+					effort: plannerEffort ?? null,
+					error: errorMsg,
+				})}`,
 			);
 			await stream.writeSSE({
 				event: "error",
@@ -391,7 +396,7 @@ projectChatRoutes.get("/projects/:id/chat/history", async (c) => {
 		if (!project) return c.json({ error: "Project not found" }, 404);
 		return c.json(await listChatMessages(projectId));
 	} catch (err) {
-		log.error("[project-chat-routes] chat history failed:" + " " + String(err));
+		log.error(`[project-chat-routes] chat history failed: ${String(err)}`);
 		return c.json({ error: "Failed to get chat history" }, 500);
 	}
 });

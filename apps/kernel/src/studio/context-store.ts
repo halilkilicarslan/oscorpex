@@ -14,8 +14,8 @@ import {
 	searchChunks,
 	upsertContextSource,
 } from "./db.js";
-import { createLogger } from "./logger.js";
 import { execute } from "./db.js";
+import { createLogger } from "./logger.js";
 import type { ContextContentType, ContextSearchOptions, ContextSearchResult, ContextSource } from "./types.js";
 const log = createLogger("context-store");
 

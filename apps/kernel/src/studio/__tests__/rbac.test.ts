@@ -250,7 +250,7 @@ describe("Auth user management routes", () => {
 		const tenantId = "tenant-1";
 		const role = "developer";
 		await execute(
-			`INSERT INTO user_roles (user_id, tenant_id, role) VALUES ($1, $2, $3) ON CONFLICT (user_id, tenant_id) DO UPDATE SET role = $3`,
+			"INSERT INTO user_roles (user_id, tenant_id, role) VALUES ($1, $2, $3) ON CONFLICT (user_id, tenant_id) DO UPDATE SET role = $3",
 			[userId, tenantId, role],
 		);
 		expect(mockExecute).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO user_roles"), [

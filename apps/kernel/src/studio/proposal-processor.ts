@@ -5,8 +5,8 @@
 // Extracted from execution-engine.ts for single-responsibility.
 // ---------------------------------------------------------------------------
 
-import type { AgentOutputProposal } from "./legacy/cli-runtime.js";
 import { getPipelineRun } from "./db.js";
+import type { AgentOutputProposal } from "./legacy/cli-runtime.js";
 import { createLogger } from "./logger.js";
 import type { Task } from "./types.js";
 const log = createLogger("proposal-processor");
@@ -76,7 +76,7 @@ async function handleTaskProposal(
 		});
 		log.info(`[proposal-processor] Task proposal accepted: "${p.title}" from ${agent.name}`);
 	} catch (err) {
-		log.warn(`[proposal-processor] Task proposal failed: "${p.title}"` + " " + String(err));
+		log.warn(`[proposal-processor] Task proposal failed: "${p.title}" ${String(err)}`);
 	}
 }
 
@@ -112,7 +112,7 @@ async function handleAgentMessage(
 		}
 		log.info(`[proposal-processor] Agent message sent (${msgType}): ${agent.name} → ${m.targetAgentId ?? "broadcast"}`);
 	} catch (err) {
-		log.warn("[proposal-processor] Agent message failed:" + " " + String(err));
+		log.warn(`[proposal-processor] Agent message failed: ${String(err)}`);
 	}
 }
 

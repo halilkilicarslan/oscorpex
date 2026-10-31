@@ -281,7 +281,7 @@ export async function indexDocument(
 	try {
 		embeddings = await generateEmbeddings(chunks, model);
 	} catch (err) {
-		log.error(`[VectorStore] Embedding API error for docId=${docId}:` + " " + String(err));
+		log.error(`[VectorStore] Embedding API error for docId=${docId}: ${String(err)}`);
 		throw err;
 	}
 

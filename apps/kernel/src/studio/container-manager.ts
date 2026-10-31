@@ -329,8 +329,8 @@ class ContainerManager {
 			id: c.Id.slice(0, 12),
 			name: c.Names[0]?.replace(/^\//, "") ?? "",
 			status: c.State,
-			projectId: c.Labels?.["project_id"] ?? "",
-			agentId: c.Labels?.["agent_id"] ?? "",
+			projectId: c.Labels?.project_id ?? "",
+			agentId: c.Labels?.agent_id ?? "",
 		}));
 	}
 

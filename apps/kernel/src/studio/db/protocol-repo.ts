@@ -96,7 +96,7 @@ export async function markMessageActioned(id: string): Promise<void> {
 /** List all protocol messages for a project */
 export async function listProtocolMessages(projectId: string, limit = 50): Promise<AgentProtocolMessage[]> {
 	const rows = await query<any>(
-		`SELECT * FROM agent_protocol_messages WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2`,
+		"SELECT * FROM agent_protocol_messages WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2",
 		[projectId, limit],
 	);
 	return rows.map(rowToMessage);

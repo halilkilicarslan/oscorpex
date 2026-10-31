@@ -74,7 +74,9 @@ describe("P10-J: Secret Guard Expansion", () => {
 	it("detects SendGrid API key", async () => {
 		const { checkForSecrets } = await import("../mcp-bridge/secret-guard.js");
 		// SG. + 22 chars + . + 43 chars
-		expect(checkForSecrets("SG.abcdefghijklmnopqrstuv.abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmn").safe).toBe(false);
+		expect(checkForSecrets("SG.abcdefghijklmnopqrstuv.abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmn").safe).toBe(
+			false,
+		);
 	});
 
 	it("allows safe content through", async () => {

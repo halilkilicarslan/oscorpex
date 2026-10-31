@@ -29,6 +29,7 @@ const log = createLogger("access-guard");
  * any other HTTP request. If a route needs public SSE access,
  * add its path to PUBLIC_ROUTES explicitly.
  */
+// biome-ignore lint/suspicious/noConfusingVoidType: Hono middleware returns void when calling next()
 export async function accessGuard(c: Context, next: Next): Promise<void | Response> {
 	const originalPath = c.req.path;
 	const path = originalPath.startsWith("/api/studio") ? originalPath.slice("/api/studio".length) || "/" : originalPath;
@@ -122,6 +123,7 @@ export async function observabilityGuard(c: Context, next: Next): Promise<void |
 
 /** Factory: create a guard scoped to a specific permission */
 export function requirePermission(permission: string) {
+	// biome-ignore lint/suspicious/noConfusingVoidType: Hono middleware returns void when calling next()
 	return async (c: Context, next: Next): Promise<void | Response> => {
 		// First ensure the user is authenticated
 		const authResult = await authMiddleware(c, async () => {});

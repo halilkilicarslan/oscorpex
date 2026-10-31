@@ -99,10 +99,11 @@ export async function insertChunks(
 }
 
 export async function getChunksBySource(sourceId: string, limit = 500, offset = 0): Promise<ContextChunk[]> {
-	const rows = await query<any>(
-		"SELECT * FROM context_chunks WHERE source_id = $1 ORDER BY id LIMIT $2 OFFSET $3",
-		[sourceId, limit, offset],
-	);
+	const rows = await query<any>("SELECT * FROM context_chunks WHERE source_id = $1 ORDER BY id LIMIT $2 OFFSET $3", [
+		sourceId,
+		limit,
+		offset,
+	]);
 	return rows.map(rowToContextChunk);
 }
 

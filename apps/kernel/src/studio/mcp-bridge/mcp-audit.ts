@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { createLogger } from "../logger.js";
 import { eventBus } from "../event-bus.js";
+import { createLogger } from "../logger.js";
 
 const log = createLogger("mcp-audit");
 

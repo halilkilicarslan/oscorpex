@@ -103,7 +103,9 @@ export type UserRole = "owner" | "admin" | "developer" | "viewer" | "billing";
 
 /** users.is_platform_admin — informational for the console (authorization re-reads it per request). */
 export async function isUserPlatformAdmin(userId: string): Promise<boolean> {
-	const row = await queryOne<{ is_platform_admin: boolean }>("SELECT is_platform_admin FROM users WHERE id = $1", [userId]);
+	const row = await queryOne<{ is_platform_admin: boolean }>("SELECT is_platform_admin FROM users WHERE id = $1", [
+		userId,
+	]);
 	return row?.is_platform_admin === true;
 }
 

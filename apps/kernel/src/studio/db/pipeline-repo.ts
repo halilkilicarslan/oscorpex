@@ -92,7 +92,7 @@ export async function updatePipelineRun(
 	if (fields.length === 0) return getPipelineRun(projectId);
 
 	// Always bump version on update
-	fields.push(`version = version + 1`);
+	fields.push("version = version + 1");
 
 	values.push(projectId);
 	const row = await queryOne<any>(
@@ -145,7 +145,7 @@ export async function mutatePipelineState(
 		}
 
 		if (fields.length > 0) {
-			fields.push(`version = version + 1`);
+			fields.push("version = version + 1");
 			values.push(projectId);
 			await client.query(`UPDATE pipeline_runs SET ${fields.join(", ")} WHERE project_id = $${idx}`, values);
 		}
@@ -222,10 +222,7 @@ export async function updateAgentRun(
 	if (fields.length === 0) return getAgentRun(id);
 
 	values.push(id);
-	const row = await queryOne<any>(
-		`UPDATE agent_runs SET ${fields.join(", ")} WHERE id = $${idx} RETURNING *`,
-		values,
-	);
+	const row = await queryOne<any>(`UPDATE agent_runs SET ${fields.join(", ")} WHERE id = $${idx} RETURNING *`, values);
 	return row ? rowToAgentRun(row) : undefined;
 }
 

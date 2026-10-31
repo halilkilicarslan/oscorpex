@@ -746,11 +746,10 @@ export function extractProposals(text: string): AgentOutputProposal[] {
 	const proposals: AgentOutputProposal[] = [];
 
 	for (const [type, pattern] of Object.entries(MARKER_PATTERNS)) {
-		let match: RegExpExecArray | null;
 		let count = 0;
 		// Reset lastIndex for global regex
 		pattern.lastIndex = 0;
-		while ((match = pattern.exec(text)) !== null && count < MAX_PROPOSALS_PER_TYPE) {
+		for (let match = pattern.exec(text); match !== null && count < MAX_PROPOSALS_PER_TYPE; match = pattern.exec(text)) {
 			try {
 				const payload = JSON.parse(match[1]);
 				if (typeof payload === "object" && payload !== null) {

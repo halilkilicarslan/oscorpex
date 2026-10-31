@@ -4,13 +4,7 @@
 // model selection.  Depends only on the catalog — no I/O, no side effects.
 // ---------------------------------------------------------------------------
 
-import {
-	type Tier,
-	TIERS,
-	getModelCostScore,
-	getProviderModels,
-	getTierModel,
-} from "./provider-model-catalog.js";
+import { TIERS, type Tier, getModelCostScore, getProviderModels, getTierModel } from "./provider-model-catalog.js";
 
 // ---------------------------------------------------------------------------
 // Tier helpers

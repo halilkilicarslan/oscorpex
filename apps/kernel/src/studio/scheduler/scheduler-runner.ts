@@ -12,10 +12,7 @@ import type { SchedulerJobContext, SchedulerJobResult } from "./scheduler-types.
 
 const log = createLogger("scheduler-runner");
 
-export async function runJob(
-	jobId: string,
-	context?: Partial<SchedulerJobContext>,
-): Promise<SchedulerJobResult> {
+export async function runJob(jobId: string, context?: Partial<SchedulerJobContext>): Promise<SchedulerJobResult> {
 	const executedAt = new Date().toISOString();
 
 	if (!isSchedulerEnabled()) {

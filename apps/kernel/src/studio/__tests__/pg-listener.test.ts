@@ -103,7 +103,7 @@ describe("PgListener — notify()", () => {
 		// Gerçek notify implementasyonunu simüle et:
 		const channel = "oscorpex_events";
 		const payload = { id: "evt-1", projectId: "proj-1", type: "task:completed" };
-		await mockExecute(`SELECT pg_notify($1, $2)`, [channel, JSON.stringify(payload)]);
+		await mockExecute("SELECT pg_notify($1, $2)", [channel, JSON.stringify(payload)]);
 
 		expect(mockExecute).toHaveBeenCalledWith("SELECT pg_notify($1, $2)", ["oscorpex_events", JSON.stringify(payload)]);
 	});

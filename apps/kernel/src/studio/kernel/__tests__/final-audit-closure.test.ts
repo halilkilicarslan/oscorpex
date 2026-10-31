@@ -98,10 +98,10 @@ describe("FINAL: Provider transitional audit", () => {
 		const { CANCEL_BEHAVIOR_MATRIX } = await import("@oscorpex/provider-sdk");
 		expect(CANCEL_BEHAVIOR_MATRIX["claude-code"]).toBeDefined();
 		expect(CANCEL_BEHAVIOR_MATRIX["claude-code"].supportsCancel).toBe(true);
-		expect(CANCEL_BEHAVIOR_MATRIX["codex"]).toBeDefined();
-		expect(CANCEL_BEHAVIOR_MATRIX["codex"].supportsCancel).toBe(false);
-		expect(CANCEL_BEHAVIOR_MATRIX["cursor"]).toBeDefined();
-		expect(CANCEL_BEHAVIOR_MATRIX["cursor"].supportsCancel).toBe(false);
+		expect(CANCEL_BEHAVIOR_MATRIX.codex).toBeDefined();
+		expect(CANCEL_BEHAVIOR_MATRIX.codex.supportsCancel).toBe(false);
+		expect(CANCEL_BEHAVIOR_MATRIX.cursor).toBeDefined();
+		expect(CANCEL_BEHAVIOR_MATRIX.cursor.supportsCancel).toBe(false);
 	});
 
 	it("ProviderCapabilities.supportsCancel exists in contract", async () => {

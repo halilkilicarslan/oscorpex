@@ -91,7 +91,7 @@ export async function enforceBudgetGuard(projectId: string): Promise<boolean> {
 		const { pipelineEngine } = await import("./pipeline-engine.js");
 		await pipelineEngine().pausePipeline(projectId);
 	} catch (err) {
-		log.error("[budget-guard] Failed to pause pipeline after budget breach:" + " " + String(err));
+		log.error(`[budget-guard] Failed to pause pipeline after budget breach: ${String(err)}`);
 	}
 
 	return true;

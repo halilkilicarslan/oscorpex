@@ -30,7 +30,7 @@ router.get("/insights/:projectId", async (c) => {
 		const insights = await costOptimizer.getCostInsights(projectId);
 		return c.json(insights);
 	} catch (err) {
-		log.error("[cost-routes] getCostInsights failed:" + " " + String(err));
+		log.error(`[cost-routes] getCostInsights failed: ${String(err)}`);
 		return c.json({ error: err instanceof Error ? err.message : "Failed to compute cost insights" }, 500);
 	}
 });
@@ -62,7 +62,7 @@ router.get("/recommendation/:projectId", async (c) => {
 		const recommendation = await costOptimizer.getRecommendation(projectId, complexity, taskType);
 		return c.json(recommendation);
 	} catch (err) {
-		log.error("[cost-routes] getRecommendation failed:" + " " + String(err));
+		log.error(`[cost-routes] getRecommendation failed: ${String(err)}`);
 		return c.json({ error: err instanceof Error ? err.message : "Failed to compute recommendation" }, 500);
 	}
 });
@@ -83,7 +83,7 @@ router.get("/efficiency/:projectId", async (c) => {
 		const stats = await costOptimizer.getModelEfficiency(projectId);
 		return c.json({ projectId, models: stats });
 	} catch (err) {
-		log.error("[cost-routes] getModelEfficiency failed:" + " " + String(err));
+		log.error(`[cost-routes] getModelEfficiency failed: ${String(err)}`);
 		return c.json({ error: err instanceof Error ? err.message : "Failed to compute model efficiency" }, 500);
 	}
 });

@@ -103,7 +103,7 @@ export async function calculateBurndown(sprintId: string): Promise<{ date: strin
 	// Yaklasim: bir item "tamamlanmis" sayilir eger current status done/closed/wontfix VE
 	// updated_at <= guncel gun ise. Aksi halde aktif sayilir.
 	const sprint = await queryOne<{ start_date: string; end_date: string }>(
-		`SELECT start_date, end_date FROM sprints WHERE id = $1`,
+		"SELECT start_date, end_date FROM sprints WHERE id = $1",
 		[sprintId],
 	);
 	if (!sprint) return [];

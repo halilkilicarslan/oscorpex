@@ -105,7 +105,7 @@ Done with the task.`;
 			{ length: 5 },
 			(_, i) => `<!-- AGENT_MESSAGE: {"targetAgentId": "a${i}", "content": "msg"} -->`,
 		).join("\n");
-		const proposals = extractProposals(tasks + "\n" + msgs);
+		const proposals = extractProposals(`${tasks}\n${msgs}`);
 		const taskProposals = proposals.filter((p) => p.type === "task_proposal");
 		const agentMessages = proposals.filter((p) => p.type === "agent_message");
 		expect(taskProposals).toHaveLength(3); // capped

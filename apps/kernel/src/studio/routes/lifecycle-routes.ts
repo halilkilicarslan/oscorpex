@@ -47,7 +47,7 @@ lifecycleRoutes.get("/projects/:id/report", async (c) => {
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);
-		log.error("[lifecycle-routes] report generation failed:" + " " + String(err));
+		log.error(`[lifecycle-routes] report generation failed: ${String(err)}`);
 		return c.json({ error: msg }, 500);
 	}
 });
@@ -63,7 +63,7 @@ lifecycleRoutes.get("/projects/:id/report/stakeholder", async (c) => {
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);
-		log.error("[lifecycle-routes] stakeholder report failed:" + " " + String(err));
+		log.error(`[lifecycle-routes] stakeholder report failed: ${String(err)}`);
 		return c.json({ error: msg }, 500);
 	}
 });
@@ -103,7 +103,7 @@ lifecycleRoutes.post("/projects/:id/lifecycle/transition", async (c) => {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("not found")) return c.json({ error: msg }, 404);
 		if (msg.includes("Invalid transition")) return c.json({ error: msg }, 409);
-		log.error("[lifecycle-routes] transition failed:" + " " + String(err));
+		log.error(`[lifecycle-routes] transition failed: ${String(err)}`);
 		return c.json({ error: msg }, 500);
 	}
 });
@@ -130,7 +130,7 @@ lifecycleRoutes.post("/projects/:id/hotfix", async (c) => {
 		if (msg.includes("has no plan") || msg.includes("no phases")) {
 			return c.json({ error: msg }, 409);
 		}
-		log.error("[lifecycle-routes] hotfix failed:" + " " + String(err));
+		log.error(`[lifecycle-routes] hotfix failed: ${String(err)}`);
 		return c.json({ error: msg }, 500);
 	}
 });

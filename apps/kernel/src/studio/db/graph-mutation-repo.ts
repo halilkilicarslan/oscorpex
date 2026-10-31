@@ -95,7 +95,7 @@ export async function recordGraphMutation(params: {
 }
 
 export async function getGraphMutation(id: string): Promise<GraphMutation | null> {
-	const row = await queryOne(`SELECT * FROM graph_mutations WHERE id = $1`, [id]);
+	const row = await queryOne("SELECT * FROM graph_mutations WHERE id = $1", [id]);
 	return row ? rowToMutation(row) : null;
 }
 
@@ -106,12 +106,12 @@ export async function listGraphMutations(
 ): Promise<GraphMutation[]> {
 	if (pipelineRunId) {
 		const rows = await query(
-			`SELECT * FROM graph_mutations WHERE project_id = $1 AND pipeline_run_id = $2 ORDER BY created_at ASC LIMIT $3`,
+			"SELECT * FROM graph_mutations WHERE project_id = $1 AND pipeline_run_id = $2 ORDER BY created_at ASC LIMIT $3",
 			[projectId, pipelineRunId, limit],
 		);
 		return rows.map(rowToMutation);
 	}
-	const rows = await query(`SELECT * FROM graph_mutations WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2`, [
+	const rows = await query("SELECT * FROM graph_mutations WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2", [
 		projectId,
 		limit,
 	]);
@@ -124,7 +124,7 @@ export async function listMutationsByType(
 	limit = 50,
 ): Promise<GraphMutation[]> {
 	const rows = await query(
-		`SELECT * FROM graph_mutations WHERE project_id = $1 AND mutation_type = $2 ORDER BY created_at DESC LIMIT $3`,
+		"SELECT * FROM graph_mutations WHERE project_id = $1 AND mutation_type = $2 ORDER BY created_at DESC LIMIT $3",
 		[projectId, mutationType, limit],
 	);
 	return rows.map(rowToMutation);

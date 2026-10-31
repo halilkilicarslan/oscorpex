@@ -22,7 +22,7 @@ memoryRoutes.get("/projects/:id/memory/context", async (c) => {
 		const text = await getProjectContext(projectId);
 		return c.json({ projectId, text });
 	} catch (err) {
-		log.error("[memory-routes] get context failed:" + " " + String(err));
+		log.error(`[memory-routes] get context failed: ${String(err)}`);
 		return c.json({ error: "Failed to get memory context" }, 500);
 	}
 });
@@ -47,7 +47,7 @@ memoryRoutes.get("/projects/:id/memory/snapshot", async (c) => {
 			},
 		});
 	} catch (err) {
-		log.error("[memory-routes] get snapshot failed:" + " " + String(err));
+		log.error(`[memory-routes] get snapshot failed: ${String(err)}`);
 		return c.json({ error: "Failed to get memory snapshot" }, 500);
 	}
 });
@@ -73,7 +73,7 @@ memoryRoutes.post("/projects/:id/memory/refresh", async (c) => {
 				: null,
 		});
 	} catch (err) {
-		log.error("[memory-routes] refresh memory failed:" + " " + String(err));
+		log.error(`[memory-routes] refresh memory failed: ${String(err)}`);
 		return c.json({ error: "Failed to refresh memory" }, 500);
 	}
 });
@@ -90,7 +90,7 @@ memoryRoutes.get("/projects/:id/memory/facts", async (c) => {
 		const facts = await getMemoryFacts(projectId, scope);
 		return c.json({ projectId, facts });
 	} catch (err) {
-		log.error("[memory-routes] get facts failed:" + " " + String(err));
+		log.error(`[memory-routes] get facts failed: ${String(err)}`);
 		return c.json({ error: "Failed to get memory facts" }, 500);
 	}
 });
@@ -122,7 +122,7 @@ memoryRoutes.post("/projects/:id/memory/facts", async (c) => {
 		const fact = await upsertMemoryFact(projectId, scope, key, value, confidence, source);
 		return c.json(fact, 200);
 	} catch (err) {
-		log.error("[memory-routes] upsert fact failed:" + " " + String(err));
+		log.error(`[memory-routes] upsert fact failed: ${String(err)}`);
 		return c.json({ error: "Failed to save memory fact" }, 500);
 	}
 });
@@ -142,7 +142,7 @@ memoryRoutes.delete("/projects/:id/memory/facts", async (c) => {
 		await deleteMemoryFact(projectId, scope, key);
 		return c.json({ ok: true, projectId, scope, key });
 	} catch (err) {
-		log.error("[memory-routes] delete fact failed:" + " " + String(err));
+		log.error(`[memory-routes] delete fact failed: ${String(err)}`);
 		return c.json({ error: "Failed to delete memory fact" }, 500);
 	}
 });

@@ -415,9 +415,7 @@ describe("P10-K: Scheduler Audit", () => {
 			durationMs: 42,
 		});
 		expect(audit.id).toBeDefined();
-		expect(audit.id).toMatch(
-			/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-		);
+		expect(audit.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 	});
 
 	it("recordSchedulerAudit sets timestamp as ISO string", async () => {

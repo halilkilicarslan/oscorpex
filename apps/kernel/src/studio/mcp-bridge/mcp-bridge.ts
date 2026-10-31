@@ -1,16 +1,12 @@
+import { createCheckpoint } from "../checkpoint/index.js";
 import { createLogger } from "../logger.js";
 import { ToolPolicyDeniedError, enforceToolPolicy } from "../security/tool-policy-enforcer.js";
-import { createCheckpoint } from "../checkpoint/index.js";
 import { recordMcpAudit } from "./mcp-audit.js";
 import { gitDiff, gitStatus, repoListFiles, repoReadFile, repoSearch } from "./read-only-tools.js";
-import { getToolHandler, listTools, registerTool } from "./tool-registry.js";
-import {
-	areWriteToolsEnabled,
-	isWriteToolRegistered,
-	listWriteTools,
-} from "./write-tool-registry.js";
 import { checkForSecrets } from "./secret-guard.js";
+import { getToolHandler, listTools, registerTool } from "./tool-registry.js";
 import type { McpToolDefinition, McpToolInvocation, McpToolResult } from "./types.js";
+import { areWriteToolsEnabled, isWriteToolRegistered, listWriteTools } from "./write-tool-registry.js";
 import type { McpWriteToolDefinition } from "./write-tool-registry.js";
 
 const log = createLogger("mcp-bridge");

@@ -1,7 +1,7 @@
 import { createLogger } from "../../logger.js";
 import { invokeMcpTool, invokeMcpWriteTool, listMcpTools } from "../mcp-bridge.js";
-import { isWriteToolRegistered } from "../write-tool-registry.js";
 import type { McpToolInvocation } from "../types.js";
+import { isWriteToolRegistered } from "../write-tool-registry.js";
 
 const log = createLogger("mcp-json-rpc");
 
@@ -30,10 +30,7 @@ export interface McpRequestContext {
  * Handle a JSON-RPC MCP request.
  * Supports: tools/list, tools/call
  */
-export async function handleJsonRpcRequest(
-	raw: unknown,
-	context: McpRequestContext,
-): Promise<JsonRpcResponse> {
+export async function handleJsonRpcRequest(raw: unknown, context: McpRequestContext): Promise<JsonRpcResponse> {
 	// Validate JSON-RPC structure
 	if (!raw || typeof raw !== "object") {
 		return { jsonrpc: "2.0", id: 0, error: { code: -32600, message: "Invalid request" } };
@@ -69,9 +66,7 @@ export async function handleJsonRpcRequest(
 
 				// Route write tools through the approval+checkpoint gate (P6-B/C)
 				const isWrite = isWriteToolRegistered(params.name);
-				const result = isWrite
-					? await invokeMcpWriteTool(invocation)
-					: await invokeMcpTool(invocation);
+				const result = isWrite ? await invokeMcpWriteTool(invocation) : await invokeMcpTool(invocation);
 
 				if (result.ok) {
 					return {

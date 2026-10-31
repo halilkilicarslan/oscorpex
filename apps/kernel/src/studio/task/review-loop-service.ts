@@ -6,13 +6,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-	createTask,
-	getProject,
-	listAgentDependencies,
-	listProjectAgents,
-	updateTask,
-} from "../db.js";
+import { createTask, getProject, listAgentDependencies, listProjectAgents, updateTask } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
 import type { ProjectAgent, Task, TaskOutput } from "../types.js";
@@ -29,10 +23,7 @@ export class TaskReviewManager {
 	private onNotifyCompleted: ReviewCompletionCallback;
 	private onCheckAndAdvancePhase: CheckAndAdvancePhaseCallback;
 
-	constructor(
-		notifyCompleted: ReviewCompletionCallback,
-		checkAndAdvancePhase: CheckAndAdvancePhaseCallback,
-	) {
+	constructor(notifyCompleted: ReviewCompletionCallback, checkAndAdvancePhase: CheckAndAdvancePhaseCallback) {
 		this.onNotifyCompleted = notifyCompleted;
 		this.onCheckAndAdvancePhase = checkAndAdvancePhase;
 	}
@@ -171,7 +162,7 @@ export class TaskReviewManager {
 				});
 			}
 		} catch (err) {
-			log.warn("[task-review-manager] Auto work-item creation on escalation failed:" + " " + String(err));
+			log.warn(`[task-review-manager] Auto work-item creation on escalation failed: ${String(err)}`);
 		}
 
 		log.warn(
@@ -206,9 +197,7 @@ export class TaskReviewManager {
 			},
 		});
 
-		log.info(
-			`[task-review-manager] Task ${taskId} revision'dan tekrar kuyruğa alındı (döngü ${task.revisionCount})`,
-		);
+		log.info(`[task-review-manager] Task ${taskId} revision'dan tekrar kuyruğa alındı (döngü ${task.revisionCount})`);
 
 		return updated;
 	}

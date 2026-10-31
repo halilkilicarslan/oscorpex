@@ -55,13 +55,13 @@ class KernelCostReporter implements CostReporter {
 	async checkBudget(projectId: string): Promise<BudgetCheck> {
 		const { getProjectSettingsMap } = await import("../db.js");
 		const settingsMap = await getProjectSettingsMap(projectId);
-		const budgetSettings = settingsMap["budget"];
+		const budgetSettings = settingsMap.budget;
 
-		if (!budgetSettings || budgetSettings["enabled"] !== "true") {
+		if (!budgetSettings || budgetSettings.enabled !== "true") {
 			return { totalSpentUsd: 0, budgetMaxUsd: null, exceeded: false };
 		}
 
-		const maxCost = Number.parseFloat(budgetSettings["maxCostUsd"] ?? "0");
+		const maxCost = Number.parseFloat(budgetSettings.maxCostUsd ?? "0");
 		const summary = await this.getProjectSpend(projectId);
 		const currentSpend = summary.totalCostUsd ?? 0;
 

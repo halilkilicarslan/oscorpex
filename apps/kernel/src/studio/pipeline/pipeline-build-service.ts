@@ -3,26 +3,10 @@
 // Builds kernel pipeline state from project agents, dependencies, and phases.
 // ---------------------------------------------------------------------------
 
-import {
-	buildDAGStages,
-	buildLinearStages,
-} from "@oscorpex/task-graph";
+import { buildDAGStages, buildLinearStages } from "@oscorpex/task-graph";
 import type { DependencyEdge, GraphAgent, PlanPhase, StagePlan } from "@oscorpex/task-graph";
-import {
-	getLatestPlan,
-	getProject,
-	listAgentDependencies,
-	listPhases,
-	listProjectAgents,
-} from "../db.js";
-import type {
-	AgentDependency,
-	Phase,
-	PipelineStage,
-	PipelineState,
-	ProjectAgent,
-	Task,
-} from "../types.js";
+import { getLatestPlan, getProject, listAgentDependencies, listPhases, listProjectAgents } from "../db.js";
+import type { AgentDependency, Phase, PipelineStage, PipelineState, ProjectAgent, Task } from "../types.js";
 
 export class PipelineBuildService {
 	async buildPipeline(projectId: string): Promise<PipelineState> {

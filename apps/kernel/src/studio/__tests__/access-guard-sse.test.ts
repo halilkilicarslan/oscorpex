@@ -3,9 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { afterEach, beforeEach, describe, expect, vi } from "vitest";
-import { it } from "./helpers/outside-scope.js";
 import { accessGuard } from "../auth/access-guard.js";
 import { currentScope } from "../tenancy/tenant-scope.js";
+import { it } from "./helpers/outside-scope.js";
 
 const ENV_KEYS = ["OSCORPEX_AUTH_ENABLED", "OSCORPEX_DEV_NO_AUTH", "OSCORPEX_API_KEY"] as const;
 

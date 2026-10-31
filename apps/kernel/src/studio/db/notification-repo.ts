@@ -96,7 +96,7 @@ export async function listNotifications(opts: ListNotificationsOpts = {}): Promi
 		params.push(projectId);
 	}
 	if (unreadOnly) {
-		conditions.push(`read = false`);
+		conditions.push("read = false");
 	}
 
 	const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -143,7 +143,7 @@ export async function countUnread(opts: CountUnreadOpts = {}): Promise<number> {
 // ---------------------------------------------------------------------------
 
 export async function markNotificationAsRead(id: string): Promise<void> {
-	await execute(`UPDATE notifications SET read = true WHERE id = $1`, [id]);
+	await execute("UPDATE notifications SET read = true WHERE id = $1", [id]);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,5 +179,5 @@ export async function markAllNotificationsAsRead(opts: MarkAllAsReadOpts = {}): 
 // ---------------------------------------------------------------------------
 
 export async function deleteNotification(id: string): Promise<void> {
-	await execute(`DELETE FROM notifications WHERE id = $1`, [id]);
+	await execute("DELETE FROM notifications WHERE id = $1", [id]);
 }

@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { z } from "zod";
 import { discoverApi, loadCollection, saveCollection } from "../api-discovery.js";
 import type { SavedRequest } from "../api-discovery.js";
 import { getAppStatus } from "../app-runner.js";
@@ -22,7 +23,6 @@ import { createLogger } from "../logger.js";
 import { decrypt, encrypt, isEncrypted } from "../secret-vault.js";
 import { sendWebhookNotification } from "../webhook-sender.js";
 import { parseBody } from "./validation-schemas.js";
-import { z } from "zod";
 const log = createLogger("integration-routes");
 
 export const integrationRoutes = new Hono();
@@ -159,9 +159,12 @@ integrationRoutes.get("/projects/:id/webhooks", async (c) => {
 const CreateWebhookBodySchema = z
 	.object({
 		name: z.string().min(1).max(120),
-		url: z.string().max(2000).refine((u) => u.startsWith("https://") || u.startsWith("http://"), {
-			message: "url must start with https:// (or http:// for local dev)",
-		}),
+		url: z
+			.string()
+			.max(2000)
+			.refine((u) => u.startsWith("https://") || u.startsWith("http://"), {
+				message: "url must start with https:// (or http:// for local dev)",
+			}),
 		type: z.enum(["slack", "discord", "generic"]).optional().default("generic"),
 		events: z.array(z.string().max(80)).max(50).optional().default([]),
 	})

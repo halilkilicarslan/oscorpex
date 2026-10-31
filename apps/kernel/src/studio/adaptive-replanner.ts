@@ -93,7 +93,7 @@ export async function recordReplanEvent(params: {
 }
 
 export async function listReplanEvents(projectId: string, limit = 20): Promise<ReplanResult[]> {
-	const rows = await query(`SELECT * FROM replan_events WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2`, [
+	const rows = await query("SELECT * FROM replan_events WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2", [
 		projectId,
 		limit,
 	]);
@@ -113,7 +113,7 @@ export async function listReplanEvents(projectId: string, limit = 20): Promise<R
 }
 
 export async function getReplanEvent(id: string): Promise<ReplanResult | null> {
-	const row = await queryOne(`SELECT * FROM replan_events WHERE id = $1`, [id]);
+	const row = await queryOne("SELECT * FROM replan_events WHERE id = $1", [id]);
 	if (!row) return null;
 	return {
 		id: row.id as string,
@@ -175,7 +175,14 @@ interface ProjectStateSnapshot {
 	blockedTasks: number;
 	queueRatio: number;
 	blockRatio: number;
-	phases: Array<{ id: string; title: string; status: string; taskCount: number; completedCount: number; tasks: Array<{ id: string; status: string }> }>;
+	phases: Array<{
+		id: string;
+		title: string;
+		status: string;
+		taskCount: number;
+		completedCount: number;
+		tasks: Array<{ id: string; status: string }>;
+	}>;
 }
 
 async function snapshotProjectState(projectId: string): Promise<ProjectStateSnapshot> {

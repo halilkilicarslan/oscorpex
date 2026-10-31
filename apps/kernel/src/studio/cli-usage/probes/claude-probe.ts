@@ -124,6 +124,7 @@ function summarizeClaudeDailyUsage(): DailyUsage {
 // ---------------------------------------------------------------------------
 
 function parsePercentQuota(text: string, providerId: string): UsageQuota[] {
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally matches ANSI escape sequences
 	const clean = text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
 	const quotas: UsageQuota[] = [];
 	const lines = clean.split("\n");

@@ -3,7 +3,6 @@
 // Assembles a read-only inspector payload from existing runtime data.
 // ---------------------------------------------------------------------------
 
-import { createLogger } from "../logger.js";
 import {
 	getAgentForInspector,
 	getSessionForTask,
@@ -14,6 +13,7 @@ import {
 	listTokenUsageForTask,
 	listVerificationResults,
 } from "../db.js";
+import { createLogger } from "../logger.js";
 import {
 	buildTimeline,
 	buildWarnings,
@@ -31,10 +31,7 @@ import type { TaskSessionInspector } from "./task-session-inspector-types.js";
 
 const log = createLogger("task-session-inspector");
 
-export async function getTaskSessionInspector(
-	projectId: string,
-	taskId: string,
-): Promise<TaskSessionInspector | null> {
+export async function getTaskSessionInspector(projectId: string, taskId: string): Promise<TaskSessionInspector | null> {
 	// 1. Fetch task — required
 	const taskRow = await getTaskForInspector(taskId);
 	if (!taskRow) {

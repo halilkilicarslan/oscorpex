@@ -27,7 +27,7 @@ cpAuditRoutes.get("/audit", async (c) => {
 		});
 		return c.json({ events });
 	} catch (err) {
-		log.error("[audit] list failed: " + String(err));
+		log.error(`[audit] list failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -47,7 +47,7 @@ cpAuditRoutes.get("/security-events", async (c) => {
 		});
 		return c.json({ events });
 	} catch (err) {
-		log.error("[audit] security list failed: " + String(err));
+		log.error(`[audit] security list failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -69,7 +69,7 @@ cpAuditRoutes.post("/audit", async (c) => {
 		const event = await appendAuditEvent(body);
 		return c.json({ event }, 201);
 	} catch (err) {
-		log.error("[audit] append failed: " + String(err));
+		log.error(`[audit] append failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });

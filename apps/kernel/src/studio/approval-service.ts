@@ -9,15 +9,15 @@ import {
 	type ApprovalRequestState,
 	type QualityApprovalDecision,
 	type QualityApprovalRequest,
+	type QualityGateEnvironment,
 	getApprovalRequest,
+	getGoalScope,
 	insertApprovalDecision,
 	insertApprovalRequest,
 	listApprovalDecisions,
 	listApprovalRequestsForGoal,
 	listPendingApprovalRequests,
 	updateApprovalRequestState,
-	type QualityGateEnvironment,
-	getGoalScope,
 } from "./db.js";
 import { eventBus } from "./event-bus.js";
 

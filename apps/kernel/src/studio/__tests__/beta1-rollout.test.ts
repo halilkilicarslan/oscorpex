@@ -19,7 +19,7 @@ describe("Beta-1: Controlled Rollout Infrastructure", () => {
 		it(`${doc} exists`, async () => {
 			const { existsSync } = await import("node:fs");
 			const { join } = await import("node:path");
-			expect(existsSync(join(process.cwd(), "../../" + doc))).toBe(true);
+			expect(existsSync(join(process.cwd(), `../../${doc}`))).toBe(true);
 		});
 	}
 

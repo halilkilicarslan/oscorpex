@@ -160,7 +160,7 @@ export async function runLintFix(repoPath: string, files: string[], log?: (msg: 
 				// code 1 = lint warnings/errors found but fix applied where possible
 				result.eslint.fixed = lintFiles.length;
 			}
-			if (stderr && stderr.trim()) {
+			if (stderr?.trim()) {
 				result.eslint.errors.push(stderr.trim().slice(0, 500));
 			}
 		} catch (e) {
@@ -182,7 +182,7 @@ export async function runLintFix(repoPath: string, files: string[], log?: (msg: 
 			if (code === 0) {
 				result.prettier.formatted = formatFiles.length;
 			}
-			if (stderr && stderr.trim()) {
+			if (stderr?.trim()) {
 				result.prettier.errors.push(stderr.trim().slice(0, 500));
 			}
 		} catch (e) {

@@ -26,7 +26,7 @@ class KernelPolicyEngine implements PolicyEngine {
 
 		const { getProjectSettingsMap } = await import("../db.js");
 		const settingsMap = await getProjectSettingsMap(projectId);
-		const raw = settingsMap["policy"]?.["rules"];
+		const raw = settingsMap.policy?.rules;
 		const customRules = parsePolicies(raw);
 
 		const result = evaluatePolicyRules(task, settingsMap, customRules);

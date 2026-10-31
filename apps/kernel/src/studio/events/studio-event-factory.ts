@@ -177,12 +177,7 @@ export function approvalRequestedEvent(
  * @param reason     Optional human-readable explanation; defaults to a
  *                   generated "Falling back from X to Y" string
  */
-export function providerFallbackEvent(
-	projectId: string,
-	from: string,
-	to: string,
-	reason?: string,
-): EmitData {
+export function providerFallbackEvent(projectId: string, from: string, to: string, reason?: string): EmitData {
 	return {
 		type: "provider:degraded",
 		projectId,

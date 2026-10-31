@@ -131,7 +131,7 @@ export class CostOptimizer {
 		taskType?: string,
 	): Promise<CostRecommendation> {
 		const defaultConfig = getDefaultRoutingConfig();
-		const defaultModel = defaultConfig[taskComplexity] ?? defaultConfig["M"] ?? "claude-sonnet-4-6";
+		const defaultModel = defaultConfig[taskComplexity] ?? defaultConfig.M ?? "claude-sonnet-4-6";
 
 		// Fetch efficiency stats from DB
 		const modelStats = await this.getModelEfficiency(projectId);
@@ -363,7 +363,7 @@ export class CostOptimizer {
 			XL: ["sonnet", "opus", "o3", "cursor-large"],
 		};
 
-		const patterns = allowPatterns[complexity] ?? allowPatterns["M"];
+		const patterns = allowPatterns[complexity] ?? allowPatterns.M;
 		return stats.filter((s) => patterns.some((p) => s.model.toLowerCase().includes(p)));
 	}
 
@@ -448,8 +448,7 @@ export class CostOptimizer {
 		const lowQuality = modelStats.filter((s) => s.taskCount >= MIN_SAMPLE_SIZE && s.successRate < 0.6);
 		for (const s of lowQuality) {
 			recs.push(
-				`${s.model} has a low success rate (${Math.round(s.successRate * 100)}%). ` +
-					`Consider upgrading to a higher-capability model for complex tasks.`,
+				`${s.model} has a low success rate (${Math.round(s.successRate * 100)}%). Consider upgrading to a higher-capability model for complex tasks.`,
 			);
 		}
 
@@ -457,8 +456,7 @@ export class CostOptimizer {
 		const avgCostPerTask = taskCount > 0 ? totalCostUsd / taskCount : 0;
 		if (avgCostPerTask > 0.5) {
 			recs.push(
-				`Average cost per task is $${avgCostPerTask.toFixed(4)}. ` +
-					`Enable caching and prefer Haiku/Sonnet for S/M complexity tasks to reduce spend.`,
+				`Average cost per task is $${avgCostPerTask.toFixed(4)}. Enable caching and prefer Haiku/Sonnet for S/M complexity tasks to reduce spend.`,
 			);
 		}
 

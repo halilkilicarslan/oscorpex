@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../security/tool-policy-enforcer.js", () => ({
 	enforceToolPolicy: vi.fn(),
@@ -246,9 +246,7 @@ describe("P11-L: Gateway Preconditions Document", () => {
 	it("preconditions document exists", async () => {
 		const { existsSync } = await import("node:fs");
 		const { join } = await import("node:path");
-		expect(
-			existsSync(join(process.cwd(), "../../docs/production/gateway-production-preconditions.md")),
-		).toBe(true);
+		expect(existsSync(join(process.cwd(), "../../docs/production/gateway-production-preconditions.md"))).toBe(true);
 	});
 
 	it("document contains required sections", async () => {

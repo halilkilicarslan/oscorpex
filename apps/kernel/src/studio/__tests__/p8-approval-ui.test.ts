@@ -22,10 +22,10 @@ describe("P8: Approval UI pages exist", () => {
 	it("remaining focus:outline-none count reduced", async () => {
 		const { execSync } = await import("node:child_process");
 		const { join } = await import("node:path");
-		const count = execSync(
-			"rg -c 'focus:outline-none' apps/console/src 2>/dev/null | awk -F: '{s+=$2}END{print s}'",
-			{ cwd: join(process.cwd(), "../.."), encoding: "utf8" },
-		).trim();
+		const count = execSync("rg -c 'focus:outline-none' apps/console/src 2>/dev/null | awk -F: '{s+=$2}END{print s}'", {
+			cwd: join(process.cwd(), "../.."),
+			encoding: "utf8",
+		}).trim();
 		// P7 fixed 40, should be well below 153 original
 		expect(Number.parseInt(count || "0")).toBeLessThan(120);
 	});

@@ -19,9 +19,7 @@ export interface SchedulerAuditEvent {
 	timestamp: string;
 }
 
-export function recordSchedulerAudit(
-	event: Omit<SchedulerAuditEvent, "id" | "timestamp">,
-): SchedulerAuditEvent {
+export function recordSchedulerAudit(event: Omit<SchedulerAuditEvent, "id" | "timestamp">): SchedulerAuditEvent {
 	const audit: SchedulerAuditEvent = {
 		...event,
 		id: randomUUID(),

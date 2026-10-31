@@ -59,7 +59,7 @@ export async function resolveAgent(projectId: string, assignment: string): Promi
 	}
 
 	const pByPartialRole = projectAgents.find(
-		(a) => a.role.toLowerCase().startsWith(aLower + "-") || a.role.toLowerCase().endsWith("-" + aLower),
+		(a) => a.role.toLowerCase().startsWith(`${aLower}-`) || a.role.toLowerCase().endsWith(`-${aLower}`),
 	);
 	if (pByPartialRole) return pByPartialRole as unknown as AgentConfig;
 
@@ -290,17 +290,17 @@ function buildZeroFileReviewPrompt(
 	return [
 		`# Zero-File Decision Review: ${originalTask.title}`,
 		"",
-		`## Context`,
+		"## Context",
 		`- Project: ${project.name}`,
 		`- Original task: ${originalTask.title}`,
 		`- Description: ${originalTask.description}`,
 		"",
-		`## Durum`,
+		"## Durum",
 		"Orijinal task hiçbir dosya oluşturmadı veya değiştirmedi.",
 		"",
-		...(allFiles.length > 0 ? [`## Decision Dosyası`, `- \`${allFiles[0]}\``, ""] : []),
+		...(allFiles.length > 0 ? ["## Decision Dosyası", `- \`${allFiles[0]}\``, ""] : []),
 		...(decisionContent ? ["## Decision İçeriği (inline)", decisionContent, ""] : []),
-		`## Reviewer Talimatları`,
+		"## Reviewer Talimatları",
 		...(allFiles.length > 0 ? ["1. readFile ile decision.md dosyasını oku"] : ["1. Yukarıdaki decision içeriğini oku"]),
 		"2. Orijinal task açıklamasını dikkatlice incele",
 		"3. Task'ın dosya değişikliği gerektirip gerektirmediğini değerlendir:",
@@ -318,15 +318,15 @@ function buildCodeReviewPrompt(project: Project, originalTask: Task, allFiles: s
 	return [
 		`# Code Review: ${originalTask.title}`,
 		"",
-		`## Context`,
+		"## Context",
 		`- Project: ${project.name}`,
 		`- Original task: ${originalTask.title}`,
 		`- Description: ${originalTask.description}`,
 		"",
-		`## Files to Review`,
+		"## Files to Review",
 		...allFiles.map((f) => `- \`${f}\``),
 		"",
-		`## Instructions`,
+		"## Instructions",
 		"Review the code for each file:",
 		"1. Use readFile to read the file contents",
 		"2. Check for bugs, security issues, code style problems, and missing edge cases",

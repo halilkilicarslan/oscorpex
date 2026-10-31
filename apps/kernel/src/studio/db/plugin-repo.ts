@@ -149,7 +149,7 @@ export async function updatePlugin(
 
 	if (parts.length === 0) return getPlugin(name);
 
-	parts.push(`updated_at = now()`);
+	parts.push("updated_at = now()");
 	values.push(name);
 
 	const row = await queryOne<Record<string, unknown>>(

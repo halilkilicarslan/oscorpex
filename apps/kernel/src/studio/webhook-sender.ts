@@ -268,7 +268,7 @@ class WebhookSender {
 			webhooks = await listWebhooksForEvent(event.projectId, webhookEventType);
 		} catch (err) {
 			rethrowScopeError(err);
-			log.warn("[webhook-sender] Webhook listesi alinamadi: " + (err instanceof Error ? err.message : String(err)));
+			log.warn(`[webhook-sender] Webhook listesi alinamadi: ${err instanceof Error ? err.message : String(err)}`);
 			return;
 		}
 
@@ -397,9 +397,7 @@ class WebhookSender {
 			});
 		} catch (logErr) {
 			// Log hatası ana akışı engellemez
-			log.warn(
-				"[webhook-sender] Teslimat kaydedilemedi: " + (logErr instanceof Error ? logErr.message : String(logErr)),
-			);
+			log.warn(`[webhook-sender] Teslimat kaydedilemedi: ${logErr instanceof Error ? logErr.message : String(logErr)}`);
 		}
 
 		if (result.success) {
@@ -459,7 +457,7 @@ export async function sendWebhookNotification(
 		webhooks = await listWebhooksForEvent(projectId, eventType);
 	} catch (err) {
 		// DB hatası — sessizce logla
-		log.warn("[webhook-sender] Webhook listesi alinamadi: " + (err instanceof Error ? err.message : String(err)));
+		log.warn(`[webhook-sender] Webhook listesi alinamadi: ${err instanceof Error ? err.message : String(err)}`);
 		return;
 	}
 

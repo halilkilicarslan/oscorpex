@@ -10,9 +10,7 @@ vi.mock("../mcp-bridge/write-tool-registry.js", async (importOriginal) => {
 });
 
 vi.mock("../security/workspace-resolver.js", () => ({
-	resolveWorkspacePath: vi.fn((_scope: unknown, rel?: string) =>
-		`/workspace/t1/p1${rel ? `/${rel}` : ""}`,
-	),
+	resolveWorkspacePath: vi.fn((_scope: unknown, rel?: string) => `/workspace/t1/p1${rel ? `/${rel}` : ""}`),
 	assertInsideWorkspace: vi.fn(),
 }));
 
@@ -100,9 +98,7 @@ describe("P6-D: file.write tool", () => {
 
 	it("rejects unknown extra fields (strict schema)", async () => {
 		const { fileWrite } = await import("../mcp-bridge/write-tools.js");
-		const result = await fileWrite(
-			inv("file.write", { path: "a.ts", content: "x", extraField: "sneaky" }),
-		);
+		const result = await fileWrite(inv("file.write", { path: "a.ts", content: "x", extraField: "sneaky" }));
 		expect(result.ok).toBe(false);
 		expect(result.error?.code).toBe("INVALID_INPUT");
 	});
@@ -339,9 +335,7 @@ describe("P6-G: git.createBranch tool", () => {
 
 	it("accepts explicit fromRef", async () => {
 		const { gitCreateBranch } = await import("../mcp-bridge/write-tools.js");
-		const result = await gitCreateBranch(
-			inv("git.createBranch", { branchName: "hotfix-99", fromRef: "main" }),
-		);
+		const result = await gitCreateBranch(inv("git.createBranch", { branchName: "hotfix-99", fromRef: "main" }));
 		expect(result.ok).toBe(true);
 		expect((result.data as Record<string, unknown>)?.fromRef).toBe("main");
 	});

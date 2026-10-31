@@ -27,10 +27,10 @@ export async function persistAgentLog(projectId: string, agentId: string, lines:
 	if (lines.length === 0) return;
 	try {
 		await mkdir(logDir(projectId), { recursive: true });
-		const content = lines.map((l) => l.replace(/\n$/, "")).join("\n") + "\n";
+		const content = `${lines.map((l) => l.replace(/\n$/, "")).join("\n")}\n`;
 		await writeFile(logPath(projectId, agentId), content, "utf8");
 	} catch (err) {
-		log.warn("[agent-log-store] Log yazılamadı: " + (err instanceof Error ? err.message : String(err)));
+		log.warn(`[agent-log-store] Log yazılamadı: ${err instanceof Error ? err.message : String(err)}`);
 	}
 }
 

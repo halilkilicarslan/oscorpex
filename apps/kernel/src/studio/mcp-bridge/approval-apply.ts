@@ -1,9 +1,9 @@
 import { createLogger } from "../logger.js";
 import { enforceToolPolicy } from "../security/tool-policy-enforcer.js";
-import { getWriteToolHandler, areWriteToolsEnabled } from "./write-tool-registry.js";
 import { recordMcpAudit } from "./mcp-audit.js";
 import { checkForSecrets } from "./secret-guard.js";
 import type { McpToolInvocation, McpToolResult } from "./types.js";
+import { areWriteToolsEnabled, getWriteToolHandler } from "./write-tool-registry.js";
 
 const log = createLogger("approval-apply");
 
@@ -101,7 +101,10 @@ export async function applyApprovedWrite(request: ApprovalApplyRequest): Promise
 		return { status: result.ok ? "applied" : "failed", toolResult: result };
 	} catch (err) {
 		const duration = Date.now() - start;
-		log.error({ err, tool: request.toolName, approvalId: request.approvalId }, "[approval-apply] Write tool execution failed");
+		log.error(
+			{ err, tool: request.toolName, approvalId: request.approvalId },
+			"[approval-apply] Write tool execution failed",
+		);
 		recordMcpAudit({
 			tenantId: request.tenantId,
 			projectId: request.projectId,

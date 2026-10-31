@@ -49,10 +49,10 @@ class PgListener {
 		try {
 			await client.connect();
 		} catch (err) {
-			log.warn("[pg-listener] Connection failed: " + (err instanceof Error ? err.message : String(err)));
+			log.warn(`[pg-listener] Connection failed: ${err instanceof Error ? err.message : String(err)}`);
 			client
 				.end()
-				.catch((err) => log.warn("[pg-listener] Non-blocking operation failed: " + (err?.message ?? String(err))));
+				.catch((err) => log.warn(`[pg-listener] Non-blocking operation failed: ${err?.message ?? String(err)}`));
 			this._scheduleReconnect();
 			return;
 		}
@@ -78,7 +78,7 @@ class PgListener {
 		});
 
 		client.on("error", (err) => {
-			log.warn("[pg-listener] Client error: " + (err instanceof Error ? err.message : String(err)));
+			log.warn(`[pg-listener] Client error: ${err instanceof Error ? err.message : String(err)}`);
 			this.connected = false;
 			this.client = null;
 			if (!this.stopped) this._scheduleReconnect();
@@ -97,12 +97,12 @@ class PgListener {
 			await client.query(`LISTEN ${CHANNEL}`);
 			console.info(`[pg-listener] Listening on channel: ${CHANNEL}`);
 		} catch (err) {
-			log.warn("[pg-listener] LISTEN failed: " + (err instanceof Error ? err.message : String(err)));
+			log.warn(`[pg-listener] LISTEN failed: ${err instanceof Error ? err.message : String(err)}`);
 			this.connected = false;
 			this.client = null;
 			client
 				.end()
-				.catch((err) => log.warn("[pg-listener] Non-blocking operation failed: " + (err?.message ?? String(err))));
+				.catch((err) => log.warn(`[pg-listener] Non-blocking operation failed: ${err?.message ?? String(err)}`));
 			this._scheduleReconnect();
 		}
 	}
@@ -174,7 +174,7 @@ class PgListener {
 	 * Dedicated client değil, execute() (pool) kullanır.
 	 */
 	async notify(payload: NotificationPayload): Promise<void> {
-		await execute(`SELECT pg_notify($1, $2)`, [CHANNEL, JSON.stringify(payload)]);
+		await execute("SELECT pg_notify($1, $2)", [CHANNEL, JSON.stringify(payload)]);
 	}
 
 	get isConnected(): boolean {

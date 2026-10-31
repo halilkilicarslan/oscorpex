@@ -33,7 +33,7 @@ export class InjectionLimitError extends Error {
 async function checkInjectionLimits(request: InjectionRequest): Promise<void> {
 	// Per-task quota: max proposals from a single originating task
 	if (request.originatingTaskId) {
-		const taskProposals = await query(`SELECT COUNT(*) AS cnt FROM task_proposals WHERE originating_task_id = $1`, [
+		const taskProposals = await query("SELECT COUNT(*) AS cnt FROM task_proposals WHERE originating_task_id = $1", [
 			request.originatingTaskId,
 		]);
 		if (Number(taskProposals[0]?.cnt ?? 0) >= MAX_PROPOSALS_PER_TASK) {
@@ -46,7 +46,7 @@ async function checkInjectionLimits(request: InjectionRequest): Promise<void> {
 
 	// Per-phase budget: max proposals in a single phase
 	if (request.phaseId) {
-		const phaseProposals = await query(`SELECT COUNT(*) AS cnt FROM task_proposals WHERE phase_id = $1`, [
+		const phaseProposals = await query("SELECT COUNT(*) AS cnt FROM task_proposals WHERE phase_id = $1", [
 			request.phaseId,
 		]);
 		if (Number(phaseProposals[0]?.cnt ?? 0) >= MAX_PROPOSALS_PER_PHASE) {

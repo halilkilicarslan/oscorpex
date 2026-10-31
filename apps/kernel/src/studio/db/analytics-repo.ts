@@ -239,14 +239,10 @@ export async function getProjectAnalytics(projectId: string) {
   `,
 			[projectId],
 		),
-		queryOne<any>(
-			`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:failed'`,
-			[projectId],
-		),
-		queryOne<any>(
-			`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:review_rejected'`,
-			[projectId],
-		),
+		queryOne<any>(`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:failed'`, [projectId]),
+		queryOne<any>(`SELECT COUNT(*) AS cnt FROM events WHERE project_id = $1 AND type = 'task:review_rejected'`, [
+			projectId,
+		]),
 		query<any>(
 			`
     SELECT

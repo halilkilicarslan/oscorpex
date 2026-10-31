@@ -113,7 +113,9 @@ export async function applyZeroFileGuard(
 		],
 	};
 
-	log.warn(`[zero-file-guard] Task "${task.title}" zero-file output — decision.md ${fileWritten ? "written" : "skipped (no repoPath)"}`);
+	log.warn(
+		`[zero-file-guard] Task "${task.title}" zero-file output — decision.md ${fileWritten ? "written" : "skipped (no repoPath)"}`,
+	);
 
 	return { proceed: true, output: guardedOutput };
 }

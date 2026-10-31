@@ -138,7 +138,7 @@ class KernelMemoryProvider implements MemoryProvider {
 			500,
 		);
 		parts.push(systemSection.text);
-		sections["system"] = systemSection.tokens;
+		sections.system = systemSection.tokens;
 
 		if (agentId) {
 			const agent = agents.find((a) => a.id === agentId);
@@ -153,7 +153,7 @@ class KernelMemoryProvider implements MemoryProvider {
 					.join("\n");
 				const profileSection = buildSection("Agent Profile", profileLines, SECTION_BUDGETS.agentProfile);
 				parts.push(profileSection.text);
-				sections["agentProfile"] = profileSection.tokens;
+				sections.agentProfile = profileSection.tokens;
 			}
 		}
 
@@ -172,7 +172,7 @@ class KernelMemoryProvider implements MemoryProvider {
 		];
 		const taskSection = buildSection("Task", taskLines.join("\n"), SECTION_BUDGETS.taskDescription);
 		parts.push(taskSection.text);
-		sections["task"] = taskSection.tokens;
+		sections.task = taskSection.tokens;
 
 		if (task.targetFiles && task.targetFiles.length > 0) {
 			const filesSection = buildSection(
@@ -181,7 +181,7 @@ class KernelMemoryProvider implements MemoryProvider {
 				SECTION_BUDGETS.targetFiles,
 			);
 			parts.push(filesSection.text);
-			sections["targetFiles"] = filesSection.tokens;
+			sections.targetFiles = filesSection.tokens;
 		}
 
 		const completed = allTasks.filter((t: any) => t.id !== taskId && t.status === "done").slice(-10);
@@ -192,14 +192,14 @@ class KernelMemoryProvider implements MemoryProvider {
 				SECTION_BUDGETS.completedTasks,
 			);
 			parts.push(completedSection.text);
-			sections["completedTasks"] = completedSection.tokens;
+			sections.completedTasks = completedSection.tokens;
 		}
 
 		const criteriaMatch = task.description.match(/acceptance criteria[:\s]+([\s\S]+?)(?:\n##|\n---|\n\n\n|$)/i);
 		if (criteriaMatch) {
 			const criteriaSection = buildSection("Acceptance Criteria", criteriaMatch[1].trim(), 2_000);
 			parts.push(criteriaSection.text);
-			sections["acceptanceCriteria"] = criteriaSection.tokens;
+			sections.acceptanceCriteria = criteriaSection.tokens;
 		}
 
 		return { sections, prompt: parts.join("\n\n---\n\n") };
@@ -220,7 +220,7 @@ class KernelMemoryProvider implements MemoryProvider {
 			400,
 		);
 		parts.push(systemSection.text);
-		sections["system"] = systemSection.tokens;
+		sections.system = systemSection.tokens;
 
 		const { listProjectTasks } = await import("../db.js");
 		const allTasks = await listProjectTasks(projectId);
@@ -233,13 +233,13 @@ class KernelMemoryProvider implements MemoryProvider {
 			SECTION_BUDGETS.taskDescription,
 		);
 		parts.push(taskSection.text);
-		sections["originalTask"] = taskSection.tokens;
+		sections.originalTask = taskSection.tokens;
 
 		const criteriaMatch = task.description.match(/acceptance criteria[:\s]+([\s\S]+?)(?:\n##|\n---|\n\n\n|$)/i);
 		if (criteriaMatch) {
 			const criteriaSection = buildSection("Acceptance Criteria", criteriaMatch[1].trim(), 2_000);
 			parts.push(criteriaSection.text);
-			sections["acceptanceCriteria"] = criteriaSection.tokens;
+			sections.acceptanceCriteria = criteriaSection.tokens;
 		}
 
 		if (task.output) {
@@ -250,7 +250,7 @@ class KernelMemoryProvider implements MemoryProvider {
 			if (changedFiles.length > 0) {
 				const changedSection = buildSection("Changed Files", changedFiles.join("\n"), 2_000);
 				parts.push(changedSection.text);
-				sections["changedFiles"] = changedSection.tokens;
+				sections.changedFiles = changedSection.tokens;
 			}
 		}
 
@@ -273,7 +273,7 @@ class KernelMemoryProvider implements MemoryProvider {
 			500,
 		);
 		parts.push(systemSection.text);
-		sections["system"] = systemSection.tokens;
+		sections.system = systemSection.tokens;
 
 		const { listProjectTasks } = await import("../db.js");
 		const allTasks = await listProjectTasks(projectId);
@@ -291,12 +291,12 @@ class KernelMemoryProvider implements MemoryProvider {
 		];
 		const taskSection = buildSection("Task", taskLines.join("\n"), SECTION_BUDGETS.taskDescription);
 		parts.push(taskSection.text);
-		sections["task"] = taskSection.tokens;
+		sections.task = taskSection.tokens;
 
 		if (task.error) {
 			const errorSection = buildSection("Previous Error", task.error, 2_000);
 			parts.push(errorSection.text);
-			sections["previousError"] = errorSection.tokens;
+			sections.previousError = errorSection.tokens;
 		}
 
 		if (task.output) {
@@ -310,7 +310,7 @@ class KernelMemoryProvider implements MemoryProvider {
 				2_000,
 			);
 			parts.push(outputSection.text);
-			sections["previousOutput"] = outputSection.tokens;
+			sections.previousOutput = outputSection.tokens;
 		}
 
 		const completed = allTasks.filter((t: any) => t.id !== taskId && t.status === "done").slice(-5);
@@ -321,7 +321,7 @@ class KernelMemoryProvider implements MemoryProvider {
 				SECTION_BUDGETS.completedTasks,
 			);
 			parts.push(completedSection.text);
-			sections["completedTasks"] = completedSection.tokens;
+			sections.completedTasks = completedSection.tokens;
 		}
 
 		return { sections, prompt: parts.join("\n\n---\n\n") };
@@ -342,7 +342,7 @@ class KernelMemoryProvider implements MemoryProvider {
 			400,
 		);
 		parts.push(systemSection.text);
-		sections["system"] = systemSection.tokens;
+		sections.system = systemSection.tokens;
 
 		const { listProjectTasks, query } = await import("../db.js");
 		const allTasks = await listProjectTasks(projectId);
@@ -355,7 +355,7 @@ class KernelMemoryProvider implements MemoryProvider {
 			SECTION_BUDGETS.taskDescription,
 		);
 		parts.push(taskSection.text);
-		sections["task"] = taskSection.tokens;
+		sections.task = taskSection.tokens;
 
 		if (task.output) {
 			const changedFiles = [
@@ -365,7 +365,7 @@ class KernelMemoryProvider implements MemoryProvider {
 			if (changedFiles.length > 0) {
 				const changedSection = buildSection("Changed Files", changedFiles.join("\n"), 2_000);
 				parts.push(changedSection.text);
-				sections["changedFiles"] = changedSection.tokens;
+				sections.changedFiles = changedSection.tokens;
 			}
 
 			if (task.output.testResults) {
@@ -375,7 +375,7 @@ class KernelMemoryProvider implements MemoryProvider {
 					1_000,
 				);
 				parts.push(testSection.text);
-				sections["testResults"] = testSection.tokens;
+				sections.testResults = testSection.tokens;
 			}
 		}
 
@@ -383,7 +383,7 @@ class KernelMemoryProvider implements MemoryProvider {
 		let verificationRows: any[] = [];
 		try {
 			verificationRows = await query(
-				`SELECT verification_type, status, details FROM verification_results WHERE task_id = $1 ORDER BY created_at DESC`,
+				"SELECT verification_type, status, details FROM verification_results WHERE task_id = $1 ORDER BY created_at DESC",
 				[taskId],
 			);
 		} catch {
@@ -393,14 +393,14 @@ class KernelMemoryProvider implements MemoryProvider {
 			const verifyLines = verificationRows.map((r: any) => `- ${r.verification_type}: ${r.status}`);
 			const verifySection = buildSection("Verification Results", verifyLines.join("\n"), 1_500);
 			parts.push(verifySection.text);
-			sections["verificationResults"] = verifySection.tokens;
+			sections.verificationResults = verifySection.tokens;
 		}
 
 		const criteriaMatch = task.description.match(/acceptance criteria[:\s]+([\s\S]+?)(?:\n##|\n---|\n\n\n|$)/i);
 		if (criteriaMatch) {
 			const criteriaSection = buildSection("Acceptance Criteria", criteriaMatch[1].trim(), 2_000);
 			parts.push(criteriaSection.text);
-			sections["acceptanceCriteria"] = criteriaSection.tokens;
+			sections.acceptanceCriteria = criteriaSection.tokens;
 		}
 
 		return { sections, prompt: parts.join("\n\n---\n\n") };

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { assertProjectInTenant } from "../auth/project-access.js";
-import { createLogger } from "../logger.js";
 import { handleGatewayRequest } from "../gateway/index.js";
+import { createLogger } from "../logger.js";
 import { rateLimiter } from "../middleware/rate-limiter.js";
 
 const log = createLogger("gateway-routes");

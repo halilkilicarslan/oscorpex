@@ -178,11 +178,11 @@ describe("P13-J: Red-Team — Hermes Attack Scenarios", () => {
 
 	it("Hermes key format validation", async () => {
 		const { validateHermesKeyFormat } = await import("../hermes/hermes-key-management.js");
-		expect(validateHermesKeyFormat("hms_" + "a".repeat(64))).toBe(true);
+		expect(validateHermesKeyFormat(`hms_${"a".repeat(64)}`)).toBe(true);
 		expect(validateHermesKeyFormat("invalid_key")).toBe(false);
 		expect(validateHermesKeyFormat("sk-ant-12345")).toBe(false);
-		expect(validateHermesKeyFormat("hms_" + "G".repeat(64))).toBe(false); // uppercase hex invalid
-		expect(validateHermesKeyFormat("hms_" + "a".repeat(63))).toBe(false); // one char short
+		expect(validateHermesKeyFormat(`hms_${"G".repeat(64)}`)).toBe(false); // uppercase hex invalid
+		expect(validateHermesKeyFormat(`hms_${"a".repeat(63)}`)).toBe(false); // one char short
 	});
 
 	it("Hermes key generation produces valid format", async () => {

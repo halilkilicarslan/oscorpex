@@ -278,6 +278,7 @@ function firstMeaningfulOutputLine(output: string): string | undefined {
 		.map((line) => line.trim())
 		.filter((line) => line.length > 0);
 
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally matches ANSI escape sequences
 	return lines.find((line) => !/^(>|\$|npm|pnpm|yarn|vitest|jest|\u001b|\s*$)/i.test(line));
 }
 

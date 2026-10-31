@@ -14,29 +14,19 @@
 // ---------------------------------------------------------------------------
 
 import { evaluateReplan } from "./adaptive-replanner.js";
-import {
-	createPipelineRun,
-	getProject,
-	mutatePipelineState,
-	updatePipelineRun,
-} from "./db.js";
+import { createPipelineRun, getProject, mutatePipelineState, updatePipelineRun } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
 import { PipelineBuildService } from "./pipeline/pipeline-build-service.js";
 import { PipelineCompletionService } from "./pipeline/pipeline-completion-service.js";
 import { PipelineControlService } from "./pipeline/pipeline-control-service.js";
 import { PipelineReviewHelpers } from "./pipeline/pipeline-review-helpers.js";
-import { StageAdvanceOrchestrator } from "./pipeline/stage-advance-service.js";
-import { PipelineBranchManager } from "./pipeline/vcs-phase-hooks.js";
 import { PipelineStateManager, runToState } from "./pipeline/pipeline-state-service.js";
 import { PipelineTaskHook } from "./pipeline/pipeline-task-hook.js";
-import { taskEngine } from "./task-engine.js";
-import type {
-	PipelineStage,
-	PipelineState,
-	PipelineStatus,
-	ProjectAgent,
-} from "./types.js";
+import { StageAdvanceOrchestrator } from "./pipeline/stage-advance-service.js";
+import { PipelineBranchManager } from "./pipeline/vcs-phase-hooks.js";
+import type { taskEngine } from "./task-engine.js";
+import type { PipelineStage, PipelineState, PipelineStatus, ProjectAgent } from "./types.js";
 
 const log = createLogger("pipeline-engine");
 
@@ -161,9 +151,9 @@ class PipelineEngine {
 		const stage = state.stages[stageIndex];
 
 		// Phase başlarken otomatik git branch oluştur — pipeline'ı bloklamaz
-		this.branchManager.createPhaseBranch(projectId, stageIndex, stage).catch((err) =>
-			log.warn(`[pipeline-engine] Phase branch oluşturulamadı (stage ${stageIndex}):` + " " + String(err)),
-		);
+		this.branchManager
+			.createPhaseBranch(projectId, stageIndex, stage)
+			.catch((err) => log.warn(`[pipeline-engine] Phase branch oluşturulamadı (stage ${stageIndex}): ${String(err)}`));
 
 		eventBus.emit({
 			projectId,
@@ -198,9 +188,9 @@ class PipelineEngine {
 		if (!stage) return;
 
 		// Phase tamamlanınca branch'i main'e merge et — pipeline'ı bloklamaz
-		this.branchManager.mergePhaseBranchToMain(projectId, stageIndex, stage).catch((err) =>
-			log.warn(`[pipeline-engine] Phase branch merge edilemedi (stage ${stageIndex}):` + " " + String(err)),
-		);
+		this.branchManager
+			.mergePhaseBranchToMain(projectId, stageIndex, stage)
+			.catch((err) => log.warn(`[pipeline-engine] Phase branch merge edilemedi (stage ${stageIndex}): ${String(err)}`));
 
 		eventBus.emit({
 			projectId,
@@ -213,7 +203,7 @@ class PipelineEngine {
 
 		// --- Adaptive Replanning: evaluate at phase boundary ---
 		evaluateReplan({ projectId, trigger: "phase_end", phaseId: stage.phaseId }).catch((err) =>
-			log.warn(`[pipeline-engine] Adaptive replan failed (non-blocking):` + " " + String(err)),
+			log.warn(`[pipeline-engine] Adaptive replan failed (non-blocking): ${String(err)}`),
 		);
 
 		const nextIndex = stageIndex + 1;

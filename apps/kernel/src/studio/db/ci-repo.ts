@@ -126,7 +126,7 @@ export async function updateCITracking(id: string, data: UpdateCITrackingData): 
 
 export async function getCITrackings(projectId: string): Promise<CITracking[]> {
 	const rows = await query<Record<string, unknown>>(
-		`SELECT * FROM ci_trackings WHERE project_id = $1 ORDER BY created_at DESC`,
+		"SELECT * FROM ci_trackings WHERE project_id = $1 ORDER BY created_at DESC",
 		[projectId],
 	);
 	return rows.map(rowToCITracking);
@@ -137,7 +137,7 @@ export async function getCITrackings(projectId: string): Promise<CITracking[]> {
 // ---------------------------------------------------------------------------
 
 export async function getCITracking(id: string): Promise<CITracking | null> {
-	const row = await queryOne<Record<string, unknown>>(`SELECT * FROM ci_trackings WHERE id = $1`, [id]);
+	const row = await queryOne<Record<string, unknown>>("SELECT * FROM ci_trackings WHERE id = $1", [id]);
 	return row ? rowToCITracking(row) : null;
 }
 
@@ -146,5 +146,5 @@ export async function getCITracking(id: string): Promise<CITracking | null> {
 // ---------------------------------------------------------------------------
 
 export async function deleteCITracking(id: string): Promise<void> {
-	await execute(`DELETE FROM ci_trackings WHERE id = $1`, [id]);
+	await execute("DELETE FROM ci_trackings WHERE id = $1", [id]);
 }

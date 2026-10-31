@@ -17,18 +17,18 @@ const CLAUDE_OPUS: ModelPricing = {
 	inputPer1M: 15.0,
 	outputPer1M: 75.0,
 	cacheWritePer1M: 18.75, // 1.25x input
-	cacheReadPer1M: 1.50, // 0.1x input
+	cacheReadPer1M: 1.5, // 0.1x input
 };
 
 const CLAUDE_SONNET: ModelPricing = {
 	inputPer1M: 3.0,
 	outputPer1M: 15.0,
 	cacheWritePer1M: 3.75, // 1.25x input
-	cacheReadPer1M: 0.30, // 0.1x input
+	cacheReadPer1M: 0.3, // 0.1x input
 };
 
 const CLAUDE_HAIKU: ModelPricing = {
-	inputPer1M: 0.80,
+	inputPer1M: 0.8,
 	outputPer1M: 4.0,
 	cacheWritePer1M: 1.0, // 1.25x input
 	cacheReadPer1M: 0.08, // 0.1x input
@@ -46,7 +46,7 @@ const GPT_4O: ModelPricing = {
 
 const GPT_4O_MINI: ModelPricing = {
 	inputPer1M: 0.15,
-	outputPer1M: 0.60,
+	outputPer1M: 0.6,
 	cacheWritePer1M: 0.15,
 	cacheReadPer1M: 0.075, // 0.5x input
 };
@@ -62,7 +62,7 @@ const O3: ModelPricing = {
 	inputPer1M: 10.0,
 	outputPer1M: 40.0,
 	cacheWritePer1M: 10.0,
-	cacheReadPer1M: 2.50,
+	cacheReadPer1M: 2.5,
 };
 
 // ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ const GEMINI_15_PRO: ModelPricing = {
 
 const GEMINI_FLASH: ModelPricing = {
 	inputPer1M: 0.075,
-	outputPer1M: 0.30,
+	outputPer1M: 0.3,
 	cacheWritePer1M: 0.075,
 	cacheReadPer1M: 0.01875, // 0.25x input
 };
@@ -146,8 +146,7 @@ export function calculateCostBreakdown(record: TokenUsageRecord): CostBreakdown 
 	const hypotheticalCostUsd = hypotheticalInput + hypotheticalOutput;
 
 	// Cache write overhead: cache writes cost more than regular input
-	const cacheWriteOverheadUsd =
-		record.cacheCreationTokens * ((pricing.cacheWritePer1M - pricing.inputPer1M) / per);
+	const cacheWriteOverheadUsd = record.cacheCreationTokens * ((pricing.cacheWritePer1M - pricing.inputPer1M) / per);
 
 	// Actual cost from provider (or estimate if provider didn't report)
 	let actualCostUsd = record.costUsd;

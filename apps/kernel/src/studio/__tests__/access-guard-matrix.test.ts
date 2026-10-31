@@ -3,11 +3,11 @@
 // ---------------------------------------------------------------------------
 
 import { afterEach, beforeAll, beforeEach, describe, expect, vi } from "vitest";
-import { it } from "./helpers/outside-scope.js";
 import { accessGuard } from "../auth/access-guard.js";
 import { signJwt } from "../auth/jwt.js";
 import { currentScope } from "../tenancy/tenant-scope.js";
 import { seedUser } from "./helpers/identity.js";
+import { it } from "./helpers/outside-scope.js";
 import { TENANT_A } from "./helpers/tenancy.js";
 
 const LOCAL_TENANT = "00000000-0000-0000-0000-000000000001";

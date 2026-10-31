@@ -5,19 +5,19 @@
 
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { persistAgentLog } from "../agent-log-store.js";
+import type { agentRuntime as agentRuntimeApi } from "../agent-runtime.js";
 import { recordStep } from "../agent-runtime/index.js";
 import { enforceBudgetGuard } from "../budget-guard.js";
 import { recordTokenUsage } from "../db.js";
 import { updateDocsAfterTask } from "../docs-generator.js";
 import { eventBus } from "../event-bus.js";
+import type { ExecutionWorkspace } from "../execution-workspace.js";
 import { runLintFix } from "../lint-runner.js";
 import { createLogger } from "../logger.js";
-import { persistAgentLog } from "../agent-log-store.js";
 import { processAgentProposals } from "../proposal-processor.js";
-import type { ExecutionWorkspace } from "../execution-workspace.js";
 import type { AgentConfig, Project, Task, TaskOutput } from "../types.js";
 import type { NormalizedProviderResult } from "./provider-execution-service.js";
-import type { agentRuntime as agentRuntimeApi } from "../agent-runtime.js";
 
 const log = createLogger("task-output-handler");
 
@@ -65,9 +65,7 @@ export function recordOutputReceived(sessionId: string | undefined, output: Task
 		step: 2,
 		type: "result_inspected",
 		summary: `Output received: ${fileCount} files (${output.filesCreated?.length ?? 0} created, ${output.filesModified?.length ?? 0} modified)`,
-	}).catch((err) =>
-		log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
-	);
+	}).catch((err) => log.warn(`[task-executor] Non-blocking operation failed: ${String(err?.message ?? err)}`));
 }
 
 export async function runTaskCompletionEffects(input: {
@@ -150,7 +148,7 @@ export async function runTaskCompletionEffects(input: {
 	const agentOutputLines = agentRuntime.getAgentOutput(projectId, agent.id);
 	if (agentOutputLines.length > 0) {
 		persistAgentLog(projectId, agent.id, agentOutputLines).catch((err) =>
-			log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+			log.warn(`[task-executor] Non-blocking operation failed: ${String(err?.message ?? err)}`),
 		);
 	}
 
@@ -158,7 +156,7 @@ export async function runTaskCompletionEffects(input: {
 		try {
 			await processAgentProposals(projectId, task, agent, cliResult.proposals);
 		} catch (err) {
-			log.warn("[task-executor] Proposal processing failed (non-blocking):" + " " + String(err));
+			log.warn(`[task-executor] Proposal processing failed (non-blocking): ${String(err)}`);
 		}
 	}
 }

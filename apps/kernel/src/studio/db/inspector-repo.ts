@@ -31,17 +31,17 @@ export async function getAgentForInspector(
 	agentIdOrRole: string,
 ): Promise<Record<string, unknown> | undefined> {
 	// Try by ID first
-	const byId = await queryOne<any>(
-		`SELECT * FROM project_agents WHERE id = $1 AND project_id = $2`,
-		[agentIdOrRole, projectId],
-	);
+	const byId = await queryOne<any>("SELECT * FROM project_agents WHERE id = $1 AND project_id = $2", [
+		agentIdOrRole,
+		projectId,
+	]);
 	if (byId) return byId;
 
 	// Fallback: by role
-	const byRole = await queryOne<any>(
-		`SELECT * FROM project_agents WHERE project_id = $1 AND role = $2 LIMIT 1`,
-		[projectId, agentIdOrRole],
-	);
+	const byRole = await queryOne<any>("SELECT * FROM project_agents WHERE project_id = $1 AND role = $2 LIMIT 1", [
+		projectId,
+		agentIdOrRole,
+	]);
 	return byRole ?? undefined;
 }
 
@@ -68,10 +68,7 @@ export async function getSessionForTask(
 
 export async function listTokenUsageForTask(taskId: string): Promise<Record<string, unknown>[]> {
 	try {
-		return await query<any>(
-			`SELECT * FROM token_usage WHERE task_id = $1 ORDER BY created_at ASC`,
-			[taskId],
-		);
+		return await query<any>("SELECT * FROM token_usage WHERE task_id = $1 ORDER BY created_at ASC", [taskId]);
 	} catch (err) {
 		log.warn({ err }, "token_usage query failed — table may not exist");
 		return [];
@@ -100,10 +97,7 @@ export async function listEventsForTask(projectId: string, taskId: string): Prom
 // Episodes for task
 // ---------------------------------------------------------------------------
 
-export async function listEpisodesForTask(
-	projectId: string,
-	taskId: string,
-): Promise<Record<string, unknown>[]> {
+export async function listEpisodesForTask(projectId: string, taskId: string): Promise<Record<string, unknown>[]> {
 	try {
 		return await query<any>(
 			`SELECT * FROM agent_episodes
@@ -140,10 +134,7 @@ export async function listTaskDiffs(taskId: string): Promise<Record<string, unkn
 
 export async function listVerificationResults(taskId: string): Promise<Record<string, unknown>[]> {
 	try {
-		return await query<any>(
-			`SELECT * FROM verification_results WHERE task_id = $1 ORDER BY created_at ASC`,
-			[taskId],
-		);
+		return await query<any>("SELECT * FROM verification_results WHERE task_id = $1 ORDER BY created_at ASC", [taskId]);
 	} catch (err) {
 		log.warn({ err }, "verification_results query failed");
 		return [];

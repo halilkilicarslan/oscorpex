@@ -26,8 +26,16 @@
 //   type                 → taskType
 // ---------------------------------------------------------------------------
 
-import type { Task as CoreTask, TaskOutput as CoreTaskOutput, PipelineState as CorePipelineState } from "@oscorpex/core";
-import type { Task as KernelTask, TaskOutput as KernelTaskOutput, PipelineState as KernelPipelineState } from "../types.js";
+import type {
+	PipelineState as CorePipelineState,
+	Task as CoreTask,
+	TaskOutput as CoreTaskOutput,
+} from "@oscorpex/core";
+import type {
+	PipelineState as KernelPipelineState,
+	Task as KernelTask,
+	TaskOutput as KernelTaskOutput,
+} from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Task mappers
@@ -178,9 +186,7 @@ import type { StudioEvent } from "../types.js";
  * BaseEvent has additional required fields (correlationId, runId) that StudioEvent
  * does not model — they are carried through the payload or discarded gracefully.
  */
-export function toStudioEventInput(
-	event: BaseEvent<string, unknown>,
-): Omit<StudioEvent, "id" | "timestamp"> {
+export function toStudioEventInput(event: BaseEvent<string, unknown>): Omit<StudioEvent, "id" | "timestamp"> {
 	return {
 		projectId: event.projectId,
 		type: event.type as StudioEvent["type"],

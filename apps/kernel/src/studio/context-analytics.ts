@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { listContextSources } from "./db.js";
-import { createLogger } from "./logger.js";
 import { query, queryOne } from "./db.js";
+import { createLogger } from "./logger.js";
 const log = createLogger("context-analytics");
 
 // ---------------------------------------------------------------------------

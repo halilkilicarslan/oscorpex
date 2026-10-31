@@ -14,9 +14,9 @@ import {
 	copyAgentsToProject,
 	createProject,
 	deleteProject,
-	getProject,
 	getPlatformAnalytics,
 	getPlatformStats,
+	getProject,
 	listProjectsPaginated,
 	listTeamTemplates,
 	setProjectSettings,
@@ -26,8 +26,8 @@ import { gitManager } from "../git-manager.js";
 import { initLintConfig } from "../lint-runner.js";
 import { createLogger } from "../logger.js";
 import { getProjectTemplate, listProjectTemplates, scaffoldFromTemplate } from "../project-templates.js";
-import { initSonarConfig, isSonarEnabled } from "../sonar-runner.js";
 import { resolveTenantImportPath, validateRepoPath } from "../security/workspace-resolver.js";
+import { initSonarConfig, isSonarEnabled } from "../sonar-runner.js";
 import { UpdateProjectSchema, parseBody } from "./validation-schemas.js";
 
 const log = createLogger("project-crud-routes");
@@ -70,7 +70,7 @@ projectCrudRoutes.get("/platform/stats", async (c) => {
 		const stats = await getPlatformStats();
 		return c.json(stats);
 	} catch (err) {
-		log.error("[project-crud-routes] platform stats failed:" + " " + String(err));
+		log.error(`[project-crud-routes] platform stats failed: ${String(err)}`);
 		return c.json({ error: "Failed to get platform stats" }, 500);
 	}
 });
@@ -82,7 +82,7 @@ projectCrudRoutes.get("/platform/analytics", async (c) => {
 		const analytics = await getPlatformAnalytics();
 		return c.json(analytics);
 	} catch (err) {
-		log.error("[project-crud-routes] platform analytics failed:" + " " + String(err));
+		log.error(`[project-crud-routes] platform analytics failed: ${String(err)}`);
 		return c.json({ error: "Failed to get platform analytics" }, 500);
 	}
 });
@@ -99,7 +99,7 @@ projectCrudRoutes.get("/projects", async (c) => {
 		c.header("X-Total-Count", String(total));
 		return c.json(projects);
 	} catch (err) {
-		log.error("[project-crud-routes] list projects failed:" + " " + String(err));
+		log.error(`[project-crud-routes] list projects failed: ${String(err)}`);
 		return c.json({ error: "Failed to list projects" }, 500);
 	}
 });
@@ -331,7 +331,7 @@ projectCrudRoutes.post("/projects/from-template", async (c) => {
 				personality: agent.personality,
 				role: agent.role,
 				model: agent.model,
-			}).catch((err) => log.error("Failed to create agent files:" + " " + String(err)));
+			}).catch((err) => log.error(`Failed to create agent files: ${String(err)}`));
 		}
 	}
 

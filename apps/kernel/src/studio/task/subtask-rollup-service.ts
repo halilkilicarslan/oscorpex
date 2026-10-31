@@ -59,6 +59,6 @@ export async function checkSubtaskRollup(
 		await progress.checkAndAdvancePhase(parentTask.phaseId, projectId);
 		notifyCompleted(task.parentTaskId, projectId);
 	} catch (err) {
-		log.warn("[subtask-rollup-service] Sub-task rollup check failed:" + " " + String(err));
+		log.warn(`[subtask-rollup-service] Sub-task rollup check failed: ${String(err)}`);
 	}
 }

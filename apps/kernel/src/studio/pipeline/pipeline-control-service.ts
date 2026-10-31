@@ -8,7 +8,7 @@ import { eventBus } from "../event-bus.js";
 import { executionEngine } from "../execution-engine.js";
 import { createLogger } from "../logger.js";
 import type { PipelineStage, PipelineStatus } from "../types.js";
-import { PipelineStateManager, runToState } from "./pipeline-state-service.js";
+import { type PipelineStateManager, runToState } from "./pipeline-state-service.js";
 
 const log = createLogger("pipeline-control-service");
 
@@ -55,9 +55,11 @@ export class PipelineControlService {
 			payload: { resumedAt: now(), currentStage: run.currentStage },
 		});
 
-		executionEngine().startProjectExecution(projectId).catch((err) => {
-			log.error(`[pipeline-engine] Resume dispatch failed:` + " " + String(err));
-		});
+		executionEngine()
+			.startProjectExecution(projectId)
+			.catch((err) => {
+				log.error(`[pipeline-engine] Resume dispatch failed: ${String(err)}`);
+			});
 
 		await advanceStage(projectId);
 	}

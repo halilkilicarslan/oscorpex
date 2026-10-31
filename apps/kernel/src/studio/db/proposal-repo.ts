@@ -69,12 +69,12 @@ export async function getProposal(id: string): Promise<TaskProposal | undefined>
 export async function listProposals(projectId: string, status?: ProposalStatus): Promise<TaskProposal[]> {
 	if (status) {
 		const rows = await query<any>(
-			`SELECT * FROM task_proposals WHERE project_id = $1 AND status = $2 ORDER BY created_at DESC`,
+			"SELECT * FROM task_proposals WHERE project_id = $1 AND status = $2 ORDER BY created_at DESC",
 			[projectId, status],
 		);
 		return rows.map(rowToProposal);
 	}
-	const rows = await query<any>(`SELECT * FROM task_proposals WHERE project_id = $1 ORDER BY created_at DESC`, [
+	const rows = await query<any>("SELECT * FROM task_proposals WHERE project_id = $1 ORDER BY created_at DESC", [
 		projectId,
 	]);
 	return rows.map(rowToProposal);

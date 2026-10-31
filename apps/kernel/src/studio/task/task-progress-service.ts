@@ -3,13 +3,7 @@
 // Phase lifecycle: advance, completion detection, readiness, progress summary.
 // ---------------------------------------------------------------------------
 
-import {
-	getLatestPlan,
-	getTasksByIds,
-	listTasks,
-	updatePhaseStatus,
-	updateProject,
-} from "../db.js";
+import { getLatestPlan, getTasksByIds, listTasks, updatePhaseStatus, updateProject } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
 import type { Phase, Task } from "../types.js";

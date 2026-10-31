@@ -52,7 +52,9 @@ describe("P1-2: Environment sanitization", () => {
 	});
 
 	it("assertNoSensitiveEnv throws for leaked DATABASE_URL", () => {
-		expect(() => assertNoSensitiveEnv({ DATABASE_URL: "leaked" } as NodeJS.ProcessEnv)).toThrow("Sensitive env var leaked");
+		expect(() => assertNoSensitiveEnv({ DATABASE_URL: "leaked" } as NodeJS.ProcessEnv)).toThrow(
+			"Sensitive env var leaked",
+		);
 	});
 
 	it("extra sensitive vars blocked unless explicitly allowed", () => {

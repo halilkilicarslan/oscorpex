@@ -23,7 +23,7 @@ cpPresenceRoutes.get("/presence", async (c) => {
 		const presence = await listPresence();
 		return c.json({ presence });
 	} catch (err) {
-		log.error("[presence] list failed: " + String(err));
+		log.error(`[presence] list failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -35,7 +35,7 @@ cpPresenceRoutes.get("/presence/:agentId", async (c) => {
 		const heartbeats = await getAgentHeartbeats(agentId);
 		return c.json({ summary, heartbeats });
 	} catch (err) {
-		log.error("[presence] get failed: " + String(err));
+		log.error(`[presence] get failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -56,7 +56,7 @@ cpPresenceRoutes.post("/presence/heartbeat", async (c) => {
 		const hb = await recordHeartbeat(body);
 		return c.json({ heartbeat: hb });
 	} catch (err) {
-		log.error("[presence] heartbeat failed: " + String(err));
+		log.error(`[presence] heartbeat failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });

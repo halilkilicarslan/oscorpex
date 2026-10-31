@@ -50,7 +50,7 @@ sprintRoutes.get("/projects/:id/sprints", async (c) => {
 		);
 		return c.json(enriched);
 	} catch (err) {
-		log.error("[sprint-routes] list failed:" + " " + String(err));
+		log.error(`[sprint-routes] list failed: ${String(err)}`);
 		const msg = err instanceof Error ? err.message : String(err);
 		return c.json({ error: msg }, 500);
 	}
@@ -85,7 +85,7 @@ sprintRoutes.post("/projects/:id/sprints", async (c) => {
 		});
 		return c.json(sprint, 201);
 	} catch (err) {
-		log.error("[sprint-routes] create failed:" + " " + String(err));
+		log.error(`[sprint-routes] create failed: ${String(err)}`);
 		const msg = err instanceof Error ? err.message : String(err);
 		return c.json({ error: msg }, 500);
 	}

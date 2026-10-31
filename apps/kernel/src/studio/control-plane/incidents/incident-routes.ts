@@ -27,7 +27,7 @@ cpIncidentRoutes.get("/incidents", async (c) => {
 		const incidents = await listIncidents(status);
 		return c.json({ incidents });
 	} catch (err) {
-		log.error("[incidents] list failed: " + String(err));
+		log.error(`[incidents] list failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -39,7 +39,7 @@ cpIncidentRoutes.post("/incidents/:id/ack", async (c) => {
 		if (!incident) return c.json({ error: "Incident not found" }, 404);
 		return c.json({ incident });
 	} catch (err) {
-		log.error("[incidents] ack failed: " + String(err));
+		log.error(`[incidents] ack failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -51,7 +51,7 @@ cpIncidentRoutes.post("/incidents/:id/resolve", async (c) => {
 		if (!incident) return c.json({ error: "Incident not found" }, 404);
 		return c.json({ incident });
 	} catch (err) {
-		log.error("[incidents] resolve failed: " + String(err));
+		log.error(`[incidents] resolve failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -73,7 +73,7 @@ cpIncidentRoutes.post("/incidents", async (c) => {
 		const incident = await openIncident(body);
 		return c.json({ incident }, 201);
 	} catch (err) {
-		log.error("[incidents] open failed: " + String(err));
+		log.error(`[incidents] open failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -86,7 +86,7 @@ cpIncidentRoutes.post("/incidents/:id/assign", async (c) => {
 		if (!incident) return c.json({ error: "Incident not found" }, 404);
 		return c.json({ incident });
 	} catch (err) {
-		log.error("[incidents] assign failed: " + String(err));
+		log.error(`[incidents] assign failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -99,7 +99,7 @@ cpIncidentRoutes.post("/incidents/:id/note", async (c) => {
 		if (!incident) return c.json({ error: "Incident not found" }, 404);
 		return c.json({ incident });
 	} catch (err) {
-		log.error("[incidents] note failed: " + String(err));
+		log.error(`[incidents] note failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -111,7 +111,7 @@ cpIncidentRoutes.post("/incidents/:id/reopen", async (c) => {
 		if (!incident) return c.json({ error: "Incident not found" }, 404);
 		return c.json({ incident });
 	} catch (err) {
-		log.error("[incidents] reopen failed: " + String(err));
+		log.error(`[incidents] reopen failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -124,7 +124,7 @@ cpIncidentRoutes.post("/incidents/:id/severity", async (c) => {
 		if (!incident) return c.json({ error: "Incident not found" }, 404);
 		return c.json({ incident });
 	} catch (err) {
-		log.error("[incidents] severity update failed: " + String(err));
+		log.error(`[incidents] severity update failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });

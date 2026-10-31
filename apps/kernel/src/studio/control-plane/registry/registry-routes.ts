@@ -27,7 +27,7 @@ cpRegistryRoutes.get("/registry/agents", async (c) => {
 		const agents = await listRegistryAgents(projectId);
 		return c.json({ agents });
 	} catch (err) {
-		log.error("[registry] list agents failed: " + String(err));
+		log.error(`[registry] list agents failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -48,7 +48,7 @@ cpRegistryRoutes.get("/registry/providers", async (c) => {
 			})),
 		});
 	} catch (err) {
-		log.error("[registry] list providers failed: " + String(err));
+		log.error(`[registry] list providers failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -60,7 +60,7 @@ cpRegistryRoutes.get("/registry/providers/:id", async (c) => {
 		const capabilities = await listProviderCapabilities(provider.id);
 		return c.json({ provider: { ...provider, capabilities } });
 	} catch (err) {
-		log.error("[registry] get provider failed: " + String(err));
+		log.error(`[registry] get provider failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -70,7 +70,7 @@ cpRegistryRoutes.get("/registry/state", async (c) => {
 		const state = await getRegistryState();
 		return c.json(state);
 	} catch (err) {
-		log.error("[registry] get state failed: " + String(err));
+		log.error(`[registry] get state failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });

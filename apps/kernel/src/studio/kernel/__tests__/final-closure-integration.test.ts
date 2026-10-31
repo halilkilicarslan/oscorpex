@@ -68,22 +68,18 @@ describe("FINAL INTEGRATION: All 8 closure tasks acceptance", () => {
 	it("Task 6: Cancel behavior matrix is documented", async () => {
 		const { CANCEL_BEHAVIOR_MATRIX } = await import("@oscorpex/provider-sdk");
 		expect(CANCEL_BEHAVIOR_MATRIX["claude-code"]).toBeDefined();
-		expect(CANCEL_BEHAVIOR_MATRIX["codex"]).toBeDefined();
-		expect(CANCEL_BEHAVIOR_MATRIX["cursor"]).toBeDefined();
+		expect(CANCEL_BEHAVIOR_MATRIX.codex).toBeDefined();
+		expect(CANCEL_BEHAVIOR_MATRIX.cursor).toBeDefined();
 	});
 
 	it("Task 7: VoltAgent boundary docs removed", async () => {
 		const fs = await import("node:fs");
-		expect(fs.existsSync(`${process.cwd()}/docs/voltagent-boundary.md`)).toBe(
-			false,
-		);
+		expect(fs.existsSync(`${process.cwd()}/docs/voltagent-boundary.md`)).toBe(false);
 	});
 
 	it("Task 8: Smoke checklist script exists", async () => {
 		const fs = await import("node:fs");
-		expect(fs.existsSync(`${process.cwd()}/scripts/smoke-checklist.sh`)).toBe(
-			true,
-		);
+		expect(fs.existsSync(`${process.cwd()}/scripts/smoke-checklist.sh`)).toBe(true);
 	});
 });
 
@@ -141,8 +137,6 @@ describe("EPIC 5 — VoltAgent Removed (IT-16..IT-17)", () => {
 
 	it("IT-17: VoltAgent boundary docs removed", async () => {
 		const fs = await import("node:fs");
-		expect(fs.existsSync(`${process.cwd()}/docs/voltagent-boundary.md`)).toBe(
-			false,
-		);
+		expect(fs.existsSync(`${process.cwd()}/docs/voltagent-boundary.md`)).toBe(false);
 	});
 });

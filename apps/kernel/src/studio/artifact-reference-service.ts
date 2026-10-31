@@ -7,15 +7,15 @@ import { randomUUID } from "node:crypto";
 import {
 	type ArtifactReferenceRow,
 	type ArtifactStatus,
+	type QualityGateEnvironment,
 	getArtifactById,
+	getGoalScope,
+	getLatestReleaseCandidateForGoal,
 	insertArtifactAndSupersedePrevious,
 	insertArtifactReference,
 	listArtifactsForGoal,
 	listLatestArtifactsForGoal,
 	supersedeArtifactById,
-	type QualityGateEnvironment,
-	getGoalScope,
-	getLatestReleaseCandidateForGoal,
 } from "./db.js";
 import { eventBus } from "./event-bus.js";
 

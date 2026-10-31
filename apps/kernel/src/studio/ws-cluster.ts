@@ -163,7 +163,7 @@ export class WsCluster {
 			try {
 				await this.heartbeat();
 			} catch (err) {
-				log.warn("[ws-cluster] Heartbeat failed: " + (err instanceof Error ? err.message : String(err)));
+				log.warn(`[ws-cluster] Heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
 			}
 		}, HEARTBEAT_INTERVAL_MS);
 

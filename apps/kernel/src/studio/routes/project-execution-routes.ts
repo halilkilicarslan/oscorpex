@@ -26,7 +26,7 @@ projectExecutionRoutes.post("/projects/:id/execute", async (c) => {
 	if (teamGuard) return teamGuard;
 
 	kernel.startProjectExecution(projectId).catch((err) => {
-		log.error("[kernel] manual execute failed:" + " " + String(err));
+		log.error(`[kernel] manual execute failed: ${String(err)}`);
 	});
 
 	return c.json({ success: true, message: "Execution started" });
@@ -39,7 +39,7 @@ projectExecutionRoutes.get("/projects/:id/execution/status", async (c) => {
 		if (!project) return c.json({ error: "Project not found" }, 404);
 		return c.json(await kernel.getExecutionStatus(projectId));
 	} catch (err) {
-		log.error("[project-execution-routes] execution status failed:" + " " + String(err));
+		log.error(`[project-execution-routes] execution status failed: ${String(err)}`);
 		return c.json({ error: "Failed to get execution status" }, 500);
 	}
 });

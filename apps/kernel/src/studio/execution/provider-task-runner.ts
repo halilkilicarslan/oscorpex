@@ -11,9 +11,9 @@ import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
 import type { AgentCliTool, AgentConfig, Task } from "../types.js";
 import {
+	type NormalizedProviderResult,
 	ProviderExecutionService,
 	isProvidersExhausted,
-	type NormalizedProviderResult,
 } from "./provider-execution-service.js";
 
 const log = createLogger("provider-task-runner");
@@ -67,9 +67,7 @@ export async function runProviderTask(input: ProviderTaskRunInput): Promise<Prov
 			step: 1,
 			type: "action_executed",
 			summary: `CLI execution started: ${primaryCliTool}`,
-		}).catch((err) =>
-			log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
-		);
+		}).catch((err) => log.warn(`[task-executor] Non-blocking operation failed: ${String(err?.message ?? err)}`));
 	}
 
 	eventBus.emitTransient({
@@ -134,7 +132,7 @@ export async function runProviderTask(input: ProviderTaskRunInput): Promise<Prov
 		getTask(task.id).then((currentTask) => {
 			if (currentTask && currentTask.status === "queued") {
 				executeTask(projectId, currentTask).catch((err) =>
-					log.warn("[task-executor] Non-blocking operation failed:" + " " + String(err?.message ?? err)),
+					log.warn(`[task-executor] Non-blocking operation failed: ${String(err?.message ?? err)}`),
 				);
 			}
 		});

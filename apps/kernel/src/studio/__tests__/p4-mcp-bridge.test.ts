@@ -18,7 +18,7 @@ vi.mock("../security/tool-policy-enforcer.js", () => {
 });
 
 vi.mock("../security/workspace-resolver.js", () => ({
-	resolveWorkspacePath: vi.fn((_scope: unknown, rel?: string) => `/workspace/t1/p1${rel ? "/" + rel : ""}`),
+	resolveWorkspacePath: vi.fn((_scope: unknown, rel?: string) => `/workspace/t1/p1${rel ? `/${rel}` : ""}`),
 	assertInsideWorkspace: vi.fn(),
 }));
 

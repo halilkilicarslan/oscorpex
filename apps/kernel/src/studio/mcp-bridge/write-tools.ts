@@ -63,11 +63,11 @@ const GitCreateBranchSchema = z
 const SAFE_BRANCH_RE = /^[a-zA-Z0-9][a-zA-Z0-9\/_.-]{0,98}[a-zA-Z0-9]$/;
 
 const FORBIDDEN_BRANCH_PATTERNS: ReadonlyArray<RegExp> = [
-	/\.\./,                          // path traversal
-	/^-/,                            // flag injection (leading dash)
-	/--/,                            // double dash (option separator)
-	/[;&|`$(){}[\]<>!\\'"]/,         // shell metacharacters
-	/\s/,                            // whitespace
+	/\.\./, // path traversal
+	/^-/, // flag injection (leading dash)
+	/--/, // double dash (option separator)
+	/[;&|`$(){}[\]<>!\\'"]/, // shell metacharacters
+	/\s/, // whitespace
 ];
 
 function validateBranchName(name: string): { valid: boolean; reason?: string } {
@@ -189,7 +189,10 @@ export const taskComment: McpToolHandler = async (inv) => {
 		};
 	}
 
-	log.info({ taskId: parsed.data.taskId, commentLength: parsed.data.comment.length }, "[mcp-write-tools] task.comment validated");
+	log.info(
+		{ taskId: parsed.data.taskId, commentLength: parsed.data.comment.length },
+		"[mcp-write-tools] task.comment validated",
+	);
 
 	return {
 		ok: true,

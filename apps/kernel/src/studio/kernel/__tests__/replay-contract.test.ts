@@ -47,7 +47,7 @@ describe("DbReplayStore contract", () => {
 
 		// Verify raw DB columns
 		const row = await queryOne<{ policy_decisions_json: string; verification_reports_json: string }>(
-			`SELECT policy_decisions_json, verification_reports_json FROM replay_snapshots WHERE id = $1`,
+			"SELECT policy_decisions_json, verification_reports_json FROM replay_snapshots WHERE id = $1",
 			["snap-1"],
 		);
 		expect(row).toBeDefined();

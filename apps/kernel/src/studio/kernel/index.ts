@@ -53,10 +53,10 @@ import { taskEngine } from "../task-engine.js";
 import { costReporter } from "./cost-adapter.js";
 import { hookRegistry, runHooks } from "./hook-registry.js";
 import {
+	toCorePipelineState,
 	toCoreTask,
 	toCoreTaskOrNull,
 	toCoreTaskOrThrow,
-	toCorePipelineState,
 	toKernelTask,
 	toKernelTaskOutput,
 	toStudioEventInput,
@@ -374,10 +374,12 @@ class OscorpexKernelImpl implements OscorpexKernelContract {
 	}
 
 	async executeTask(projectId: string, task: CoreTask): Promise<void> {
-		executionEngine().executeTask(projectId, toKernelTask(task)).catch((err) => {
-			// eslint-disable-next-line no-console
-			console.warn("[kernel] executeTask background error:", err?.message ?? err);
-		});
+		executionEngine()
+			.executeTask(projectId, toKernelTask(task))
+			.catch((err) => {
+				// eslint-disable-next-line no-console
+				console.warn("[kernel] executeTask background error:", err?.message ?? err);
+			});
 	}
 
 	async startPipeline(projectId: string): Promise<void> {

@@ -36,7 +36,7 @@ describe("P4-1: Checkpoint wiring verification", () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
 		const src = readFileSync(join(process.cwd(), "src/studio/checkpoint/checkpoint-service.ts"), "utf8");
-		expect(src).toContain("case \"git\"");
+		expect(src).toContain('case "git"');
 		expect(src).toContain("checkout");
 		expect(src).toContain("execFileSync");
 	});
@@ -45,7 +45,7 @@ describe("P4-1: Checkpoint wiring verification", () => {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
 		const src = readFileSync(join(process.cwd(), "src/studio/checkpoint/checkpoint-service.ts"), "utf8");
-		expect(src).toContain("case \"filesystem\"");
+		expect(src).toContain('case "filesystem"');
 		expect(src).toContain("changedFiles");
 	});
 });

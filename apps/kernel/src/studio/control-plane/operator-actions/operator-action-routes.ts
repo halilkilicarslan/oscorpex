@@ -68,7 +68,7 @@ cpOperatorActionRoutes.post("/actions", async (c) => {
 		});
 		return c.json(result, result.status === "success" ? 200 : 400);
 	} catch (err) {
-		log.error("[operator-action] failed: " + String(err));
+		log.error(`[operator-action] failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 400);
 	}
 });
@@ -89,7 +89,7 @@ cpOperatorActionRoutes.get("/actions", async (c) => {
 		const actions = await listOperatorActions(limit);
 		return c.json({ actions });
 	} catch (err) {
-		log.error("[operator-actions] list failed: " + String(err));
+		log.error(`[operator-actions] list failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -101,7 +101,7 @@ cpOperatorActionRoutes.get("/flags/:key", async (c) => {
 		if (!flag) return c.json({ error: "Flag not found" }, 404);
 		return c.json({ flag });
 	} catch (err) {
-		log.error("[operator-flags] get failed: " + String(err));
+		log.error(`[operator-flags] get failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
@@ -111,7 +111,7 @@ cpOperatorActionRoutes.get("/flags/queue-paused", async (c) => {
 		const paused = await isQueuePaused();
 		return c.json({ paused });
 	} catch (err) {
-		log.error("[operator-flags] queue check failed: " + String(err));
+		log.error(`[operator-flags] queue check failed: ${String(err)}`);
 		return c.json({ error: String(err) }, 500);
 	}
 });
