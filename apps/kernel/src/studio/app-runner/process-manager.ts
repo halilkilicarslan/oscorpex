@@ -3,7 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { spawn } from "node:child_process";
-import { basename, join } from "node:path";
+import { basename, resolve as resolvePath } from "node:path";
+import { resolveContainedCwd } from "../security/contained-fs.js";
 import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { postStartHealthCheck } from "./port-manager.js";
 import { runningApps } from "./state.js";
@@ -17,7 +18,15 @@ export function startService(
 	onLog: (msg: string) => void,
 ): Promise<RunningService> {
 	return new Promise((resolve, reject) => {
-		const servicePath = config.path.startsWith("/") ? config.path : join(repoPath, config.path);
+		// The service dir comes from tenant-controlled config: its REAL path must be inside the repo (an absolute path or a
+		// symlink out of it is refused), and the process starts from that real directory.
+		let servicePath: string;
+		try {
+			servicePath = resolveContainedCwd(repoPath, resolvePath(repoPath, config.path)).realCwd;
+		} catch (err) {
+			reject(new Error(`Service ${config.name} refused: ${err instanceof Error ? err.message : String(err)}`));
+			return;
+		}
 		const command = config.command.replace(/\$\{PORT\}/g, String(config.port));
 
 		// Defense-in-depth guard, not an isolation boundary; isolation is a separate epic.

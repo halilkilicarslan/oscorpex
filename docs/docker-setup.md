@@ -65,11 +65,11 @@ Kullanıcı düzeyindeki ayarlar bilerek yüklenmez.
 - **LivePreview** Docker'da çalışmaz: uygulama portları yayınlanmaz ve `frame-src 'self'` doğrudan port iframe'ini engeller.
 - **Rate limit:** Backend, nginx'in `X-Forwarded-For`'una güvenir (`OSCORPEX_TRUSTED_PROXY=true`). Docker Desktop port
   yayınında istemci IP'leri gateway IP'sine dönüşebilir; bu durumda `/auth/*` limiti istemciler arasında ortak olur.
-  Ayrıca bu ayar XFF'e backend'in ağlarındaki herhangi bir eşten güvenir: agents/sonar konteynerleri XFF'i
+  Ayrıca bu ayar XFF'e backend'in ağlarındaki herhangi bir eşten güvenir: sonar konteyneri XFF'i
   taklit edebilir (takip işi).
-- **Agent havuzu (`--profile agents`):** worker'ın `/tool` uç noktası kimliksizdir; profil yalnızca izole/geliştirme
-  kullanımı içindir (worker kimlik doğrulaması workload izolasyonu epic'inde). Host portu yoktur ve kendi
-  `agent-workspace` volume'ünü kullanır (tenant verisi yok).
+- **Agent havuzu kaldırıldı:** Eski konteyner havuzu (`agents` profili, `docker/coder-agent`, `docker-compose.pool.yml`)
+  silindi; `isolationLevel: container`/`vm` açık bir hatayla reddedilir, host'a düşmez. Yerine workload izolasyonu
+  epic'indeki runner gelecek.
 - **F4 öncesi:** Runtime hâlâ veritabanı süper kullanıcısıyla bağlanır; `migrate` ve backend aynı bağlantıyı kullanır.
   Kısıtlı `oscorpex_app` rolüne geçiş F4'te yapılır.
 - **Aynı uid kalan riski:** Kernel ve agent CLI aynı uid'le (1001) çalışır; bir agent kernel'in ortamını (`/proc`)
@@ -104,9 +104,6 @@ ya da yedeklemeyin (kaybederseniz `docker compose exec backend claude` ile yenid
 - `docker-compose.dev.yml`: yalnızca postgres'i `127.0.0.1:5432`'de yayınlar (host'ta `pnpm dev` için).
   Port doluysa `OSCORPEX_DEV_PG_PORT` verin. Örnek:
   `POSTGRES_PASSWORD=oscorpex_dev OSCORPEX_JWT_SECRET=dev docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres`
-- `docker-compose.pool.yml`: Docker socket'ini backend'e bağlar, `OSCORPEX_ENABLE_CONTAINER_RUNTIME=true` verir ve agent
-  ağını açar. `DOCKER_GID` (socket'in gid'i) zorunludur: `DOCKER_GID=$(stat -c %g /var/run/docker.sock)`.
-  Socket host'ta root eşdeğeridir ve sertleştirmeyi geçersiz kılar: yalnızca geliştirmede kullanın.
 
 ## Doğrulama
 

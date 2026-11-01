@@ -15,7 +15,6 @@ export * from "./context-types.js";
 export * from "./work-item-types.js";
 export * from "./cost-types.js";
 export * from "./git-types.js";
-export * from "./container-types.js";
 export * from "./provider-types.js";
 export * from "./memory-types.js";
 export * from "./policy-types.js";

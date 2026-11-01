@@ -94,12 +94,13 @@ async function applyRollback(checkpoint: CheckpointRecord): Promise<RollbackResu
 			const repoPath = (checkpoint.metadata as Record<string, unknown>)?.repoPath;
 			if (typeof repoPath === "string") {
 				try {
-					execFileSync("git", ["checkout", checkpoint.ref], {
+					// --quiet: skips the local-changes report, which recurses into submodules
+					execFileSync("git", ["checkout", "--quiet", checkpoint.ref], {
 						cwd: repoPath,
 						timeout: 30_000,
 						encoding: "utf8",
 						stdio: "pipe",
-						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), repoPath),
 					});
 				} catch (err) {
 					return {

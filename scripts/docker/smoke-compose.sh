@@ -26,7 +26,6 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/oscorpex-smoke-compose.XXXXXX")"
 PROJ="oscx-smoke-$$-$RANDOM"
 COMPOSE_FILE_MAIN="$REPO_ROOT/docker-compose.yml"
 COMPOSE_FILE_DEV="$REPO_ROOT/docker-compose.dev.yml"
-COMPOSE_FILE_POOL="$REPO_ROOT/docker-compose.pool.yml"
 PINNED_DIGEST="sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da"
 PG_IMAGE="pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f"
 MIN_FREE_KB=$((15 * 1024 * 1024)) # docker data root must have this much free space
@@ -34,7 +33,7 @@ ENVF="$WORK/stack.env"
 STACK_TOUCHED=0
 
 # Variables compose interpolates or forwards: a value in the caller's environment would beat --env-file.
-STRIP_VARS="POSTGRES_PASSWORD OSCORPEX_JWT_SECRET OSCORPEX_CONSOLE_PORT ANTHROPIC_API_KEY ANTHROPIC_BASE_URL COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES COMPOSE_ENV_FILES OSCORPEX_DEV_PG_PORT OSCORPEX_BACKEND_CPUS DOCKER_GID"
+STRIP_VARS="POSTGRES_PASSWORD OSCORPEX_JWT_SECRET OSCORPEX_CONSOLE_PORT ANTHROPIC_API_KEY ANTHROPIC_BASE_URL COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES COMPOSE_ENV_FILES OSCORPEX_DEV_PG_PORT OSCORPEX_BACKEND_CPUS"
 
 # dcf <envfile> <compose args...>: compose against the main file with an explicit env file, clean environment
 dcf() {
@@ -49,7 +48,7 @@ dc() { dcf "$ENVF" "$@"; }
 cleanup() {
 	local rc=$?
 	if [ "$STACK_TOUCHED" = 1 ] && [ -f "$ENVF" ]; then
-		dc --profile agents --profile sonar down -v --remove-orphans >/dev/null 2>&1 || true
+		dc --profile sonar down -v --remove-orphans >/dev/null 2>&1 || true
 		local img
 		for img in $(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep "^${PROJ}[-_]" || true); do
 			docker rmi -f "$img" >/dev/null 2>&1 || true
@@ -239,7 +238,7 @@ if dc config -q >"$WORK/cfg.log" 2>&1; then pass "docker-compose.yml renders wit
 	finish
 fi
 if dc -f "$COMPOSE_FILE_DEV" config -q >"$WORK/cfg-dev.log" 2>&1; then pass "docker-compose.yml + docker-compose.dev.yml renders"; else fail "dev override does not render ($(head -c 300 "$WORK/cfg-dev.log"))"; fi
-if dc --profile agents --profile sonar config -q >"$WORK/cfg-prof.log" 2>&1; then pass "agents and sonar profiles render"; else fail "agents/sonar profiles do not render ($(head -c 300 "$WORK/cfg-prof.log"))"; fi
+if dc --profile sonar config -q >"$WORK/cfg-prof.log" 2>&1; then pass "sonar profile renders"; else fail "sonar profile does not render ($(head -c 300 "$WORK/cfg-prof.log"))"; fi
 if dc -f "$COMPOSE_FILE_DEV" config postgres -q >"$WORK/cfg-devpg.log" 2>&1; then pass "'config postgres' renders with the dev override"; else fail "'config postgres' with the dev override does not render ($(head -c 300 "$WORK/cfg-devpg.log"))"; fi
 if dcf "$WORK/nojwt.env" -f "$COMPOSE_FILE_DEV" config postgres -q >/dev/null 2>&1; then
 	echo "NOTE: with the dev override, 'config postgres' does NOT require OSCORPEX_JWT_SECRET"
@@ -273,15 +272,6 @@ if (mode === "cpus") {
 	else out(c !== undefined && Number(c) === Number(expect), "backend cpus is " + expect + " when OSCORPEX_BACKEND_CPUS=" + expect + " (got " + c + ")");
 	process.exit(0);
 }
-if (mode === "pool") {
-	const b = svc.backend || {};
-	const hasSock = (b.volumes || []).some((v) => (typeof v === "string" ? v.split(":")[0] : v.source) === "/var/run/docker.sock");
-	out(hasSock, "pool override: backend mounts /var/run/docker.sock");
-	out((b.group_add || []).map(String).includes(expect), "pool override: backend group_add contains " + expect);
-	const e = envOf("backend");
-	out(e.OSCORPEX_ENABLE_CONTAINER_RUNTIME === "true", "pool override: OSCORPEX_ENABLE_CONTAINER_RUNTIME=true");
-	process.exit(0);
-}
 if (mode === "dev") {
 	const pg = svc.postgres || {};
 	const pub = (pg.ports || []).find((p) => Number(p.target) === 5432);
@@ -300,13 +290,13 @@ const published = Object.entries(svc).flatMap(([n, s]) => (s.ports || []).map((p
 const core = published.filter((x) => ["postgres", "migrate", "backend", "console"].includes(x.n));
 out(core.length === 1 && core[0].n === "console" && core[0].p.host_ip === "127.0.0.1" && String(core[0].p.published) === port && Number(core[0].p.target) === 8080, "only console publishes a port: 127.0.0.1:" + port + " -> 8080");
 const agents = Object.keys(svc).filter((n) => /^agent-/.test(n));
-out(agents.length > 0 && agents.every((n) => !svc[n].ports), "agent pool services publish no ports (" + agents.join(",") + ")");
-const extra = published.filter((x) => !["postgres", "migrate", "backend", "console"].includes(x.n) && !/^agent-/.test(x.n) && x.p.host_ip !== "127.0.0.1");
+out(agents.length === 0, "the legacy agent pool is gone: no agent-* services (" + agents.join(",") + ")");
+const extra = published.filter((x) => !["postgres", "migrate", "backend", "console"].includes(x.n) && x.p.host_ip !== "127.0.0.1");
 out(extra.length === 0, "other profile services (sonarqube) bind published ports to 127.0.0.1 only" + (extra.length ? " (offenders: " + extra.map((x) => x.n).join(",") + ")" : ""));
 const kimg = (n) => (svc[n] && svc[n].image) || "";
 out(!!kimg("backend") && kimg("backend") === kimg("migrate") && kimg("backend").indexOf(proj) === 0 && /kernel/.test(kimg("backend")), "migrate and backend share one kernel image (" + kimg("backend") + ")");
 const volSrc = (n) => ((svc[n] && svc[n].volumes) || []).map((v) => (typeof v === "string" ? v.split(":")[0] : v.source || ""));
-out(agents.length > 0 && agents.every((n) => volSrc(n).includes("agent-workspace") && !volSrc(n).some((v) => ["oscorpex-data", "studio-data", "claude-home", "repos"].includes(v))), "agents use their own agent-workspace volume and never oscorpex-data/studio-data/claude-home");
+out(!(cfg.volumes && cfg.volumes["agent-workspace"]) && !Object.keys(svc).some((n) => volSrc(n).includes("agent-workspace")), "no agent-workspace volume is defined or mounted");
 const lim = (s, k, dk) => (s[k] !== undefined && s[k] !== null && s[k] !== "" && s[k] !== 0) || (s.deploy && s.deploy.resources && s.deploy.resources.limits && s.deploy.resources.limits[dk] !== undefined);
 const noLimit = ["postgres", "migrate", "backend", "console"].filter((n) => !(svc[n] && lim(svc[n], "mem_limit", "memory") && lim(svc[n], "pids_limit", "pids")));
 out(noLimit.length === 0, "postgres, migrate, backend and console set mem_limit and pids_limit" + (noLimit.length ? " (missing: " + noLimit.join(",") + ")" : ""));
@@ -359,7 +349,7 @@ out(nets.db && nets.db.internal === true, "db network is internal");
 out(nets["studio-agents"] && nets["studio-agents"].internal === true, "studio-agents network is internal");
 out(nets.frontend && nets.frontend.internal !== true, "frontend network allows egress (not internal)");
 NODE
-if dc --profile agents --profile sonar config --format json >"$WORK/config.json" 2>"$WORK/config-json.err"; then
+if dc --profile sonar config --format json >"$WORK/config.json" 2>"$WORK/config-json.err"; then
 	while IFS=$'\t' read -r verdict msg; do
 		case "$verdict" in
 		PASS) pass "$msg" ;;
@@ -386,19 +376,10 @@ check_render() {
 }
 { cat "$ENVF"; echo OSCORPEX_DEV_PG_PORT=55432; } >"$WORK/devport.env"
 { cat "$ENVF"; echo OSCORPEX_BACKEND_CPUS=2; } >"$WORK/cpus.env"
-{ cat "$ENVF"; echo DOCKER_GID=999; } >"$WORK/gid.env"
 check_render "base + dev override" "$ENVF" dev 5432 -f "$COMPOSE_FILE_DEV"
 check_render "base + dev override with OSCORPEX_DEV_PG_PORT=55432" "$WORK/devport.env" dev 55432 -f "$COMPOSE_FILE_DEV"
 check_render "base (default cpus)" "$ENVF" cpus none
 check_render "base with OSCORPEX_BACKEND_CPUS=2" "$WORK/cpus.env" cpus 2
-if dc -f "$COMPOSE_FILE_POOL" config -q >"$WORK/cfg-pool.log" 2>&1; then
-	fail "base + pool override renders without DOCKER_GID"
-elif grep -Fq DOCKER_GID "$WORK/cfg-pool.log"; then
-	pass "base + pool override fails without DOCKER_GID and names the variable"
-else
-	fail "base + pool override failed without DOCKER_GID but the error does not name it ($(head -c 200 "$WORK/cfg-pool.log"))"
-fi
-check_render "base + pool override with DOCKER_GID=999" "$WORK/gid.env" pool 999 -f "$COMPOSE_FILE_POOL"
 
 # ---------------------------------------------------------------- 2. fresh up
 echo "--- [S1] fresh stack ---"

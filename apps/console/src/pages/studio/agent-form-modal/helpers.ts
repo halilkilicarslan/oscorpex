@@ -15,7 +15,6 @@ export const CLI_TOOL_OPTIONS = [
 	{ value: 'claude-code', label: 'claude-code' },
 	{ value: 'codex', label: 'codex' },
 	{ value: 'cursor', label: 'cursor' },
-	{ value: 'custom', label: 'custom' },
 ];
 
 export const inputClass =

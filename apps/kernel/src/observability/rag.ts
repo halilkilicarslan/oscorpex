@@ -3,6 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { z } from "zod";
+import { assertProjectInTenant, resolveProjectRepoPath } from "../studio/auth/project-access.js";
 import { execute, query, queryOne } from "../studio/pg.js";
 
 interface RagKnowledgeBase {
@@ -45,6 +47,30 @@ interface RagQuery {
 }
 
 export const ragRoutes = new Hono();
+
+// Strict bodies: a `projectPath`/`repoPath` (or any other unknown key) is a 400, never a filesystem path to read.
+const IndexCodebaseBodySchema = z
+	.object({
+		projectId: z.string().min(1).max(200),
+		extensions: z.array(z.string().max(32)).max(100).optional(),
+		excludeDirs: z.array(z.string().max(200)).max(100).optional(),
+		maxFileSize: z.number().int().positive().optional(),
+		chunkSize: z.number().int().positive().optional(),
+		chunkOverlap: z.number().int().nonnegative().optional(),
+	})
+	.strict();
+
+const ReindexBodySchema = z
+	.object({
+		projectId: z.string().min(1).max(200),
+		// a git revision, never an option
+		sinceCommit: z
+			.string()
+			.max(100)
+			.regex(/^[A-Za-z0-9_][A-Za-z0-9_./~^@{}-]*$/)
+			.optional(),
+	})
+	.strict();
 
 // GET /api/observability/rag/knowledge-bases/stats — MUST be before /:id
 ragRoutes.get("/rag/knowledge-bases/stats", async (c) => {
@@ -339,22 +365,21 @@ ragRoutes.post("/rag/knowledge-bases/:id/index-codebase", async (c) => {
 	const kb = await queryOne<{ id: string }>("SELECT id FROM rag_knowledge_bases WHERE id = $1", [kbId]);
 	if (!kb) return c.json({ error: "Knowledge base not found" }, 404);
 
-	const body = (await c.req.json()) as {
-		projectPath: string;
-		extensions?: string[];
-		excludeDirs?: string[];
-		maxFileSize?: number;
-		chunkSize?: number;
-		chunkOverlap?: number;
-	};
+	const parsed = IndexCodebaseBodySchema.safeParse(await c.req.json().catch(() => undefined));
+	if (!parsed.success) return c.json({ error: "Invalid body: expected projectId and optional index options" }, 400);
+	const body = parsed.data;
 
-	if (!body.projectPath) return c.json({ error: "projectPath is required" }, 400);
+	// The repository path is resolved server-side from the project; a body never supplies one.
+	const denied = await assertProjectInTenant(c, body.projectId);
+	if (denied) return denied;
+	const projectPath = await resolveProjectRepoPath(c, body.projectId);
+	if (!projectPath) return c.json({ error: "Project has no repository" }, 404);
 
 	const { documentIndexer } = await import("../studio/document-indexer.js");
 
 	try {
 		const result = await documentIndexer.indexCodebase({
-			projectPath: body.projectPath,
+			projectPath,
 			kbId,
 			extensions: body.extensions,
 			excludeDirs: body.excludeDirs,
@@ -377,17 +402,19 @@ ragRoutes.post("/rag/knowledge-bases/:id/reindex", async (c) => {
 	const kb = await queryOne<{ id: string }>("SELECT id FROM rag_knowledge_bases WHERE id = $1", [kbId]);
 	if (!kb) return c.json({ error: "Knowledge base not found" }, 404);
 
-	const body = (await c.req.json()) as {
-		projectPath: string;
-		sinceCommit?: string;
-	};
+	const parsed = ReindexBodySchema.safeParse(await c.req.json().catch(() => undefined));
+	if (!parsed.success) return c.json({ error: "Invalid body: expected projectId and optional sinceCommit" }, 400);
+	const body = parsed.data;
 
-	if (!body.projectPath) return c.json({ error: "projectPath is required" }, 400);
+	const denied = await assertProjectInTenant(c, body.projectId);
+	if (denied) return denied;
+	const projectPath = await resolveProjectRepoPath(c, body.projectId);
+	if (!projectPath) return c.json({ error: "Project has no repository" }, 404);
 
 	const { documentIndexer } = await import("../studio/document-indexer.js");
 
 	try {
-		const result = await documentIndexer.reindexChanged(body.projectPath, kbId, body.sinceCommit);
+		const result = await documentIndexer.reindexChanged(projectPath, kbId, body.sinceCommit);
 
 		return c.json(result);
 	} catch (err: unknown) {

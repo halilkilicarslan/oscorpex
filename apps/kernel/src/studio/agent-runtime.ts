@@ -11,7 +11,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { claudeSafeSettingArgs } from "@oscorpex/provider-sdk";
-import { composeSystemPrompt } from "./behavioral-prompt.js";
 import { execute, query, queryOne } from "./db.js";
 import { eventBus } from "./event-bus.js";
 import { createLogger } from "./logger.js";
@@ -79,40 +78,40 @@ function appendLine(record: AgentProcessRecord, line: string): void {
 	});
 }
 
-/** CLI aracına göre komut ve argüman dizisi oluşturur */
-function buildCommand(
-	cliTool: string,
-	taskPrompt?: string,
-	systemPrompt?: string,
-): { cmd: string; args: string[] } | null {
+/**
+ * CLI aracına göre komut ve argüman dizisi oluşturur.
+ * Görev istemi her zaman stdin'den gelir (`stdin`): argv'de bulunmaz, bir seçenek olarak yorumlanamaz.
+ */
+function buildCommand(cliTool: string, taskPrompt?: string): { cmd: string; args: string[]; stdin?: string } | null {
 	switch (cliTool) {
 		case "claude-code":
 			if (taskPrompt) {
-				// Görev istemiyle yazdırma modunda çalıştır
-				return { cmd: "claude", args: [...claudeSafeSettingArgs(), "--print", taskPrompt] };
+				// Görev istemiyle yazdırma modunda çalıştır; `--print` istemi stdin'den okur
+				return { cmd: "claude", args: [...claudeSafeSettingArgs(), "--print"], stdin: taskPrompt };
 			}
 			// İstemi yoksa etkileşimli mod (terminal'e bağlı değil — çıktı akışı okunur)
 			return { cmd: "claude", args: [...claudeSafeSettingArgs()] };
 
 		case "codex":
 			if (taskPrompt) {
-				return { cmd: "codex", args: [taskPrompt] };
+				// `exec -` reads the prompt from stdin: never in argv
+				return { cmd: "codex", args: ["exec", "-"], stdin: taskPrompt };
 			}
 			return { cmd: "codex", args: [] };
 
 		case "cursor":
 			if (taskPrompt) {
-				return { cmd: "cursor", args: ["agent", "-p", "--output-format", "json", "--trust", "--force", taskPrompt] };
+				// `--trust --force` (komutları onaysız çalıştırır) mevcut davranış olarak korunuyor; I4'te yeniden ele alınacak.
+				return {
+					cmd: "cursor",
+					args: ["agent", "-p", "--output-format", "json", "--trust", "--force"],
+					stdin: taskPrompt,
+				};
 			}
 			return { cmd: "cursor", args: ["agent"] };
 
-		case "custom": {
-			// systemPrompt komutu ikiye böl: ilk kelime = program, geri kalanı = argümanlar
-			if (!systemPrompt?.trim()) return null;
-			const parts = systemPrompt.trim().split(/\s+/);
-			return { cmd: parts[0], args: parts.slice(1) };
-		}
 		default:
+			// `none` ve bilinmeyen araçlar (kaldırılan `custom` dahil) hiçbir süreç başlatmaz
 			return null;
 	}
 }
@@ -158,8 +157,7 @@ export async function startAgent(
 	processes.set(key, record);
 
 	// `none` — süreç başlatma, sadece idle durumu döndür
-	const effectiveSystemPrompt = agent.systemPrompt ? composeSystemPrompt(agent.systemPrompt) : undefined;
-	const cmdSpec = buildCommand(agent.cliTool, taskPrompt, effectiveSystemPrompt);
+	const cmdSpec = buildCommand(agent.cliTool, taskPrompt);
 	if (!cmdSpec) {
 		record.status = "idle";
 		return record;
@@ -181,6 +179,11 @@ export async function startAgent(
 		// stdio akışlarını ayrı tutarak stdout/stderr'ı dinle
 		stdio: ["pipe", "pipe", "pipe"],
 	});
+
+	if (cmdSpec.stdin !== undefined) {
+		child.stdin?.on("error", () => undefined);
+		child.stdin?.end(cmdSpec.stdin);
+	}
 
 	record.process = child;
 	record.pid = child.pid;
@@ -559,7 +562,7 @@ function markVirtualStopped(projectId: string, agentId: string): void {
 
 /**
  * Çalıştırılabilir bir örnek olarak dışa aktarılan nesne.
- * routes.ts'de containerManager ile aynı erişim kalıbını korumak için.
+ * Diğer servislerle aynı erişim kalıbını korumak için.
  */
 export const agentRuntime = {
 	startAgent,

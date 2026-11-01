@@ -262,7 +262,6 @@ if [ "$INSTALL" -eq 1 ]; then
 		mkdir -p "$pdir"
 		cat >"$pdir/probe.Dockerfile" <<EOF
 FROM node:22-bookworm-slim AS install
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY . .
 RUN sha256sum pnpm-lock.yaml > /lock.before

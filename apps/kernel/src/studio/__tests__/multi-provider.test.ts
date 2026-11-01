@@ -75,7 +75,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 
 function makeMockProc(exitCode = 0, stdout = "", stderr = "") {
 	const proc = new EventEmitter() as any;
-	proc.stdin = { write: vi.fn(), end: vi.fn() };
+	proc.stdin = { write: vi.fn(), end: vi.fn(), on: vi.fn() };
 	proc.stdout = new EventEmitter();
 	proc.stderr = new EventEmitter();
 	proc.kill = vi.fn();

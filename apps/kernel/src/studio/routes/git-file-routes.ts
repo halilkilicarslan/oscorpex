@@ -5,6 +5,7 @@
 import { Hono } from "hono";
 import { getProject } from "../db.js";
 import { gitManager } from "../git-manager.js";
+import { InvalidGitInputError, isGitSha, isSafeGitPath, isSafeGitRef } from "../git/git-input.js";
 import { createLogger } from "../logger.js";
 const log = createLogger("git-file-routes");
 
@@ -138,10 +139,13 @@ gitFileRoutes.get("/projects/:id/git/diff", async (c) => {
 	if (!project.repoPath) return c.json({ error: "No repo path configured" }, 400);
 
 	const ref = c.req.query("ref");
+	// an option-shaped ref (`--output=<file>`) would be parsed by git as an option
+	if (ref !== undefined && !isSafeGitRef(ref)) return c.json({ error: "Invalid ref" }, 400);
 	try {
 		const diff = await gitManager.getDiff(project.repoPath, ref);
 		return c.json({ diff });
 	} catch (error) {
+		if (error instanceof InvalidGitInputError) return c.json({ error: error.message }, 400);
 		const msg = error instanceof Error ? error.message : "Failed to get diff";
 		return c.json({ error: msg }, 500);
 	}
@@ -187,6 +191,8 @@ gitFileRoutes.post("/projects/:id/git/revert", async (c) => {
 		return c.json({ error: "commitHash is required" }, 400);
 	}
 
+	if (!isGitSha(body.commitHash)) return c.json({ error: "commitHash must be a hex commit id" }, 400);
+
 	try {
 		const revertHash = await gitManager.revertCommit(project.repoPath, body.commitHash);
 		return c.json({
@@ -214,6 +220,10 @@ gitFileRoutes.post("/projects/:id/git/merge", async (c) => {
 		return c.json({ error: "target branch is required" }, 400);
 	}
 
+	if (!isSafeGitRef(body.source) || !isSafeGitRef(body.target)) {
+		return c.json({ error: "source and target must be plain branch names" }, 400);
+	}
+
 	try {
 		const result = await gitManager.mergeBranch(project.repoPath, body.source, body.target);
 		if (!result.success) {
@@ -237,7 +247,7 @@ gitFileRoutes.post("/projects/:id/git/commit", async (c) => {
 	}
 	if (Array.isArray(body.files)) {
 		for (const f of body.files) {
-			if (typeof f !== "string" || f.includes("..")) return c.json({ error: `Invalid file path: ${f}` }, 400);
+			if (!isSafeGitPath(f) || f.includes("..")) return c.json({ error: `Invalid file path: ${f}` }, 400);
 		}
 	}
 

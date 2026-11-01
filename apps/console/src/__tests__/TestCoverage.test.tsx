@@ -167,7 +167,8 @@ describe('TestCoverage', () => {
 		await user.click(btn);
 
 		await waitFor(() => {
-			expect(mockTriggerTestRun).toHaveBeenCalledWith('proj-1', '/some/repo');
+			// the path is resolved server-side: the client sends the project id only, never a repo path
+			expect(mockTriggerTestRun).toHaveBeenCalledWith('proj-1');
 		});
 	});
 

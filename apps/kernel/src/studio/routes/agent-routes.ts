@@ -21,7 +21,6 @@ import {
 import { agentRuntime } from "../agent-runtime.js";
 import { callerTenantId, callerUserId, isPlatformAdminRequest } from "../auth/request-identity.js";
 import { AVATARS, FEMALE_AVATARS, MALE_AVATARS } from "../avatars.js";
-import { containerManager } from "../container-manager.js";
 import {
 	createAgentConfig,
 	deleteAgentConfig,
@@ -314,7 +313,7 @@ agentRoutes.get("/projects/:id/agents/:agentId/inbox/count", async (c) => {
 	return c.json({ agentId: c.req.param("agentId"), unreadCount: count });
 });
 
-// ---- Container / Runtime --------------------------------------------------
+// ---- Runtime --------------------------------------------------
 
 agentRoutes.post("/projects/:id/agents/:agentId/start", async (c) => {
 	const projectId = c.req.param("id");
@@ -356,35 +355,13 @@ agentRoutes.post("/projects/:id/agents/:agentId/start", async (c) => {
 				cliTool: record.cliTool,
 			});
 		} catch (localErr) {
-			log.warn(`[routes] Yerel süreç başlatılamadı, Docker deneniyor: ${String(localErr)}`);
-		}
-	}
-
-	// Backing config must be visible to the caller (preset, or own tenant + creator); otherwise 404.
-	const agentConfig = await getAgentConfig(agentId);
-	if (agentConfig && !(await getVisibleAgentConfig(agentId, agentViewer(c)))) {
-		return c.json({ error: "Agent bulunamadı" }, 404);
-	}
-	if (agentConfig) {
-		try {
-			const containerId = await containerManager.createContainer(agentConfig, project);
-			return c.json({
-				success: true,
-				mode: "docker",
-				containerId: containerId.slice(0, 12),
-			});
-		} catch (dockerErr) {
-			const msg = dockerErr instanceof Error ? dockerErr.message : "Container başlatılamadı";
+			const msg = localErr instanceof Error ? localErr.message : "Agent başlatılamadı";
+			log.warn(`[routes] Yerel süreç başlatılamadı: ${String(localErr)}`);
 			return c.json({ error: msg }, 500);
 		}
 	}
 
-	return c.json(
-		{
-			error: "Agent başlatılamadı: CLI aracı yapılandırılmamış ve Docker da mevcut değil",
-		},
-		500,
-	);
+	return c.json({ error: "Agent başlatılamadı: CLI aracı yapılandırılmamış" }, 409);
 });
 
 agentRoutes.post("/projects/:id/agents/:agentId/stop", async (c) => {
@@ -397,13 +374,7 @@ agentRoutes.post("/projects/:id/agents/:agentId/stop", async (c) => {
 		return c.json({ success: true, mode: "local" });
 	}
 
-	try {
-		await containerManager.stopContainer(projectId, agentId);
-		return c.json({ success: true, mode: "docker" });
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "Durdurulamadı";
-		return c.json({ error: msg }, 500);
-	}
+	return c.json({ error: "Çalışan süreç bulunamadı" }, 404);
 });
 
 agentRoutes.get("/projects/:id/agents/:agentId/status", async (c) => {
@@ -414,11 +385,6 @@ agentRoutes.get("/projects/:id/agents/:agentId/status", async (c) => {
 	if (localRecord) {
 		const { process: _proc, ...safeRecord } = localRecord;
 		return c.json({ mode: "local", ...safeRecord });
-	}
-
-	const dockerRuntime = containerManager.getRuntime(projectId, agentId);
-	if (dockerRuntime) {
-		return c.json({ mode: "docker", ...dockerRuntime });
 	}
 
 	const agent = (await listProjectAgents(projectId)).find((a) => a.id === agentId);
@@ -547,12 +513,7 @@ agentRoutes.get("/projects/:id/runtimes", (c) => {
 		return { mode: "local", ...safe };
 	});
 
-	const dockerRuntimes = containerManager.getAllRuntimes(projectId).map((r) => ({
-		mode: "docker",
-		...r,
-	}));
-
-	return c.json([...localProcesses, ...dockerRuntimes]);
+	return c.json(localProcesses);
 });
 
 agentRoutes.get("/projects/:id/agents/:agentId/runs", async (c) => {
@@ -563,21 +524,9 @@ agentRoutes.get("/projects/:id/agents/:agentId/runs", async (c) => {
 	return c.json(runs);
 });
 
-agentRoutes.post("/projects/:id/agents/:agentId/exec", async (c) => {
-	const body = (await c.req.json()) as { command: string[] };
-	try {
-		const result = await containerManager.execCommand(c.req.param("id"), c.req.param("agentId"), body.command);
-		return c.json(result);
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "Exec failed";
-		return c.json({ error: msg }, 500);
-	}
-});
-
-agentRoutes.get("/docker/status", async (c) => {
-	const available = await containerManager.isDockerAvailable();
-	const hasImage = available ? await containerManager.hasCoderImage() : false;
-	return c.json({ docker: available, coderImage: hasImage });
+// The Docker coder-agent runtime was removed (I0); kept as a static answer for older consoles.
+agentRoutes.get("/docker/status", (c) => {
+	return c.json({ docker: false, coderImage: false });
 });
 
 // ---- Agent Chat (v3.8) ----------------------------------------------------

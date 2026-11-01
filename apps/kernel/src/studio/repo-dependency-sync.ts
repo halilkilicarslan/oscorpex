@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createLogger } from "./logger.js";
+import { hardenInstall } from "./safe-install.js";
 import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 
 const log = createLogger("repo-dependency-sync");
@@ -97,7 +98,21 @@ export function syncDeclaredDependencies(repoRoot: string, timeoutMs = 420_000):
 			args = ["install"];
 			break;
 	}
+	// --ignore-scripts / --ignore-pnpmfile / YARN_IGNORE_PATH come from the shared safe-install helper
+	const hardened = hardenInstall(pm, repoRoot);
+	args = [...args, ...hardened.flags];
 	const cmdline = `${exe} ${args.join(" ")}`;
+	if (!hardened.ok) {
+		log.warn(`[repo-dependency-sync] ${repoRoot}: ${hardened.error}`);
+		return {
+			command: cmdline,
+			missingBefore,
+			missingAfter: missingBefore,
+			ranInstall: false,
+			ok: false,
+			error: hardened.error,
+		};
+	}
 
 	try {
 		log.info(`[repo-dependency-sync] ${repoRoot}: missing=${missingBefore.join(", ")} → running ${cmdline}`);
@@ -106,7 +121,7 @@ export function syncDeclaredDependencies(repoRoot: string, timeoutMs = 420_000):
 			encoding: "utf-8",
 			timeout: timeoutMs,
 			stdio: "pipe",
-			env: buildSafeChildEnv({ profile: "build_tool" }),
+			env: buildSafeChildEnv({ profile: "build_tool", extra: hardened.env }),
 		});
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);

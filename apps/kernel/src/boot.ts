@@ -10,7 +10,6 @@ import type { Hono } from "hono";
 import { createLogger } from "./studio/logger.js";
 
 import { authConfigPhase } from "./boot-phases/auth-config-phase.js";
-import { containerPoolPhase } from "./boot-phases/container-pool-phase.js";
 import { dbPhase } from "./boot-phases/db-phase.js";
 import { enginePhase } from "./boot-phases/engine-phase.js";
 import { httpPhase } from "./boot-phases/http-phase.js";
@@ -73,9 +72,6 @@ export async function bootKernel(options: KernelBootOptions = {}): Promise<{
 
 	// Phase 4: Webhook sender
 	webhookPhase();
-
-	// Phase 5: Container pool warm-up (skip-allowed)
-	containerPoolPhase();
 
 	// Phase 6: Execution engine recovery (error logged, non-fatal)
 	await recoveryPhase();

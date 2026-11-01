@@ -97,12 +97,9 @@ export function runCLI(opts: CLIRunOptions): Promise<CLIRunResult> {
 		});
 
 		// Send stdin if provided
-		if (opts.stdin) {
-			proc.stdin?.write(opts.stdin);
-			proc.stdin?.end();
-		} else {
-			proc.stdin?.end();
-		}
+		// (EPIPE when the child exits before reading must not crash the process)
+		proc.stdin?.on("error", () => undefined);
+		proc.stdin?.end(opts.stdin || undefined);
 
 		proc.on("close", (code, sig) => {
 			cleanup();

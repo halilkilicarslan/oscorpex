@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Oscorpex — Execution Workspace Contract
-// Unified interface for local, file-copy isolated, and container workspaces.
+// Unified interface for local and file-copy isolated workspaces.
 // resolveWorkspace() picks the right strategy based on sandbox policy.
 // ---------------------------------------------------------------------------
 
@@ -13,7 +13,7 @@ const log = createLogger("execution-workspace");
 // Contract
 // ---------------------------------------------------------------------------
 
-export type WorkspaceType = "local" | "isolated" | "container";
+export type WorkspaceType = "local" | "isolated";
 
 export interface ExecutionWorkspace {
 	readonly type: WorkspaceType;
@@ -56,81 +56,30 @@ function localWorkspace(repoPath: string): ExecutionWorkspace {
  * Pick the right workspace strategy based on sandbox policy.
  *
  * Decision matrix:
- *  - isolationLevel "container" + Docker available → container (future)
- *  - isolationLevel "workspace" or "container" (no Docker) → file-copy isolated
+ *  - isolationLevel "container" or "vm" → refused (there is no container/VM runtime; never falls back to the host)
+ *  - isolationLevel "workspace" → file-copy isolated
  *  - isolationLevel "none" or no policy → local (source repo direct)
+ *  - anything else → refused
  */
 export async function resolveWorkspace(
 	sourceRepoPath: string | undefined,
 	taskId: string,
 	policy?: SandboxPolicy,
-	_containerAvailable?: boolean,
 ): Promise<ExecutionWorkspace> {
-	if (!sourceRepoPath) {
-		return localWorkspace("");
+	const level: unknown = policy?.isolationLevel ?? "none";
+
+	// Fail closed: a policy that demands a container/VM boundary must never run unisolated on the host.
+	if (level === "container" || level === "vm") {
+		log.warn({ taskId, level }, "[execution-workspace] isolationLevel not available, refusing to run");
+		throw new Error(`isolationLevel "${level}" is not available: container/VM isolation is not supported`);
+	}
+	// ...and neither may an unknown value be read as "no isolation"
+	if (level !== "none" && level !== "workspace") {
+		throw new Error(`Unknown isolationLevel ${JSON.stringify(level)}`);
 	}
 
-	const level = policy?.isolationLevel ?? "none";
-
-	// Container/VM mode: use container-pool when available, fall back to
-	// file-copy isolation when Docker is not present or pool is not ready.
-	if (level === "container" || level === "vm") {
-		try {
-			const { containerPool } = await import("./container-pool.js");
-			if (containerPool.isReady()) {
-				const container = await containerPool.acquireContainer(taskId);
-				if (container) {
-					await containerPool.bindWorkspace(container.id, sourceRepoPath);
-					log.info({ taskId, containerId: container.id }, "[execution-workspace] Container workspace bound");
-
-					return {
-						type: "container" as const,
-						repoPath: "/workspace",
-						isolated: true,
-
-						async writeBack(files: string[]): Promise<string[]> {
-							const { writeFile, mkdir } = await import("node:fs/promises");
-							const { join, dirname } = await import("node:path");
-							const written: string[] = [];
-
-							for (const file of files) {
-								// Strip any path component that isn't alphanumeric, dot, dash, slash, or underscore
-								const safePath = file.replace(/[^a-zA-Z0-9._\-/]/g, "");
-								if (!safePath) continue;
-
-								try {
-									// Read the file from the container using cat with array Cmd (no shell injection)
-									const content = await containerPool.execInContainer(container.id, ["cat", `/workspace/${safePath}`]);
-									const targetPath = join(sourceRepoPath, safePath);
-									await mkdir(dirname(targetPath), { recursive: true });
-									await writeFile(targetPath, content);
-									written.push(safePath);
-								} catch (err) {
-									log.warn({ err, file: safePath }, "[execution-workspace] Write-back failed for file");
-								}
-							}
-
-							return written;
-						},
-
-						async cleanup(): Promise<void> {
-							try {
-								containerPool.releaseContainer(container.id);
-								log.info({ containerId: container.id }, "[execution-workspace] Container released back to pool");
-							} catch (err) {
-								log.warn({ err }, "[execution-workspace] Container cleanup failed");
-							}
-						},
-					};
-				}
-			}
-		} catch (err) {
-			log.warn({ err }, "[execution-workspace] Container workspace setup failed, falling back to file-copy");
-		}
-
-		// Fallback: file-copy isolation (no real container boundary)
-		const ws = await prepareIsolatedWorkspace(sourceRepoPath, taskId, policy);
-		return fromIsolated(ws, ws.isolated ? "isolated" : "local");
+	if (!sourceRepoPath) {
+		return localWorkspace("");
 	}
 
 	if (level === "workspace") {
@@ -138,6 +87,6 @@ export async function resolveWorkspace(
 		return fromIsolated(ws, ws.isolated ? "isolated" : "local");
 	}
 
-	// "none" or unknown
+	// "none"
 	return localWorkspace(sourceRepoPath);
 }

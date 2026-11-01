@@ -12,7 +12,6 @@ const phases = vi.hoisted(() => ({
 	providerStatePhase: vi.fn(async () => {}),
 	websocketPhase: vi.fn(),
 	webhookPhase: vi.fn(),
-	containerPoolPhase: vi.fn(),
 	recoveryPhase: vi.fn(async () => {}),
 	pipelinePhase: vi.fn(async () => {}),
 	providerRegistryPhase: vi.fn(async () => {}),
@@ -26,7 +25,6 @@ vi.mock("../../boot-phases/engine-phase.js", () => ({ enginePhase: phases.engine
 vi.mock("../../boot-phases/provider-state-phase.js", () => ({ providerStatePhase: phases.providerStatePhase }));
 vi.mock("../../boot-phases/websocket-phase.js", () => ({ websocketPhase: phases.websocketPhase }));
 vi.mock("../../boot-phases/webhook-phase.js", () => ({ webhookPhase: phases.webhookPhase }));
-vi.mock("../../boot-phases/container-pool-phase.js", () => ({ containerPoolPhase: phases.containerPoolPhase }));
 vi.mock("../../boot-phases/recovery-phase.js", () => ({ recoveryPhase: phases.recoveryPhase }));
 vi.mock("../../boot-phases/pipeline-phase.js", () => ({ pipelinePhase: phases.pipelinePhase }));
 vi.mock("../../boot-phases/provider-registry-phase.js", () => ({

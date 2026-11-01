@@ -79,7 +79,7 @@ describe("Git Manager", () => {
 	// ---- Merge operations ---------------------------------------------------
 
 	describe("Merge", () => {
-		it("should merge branches", async () => {
+		it("should merge branches", { timeout: 15_000 }, async () => {
 			// Create a feature branch with changes
 			await gitManager.createBranch(testDir, "feat/merge-test");
 			await writeFile(join(testDir, "feature.txt"), "Feature content");

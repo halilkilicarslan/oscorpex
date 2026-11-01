@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { z } from "zod";
 import {
 	getActivityTimeline,
 	getAgentAnalytics,
@@ -24,13 +25,17 @@ import { checkDocsFreshness, generateReadme, regenerateAllDocs } from "../docs-g
 import { createLogger } from "../logger.js";
 import { type TokenUsageRecord, aggregateCostBreakdowns } from "../providers/model-pricing.js";
 import {
+	SONAR_DISABLED_KEY,
+	SONAR_DISABLED_MESSAGE,
 	fetchQualityGate,
 	getLatestSonarScan,
 	initSonarConfig,
+	isPlatformSonarHost,
 	isSonarEnabled,
 	recordSonarScan,
 	runSonarScan,
 } from "../sonar-runner.js";
+import { validateOutboundHostUrl } from "../utils/url-validator.js";
 import { UpdateSettingsSchema, parseBody } from "./validation-schemas.js";
 const log = createLogger("analytics-routes");
 
@@ -192,6 +197,10 @@ analyticsRoutes.get("/projects/:id/sonar/status", async (c) => {
 });
 
 analyticsRoutes.post("/projects/:id/sonar/scan", async (c) => {
+	// disabled until workload isolation (I5): the scanner would read and run against tenant code
+	if (!(await isSonarEnabled())) {
+		return c.json({ error: SONAR_DISABLED_MESSAGE, key: SONAR_DISABLED_KEY, code: "sonar_disabled" }, 409);
+	}
 	const projectId = c.req.param("id");
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
@@ -295,6 +304,15 @@ analyticsRoutes.get("/projects/:id/settings", async (c) => {
 	return c.json(await getProjectSettingsMap(projectId));
 });
 
+// Strict: the host is tenant-supplied and receives the scanner token, so it is validated on save (and again at use time)
+const SonarSettingsSchema = z
+	.object({
+		enabled: z.enum(["true", "false"]).optional(),
+		hostUrl: z.string().max(500).optional(),
+		token: z.string().max(500).optional(),
+	})
+	.strict();
+
 analyticsRoutes.put("/projects/:id/settings/:category", async (c) => {
 	const { setProjectSettings } = await import("../db.js");
 	const projectId = c.req.param("id");
@@ -302,7 +320,20 @@ analyticsRoutes.put("/projects/:id/settings/:category", async (c) => {
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
-	const body = await c.req.json<Record<string, string>>();
+	let body = await c.req.json<Record<string, string>>();
+	if (category === "sonarqube") {
+		const parsed = SonarSettingsSchema.safeParse(body);
+		if (!parsed.success) return c.json({ error: "Invalid SonarQube settings" }, 400);
+		// the legacy UI default and the platform host both mean "the platform SonarQube": stored as blank
+		if (parsed.data.hostUrl && isPlatformSonarHost(parsed.data.hostUrl)) {
+			parsed.data.hostUrl = "";
+		}
+		if (parsed.data.hostUrl) {
+			const check = await validateOutboundHostUrl(parsed.data.hostUrl);
+			if (!check.valid) return c.json({ error: `Invalid SonarQube hostUrl: ${check.reason}` }, 400);
+		}
+		body = parsed.data as Record<string, string>;
+	}
 	await setProjectSettings(projectId, category, body);
 	return c.json({ ok: true });
 });

@@ -21,7 +21,6 @@ vi.mock("../app-runner.js", () => ({
 	stopApp: vi.fn(),
 	switchPreviewService: vi.fn(),
 }));
-vi.mock("../container-pool.js", () => ({ containerPool: { getStatus: vi.fn() } }));
 vi.mock("../db-provisioner.js", () => ({
 	getDbStatus: vi.fn(),
 	parseCloudUrl: vi.fn(),

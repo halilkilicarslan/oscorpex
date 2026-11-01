@@ -49,21 +49,6 @@ export interface AgentConfig {
 	taskTimeout?: number;
 }
 
-// ---- Agent Runtime State ---------------------------------------------------
-
-export type AgentRuntimeStatus = "idle" | "working" | "waiting" | "error";
-
-export interface AgentRuntime {
-	agentId: string;
-	projectId: string;
-	containerId?: string;
-	status: AgentRuntimeStatus;
-	currentTaskId?: string;
-	terminalBuffer: string[];
-	branch: string;
-	startedAt?: string;
-}
-
 // ---- Project Agent (proje bazlı takım üyesi) --------------------------------
 
 export interface ProjectAgent {

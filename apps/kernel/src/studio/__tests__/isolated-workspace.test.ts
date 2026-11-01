@@ -173,25 +173,26 @@ describe("execution-workspace", () => {
 		await ws.cleanup();
 	});
 
-	it("falls back to isolated when isolationLevel is container (no Docker)", async () => {
-		const ws = await resolveWorkspace(sourceRepo, "task-3", {
-			id: "p",
-			projectId: "proj-1",
-			isolationLevel: "container",
-			allowedTools: [],
-			deniedTools: [],
-			filesystemScope: [],
-			networkPolicy: "no_network",
-			maxExecutionTimeMs: 1000,
-			maxOutputSizeBytes: 1000,
-			elevatedCapabilities: [],
-			enforcementMode: "hard",
-		});
-		// Without Docker, container mode falls back to file-copy — type is "isolated" not "container"
-		expect(ws.type).toBe("isolated");
-		expect(ws.isolated).toBe(true);
-		await ws.cleanup();
-	});
+	it.each(["container", "vm"] as const)(
+		"refuses isolationLevel %s instead of falling back to the host",
+		async (level) => {
+			await expect(
+				resolveWorkspace(sourceRepo, "task-3", {
+					id: "p",
+					projectId: "proj-1",
+					isolationLevel: level,
+					allowedTools: [],
+					deniedTools: [],
+					filesystemScope: [],
+					networkPolicy: "no_network",
+					maxExecutionTimeMs: 1000,
+					maxOutputSizeBytes: 1000,
+					elevatedCapabilities: [],
+					enforcementMode: "hard",
+				}),
+			).rejects.toThrow(/not available/);
+		},
+	);
 
 	it("returns local workspace when no source repo provided", async () => {
 		const ws = await resolveWorkspace(undefined, "task-4");
@@ -216,28 +217,5 @@ describe("execution-workspace", () => {
 		expect(typeof ws.writeBack).toBe("function");
 		expect(typeof ws.cleanup).toBe("function");
 		await ws.cleanup();
-	});
-});
-
-// ---------------------------------------------------------------------------
-// Network policy resolution
-// ---------------------------------------------------------------------------
-import { resolveNetworkMode } from "../container-pool.js";
-
-describe("resolveNetworkMode", () => {
-	it("maps no_network to Docker none", () => {
-		expect(resolveNetworkMode("no_network")).toBe("none");
-	});
-
-	it("maps project_only to internal network", () => {
-		expect(resolveNetworkMode("project_only")).toBe("studio-agent-net");
-	});
-
-	it("maps unrestricted to internal network", () => {
-		expect(resolveNetworkMode("unrestricted")).toBe("studio-agent-net");
-	});
-
-	it("defaults to internal network for undefined", () => {
-		expect(resolveNetworkMode(undefined)).toBe("studio-agent-net");
 	});
 });

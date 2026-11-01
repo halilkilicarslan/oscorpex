@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { Hono } from "hono";
 import { getProject } from "../db.js";
+import { NO_SUBMODULES, gitSafeEnv } from "../git/git-safe-config.js";
 import { createLogger } from "../logger.js";
 import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 
@@ -19,8 +20,9 @@ export const terminalRoutes = new Hono();
 // Allowlisted commands — never pass raw user strings to shell
 // ---------------------------------------------------------------------------
 const ALLOWED_COMMANDS: Record<string, { bin: string; args: string[] }> = {
-	git_status: { bin: "git", args: ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "status"] },
-	git_diff: { bin: "git", args: ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "diff"] },
+	// hooks/fsmonitor/pager/drivers are neutralised by gitSafeEnv below
+	git_status: { bin: "git", args: ["status", NO_SUBMODULES] },
+	git_diff: { bin: "git", args: ["diff", "--no-ext-diff", "--no-textconv", NO_SUBMODULES] },
 	git_log: {
 		bin: "git",
 		args: ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "log", "--oneline", "-20"],
@@ -86,13 +88,16 @@ terminalRoutes.post("/projects/:id/terminal/exec", async (c) => {
 	log.info({ projectId, cwd, commandName }, "[terminal] executing allowlisted command");
 
 	try {
+		const baseEnv = buildSafeChildEnv({ profile: "build_tool", extra: { FORCE_COLOR: "0", NO_COLOR: "1" } });
+		// git runs in a tenant repo: repo pre-flight + hardened env (throws, and so refuses, for an unsafe repo)
+		const childEnv = allowed.bin === "git" ? gitSafeEnv(baseEnv, cwd) : baseEnv;
 		// P0: use execFileSync with array args — no shell interpolation
 		const output = execFileSync(allowed.bin, allowed.args, {
 			cwd,
 			timeout: 30_000,
 			encoding: "utf8",
 			stdio: ["pipe", "pipe", "pipe"],
-			env: buildSafeChildEnv({ profile: "build_tool", extra: { FORCE_COLOR: "0", NO_COLOR: "1" } }),
+			env: childEnv,
 		});
 		return c.json({ output: output.slice(0, 10_000), exitCode: 0 });
 	} catch (err: unknown) {

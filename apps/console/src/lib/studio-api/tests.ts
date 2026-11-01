@@ -41,15 +41,12 @@ export interface TestSummary {
 // API functions
 // ---------------------------------------------------------------------------
 
-export async function triggerTestRun(
-	projectId: string,
-	repoPath: string,
-	taskId?: string,
-): Promise<TestResult> {
+/** The kernel resolves the repository from the project; a request never carries a filesystem path. */
+export async function triggerTestRun(projectId: string, taskId?: string): Promise<TestResult> {
 	return json<TestResult>(`${API}/tests/run/${projectId}`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ repoPath, taskId }),
+		body: JSON.stringify(taskId ? { taskId } : {}),
 	});
 }
 

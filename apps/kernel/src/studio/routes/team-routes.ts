@@ -45,6 +45,7 @@ import {
 } from "../planner-cli.js";
 import { TEAM_ARCHITECT_SYSTEM_PROMPT } from "../team-architect.js";
 import type { DependencyType, ProjectAgent } from "../types.js";
+import { CreateProjectAgentSchema, UpdateProjectAgentSchema, parseBody } from "./validation-schemas.js";
 const log = createLogger("team-routes");
 
 export const teamRoutes = new Hono();
@@ -256,17 +257,9 @@ teamRoutes.post("/projects/:id/team", async (c) => {
 	const project = await getProject(projectId);
 	if (!project) return c.json({ error: "Project not found" }, 404);
 
-	const body = (await c.req.json()) as {
-		sourceAgentId?: string;
-		name?: string;
-		role?: string;
-		avatar?: string;
-		personality?: string;
-		model?: string;
-		cliTool?: string;
-		skills?: string[];
-		systemPrompt?: string;
-	};
+	const parsed = parseBody(CreateProjectAgentSchema, await c.req.json().catch(() => undefined));
+	if (!parsed.success) return c.json({ error: parsed.error }, 400);
+	const body = parsed.data;
 
 	if (body.sourceAgentId) {
 		const preset = await getVisibleAgentConfig(body.sourceAgentId, {
@@ -438,8 +431,13 @@ teamRoutes.put("/projects/:id/team/:agentId", async (c) => {
 		return c.json({ error: "Agent not found" }, 404);
 	}
 
-	const body = await c.req.json();
-	const updated = await updateProjectAgent(agentId, body);
+	const parsed = parseBody(UpdateProjectAgentSchema, await c.req.json().catch(() => undefined));
+	if (!parsed.success) return c.json({ error: parsed.error }, 400);
+	// null clears the reporting line (the repo stores an empty string as NULL)
+	const updated = await updateProjectAgent(agentId, {
+		...parsed.data,
+		reportsTo: parsed.data.reportsTo === null ? "" : parsed.data.reportsTo,
+	});
 	if (!updated) return c.json({ error: "Agent not found" }, 404);
 	updateAgentFiles(c.req.param("id"), updated.name, {
 		skills: updated.skills,

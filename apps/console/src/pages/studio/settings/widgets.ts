@@ -26,10 +26,10 @@ export const WIDGETS: WidgetDef[] = [
 		title: 'SonarQube',
 		icon: '\u{1F6E1}',
 		color: '#a78bfa',
-		description: 'Kod kalitesi analizi ve quality gate kontrolu. Docker uzerinde calisir.',
+		description: 'Kod kalitesi analizi ve quality gate kontrolu. NOT: Tarama, is yuku izolasyonu tamamlanana kadar devre disi (scanning is disabled until workload isolation is complete).',
 		fields: [
 			{ key: 'enabled', label: 'Enabled', type: 'toggle', defaultValue: 'false' },
-			{ key: 'hostUrl', label: 'Host URL', type: 'text', placeholder: 'http://localhost:9000', defaultValue: 'http://localhost:9000' },
+			{ key: 'hostUrl', label: 'Host URL (bos = platform SonarQube)', type: 'text', placeholder: 'https://sonar.example.com', defaultValue: '' },
 			{ key: 'token', label: 'Token', type: 'password', placeholder: 'squ_...', defaultValue: '' },
 		],
 	},

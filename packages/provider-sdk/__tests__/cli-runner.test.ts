@@ -58,8 +58,12 @@ function createMockChildProcess() {
 			write(data: string) {
 				stdinData += data;
 			},
-			end() {
-				// no-op
+			// a real stream: runCLI listens for EPIPE and passes the payload to end()
+			on() {
+				return this;
+			},
+			end(data?: string) {
+				if (data) stdinData += data;
 			},
 		},
 		kill(signal?: string) {

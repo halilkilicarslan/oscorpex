@@ -22,6 +22,9 @@ export const CreateProjectSchema = z
 	})
 	.strict();
 
+// Supported agent CLI tools (mirrors AgentCliTool). "custom" (run systemPrompt as a command) was removed in I0.
+export const AgentCliToolSchema = z.enum(["claude-code", "codex", "cursor", "none"]);
+
 // Agent schemas — includes all DB-required optional fields for createAgentConfig
 export const CreateAgentSchema = z
 	.object({
@@ -31,9 +34,9 @@ export const CreateAgentSchema = z
 		systemPrompt: z.string().max(10000).optional(),
 		capabilities: z.array(z.string().max(80)).max(20).optional(),
 		avatar: z.string().max(200).optional(),
-		gender: z.string().max(20).optional(),
+		gender: z.enum(["male", "female"]).optional(),
 		personality: z.string().max(200).optional(),
-		cliTool: z.string().max(80).optional(),
+		cliTool: AgentCliToolSchema.optional(),
 		skills: z.array(z.string().max(200)).max(50).optional(),
 		// Reaches the route's permission check (platform:admin only) instead of failing with 400
 		isPreset: z.boolean().optional(),
@@ -42,6 +45,40 @@ export const CreateAgentSchema = z
 
 /** PUT /agents/:id — same fields and size limits as creation, all optional, unknown keys rejected. */
 export const UpdateAgentConfigSchema = CreateAgentSchema.partial().strict();
+
+/** POST /projects/:id/team — either a copy of `sourceAgentId` (with overrides) or a fresh agent (name + role). */
+export const CreateProjectAgentSchema = z
+	.object({
+		sourceAgentId: z.string().min(1).max(200).optional(),
+		name: z.string().min(1).max(80).optional(),
+		role: z.string().min(1).max(40).optional(),
+		avatar: z.string().max(200).optional(),
+		gender: z.enum(["male", "female"]).optional(),
+		personality: z.string().max(200).optional(),
+		model: z.string().max(80).optional(),
+		cliTool: AgentCliToolSchema.optional(),
+		skills: z.array(z.string().max(200)).max(50).optional(),
+		systemPrompt: z.string().max(10000).optional(),
+	})
+	.strict();
+
+/** PUT /projects/:id/team/:agentId — whitelisted mutable fields only (no tenantId/projectId mass assignment). */
+export const UpdateProjectAgentSchema = z
+	.object({
+		name: z.string().min(1).max(80).optional(),
+		role: z.string().min(1).max(40).optional(),
+		avatar: z.string().max(200).optional(),
+		gender: z.enum(["male", "female"]).optional(),
+		personality: z.string().max(200).optional(),
+		model: z.string().max(80).optional(),
+		cliTool: AgentCliToolSchema.optional(),
+		skills: z.array(z.string().max(200)).max(50).optional(),
+		systemPrompt: z.string().max(10000).optional(),
+		reportsTo: z.string().max(200).nullable().optional(),
+		color: z.string().max(40).optional(),
+		pipelineOrder: z.number().int().optional(),
+	})
+	.strict();
 
 export const UpdateAgentSchema = z
 	.object({

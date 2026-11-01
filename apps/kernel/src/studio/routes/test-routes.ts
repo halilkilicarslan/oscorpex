@@ -4,6 +4,8 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { z } from "zod";
+import { assertProjectInTenant, resolveProjectRepoPath } from "../auth/project-access.js";
 import { getTestResults, getTestSummary, saveTestResult } from "../db.js";
 import { createLogger } from "../logger.js";
 import { testRunner } from "../test-runner.js";
@@ -11,21 +13,24 @@ const log = createLogger("test-routes");
 
 const router = new Hono();
 
+const RunTestsBodySchema = z.object({ taskId: z.string().min(1).max(200).optional() }).strict();
+
 // ---------------------------------------------------------------------------
 // POST /tests/run/:projectId — trigger a test run
-// Body: { repoPath: string; taskId?: string }
+// Body: { taskId?: string }. The repository path is resolved server-side from the project; a body path is a 400.
 // ---------------------------------------------------------------------------
 
 router.post("/run/:projectId", async (c) => {
 	try {
 		const projectId = c.req.param("projectId");
-		const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-		const repoPath = body.repoPath as string | undefined;
-		const taskId = (body.taskId as string | undefined) ?? undefined;
+		const parsed = RunTestsBodySchema.safeParse(await c.req.json().catch(() => ({})));
+		if (!parsed.success) return c.json({ error: "Invalid body: only taskId is accepted" }, 400);
+		const taskId = parsed.data.taskId;
 
-		if (!repoPath) {
-			return c.json({ error: "repoPath is required" }, 400);
-		}
+		const denied = await assertProjectInTenant(c, projectId);
+		if (denied) return denied;
+		const repoPath = await resolveProjectRepoPath(c, projectId);
+		if (!repoPath) return c.json({ error: "Project has no repository" }, 404);
 
 		const result = await testRunner.runTests(projectId, repoPath, taskId);
 
@@ -57,6 +62,8 @@ router.post("/run/:projectId", async (c) => {
 router.get("/results/:projectId", async (c) => {
 	try {
 		const projectId = c.req.param("projectId");
+		const denied = await assertProjectInTenant(c, projectId);
+		if (denied) return denied;
 		const taskId = c.req.query("taskId") ?? undefined;
 		const limit = Math.min(Number(c.req.query("limit") ?? "50"), 200);
 		const offset = Number(c.req.query("offset") ?? "0");
@@ -76,6 +83,8 @@ router.get("/results/:projectId", async (c) => {
 router.get("/summary/:projectId", async (c) => {
 	try {
 		const projectId = c.req.param("projectId");
+		const denied = await assertProjectInTenant(c, projectId);
+		if (denied) return denied;
 		const summary = await getTestSummary(projectId);
 		return c.json(summary);
 	} catch (err) {

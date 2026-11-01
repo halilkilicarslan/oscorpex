@@ -11,6 +11,7 @@ import { getDbConnectionInfo, provisionDatabase } from "../db-provisioner.js";
 import { createLogger } from "../logger.js";
 import { analyzeProject, generateStudioConfig, writeEnvFile } from "../runtime-analyzer.js";
 import type { DetectedService } from "../runtime-analyzer.js";
+import { hardenInstallCommand } from "../safe-install.js";
 import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { detectDockerCompose, loadStudioConfig } from "./detection.js";
 import { resolvePort } from "./port-manager.js";
@@ -232,18 +233,21 @@ export async function startApp(
 		for (const svc of analysis.services) {
 			if (!svc.depsInstalled && svc.installCommand) {
 				const svcPath = svc.path === "." ? repoPath : join(repoPath, svc.path);
-				// Append --ignore-scripts to npm/pnpm/yarn to prevent arbitrary lifecycle script execution
-				const safeInstallCmd = /^(npm|pnpm|yarn)\s+install/.test(svc.installCommand)
-					? `${svc.installCommand} --ignore-scripts`
-					: svc.installCommand;
+				// Lifecycle scripts, .pnpmfile.cjs and yarnPath are repo-controlled code: never run them
+				const hardened = hardenInstallCommand(svc.installCommand, svcPath, repoPath);
+				if (!hardened.ok) {
+					onLog(`[app-runner] Bağımlılık kurulumu reddedildi (${svc.name}): ${hardened.error}`);
+					continue;
+				}
+				const safeInstallCmd = hardened.command;
 				onLog(`[app-runner] Bağımlılıklar kuruluyor: ${safeInstallCmd} (${svc.name})`);
 				try {
 					execSync(safeInstallCmd, {
-						cwd: svcPath,
+						cwd: hardened.cwd ?? svcPath,
 						encoding: "utf-8",
 						timeout: 120000,
 						stdio: "pipe",
-						env: buildSafeChildEnv({ profile: "app_runner" }),
+						env: buildSafeChildEnv({ profile: "app_runner", extra: hardened.env }),
 					});
 					onLog(`[app-runner] Bağımlılıklar kuruldu: ${svc.name}`);
 				} catch (err) {

@@ -36,6 +36,7 @@ import { runProviderTask } from "./provider-task-runner.js";
 import { computeQueueWaitMs } from "./queue-wait.js";
 import { executeTaskReview } from "./review-task-runner.js";
 import {
+	IsolationUnavailableError,
 	type SandboxExecutionContext,
 	closeSandboxExecution,
 	enforceSandboxHardPreflight,
@@ -221,14 +222,36 @@ export class TaskExecutor {
 		// --- Sandbox: resolve policy for this task ---
 		let sandboxContext: SandboxExecutionContext = { runtimeRepoPath: project.repoPath };
 		if (project.repoPath) {
-			sandboxContext = await setupSandboxExecution(
-				projectId,
-				task,
-				agent.id,
-				agent.role,
-				project.repoPath,
-				task.riskLevel,
-			);
+			try {
+				sandboxContext = await setupSandboxExecution(
+					projectId,
+					task,
+					agent.id,
+					agent.role,
+					project.repoPath,
+					task.riskLevel,
+				);
+			} catch (err) {
+				if (!(err instanceof IsolationUnavailableError)) throw err;
+				// Fail closed: never run the agent in the source repo when the demanded isolation is unavailable
+				log.error({ err, taskId: task.id }, "[task-executor] Isolation unavailable — failing the task");
+				this._activeControllers.delete(controllerKey);
+				if (sessionId) {
+					failSession(sessionId, projectId, agent.id, agent.role, task, err.message).catch((e) =>
+						log.warn(`[task-executor] Session fail record failed: ${String(e)}`),
+					);
+				}
+				eventBus.emit({
+					projectId,
+					type: "agent:error",
+					agentId: agent.id,
+					taskId: task.id,
+					payload: { error: err.message },
+				});
+				await taskEngine().failTask(task.id, err.message);
+				await dispatchReadyTasks(projectId, task.phaseId);
+				return;
+			}
 		}
 		const { sandboxPolicy, sandboxSessionId, isolatedWorkspace } = sandboxContext;
 		const runtimeRepoPath = sandboxContext.runtimeRepoPath;
@@ -314,56 +337,6 @@ export class TaskExecutor {
 				},
 			});
 
-			// --- Container pool branch: route to Docker container if isolation=container and pool is ready ---
-			let containerResult: import("./provider-execution-service.js").NormalizedProviderResult | null = null;
-			if (sandboxPolicy?.isolationLevel === "container") {
-				try {
-					const { containerPool } = await import("../container-pool.js");
-					if (containerPool.isReady()) {
-						log.info({ taskId: task.id }, "[task-executor] Routing to container pool (isolation=container)");
-
-						const poolResult = await containerPool.executeTask(
-							projectId,
-							agent.id,
-							agent.name,
-							agent.role,
-							runtimeRepoPath,
-							{ taskId: task.id, prompt, timeout: timeoutMs },
-						);
-
-						containerResult = {
-							text: poolResult.output ?? "",
-							filesCreated: poolResult.filesCreated ?? [],
-							filesModified: poolResult.filesModified ?? [],
-							logs: poolResult.logs ?? [],
-							inputTokens: 0,
-							outputTokens: 0,
-							cacheCreationTokens: 0,
-							cacheReadTokens: 0,
-							costUsd: 0,
-							durationMs: 0,
-							model: "container",
-							provider: "container-pool",
-						};
-
-						log.info(
-							{
-								taskId: task.id,
-								files: containerResult.filesCreated.length + containerResult.filesModified.length,
-							},
-							"[task-executor] Container pool execution completed",
-						);
-					} else {
-						log.info({ taskId: task.id }, "[task-executor] Container pool not ready, falling back to CLI adapter");
-					}
-				} catch (err) {
-					log.warn(
-						{ err, taskId: task.id },
-						"[task-executor] Container pool execution failed, falling back to CLI adapter",
-					);
-				}
-			}
-
 			// P4-1: Create checkpoint before provider execution
 			try {
 				await createCheckpoint({
@@ -379,33 +352,30 @@ export class TaskExecutor {
 				log.warn({ err, taskId: task.id }, "[task-executor] checkpoint creation failed (non-blocking)");
 			}
 
-			let providerRun: import("./provider-task-runner.js").ProviderTaskRunResult | null = null;
-			if (!containerResult) {
-				providerRun = await runProviderTask({
-					projectId,
-					task,
-					agent,
-					runtimeRepoPath,
-					prompt,
-					routedModel,
-					primaryCliTool,
-					allowedTools,
-					timeoutMs,
-					signal: taskController.signal,
-					queueWaitMs,
-					isColdStart,
-					sessionId,
-					telemetry: this.telemetry,
-					executeTask,
-					formatTaskLog,
-				});
-				if (providerRun.deferred) {
-					return;
-				}
+			const providerRun = await runProviderTask({
+				projectId,
+				task,
+				agent,
+				runtimeRepoPath,
+				prompt,
+				routedModel,
+				primaryCliTool,
+				allowedTools,
+				timeoutMs,
+				signal: taskController.signal,
+				queueWaitMs,
+				isColdStart,
+				sessionId,
+				telemetry: this.telemetry,
+				executeTask,
+				formatTaskLog,
+			});
+			if (providerRun.deferred) {
+				return;
 			}
 
-			// biome-ignore lint/style/noNonNullAssertion: providerRun is non-null when containerResult is null (branch above guarantees it)
-			const cliResult = containerResult ?? providerRun!.result!;
+			// biome-ignore lint/style/noNonNullAssertion: result is set whenever the run was not deferred
+			const cliResult = providerRun.result!;
 			lastFailureClassification = undefined;
 
 			const output = await buildTaskOutput(cliResult, runtimeRepoPath, isolatedWorkspace);

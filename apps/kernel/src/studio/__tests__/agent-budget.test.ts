@@ -54,7 +54,7 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 				avatar: "🧑‍💻",
 				personality: "focused",
 				model: "claude-sonnet-4-6",
-				cliTool: "claude",
+				cliTool: "claude-code",
 				skills: [],
 				systemPrompt: "You are a developer.",
 			});
@@ -74,7 +74,7 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 				avatar: "🅰️",
 				personality: "fast",
 				model: "claude-sonnet-4-6",
-				cliTool: "claude",
+				cliTool: "claude-code",
 				skills: [],
 				systemPrompt: "Alpha agent.",
 			});
@@ -85,7 +85,7 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 				avatar: "🅱️",
 				personality: "thorough",
 				model: "claude-sonnet-4-6",
-				cliTool: "claude",
+				cliTool: "claude-code",
 				skills: [],
 				systemPrompt: "Beta agent.",
 			});
@@ -150,7 +150,7 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 				avatar: "👩‍💻",
 				personality: "",
 				model: "claude-sonnet-4-6",
-				cliTool: "claude",
+				cliTool: "claude-code",
 				skills: [],
 				systemPrompt: "",
 			});
@@ -161,7 +161,7 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 				avatar: "👩‍💻",
 				personality: "",
 				model: "claude-sonnet-4-6",
-				cliTool: "claude",
+				cliTool: "claude-code",
 				skills: [],
 				systemPrompt: "",
 			});
@@ -196,7 +196,7 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 				avatar: "💰",
 				personality: "",
 				model: "claude-sonnet-4-6",
-				cliTool: "claude",
+				cliTool: "claude-code",
 				skills: [],
 				systemPrompt: "",
 			});
@@ -286,7 +286,7 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 				avatar: "📊",
 				personality: "",
 				model: "claude-sonnet-4-6",
-				cliTool: "claude",
+				cliTool: "claude-code",
 				skills: [],
 				systemPrompt: "",
 			});
@@ -337,7 +337,7 @@ describe.skipIf(!hasDb)("Agent Budget (Faz 3.2)", () => {
 				avatar: "💸",
 				personality: "",
 				model: "claude-sonnet-4-6",
-				cliTool: "claude",
+				cliTool: "claude-code",
 				skills: [],
 				systemPrompt: "",
 			});

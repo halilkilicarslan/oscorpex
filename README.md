@@ -83,7 +83,7 @@ Oscorpex is a full-stack development studio that orchestrates a team of 12 speci
 | Frontend | React 19, Vite, Tailwind CSS 4 |
 | AI Execution | ProviderRegistry + ProviderAdapter boundary for Claude Code, Codex, Cursor, Google Gemini, and Ollama |
 | AI Framework | Oscorpex Kernel (custom execution engine) |
-| Container | Docker (Dockerode), container pool with health checks |
+| Container | Docker Compose (postgres, kernel, console); the legacy agent container pool was removed |
 | Terminal | xterm.js v6 |
 | Git | simple-git |
 | Testing | Vitest (1400+ tests, 104 test files) |

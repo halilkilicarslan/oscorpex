@@ -37,7 +37,12 @@ vi.mock("node:child_process", async (importOriginal) => {
 				call.stdin = stdin;
 				return true;
 			},
-			end: () => undefined,
+			end: (s?: string) => {
+				if (s !== undefined) {
+					stdin += String(s);
+					call.stdin = stdin;
+				}
+			},
 			on: () => undefined,
 		};
 		proc.kill = () => true;

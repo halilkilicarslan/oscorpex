@@ -6,6 +6,9 @@
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type {
 	LanguageModelV3,
 	LanguageModelV3CallOptions,
@@ -99,15 +102,15 @@ function buildInvocation(tool: ProviderCliTool, model: string, system: string): 
 	switch (tool) {
 		case "claude": {
 			// claude -p --output-format json --model <model> --system-prompt <system>
-			// prompt body goes on stdin
+			// prompt body goes on stdin. Pure text generation: every tool is disabled (no permission bypass needed).
 			const args = [
 				"-p",
 				"--output-format",
 				"json",
 				"--model",
 				model || "sonnet",
-				"--permission-mode",
-				"bypassPermissions",
+				"--tools",
+				"",
 				"--disable-slash-commands",
 				"--no-session-persistence",
 				...claudeSafeSettingArgs(),
@@ -192,7 +195,27 @@ interface CliResult {
 	outputTokens: number;
 }
 
+/** Runs the CLI inside a fresh empty directory (removed afterwards) so it never sees kernel or tenant files. */
 async function runCli(
+	tool: ProviderCliTool,
+	model: string,
+	system: string,
+	userPrompt: string,
+	abortSignal?: AbortSignal,
+	timeoutMs = 120_000,
+): Promise<CliResult> {
+	const cwd = await mkdtemp(join(tmpdir(), "oscorpex-cli-lm-"));
+	try {
+		return await spawnCli(cwd, tool, model, system, userPrompt, abortSignal, timeoutMs);
+	} finally {
+		await rm(cwd, { recursive: true, force: true }).catch((err) =>
+			log.warn({ err }, "failed to remove cli-language-model temp dir"),
+		);
+	}
+}
+
+function spawnCli(
+	cwd: string,
 	tool: ProviderCliTool,
 	model: string,
 	system: string,
@@ -204,6 +227,7 @@ async function runCli(
 
 	return new Promise((resolvePromise, rejectPromise) => {
 		const proc = spawn(bin, args, {
+			cwd,
 			stdio: ["pipe", "pipe", "pipe"],
 			env: buildSafeChildEnv({
 				profile: "provider",
@@ -270,8 +294,8 @@ async function runCli(
 		});
 
 		// Send user prompt via stdin
-		proc.stdin?.write(userPrompt);
-		proc.stdin?.end();
+		proc.stdin?.on("error", () => undefined); // EPIPE: the CLI may exit before reading
+		proc.stdin?.end(userPrompt);
 	});
 }
 

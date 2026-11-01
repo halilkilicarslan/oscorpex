@@ -11,33 +11,79 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getProjectSetting } from "./db.js";
 import { execute, query, queryOne } from "./db.js";
 import { createLogger } from "./logger.js";
 import { buildSafeChildEnv } from "./security/env-sanitizer.js";
+import { validateOutboundHostUrl } from "./utils/url-validator.js";
 const log = createLogger("sonar-runner");
+
+/** Pinned scanner release run through npx (never a repo-local copy). */
+const SONAR_SCANNER_VERSION = "4.3.0";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-async function getSonarConfig(projectId?: string) {
+const PLATFORM_DEFAULT_HOST = "http://localhost:9000";
+
+/** Host URL comparison key: trimmed, lower-cased, without trailing slashes. */
+export function normalizeSonarHost(url: string): string {
+	return url.trim().toLowerCase().replace(/\/+$/, "");
+}
+
+/** True when `url` names the platform SonarQube (the legacy UI default or the configured platform host). */
+export function isPlatformSonarHost(url: string): boolean {
+	const n = normalizeSonarHost(url);
+	return (
+		n === normalizeSonarHost(PLATFORM_DEFAULT_HOST) ||
+		n === normalizeSonarHost(process.env.SONAR_HOST_URL || PLATFORM_DEFAULT_HOST)
+	);
+}
+
+interface SonarConfig {
+	enabled: boolean;
+	hostUrl: string;
+	token: string;
+	/** Set when the configuration must not be used (tenant-supplied host failed validation). */
+	refused?: string;
+}
+
+async function getSonarConfig(projectId?: string): Promise<SonarConfig> {
 	// Project-level settings take priority over env vars
 	const dbEnabled = projectId ? await getProjectSetting(projectId, "sonarqube", "enabled") : undefined;
 	const dbHost = projectId ? await getProjectSetting(projectId, "sonarqube", "hostUrl") : undefined;
 	const dbToken = projectId ? await getProjectSetting(projectId, "sonarqube", "token") : undefined;
 
-	return {
+	const platformHost = process.env.SONAR_HOST_URL || PLATFORM_DEFAULT_HOST;
+	const tenantHost = Boolean(dbHost) && !isPlatformSonarHost(dbHost as string);
+	const config: SonarConfig = {
 		enabled: dbEnabled !== undefined ? dbEnabled === "true" : process.env.SONAR_ENABLED === "true",
-		hostUrl: dbHost || process.env.SONAR_HOST_URL || "http://localhost:9000",
-		token: dbToken || process.env.SONAR_TOKEN || "",
+		hostUrl: dbHost || platformHost,
+		// The platform token only ever goes to the platform host; a project token only to that project's host.
+		token: dbToken || (tenantHost ? "" : process.env.SONAR_TOKEN || ""),
 	};
+	if (config.enabled && tenantHost) {
+		const check = await validateOutboundHostUrl(config.hostUrl);
+		if (!check.valid) config.refused = check.reason;
+	}
+	return config;
 }
 
-export async function isSonarEnabled(projectId?: string): Promise<boolean> {
-	return (await getSonarConfig(projectId)).enabled;
+/**
+ * SonarQube scanning is switched off until workload isolation (I5): the scanner reads and parses tenant code, so it may
+ * only run inside the isolated runner. Everything below the guards is kept inert for I5 to re-enable.
+ */
+export const SONAR_DISABLED_MESSAGE = "SonarQube taraması iş yükü izolasyonu tamamlanana kadar devre dışı";
+export const SONAR_DISABLED_KEY = "SonarQube scanning is disabled until workload isolation is complete";
+const SONAR_SCANNING_DISABLED = true as boolean;
+
+export async function isSonarEnabled(_projectId?: string): Promise<boolean> {
+	if (SONAR_SCANNING_DISABLED) return false;
+	return (await getSonarConfig(_projectId)).enabled;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +124,7 @@ function exec(
 	args: string[],
 	cwd: string,
 	env?: Record<string, string>,
+	allowEnv: string[] = [],
 ): Promise<{ stdout: string; stderr: string; code: number }> {
 	return new Promise((resolve) => {
 		execFile(
@@ -87,7 +134,7 @@ function exec(
 				cwd,
 				timeout: 120_000,
 				maxBuffer: 5 * 1024 * 1024,
-				env: buildSafeChildEnv({ profile: "build_tool", extra: env }),
+				env: buildSafeChildEnv({ profile: "build_tool", extra: env, allow: allowEnv }),
 			},
 			(err, stdout, stderr) => {
 				const code = err && "code" in err ? (err as NodeJS.ErrnoException).code : 0;
@@ -106,10 +153,16 @@ export async function runSonarScan(
 	log?: (msg: string) => void,
 	projectId?: string,
 ): Promise<ScanResult> {
+	// Refuses even when called directly: nothing is spawned while scanning is disabled (see isSonarEnabled)
+	if (SONAR_SCANNING_DISABLED) return { success: false, output: "", error: SONAR_DISABLED_MESSAGE };
+
 	const config = await getSonarConfig(projectId);
 
 	if (!config.enabled) {
 		return { success: true, output: "SonarQube disabled (SONAR_ENABLED != true)" };
+	}
+	if (config.refused) {
+		return { success: false, output: "", error: `SonarQube host refused: ${config.refused}` };
 	}
 
 	if (!existsSync(join(repoPath, "sonar-project.properties"))) {
@@ -118,13 +171,26 @@ export async function runSonarScan(
 
 	log?.("[sonar] SonarQube scan baslatiliyor...");
 
-	const args = ["sonar-scanner", `-Dsonar.host.url=${config.hostUrl}`];
+	// The scanner runs from an empty temp dir (npx would otherwise resolve a repo-local node_modules/.bin/sonar-scanner,
+	// i.e. tenant code) and only reads the repo through projectBaseDir. The version is pinned.
+	const args = [
+		"--yes",
+		`--package=sonarqube-scanner@${SONAR_SCANNER_VERSION}`,
+		"sonar-scanner",
+		`-Dsonar.host.url=${config.hostUrl}`,
+		`-Dsonar.projectBaseDir=${repoPath}`,
+	];
 
-	if (config.token) {
-		args.push(`-Dsonar.token=${config.token}`);
+	// The token travels through the environment: argv is visible to every local user in `ps`. SONAR_TOKEN is always set
+	// explicitly (possibly empty) so the kernel process's own platform token can never leak through to a tenant host.
+	const scratch = await mkdtemp(join(tmpdir(), "oscorpex-sonar-"));
+	let result: { stdout: string; stderr: string; code: number };
+	try {
+		result = await exec("npx", args, scratch, { SONAR_TOKEN: config.token }, ["SONAR_TOKEN"]);
+	} finally {
+		await rm(scratch, { recursive: true, force: true }).catch(() => undefined);
 	}
-
-	const { stdout, stderr, code } = await exec("npx", args, repoPath);
+	const { stdout, stderr, code } = result;
 
 	if (code !== 0) {
 		const errorMsg = stderr.slice(0, 500) || stdout.slice(0, 500);
@@ -157,9 +223,10 @@ export interface QualityGateCondition {
  * Returns NONE if SonarQube is disabled or unreachable.
  */
 export async function fetchQualityGate(projectKey: string, projectId?: string): Promise<QualityGateResult> {
+	if (SONAR_SCANNING_DISABLED) return { status: "NONE", conditions: [] };
 	const config = await getSonarConfig(projectId);
 
-	if (!config.enabled) {
+	if (!config.enabled || config.refused) {
 		return { status: "NONE", conditions: [] };
 	}
 

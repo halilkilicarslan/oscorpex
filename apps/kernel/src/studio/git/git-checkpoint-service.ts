@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { createLogger } from "../logger.js";
 import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { assertInsideWorkspace } from "../security/workspace-resolver.js";
-import { gitSafeEnv } from "./git-safe-config.js";
+import { NO_SUBMODULES, gitSafeEnv } from "./git-safe-config.js";
 import type { GitCheckpoint } from "./git-types.js";
 
 const log = createLogger("git-checkpoint");
@@ -38,7 +38,7 @@ export function createGitCheckpoint(opts: {
 		cwd: opts.repoPath,
 		encoding: "utf8",
 		timeout: 10_000,
-		env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+		env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), opts.repoPath),
 	}).trim();
 
 	// Capture current branch
@@ -46,16 +46,20 @@ export function createGitCheckpoint(opts: {
 		cwd: opts.repoPath,
 		encoding: "utf8",
 		timeout: 10_000,
-		env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+		env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), opts.repoPath),
 	}).trim();
 
 	// Capture staged file list (may be empty)
-	const stagedOutput = execFileSync("git", ["diff", "--no-ext-diff", "--no-textconv", "--cached", "--name-only"], {
-		cwd: opts.repoPath,
-		encoding: "utf8",
-		timeout: 10_000,
-		env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
-	}).trim();
+	const stagedOutput = execFileSync(
+		"git",
+		["diff", "--no-ext-diff", "--no-textconv", NO_SUBMODULES, "--cached", "--name-only"],
+		{
+			cwd: opts.repoPath,
+			encoding: "utf8",
+			timeout: 10_000,
+			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), opts.repoPath),
+		},
+	).trim();
 	const stagedFiles = stagedOutput ? stagedOutput.split("\n") : [];
 
 	const now = new Date();

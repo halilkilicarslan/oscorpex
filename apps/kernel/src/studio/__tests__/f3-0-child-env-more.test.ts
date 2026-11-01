@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { EventEmitter } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -55,7 +55,6 @@ vi.mock("../app-runner.js", () => ({
 	stopApp: vi.fn(),
 	switchPreviewService: vi.fn(),
 }));
-vi.mock("../container-pool.js", () => ({ containerPool: { getStatus: vi.fn() } }));
 vi.mock("../routes/team-init-guard.js", () => ({ ensureProjectTeamInitialized: vi.fn() }));
 vi.mock("../security/workspace-resolver.js", () => ({
 	assertInsideWorkspace: vi.fn(),
@@ -251,7 +250,7 @@ describe("F3-0 child env — planner-cli codex spawn", () => {
 		const proc = Object.assign(new EventEmitter(), {
 			stdout: new EventEmitter(),
 			stderr: new EventEmitter(),
-			stdin: { write: vi.fn(), end: vi.fn() },
+			stdin: { write: vi.fn(), end: vi.fn(), on: vi.fn() },
 			kill: vi.fn(),
 		});
 		mocks.spawn.mockReturnValue(proc);
@@ -271,11 +270,24 @@ describe("F3-0 child env — planner-cli codex spawn", () => {
 });
 
 // ---------------------------------------------------------------------------
+/**
+ * execFileSync is mocked, so the git pre-flight's own probes need answers too: `rev-parse --absolute-git-dir` must
+ * report the repo's real git dir and `config --list` is empty. Every other call gets `fallback`.
+ */
+function gitAnswers(repoDir: string, fallback: string) {
+	return (_cmd: string, args: string[]) => {
+		if (args[0] === "rev-parse" && args.includes("--absolute-git-dir"))
+			return `${realpathSync(join(repoDir, ".git"))}\n`;
+		if (args[0] === "config") return "";
+		return fallback;
+	};
+}
+
 describe("F3-0 child env — git paths in the tenant repo", () => {
 	it("commit-executor: `git commit` (runs repo hooks) gets a sanitized env on every git call", () => {
 		const repo = join(tmp, "repo");
-		mkdirSync(repo);
-		mocks.execFileSync.mockReturnValue("abc123\n");
+		mkdirSync(join(repo, ".git"), { recursive: true }); // the git pre-flight wants a real `.git` directory
+		mocks.execFileSync.mockImplementation(gitAnswers(repo, "abc123\n"));
 
 		const result = applyCommit({
 			proposal: {
@@ -315,7 +327,8 @@ describe("F3-0 child env — git paths in the tenant repo", () => {
 	});
 
 	it("diff-capture: git diff calls get a sanitized env", async () => {
-		mocks.execFileSync.mockReturnValue("+added line\n");
+		mkdirSync(join(tmp, ".git"), { recursive: true }); // the git pre-flight wants a real `.git` directory
+		mocks.execFileSync.mockImplementation(gitAnswers(tmp, "+added line\n"));
 
 		await captureTaskDiffs("task-1", tmp, { filesCreated: ["a.ts"], filesModified: ["b.ts"], logs: [] } as never);
 

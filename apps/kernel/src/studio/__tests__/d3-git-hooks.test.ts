@@ -217,9 +217,17 @@ describe("D3: static coverage of kernel git invocations", () => {
 		const text = readFileSync(file, "utf8");
 		const entries = [...text.matchAll(/bin:\s*"git",\s*args:\s*\[([^\]]*)\]/g)].map((m) => m[1]);
 		expect(entries.length).toBeGreaterThan(0);
+		// Hardening is either explicit `-c` args on the entry or the shared gitSafeEnv(env, repoPath) pre-flight + env
+		// (GIT_CONFIG_* entries at command scope). One of the two must be in place for the terminal git path.
+		const viaSafeEnv =
+			/from\s+["'][^"']*git-safe-config[^"']*["']/.test(text) && /gitSafeEnv\(\s*[\w.]+\s*,\s*[\w.]+\s*\)/.test(text);
 		for (const args of entries) {
-			expect(args, `terminal git entry [${args}]`).toContain("core.hooksPath=/dev/null");
-			expect(args, `terminal git entry [${args}]`).toContain("core.fsmonitor=false");
+			const viaArgs = args.includes("core.hooksPath=/dev/null") && args.includes("core.fsmonitor=false");
+			expect(viaArgs || viaSafeEnv, `terminal git entry [${args}] has no hardening (-c args or gitSafeEnv)`).toBe(true);
+			if (viaSafeEnv && /^\s*"diff"/.test(args)) {
+				expect(args, `terminal git diff entry [${args}]`).toContain("--no-ext-diff");
+				expect(args, `terminal git diff entry [${args}]`).toContain("--no-textconv");
+			}
 		}
 	});
 });

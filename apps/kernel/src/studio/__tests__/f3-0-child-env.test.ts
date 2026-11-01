@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { EventEmitter } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -433,9 +433,15 @@ describe("F3-0 child env — terminal exec", () => {
 		process.env.OSCORPEX_ENABLE_TERMINAL_EXEC = "true";
 		process.env.NODE_ENV = "test";
 		const repo = join(tmp, "repo");
-		mkdirSync(repo);
+		mkdirSync(join(repo, ".git"), { recursive: true }); // the git pre-flight wants a real `.git` directory
 		mocks.getProject.mockResolvedValue({ id: "p1", name: "x", repoPath: repo });
-		mocks.execFileSync.mockReturnValue("ok");
+		// the pre-flight spawns git too (execFileSync is mocked): answer its probes, everything else is "ok"
+		mocks.execFileSync.mockImplementation((_cmd: string, args: string[]) => {
+			if (args[0] === "rev-parse" && args.includes("--absolute-git-dir"))
+				return `${realpathSync(join(repo, ".git"))}\n`;
+			if (args[0] === "config") return "";
+			return "ok";
+		});
 
 		const res = await app.request("http://localhost/projects/p1/terminal/exec", {
 			method: "POST",
@@ -443,10 +449,11 @@ describe("F3-0 child env — terminal exec", () => {
 			body: JSON.stringify({ command: "git_status" }),
 		});
 		expect(res.status).toBe(200);
-		expect(mocks.execFileSync).toHaveBeenCalledTimes(1);
-
-		const opts = mocks.execFileSync.mock.calls[0][2] as { env?: NodeJS.ProcessEnv };
-		assertNoSecrets(opts.env);
+		// the terminal command itself (pre-flight probes are separate calls, each also checked below)
+		const terminalCalls = mocks.execFileSync.mock.calls.filter((c) => (c[1] as string[])[0] === "status");
+		expect(terminalCalls).toHaveLength(1);
+		for (const call of mocks.execFileSync.mock.calls) assertNoSecrets((call[2] as { env?: NodeJS.ProcessEnv }).env);
+		const opts = terminalCalls[0][2] as { env?: NodeJS.ProcessEnv };
 		expect(opts.env?.PATH).toBeTruthy();
 	});
 });

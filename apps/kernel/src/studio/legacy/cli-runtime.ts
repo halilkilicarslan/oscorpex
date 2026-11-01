@@ -256,8 +256,8 @@ export function executeWithCLI(opts: {
 		});
 
 		// Send prompt via stdin then close — avoids shell escaping and arg length issues
-		proc.stdin?.write(prompt);
-		proc.stdin?.end();
+		proc.stdin?.on("error", () => undefined); // EPIPE: the CLI may exit before reading
+		proc.stdin?.end(prompt);
 
 		// Track state
 		const result: CLIExecutionResult = {
@@ -604,8 +604,8 @@ export function streamWithCLI(
 		env: buildSafeChildEnv({ profile: "provider" }),
 	});
 
-	proc.stdin?.write(prompt);
-	proc.stdin?.end();
+	proc.stdin?.on("error", () => undefined); // EPIPE: the CLI may exit before reading
+	proc.stdin?.end(prompt);
 
 	let fullText = "";
 	let inputTokens = 0;

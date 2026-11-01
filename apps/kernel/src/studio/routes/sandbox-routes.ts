@@ -4,11 +4,14 @@
 // ---------------------------------------------------------------------------
 
 import { Hono } from "hono";
+import { z } from "zod";
 import { assertProjectInTenant } from "../auth/project-access.js";
 import { getTask } from "../db.js";
 import { createLogger } from "../logger.js";
 import { createSandboxPolicy, getSandboxPolicy, getSessionViolations, resolveTaskPolicy } from "../sandbox-manager.js";
 const log = createLogger("sandbox-routes");
+
+const SUPPORTED_ISOLATION = z.enum(["none", "workspace"]);
 
 export const sandboxRoutes = new Hono();
 
@@ -29,6 +32,10 @@ sandboxRoutes.get("/projects/:projectId/sandbox-policy", async (c) => {
 sandboxRoutes.post("/projects/:projectId/sandbox-policy", async (c) => {
 	try {
 		const body = await c.req.json();
+		// container/vm cannot be provided (they fail the task at run time); only the supported levels are stored
+		if (body.isolationLevel !== undefined && !SUPPORTED_ISOLATION.safeParse(body.isolationLevel).success) {
+			return c.json({ error: 'isolationLevel must be "none" or "workspace"' }, 400);
+		}
 		const policy = await createSandboxPolicy({
 			projectId: c.req.param("projectId"),
 			isolationLevel: body.isolationLevel ?? "workspace",

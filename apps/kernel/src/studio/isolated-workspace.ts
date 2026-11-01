@@ -4,11 +4,12 @@
 // declared file mutations to the source repository.
 // ---------------------------------------------------------------------------
 
-import { cp, lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, normalize, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, normalize } from "node:path";
 import { createLogger } from "./logger.js";
 import type { SandboxPolicy } from "./sandbox-manager.js";
+import { readContainedFile, writeContainedFile } from "./security/contained-fs.js";
 const log = createLogger("isolated-workspace");
 
 const COPY_EXCLUDES = new Set(["node_modules", "dist", "build", ".next", ".turbo", ".oscorpex", "coverage"]);
@@ -27,7 +28,16 @@ function isIsolationEnabled(policy: SandboxPolicy | undefined): boolean {
 
 function isSafeRelativePath(filePath: string): boolean {
 	const normalized = normalize(filePath);
-	return normalized.length > 0 && !normalized.startsWith("..") && !normalized.includes(`..${"/"}`);
+	if (
+		normalized.length === 0 ||
+		isAbsolute(normalized) ||
+		normalized.startsWith("..") ||
+		normalized.includes(`..${"/"}`)
+	) {
+		return false;
+	}
+	// Never write into any `.git` directory (config/hooks of the source repo would run as the kernel); any case
+	return !normalized.split(/[\\/]+/).some((segment) => segment.toLowerCase() === ".git");
 }
 
 async function copySourceRepo(sourceRepoPath: string, workspacePath: string): Promise<void> {
@@ -84,27 +94,16 @@ export async function prepareIsolatedWorkspace(
 			for (const file of unique) {
 				if (!isSafeRelativePath(file)) continue;
 
-				const sourceFile = resolve(workspacePath, file);
-				// Strict parent check with separator to prevent prefix bypass
-				if (sourceFile !== workspacePath && !sourceFile.startsWith(workspacePath + sep)) continue;
-
 				try {
-					// Resolve symlinks to prevent symlink traversal attacks
-					const realSource = await realpath(sourceFile);
-					if (realSource !== workspacePath && !realSource.startsWith(workspacePath + sep)) continue;
-
-					// Reject symlinks pointing outside workspace
-					const fileStat = await lstat(sourceFile);
-					if (fileStat.isSymbolicLink()) continue;
-				} catch {
+					// O_NOFOLLOW + descriptor check: a symlink (or redirected directory) swapped in after any check
+					// is refused before a byte is read
+					const { data, mode } = await readContainedFile(workspacePath, file);
+					// The destination is verified the same way; directories are only created after the check
+					await writeContainedFile(canonicalSourceRepo, file, data, { mkdirs: true, mode, applyMode: true });
+				} catch (err) {
+					log.warn({ err, file }, "[isolated-workspace] write-back skipped a file");
 					continue;
 				}
-
-				const targetFile = resolve(canonicalSourceRepo, file);
-				if (targetFile !== canonicalSourceRepo && !targetFile.startsWith(canonicalSourceRepo + sep)) continue;
-
-				await mkdir(dirname(targetFile), { recursive: true });
-				await cp(sourceFile, targetFile, { force: true, recursive: false, preserveTimestamps: true });
 				synced.push(file);
 			}
 

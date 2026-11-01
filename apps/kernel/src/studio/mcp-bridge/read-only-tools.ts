@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { gitSafeEnv } from "../git/git-safe-config.js";
+import { NO_SUBMODULES, gitSafeEnv } from "../git/git-safe-config.js";
 import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { assertInsideWorkspace, resolveWorkspacePath } from "../security/workspace-resolver.js";
 import type { McpToolHandler, McpToolInvocation } from "./types.js";
@@ -82,11 +82,11 @@ export const gitStatus: McpToolHandler = async (inv) => {
 	try {
 		const { execFileSync } = await import("node:child_process");
 		const dir = getWorkspacePath(inv);
-		const output = execFileSync("git", ["status", "--porcelain"], {
+		const output = execFileSync("git", ["status", "--porcelain", NO_SUBMODULES], {
 			cwd: dir,
 			encoding: "utf8",
 			timeout: 10_000,
-			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), dir),
 		});
 		return { ok: true, data: { status: output.trim() } };
 	} catch (err) {
@@ -101,11 +101,11 @@ export const gitDiff: McpToolHandler = async (inv) => {
 	try {
 		const { execFileSync } = await import("node:child_process");
 		const dir = getWorkspacePath(inv);
-		const output = execFileSync("git", ["diff", "--no-ext-diff", "--no-textconv", "--stat"], {
+		const output = execFileSync("git", ["diff", "--no-ext-diff", "--no-textconv", NO_SUBMODULES, "--stat"], {
 			cwd: dir,
 			encoding: "utf8",
 			timeout: 10_000,
-			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), dir),
 		});
 		return { ok: true, data: { diff: output.slice(0, 50_000) } };
 	} catch (err) {

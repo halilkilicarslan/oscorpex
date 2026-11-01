@@ -67,6 +67,7 @@ export class GitHubIntegration {
 			const remote = execSync("git remote get-url origin", {
 				cwd: repoPath,
 				encoding: "utf8",
+				// read-only `remote get-url`: the fixed hardening env is enough; no repo pre-flight (works on any directory)
 				env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
 			}).trim();
 

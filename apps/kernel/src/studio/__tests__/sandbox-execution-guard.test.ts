@@ -52,6 +52,7 @@ vi.mock("../logger.js", () => ({
 
 // Import module under test after mocks are registered
 import {
+	IsolationUnavailableError,
 	closeSandboxExecution,
 	enforceSandboxHardPreflight,
 	enforceSandboxPostExecution,
@@ -221,15 +222,17 @@ describe("setupSandboxExecution", () => {
 		expect(ctx.isolatedWorkspace).toBeUndefined();
 	});
 
-	it("returns partial context (non-blocking) when resolveTaskPolicy throws", async () => {
+	it("fails closed with IsolationUnavailableError when resolveTaskPolicy throws (never runs in the source repo)", async () => {
 		mockResolveTaskPolicy.mockRejectedValue(new Error("DB down"));
 
-		const ctx = await setupSandboxExecution(projectId, makeTask(), agentId, agentRole, repoPath);
+		const result = await setupSandboxExecution(projectId, makeTask(), agentId, agentRole, repoPath).then(
+			(ctx) => ({ ok: true as const, ctx }),
+			(error: unknown) => ({ ok: false as const, error }),
+		);
 
-		// Should still return a context — error is swallowed (non-blocking)
-		expect(ctx).toBeDefined();
-		expect(ctx.runtimeRepoPath).toBe(repoPath);
-		expect(ctx.sandboxPolicy).toBeUndefined();
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.error).toBeInstanceOf(IsolationUnavailableError);
+		expect(mockStartSandboxSession).not.toHaveBeenCalled();
 	});
 
 	it("returns partial context when startSandboxSession throws", async () => {

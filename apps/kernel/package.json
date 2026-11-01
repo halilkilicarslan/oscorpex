@@ -42,7 +42,6 @@
     "@oscorpex/verification-kit": "workspace:*",
     "ai": "^6.0.146",
     "commander": "^14.0.3",
-    "dockerode": "^4.0.10",
     "dotenv": "^16.4.7",
     "hono": "^4.12.11",
     "pg": "^8.20.0",
@@ -54,7 +53,6 @@
   "optionalDependencies": {},
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@types/dockerode": "^4.0.1",
     "@types/node": "^22.10.5",
     "@types/pg": "^8.20.0",
     "@types/ws": "^8.18.1",

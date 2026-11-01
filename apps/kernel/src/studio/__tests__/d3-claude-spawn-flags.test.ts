@@ -31,7 +31,7 @@ function fakeProc() {
 	const proc = new EventEmitter() as EventEmitter & Record<string, unknown>;
 	proc.stdout = new EventEmitter();
 	proc.stderr = new EventEmitter();
-	proc.stdin = { write: vi.fn(), end: vi.fn() };
+	proc.stdin = { write: vi.fn(), end: vi.fn(), on: vi.fn() };
 	proc.kill = vi.fn();
 	proc.pid = 4242;
 	setTimeout(() => proc.emit("close", 0, null), 5);
@@ -298,7 +298,6 @@ describe("D3: static coverage of claude CLI argument lists", () => {
 			"apps/kernel/src/studio/cli-language-model.ts",
 			"apps/kernel/src/studio/legacy/cli-runtime.ts",
 			"apps/kernel/src/studio/agent-runtime.ts",
-			"apps/kernel/src/studio/container-manager.ts",
 		]) {
 			expect(files, `no claude arg list found in ${f}`).toContain(f);
 		}

@@ -230,7 +230,7 @@ export default function TestCoverage({ projectId, repoPath }: Props) {
 		setRunning(true);
 		setRunError(null);
 		try {
-			await triggerTestRun(projectId, repoPath);
+			await triggerTestRun(projectId);
 			await loadData();
 		} catch (err) {
 			setRunError(err instanceof Error ? err.message : 'Failed to run tests');

@@ -8,7 +8,7 @@
 #     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
 # Host port 5432 taken? Set OSCORPEX_DEV_PG_PORT (e.g. 55432) and use it in DATABASE_URL.
 #
-# DEV ONLY: never use this file in production. For the container pool see docker-compose.pool.yml.
+# DEV ONLY: never use this file in production.
 # ---------------------------------------------------------------------------
 
 services:

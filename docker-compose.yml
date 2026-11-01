@@ -12,7 +12,6 @@
 #
 # Usage:
 #   docker compose up -d --build                       # postgres + migrate + backend + console
-#   docker compose --profile agents up -d              # additionally start the agent pool
 #   docker compose run --rm migrate node dist/admin-grant.js grant <email>   # first platform admin
 #   docker compose down                                # stop (volumes are kept; add -v to wipe them)
 #
@@ -159,78 +158,6 @@ services:
     logging: *logging
     restart: unless-stopped
 
-  # ---- Agent Pool (pre-warmed isolated containers) ------------------------
-  # Activate with: docker compose --profile agents up -d
-  # ISOLATED/DEV USE ONLY: the worker's /tool endpoint is unauthenticated (anything on studio-agents can call it).
-  # Worker auth is a follow-up in the workload-isolation epic. No host ports; own workspace volume (no tenant data).
-  agent-1:
-    build:
-      context: ./docker/coder-agent
-      dockerfile: Dockerfile
-    profiles: ["agents"]
-    environment:
-      - WORKER_PORT=9900
-      - HOST_API=http://backend:3141
-      - WORKSPACE=/workspace
-    volumes:
-      - agent-workspace:/workspace
-    networks:
-      - studio-agents
-    mem_limit: 2g
-    cpus: ${OSCORPEX_AGENT_CPUS:-0}
-    security_opt:
-      - no-new-privileges
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - DAC_OVERRIDE
-    pids_limit: 512
-    logging: *logging
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9900/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
-
-  agent-2:
-    build:
-      context: ./docker/coder-agent
-      dockerfile: Dockerfile
-    profiles: ["agents"]
-    environment:
-      - WORKER_PORT=9900
-      - HOST_API=http://backend:3141
-      - WORKSPACE=/workspace
-    volumes:
-      - agent-workspace:/workspace
-    networks:
-      - studio-agents
-    mem_limit: 2g
-    cpus: ${OSCORPEX_AGENT_CPUS:-0}
-    security_opt:
-      - no-new-privileges
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - DAC_OVERRIDE
-    pids_limit: 512
-    logging: *logging
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9900/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
-
   # ---- SonarQube (optional) -----------------------------------------------
   sonarqube:
     image: sonarqube:community@sha256:f95aaa9016dd4e92c7d70691167a6d96dbb5d8acffd61eba1cb4335d364a7840
@@ -265,8 +192,7 @@ networks:
   frontend:
     driver: bridge
 
-  # backend <-> agent containers + sonarqube; no egress.
-  # Use docker-compose.dev.yml to open it (dev only).
+  # backend <-> sonarqube (optional profile); internal, no egress. Nothing else is attached to it.
   studio-agents:
     driver: bridge
     internal: true
@@ -277,7 +203,6 @@ networks:
 volumes:
   pgdata:
   oscorpex-data:
-  agent-workspace:
   studio-data:
   claude-home:
   sonar-data:

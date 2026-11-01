@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { getAppStatus, getResolvedConfig, startApp, stopApp, switchPreviewService } from "../app-runner.js";
-import { containerPool } from "../container-pool.js";
 import { getDbStatus, parseCloudUrl, provisionDatabase, stopAllDatabases, stopDatabase } from "../db-provisioner.js";
 import type { DbProvisionMethod } from "../db-provisioner.js";
 import { getProject } from "../db.js";
@@ -15,6 +14,7 @@ import { eventBus } from "../event-bus.js";
 import { createLogger } from "../logger.js";
 import { analyzeProject, writeEnvFile } from "../runtime-analyzer.js";
 import type { DatabaseType } from "../runtime-analyzer.js";
+import { hardenInstallCommand } from "../safe-install.js";
 import { buildSafeChildEnv } from "../security/env-sanitizer.js";
 import { ensureProjectTeamInitialized } from "./team-init-guard.js";
 const log = createLogger("runtime-routes");
@@ -23,9 +23,18 @@ export const runtimeRoutes = new Hono();
 
 // ---- Container Pool -------------------------------------------------------
 
+// The container pool was removed (I0); the endpoint stays so older consoles get a clear static answer.
 runtimeRoutes.get("/pool/status", (c) => {
-	const status = containerPool.getStatus();
-	return c.json(status);
+	return c.json({
+		initialized: false,
+		available: false,
+		reason: "container pool is not available",
+		total: 0,
+		ready: 0,
+		busy: 0,
+		unhealthy: 0,
+		containers: [],
+	});
 });
 
 // ---- App Runner -----------------------------------------------------------
@@ -370,18 +379,21 @@ runtimeRoutes.post("/projects/:id/runtime/install", async (c) => {
 			results.push({ name: svc.name, success: true });
 			continue;
 		}
-		// Append --ignore-scripts to npm/pnpm/yarn to prevent arbitrary lifecycle script execution
-		const safeCmd = /^(npm|pnpm|yarn)\s+install/.test(svc.installCommand)
-			? `${svc.installCommand} --ignore-scripts`
-			: svc.installCommand;
 		const svcPath = svc.path === "." ? project.repoPath : join(project.repoPath, svc.path);
+		// Lifecycle scripts, .pnpmfile.cjs and yarnPath are repo-controlled code: never run them
+		const hardened = hardenInstallCommand(svc.installCommand, svcPath, project.repoPath);
+		if (!hardened.ok) {
+			results.push({ name: svc.name, success: false, error: hardened.error });
+			continue;
+		}
+		const safeCmd = hardened.command;
 		try {
 			execSync(safeCmd, {
-				cwd: svcPath,
+				cwd: hardened.cwd ?? svcPath,
 				encoding: "utf-8",
 				timeout: 120000,
 				stdio: "pipe",
-				env: buildSafeChildEnv({ profile: "build_tool" }),
+				env: buildSafeChildEnv({ profile: "build_tool", extra: hardened.env }),
 			});
 			results.push({ name: svc.name, success: true });
 		} catch (err) {

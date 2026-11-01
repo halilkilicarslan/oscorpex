@@ -3,44 +3,52 @@
 // ---------------------------------------------------------------------------
 
 import * as dns from "node:dns/promises";
+import { BlockList, isIP } from "node:net";
 import { createLogger } from "../logger.js";
 const log = createLogger("url-validator");
 
-const PRIVATE_IP_RANGES = [
-	/^127\./, // loopback
-	/^10\./, // class A private
-	/^172\.(1[6-9]|2\d|3[01])\./, // class B private
-	/^192\.168\./, // class C private
-	/^169\.254\./, // link-local
-	/^0\./, // current network
-	/^::1$/, // IPv6 loopback
-	/^fc00:/i, // IPv6 unique local
-	/^fe80:/i, // IPv6 link-local
-];
+/** Blocked address space (SSRF): loopback, private, link-local/metadata, CGNAT, unspecified, IPv6 ULA/link-local. */
+const BLOCKED = new BlockList();
+for (const [net, prefix] of [
+	["0.0.0.0", 8],
+	["10.0.0.0", 8],
+	["100.64.0.0", 10],
+	["127.0.0.0", 8],
+	["169.254.0.0", 16],
+	["172.16.0.0", 12],
+	["192.168.0.0", 16],
+] as const) {
+	BLOCKED.addSubnet(net, prefix, "ipv4");
+}
+BLOCKED.addAddress("::1", "ipv6");
+BLOCKED.addAddress("::", "ipv6");
+BLOCKED.addSubnet("fc00::", 7, "ipv6");
+BLOCKED.addSubnet("fe80::", 10, "ipv6");
+
+/** `::ffff:a.b.c.d` / `::ffff:hhhh:hhhh` (any spelling) → the embedded dotted IPv4, otherwise undefined. */
+function embeddedIpv4(ip: string): string | undefined {
+	const lower = ip.toLowerCase();
+	const dotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(lower);
+	if (dotted) return dotted[1];
+	// expand the hex forms through the URL parser, which canonicalises IPv6 literals to `::ffff:hhhh:hhhh`
+	let host: string;
+	try {
+		host = new URL(`http://[${lower}]/`).hostname.replace(/^\[|\]$/g, "");
+	} catch {
+		return undefined;
+	}
+	const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+	if (!hex) return undefined;
+	const hi = Number.parseInt(hex[1], 16);
+	const lo = Number.parseInt(hex[2], 16);
+	return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+}
 
 /**
  * Known DNS rebinding domains that map arbitrary subdomains to private/loopback IPs.
  * e.g. 127.0.0.1.nip.io → 127.0.0.1
  */
 const REBINDING_DOMAINS = ["nip.io", "sslip.io", "localtest.me", "xip.io", "lvh.me"];
-
-/**
- * IPv6-mapped IPv4 private address patterns.
- * e.g. ::ffff:127.0.0.1 or ::ffff:7f00:1 (hex form)
- */
-const IPV6_MAPPED_PRIVATE_RANGES = [
-	/^::ffff:127\./i, // ::ffff:127.x.x.x — loopback
-	/^::ffff:10\./i, // ::ffff:10.x.x.x — class A private
-	/^::ffff:172\.(1[6-9]|2\d|3[01])\./i, // ::ffff:172.16-31.x.x — class B private
-	/^::ffff:192\.168\./i, // ::ffff:192.168.x.x — class C private
-	/^::ffff:169\.254\./i, // ::ffff:169.254.x.x — link-local
-	/^::ffff:0\./i, // ::ffff:0.x.x.x — current network
-	// Hex-encoded compact forms (e.g. ::ffff:7f00:0001)
-	/^::ffff:7f[0-9a-f]{2}:[0-9a-f]{4}$/i, // 0x7f = 127 (loopback)
-	/^::ffff:0a[0-9a-f]{2}:[0-9a-f]{4}$/i, // 0x0a = 10 (class A)
-	/^::ffff:a9fe:[0-9a-f]{4}$/i, // 0xa9fe = 169.254 (link-local)
-	/^::ffff:c0a8:[0-9a-f]{4}$/i, // 0xc0a8 = 192.168 (class C)
-];
 
 export interface DnsValidationResult {
 	valid: boolean;
@@ -52,21 +60,17 @@ export interface DnsValidationResult {
  * Checks whether a single resolved IP address falls within a blocked range.
  * Handles both IPv4, bare IPv6, and IPv6-mapped IPv4 addresses.
  */
-function isPrivateOrLoopbackIp(ip: string): boolean {
+export function isPrivateOrLoopbackIp(ip: string): boolean {
 	// Strip IPv6 brackets if present (e.g. [::1] → ::1)
 	const normalized = ip.startsWith("[") && ip.endsWith("]") ? ip.slice(1, -1) : ip;
-
-	// Plain IPv6 loopback / unique-local / link-local
-	for (const pattern of PRIVATE_IP_RANGES) {
-		if (pattern.test(normalized)) return true;
+	const family = isIP(normalized);
+	if (family === 4) return BLOCKED.check(normalized, "ipv4");
+	if (family === 6) {
+		const mapped = embeddedIpv4(normalized);
+		return mapped ? BLOCKED.check(mapped, "ipv4") : BLOCKED.check(normalized, "ipv6");
 	}
-
-	// IPv6-mapped IPv4 forms
-	for (const pattern of IPV6_MAPPED_PRIVATE_RANGES) {
-		if (pattern.test(normalized)) return true;
-	}
-
-	return false;
+	// not an address at all: be conservative
+	return true;
 }
 
 /**
@@ -102,6 +106,16 @@ export async function resolveAndValidateUrl(url: string): Promise<DnsValidationR
 	}
 
 	const hostname = parsed.hostname.toLowerCase();
+
+	// An IP literal is judged directly: it never goes through DNS and can never be "unresolvable"
+	const literal = hostname.replace(/^\[|\]$/g, "");
+	if (isIP(literal)) {
+		if (isPrivateOrLoopbackIp(literal)) {
+			log.warn({ hostname }, "IP literal is in a private/loopback range");
+			return { valid: false, reason: `Address ${literal} is a private/loopback address`, resolvedIps: [literal] };
+		}
+		return { valid: true, reason: "IP literal", resolvedIps: [literal] };
+	}
 
 	// Fast-path: block known rebinding domains before touching DNS
 	if (isKnownRebindingDomain(hostname)) {
@@ -164,10 +178,8 @@ export function validateWebhookUrl(url: string): { valid: boolean; reason?: stri
 		}
 
 		// Block private/loopback IPs
-		for (const pattern of PRIVATE_IP_RANGES) {
-			if (pattern.test(hostname)) {
-				return { valid: false, reason: `Private/loopback IP blocked: ${hostname}` };
-			}
+		if (isIP(hostname.replace(/^\[|\]$/g, "")) && isPrivateOrLoopbackIp(hostname)) {
+			return { valid: false, reason: `Private/loopback IP blocked: ${hostname}` };
 		}
 
 		// Block localhost variants
@@ -179,4 +191,33 @@ export function validateWebhookUrl(url: string): { valid: boolean; reason?: stri
 	} catch {
 		return { valid: false, reason: "Invalid URL format" };
 	}
+}
+
+/**
+ * Validation for a tenant-supplied OUTBOUND host (e.g. a SonarQube server): http(s) only, no loopback / private /
+ * link-local / metadata literal, no `localhost`, and the DNS answer must not point at a private address.
+ * A name that does not resolve at all is let through (nothing can connect to it either); callers re-validate at use
+ * time. Residual: DNS rebinding between this check and the connection.
+ */
+export async function validateOutboundHostUrl(url: string): Promise<{ valid: boolean; reason: string }> {
+	let parsed: URL;
+	try {
+		parsed = new URL(url);
+	} catch {
+		return { valid: false, reason: "Invalid URL format" };
+	}
+	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+		return { valid: false, reason: `Unsupported protocol: ${parsed.protocol}` };
+	}
+	if (parsed.username || parsed.password) return { valid: false, reason: "Credentials in the URL are not allowed" };
+	const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+	if (host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0" || host === "::") {
+		return { valid: false, reason: "Loopback hosts are not allowed" };
+	}
+	if (isIP(host) && isPrivateOrLoopbackIp(host)) {
+		return { valid: false, reason: "Private or loopback addresses are not allowed" };
+	}
+	const result = await resolveAndValidateUrl(url);
+	if (!result.valid && result.reason.startsWith("DNS resolution failed")) return { valid: true, reason: "unresolved" };
+	return { valid: result.valid, reason: result.reason };
 }

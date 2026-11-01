@@ -19,6 +19,14 @@ import type { RiskLevel, Task, TaskOutput } from "../types.js";
 
 const log = createLogger("sandbox-execution-guard");
 
+/** The isolation the policy demands cannot be provided; the task must fail, never run in the source repo. */
+export class IsolationUnavailableError extends Error {
+	constructor(taskId: string, cause: unknown) {
+		super(`Isolation unavailable for task ${taskId}: ${cause instanceof Error ? cause.message : String(cause)}`);
+		this.name = "IsolationUnavailableError";
+	}
+}
+
 export interface SandboxExecutionContext {
 	sandboxSessionId?: string;
 	sandboxPolicy?: SandboxPolicy;
@@ -36,11 +44,23 @@ export async function setupSandboxExecution(
 ): Promise<SandboxExecutionContext> {
 	const context: SandboxExecutionContext = { runtimeRepoPath: repoPath };
 
+	// Fail closed: without a resolvable policy the isolation level is unknown, so the task must not run
 	try {
 		context.sandboxPolicy = await resolveTaskPolicy(projectId, task, agentRole, riskLevel);
-		if (repoPath) {
+	} catch (err) {
+		throw new IsolationUnavailableError(task.id, err);
+	}
+
+	if (repoPath) {
+		// Fail closed: a workspace that cannot be resolved (container/vm/unknown level, copy failure) fails the task
+		// instead of silently running in the source repo.
+		try {
 			context.isolatedWorkspace = await resolveWorkspace(repoPath, task.id, context.sandboxPolicy);
-			context.runtimeRepoPath = context.isolatedWorkspace.repoPath || repoPath;
+		} catch (err) {
+			throw new IsolationUnavailableError(task.id, err);
+		}
+		context.runtimeRepoPath = context.isolatedWorkspace.repoPath || repoPath;
+		try {
 			const session = await startSandboxSession({
 				projectId,
 				taskId: task.id,
@@ -48,9 +68,9 @@ export async function setupSandboxExecution(
 				workspacePath: context.runtimeRepoPath,
 			});
 			context.sandboxSessionId = session.id;
+		} catch (err) {
+			log.warn(`[task-executor] Sandbox session start failed (non-blocking): ${String(err)}`);
 		}
-	} catch (err) {
-		log.warn(`[task-executor] Sandbox init failed (non-blocking): ${String(err)}`);
 	}
 
 	return context;

@@ -77,9 +77,10 @@ export class CodexAdapter implements ProviderAdapter {
 		const model = input.model ?? "gpt-4o";
 		const timeoutMs = input.timeoutMs ?? 120_000;
 
-		const args = ["--quiet", "--full-auto"];
+		// The prompt travels over stdin (`exec -`), never in argv: it cannot be parsed as an option or seen in `ps`
+		const args = ["exec", "--full-auto"];
 		if (model) args.push("--model", model);
-		args.push(prompt);
+		args.push("-");
 
 		const runResult = await runCLI({
 			binary: this.binary,
@@ -88,6 +89,7 @@ export class CodexAdapter implements ProviderAdapter {
 			env: input.env,
 			timeoutMs,
 			signal: input.signal,
+			stdin: prompt,
 		});
 
 		const classified = classifyExit(runResult);

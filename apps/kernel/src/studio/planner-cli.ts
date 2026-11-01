@@ -206,8 +206,8 @@ function streamWithCodex(
 		},
 	);
 
-	proc.stdin?.write(fullPrompt);
-	proc.stdin?.end();
+	proc.stdin?.on("error", () => undefined); // EPIPE: the CLI may exit before reading
+	proc.stdin?.end(fullPrompt);
 
 	let buffer = "";
 	let fullText = "";
@@ -277,16 +277,26 @@ function streamWithGemini(
 	const { repoPath, prompt, systemPrompt, model = "gemini-2.5-flash", effort, timeoutMs = 120_000 } = opts;
 	const fullPrompt = `${systemPrompt}\n\n${prompt}`;
 
-	const proc = spawn("gemini", ["-p", fullPrompt, "-m", model, "--approval-mode", "plan", "-o", "text"], {
-		cwd: repoPath,
-		stdio: ["ignore", "pipe", "pipe"],
-		shell: false,
-		env: buildSafeChildEnv({
-			profile: "provider",
-			extra: pickEnv(providerEnvKeys("gemini")),
-			allow: providerEnvKeys("gemini"),
-		}),
-	});
+	// The prompt travels over stdin so it can never be parsed as an option; `-p` carries only a fixed instruction.
+	// Assumes gemini-cli appends piped stdin to the `-p` text (its documented non-interactive behaviour; not verified
+	// against the installed version).
+	const proc = spawn(
+		"gemini",
+		["-p", "Follow the instructions provided on stdin.", "-m", model, "--approval-mode", "plan", "-o", "text"],
+		{
+			cwd: repoPath,
+			stdio: ["pipe", "pipe", "pipe"],
+			shell: false,
+			env: buildSafeChildEnv({
+				profile: "provider",
+				extra: pickEnv(providerEnvKeys("gemini")),
+				allow: providerEnvKeys("gemini"),
+			}),
+		},
+	);
+
+	proc.stdin?.on("error", () => undefined);
+	proc.stdin?.end(fullPrompt);
 
 	let fullText = "";
 	let stderrText = "";

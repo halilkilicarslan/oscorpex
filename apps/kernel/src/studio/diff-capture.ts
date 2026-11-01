@@ -5,7 +5,7 @@
 
 import { execFileSync } from "node:child_process";
 import { insertTaskDiffs } from "./db.js";
-import { gitSafeEnv } from "./git/git-safe-config.js";
+import { NO_SUBMODULES, gitSafeEnv, inspectRepoGitConfig } from "./git/git-safe-config.js";
 import { createLogger } from "./logger.js";
 import { buildSafeChildEnv } from "./security/env-sanitizer.js";
 import type { TaskOutput } from "./types.js";
@@ -41,7 +41,12 @@ function countDiffLines(diff: string): { added: number; removed: number } {
 // Capture diffs for a single file
 // ---------------------------------------------------------------------------
 
-function captureFileDiff(repoPath: string, filePath: string, diffType: "created" | "modified"): FileDiff | null {
+function captureFileDiff(
+	repoPath: string,
+	filePath: string,
+	diffType: "created" | "modified",
+	preflight: [string, string][],
+): FileDiff | null {
 	try {
 		let diff: string;
 		if (diffType === "created") {
@@ -49,12 +54,12 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 			try {
 				diff = execFileSync(
 					"git",
-					["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--", "/dev/null", filePath],
+					["diff", "--no-ext-diff", "--no-textconv", NO_SUBMODULES, "--no-color", "--", "/dev/null", filePath],
 					{
 						cwd: repoPath,
 						encoding: "utf-8",
 						timeout: 5000,
-						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), undefined, { preflight }),
 					},
 				).trim();
 			} catch {
@@ -64,7 +69,7 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 						cwd: repoPath,
 						encoding: "utf-8",
 						timeout: 5000,
-						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), undefined, { preflight }),
 					}).trim();
 				} catch {
 					diff = "";
@@ -77,23 +82,27 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 			}
 		} else {
 			// For modified files — array args prevent shell injection via filePath
-			diff = execFileSync("git", ["diff", "--no-ext-diff", "--no-textconv", "--no-color", "HEAD", "--", filePath], {
-				cwd: repoPath,
-				encoding: "utf-8",
-				timeout: 5000,
-				env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
-			}).trim();
+			diff = execFileSync(
+				"git",
+				["diff", "--no-ext-diff", "--no-textconv", NO_SUBMODULES, "--no-color", "HEAD", "--", filePath],
+				{
+					cwd: repoPath,
+					encoding: "utf-8",
+					timeout: 5000,
+					env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), undefined, { preflight }),
+				},
+			).trim();
 
 			if (!diff) {
 				// Try staged diff
 				diff = execFileSync(
 					"git",
-					["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--cached", "--", filePath],
+					["diff", "--no-ext-diff", "--no-textconv", NO_SUBMODULES, "--no-color", "--cached", "--", filePath],
 					{
 						cwd: repoPath,
 						encoding: "utf-8",
 						timeout: 5000,
-						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+						env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), undefined, { preflight }),
 					},
 				).trim();
 			}
@@ -122,13 +131,22 @@ function captureFileDiff(repoPath: string, filePath: string, diffType: "created"
 export async function captureTaskDiffs(taskId: string, repoPath: string, output: TaskOutput): Promise<number> {
 	const diffs: FileDiff[] = [];
 
+	// The repo pre-flight spawns git synchronously: run it once per task, not once per file
+	let preflight: [string, string][];
+	try {
+		preflight = inspectRepoGitConfig(repoPath);
+	} catch (err) {
+		log.warn({ err, taskId }, "[diff-capture] repository refused by the git safety pre-flight");
+		return 0;
+	}
+
 	for (const fp of output.filesCreated) {
-		const d = captureFileDiff(repoPath, fp, "created");
+		const d = captureFileDiff(repoPath, fp, "created", preflight);
 		if (d) diffs.push(d);
 	}
 
 	for (const fp of output.filesModified) {
-		const d = captureFileDiff(repoPath, fp, "modified");
+		const d = captureFileDiff(repoPath, fp, "modified", preflight);
 		if (d) diffs.push(d);
 	}
 

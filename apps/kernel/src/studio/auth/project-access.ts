@@ -6,7 +6,7 @@
 import type { Context } from "hono";
 import { queryOne } from "../pg.js";
 import { projectBelongsToTenant } from "../tenancy/project-tenant-cache.js";
-import { runSysLookupAtBoundary } from "../tenancy/tenant-scope.js";
+import { enterRequestTenant, runSysLookupAtBoundary } from "../tenancy/tenant-scope.js";
 import { LOCAL_TENANT_ID } from "./auth-middleware.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: routers declare differing Variables; helpers stay env-agnostic
@@ -73,4 +73,17 @@ export async function assertProjectInTenant(
 		projectBelongsToTenant(projectId, tenantId),
 	);
 	return ok ? undefined : projectNotFoundResponse(c);
+}
+
+/**
+ * Repository path of a project, resolved server-side inside the caller's tenant. Callers must have passed
+ * assertProjectInTenant first; request bodies never supply filesystem paths. Null when there is none.
+ */
+export async function resolveProjectRepoPath(c: AnyContext, projectId: string): Promise<string | null> {
+	const tenantId = resolveRequestTenant(c);
+	if (!tenantId) return null;
+	const row = await enterRequestTenant(tenantId, () =>
+		queryOne<{ repo_path: string | null }>("SELECT repo_path FROM projects WHERE id = $1", [projectId]),
+	);
+	return row?.repo_path || null;
 }

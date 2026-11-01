@@ -9,6 +9,7 @@
 import { getProject, getProjectSetting } from "../db.js";
 import { eventBus } from "../event-bus.js";
 import { gitManager } from "../git-manager.js";
+import { UnsafeGitRepoError } from "../git/git-safe-config.js";
 import { GitHubIntegration } from "../github-integration.js";
 import { createLogger } from "../logger.js";
 import { decrypt, isEncrypted } from "../secret-vault.js";
@@ -17,6 +18,25 @@ import type { PipelineStage } from "../types.js";
 const log = createLogger("vcs-phase-hooks");
 
 export class PipelineBranchManager {
+	/**
+	 * A skipped VCS step must not be silent: it is surfaced as a pipeline event the console can show. The reason is
+	 * the repo-safety refusal text (it carries no server path) or a generic message.
+	 */
+	private emitVcsSkipped(projectId: string, stageIndex: number, step: "branch" | "merge", err: unknown): void {
+		const reason =
+			err instanceof UnsafeGitRepoError || (err instanceof Error && err.message === "merge conflict")
+				? err.message
+				: "git operation failed";
+		eventBus.emit({
+			projectId,
+			type: "pipeline:degraded",
+			payload: {
+				reason: `VCS ${step} skipped for stage ${stageIndex}: ${reason}`,
+				message: `VCS ${step} skipped: ${reason}`,
+			},
+		});
+	}
+
 	/**
 	 * Phase başlangıcında `phase/{stageIndex}-{agentRoles}` formatında
 	 * git branch oluşturur. Başarısızlık pipeline'ı durdurmaz.
@@ -49,6 +69,7 @@ export class PipelineBranchManager {
 			});
 		} catch (err) {
 			log.warn(`[vcs-phase-hooks] Branch oluşturulamadı: ${branchName} ${String(err)}`);
+			this.emitVcsSkipped(projectId, stageIndex, "branch", err);
 		}
 	}
 
@@ -92,12 +113,14 @@ export class PipelineBranchManager {
 			} else {
 				// Conflict varsa main'e geri dön
 				log.warn(`[vcs-phase-hooks] Merge conflict tespit edildi: ${branchName} → main ${String(result.conflicts)}`);
+				this.emitVcsSkipped(projectId, stageIndex, "merge", new Error("merge conflict"));
 				await gitManager
 					.checkout(project.repoPath, "main")
 					.catch((err) => log.warn("[vcs-phase-hooks] Non-blocking operation failed:", err?.message ?? err));
 			}
 		} catch (err) {
 			log.warn(`[vcs-phase-hooks] Branch merge atlandı: ${branchName} ${String(err)}`);
+			this.emitVcsSkipped(projectId, stageIndex, "merge", err);
 		}
 	}
 

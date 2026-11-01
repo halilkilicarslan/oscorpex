@@ -93,9 +93,10 @@ export class CodexAdapter implements CLIAdapter {
 		const governanceSection = buildToolGovernanceSection(opts.allowedTools);
 		const prompt = governanceSection ? `${governanceSection}\n\n${opts.prompt}` : opts.prompt;
 
-		const args = ["--quiet", "--full-auto"];
+		// The prompt goes over stdin (`exec -`): never in argv, so it cannot be parsed as an option
+		const args = ["exec", "--full-auto"];
 		if (opts.model) args.push("--model", opts.model);
-		args.push(prompt);
+		args.push("-");
 
 		return new Promise((resolve, reject) => {
 			const proc = spawn("codex", args, {
@@ -127,11 +128,8 @@ export class CodexAdapter implements CLIAdapter {
 				opts.signal.addEventListener("abort", () => proc.kill("SIGTERM"), { once: true });
 			}
 
-			// Send system prompt via stdin if provided
-			if (opts.systemPrompt) {
-				proc.stdin?.write(`${opts.systemPrompt}\n\n`);
-			}
-			proc.stdin?.end();
+			proc.stdin?.on("error", () => undefined); // EPIPE: the CLI may exit before reading
+			proc.stdin?.end([opts.systemPrompt, prompt].filter(Boolean).join("\n\n"));
 
 			proc.on("close", (code) => {
 				clearTimeout(timer);
@@ -251,8 +249,8 @@ export class CursorAdapter implements CLIAdapter {
 			}
 
 			const fullPrompt = [opts.systemPrompt, governanceSection, opts.prompt].filter(Boolean).join("\n\n");
-			proc.stdin?.write(fullPrompt);
-			proc.stdin?.end();
+			proc.stdin?.on("error", () => undefined); // EPIPE: the CLI may exit before reading
+			proc.stdin?.end(fullPrompt);
 
 			proc.on("close", (code) => {
 				clearTimeout(timer);

@@ -37,7 +37,7 @@ export function rollbackToCheckpoint(opts: {
 			cwd: repoPath,
 			encoding: "utf8",
 			timeout: 10_000,
-			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), repoPath),
 		}).trim();
 	} catch (err) {
 		return { status: "failed", error: `Failed to read HEAD: ${err instanceof Error ? err.message : String(err)}` };
@@ -63,7 +63,7 @@ export function rollbackToCheckpoint(opts: {
 			cwd: repoPath,
 			encoding: "utf8",
 			timeout: 30_000,
-			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" })),
+			env: gitSafeEnv(buildSafeChildEnv({ profile: "build_tool" }), repoPath),
 		});
 
 		log.info(

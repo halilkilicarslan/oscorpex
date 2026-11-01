@@ -1,14 +1,8 @@
 # Production kernel image. Build context = repo root, filtered by the allow-list in ./.dockerignore.
-# base (pinned node + corepack) -> toolchain (python3/make/g++, build stages only) -> manifests / deps -> build ->
-# deploy (prod-only node_modules); claude-cli (pinned CLI) and runtime derive from base and carry no build tools.
+# base (pinned node + corepack) -> manifests / deps -> build -> deploy (prod-only node_modules); claude-cli (pinned CLI) and runtime derive from base and carry no build tools.
 
 FROM node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS base
 RUN corepack enable
-
-FROM base AS toolchain
-RUN apt-get update \
-	&& apt-get install -y --no-install-recommends python3 make g++ \
-	&& rm -rf /var/lib/apt/lists/*
 
 # Only the manifests a frozen install needs, so source edits never invalidate the dependency layer.
 FROM base AS manifests
@@ -18,7 +12,7 @@ RUN mkdir /manifests \
 	&& find . -type f \( -name package.json -o -name pnpm-lock.yaml -o -name pnpm-workspace.yaml \) -not -path './docker/*' \
 		| tar -cf - -T - | tar -xf - -C /manifests
 
-FROM toolchain AS deps
+FROM base AS deps
 ENV PNPM_HOME=/pnpm \
 	npm_config_store_dir=/pnpm/store \
 	CI=true
@@ -33,7 +27,7 @@ RUN pnpm --filter "@oscorpex/kernel..." build
 
 FROM build AS deploy
 # Package READMEs and other docs are dead weight at runtime (and carry example tokens that trip secret scanners);
-# licence texts stay. Third-party test directories go too (ssh2 ships test private keys). The deployed pnpm-workspace.yaml is
+# licence texts stay. Third-party test directories go too. The deployed pnpm-workspace.yaml is
 # dropped (unreadable 0600 file that would break `pnpm` in /app).
 RUN --mount=type=cache,id=oscorpex-pnpm-store,target=/pnpm/store \
 	pnpm --filter @oscorpex/kernel deploy --prod /out \

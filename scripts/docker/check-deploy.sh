@@ -136,7 +136,7 @@ for pkg in $PKGS; do
 done
 
 # ---------------------------------------------------------------- out hygiene
-# Third-party fixtures inside node_modules (e.g. ssh2 test keys) are not ours; scan everything else.
+# Third-party fixtures inside node_modules (test keys) are not ours; scan everything else.
 check "out has no .env* files outside node_modules" test -z "$(find "$OUT" -path "$OUT/node_modules" -prune -o -name '.env*' -print 2>/dev/null | head -n 1)"
 check "out has no *.pem files outside node_modules" test -z "$(find "$OUT" -path "$OUT/node_modules" -prune -o -name '*.pem' -print 2>/dev/null | head -n 1)"
 check "@oscorpex/* packages in out contain no .env* or *.pem" test -z "$(find "$OUT"/node_modules/@oscorpex/ \( -name '.env*' -o -name '*.pem' \) -print 2>/dev/null | head -n 1)"

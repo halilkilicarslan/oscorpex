@@ -3219,3 +3219,25 @@ BEGIN
 		END;
 	END LOOP;
 END $$;
+
+-- I0: cli_tool 'custom' (run the agent's systemPrompt as a command) is removed. Existing rows move to the default tool
+-- and a CHECK keeps unsupported tools out. Idempotent: the UPDATEs are no-ops once clean, the constraints are added once.
+UPDATE agent_configs SET cli_tool = 'claude-code' WHERE cli_tool NOT IN ('claude-code', 'codex', 'cursor', 'none');
+UPDATE project_agents SET cli_tool = 'claude-code' WHERE cli_tool NOT IN ('claude-code', 'codex', 'cursor', 'none');
+
+DO $$
+DECLARE
+	t text;
+	cname text;
+BEGIN
+	FOREACH t IN ARRAY ARRAY['agent_configs', 'project_agents']
+	LOOP
+		cname := t || '_cli_tool_check';
+		IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = format('public.%I', t)::regclass AND conname = cname) THEN
+			EXECUTE format(
+				'ALTER TABLE public.%I ADD CONSTRAINT %I CHECK (cli_tool IN (''claude-code'', ''codex'', ''cursor'', ''none''))',
+				t, cname
+			);
+		END IF;
+	END LOOP;
+END $$;

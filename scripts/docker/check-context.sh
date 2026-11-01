@@ -49,7 +49,6 @@ BLOCK_END='# <<< common-deny'
 IGNORE_FILES="
 .dockerignore
 apps/console/Dockerfile.dockerignore
-docker/coder-agent/.dockerignore
 apps/console/.dockerignore
 "
 
@@ -178,9 +177,7 @@ apps/console/src/.env
 apps/console/src/k.pem
 apps/console/public/.env.production
 apps/console/public/shot.png
-packages/control-plane/src/.env
-docker/coder-agent/.env
-docker/coder-agent/x.pem"
+packages/control-plane/src/.env"
 
 # Trees that are (partly) re-included by the allow-lists; canaries are generated inside each of them.
 CANARY_TREES="apps/kernel/src
@@ -190,8 +187,7 @@ apps/console/src
 apps/console/public
 apps/console/nginx
 packages/control-plane/src
-docker/claude-cli
-docker/coder-agent"
+docker/claude-cli"
 
 # Secret / artifact families that must never reach any context (mirrors the common-deny block).
 FORBIDDEN_RE='(^|/)node_modules(/|$)'
@@ -625,12 +621,6 @@ EOF
 		require_prefix "packages/control-plane/src/"
 		require packages/control-plane/tsconfig.json
 		;;
-	coder-agent)
-		printf '%s\n' '^(agent-worker\.ts|tsconfig\.json)$' >"$WORK/allowed.re"
-		check_allowed
-		require agent-worker.ts
-		require tsconfig.json
-		;;
 	console-local)
 		if [ "$total" -eq 0 ]; then
 			pass "console-local context (apps/console/.dockerignore) is empty"
@@ -655,7 +645,7 @@ planted_leaks() { # planted_leaks <df> <ctx>: number of planted canaries reachin
 run_mutations() {
 	echo "--- mutation run (canary coverage of each common-deny line) ---"
 	local saved="$IGNORE_ROOT" mut="$WORK/mut" f
-	mkdir -p "$mut/apps/console" "$mut/docker/coder-agent"
+	mkdir -p "$mut/apps/console"
 	for f in $IGNORE_FILES; do
 		if [ -f "$saved/$f" ]; then cp "$saved/$f" "$mut/$f"; fi
 	done
@@ -708,7 +698,6 @@ run_mutations() {
 		cp "$WORK/mut-orig" "$mut/$f"
 	done
 	IGNORE_ROOT="$saved"
-	echo "NOTE: docker/coder-agent/.dockerignore is deny-all plus two re-includes, so its common block is redundant defense and is not mutated"
 	if [ "$total_lines" -gt 0 ]; then
 		echo "mutation summary: $caught of $total_lines removed lines were caught by a canary"
 	fi
@@ -718,13 +707,18 @@ run_mutations() {
 # Main
 # ---------------------------------------------------------------------------------------------
 check_common_block
+# The legacy agent-pool image/compose file were removed (I0): assert they stay gone
+if compgen -G "$REPO_ROOT/docker/coder-*" >/dev/null || compgen -G "$REPO_ROOT/docker-compose.p*.yml" >/dev/null; then
+	fail "the removed legacy agent pool image/compose file is back (docker/coder-* or docker-compose.p*.yml)"
+else
+	pass "legacy agent pool image/compose file are gone"
+fi
 if prepare_mirror; then
 	if [ "$MUTATE" -eq 1 ]; then
 		run_mutations
 	else
 		run_context root Dockerfile .
 		run_context console apps/console/Dockerfile .
-		run_context coder-agent docker/coder-agent/Dockerfile docker/coder-agent
 		run_context console-local - apps/console
 	fi
 fi
